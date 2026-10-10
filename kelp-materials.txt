@@ -1,0 +1,40 @@
+Vexed Kelp Module V2 — materials
+16 × 16 blocks; 13 blocks high; stack pitch 13.
+Schematic SHA-256: b25750fcc8e7e86fefb6ba9a0b9c3d436fffc7369f4ac1883c9c76e38d16f261
+
+Build materials (single chests, not double chests):
+  69  chest  (1 stack + 5)
+  12  comparator
+  13  dispenser
+ 143  gray stained glass  (2 stacks + 15)
+ 273  hopper  (4 stacks + 17)
+   8  ladder
+   1  lever
+   2  mud
+   6  observer
+  13  piston
+  84  polished deepslate  (1 stack + 20)
+   1  redstone block
+   5  redstone torch
+  70  redstone dust  (1 stack + 6)
+  32  repeater
+ 203  smooth stone  (3 stacks + 11)
+  16  smooth stone slab
+
+8 kelp plants.
+Water: 12 source placements plus waterlogging all 16 slabs.
+The 16 remaining water cells are flowing water; let flow form naturally.
+
+Initial operating supplies:
+1 paper in the hopper clock.
+72 stacks / 4,608 bonemeal to fill all eight growth dispensers for immediate first start.
+Full bonemeal shulkers in all four input chests; four boxes per input used in the test.
+At least 12 separate empty shulkers in the kelp-loader supply chest for the test.
+Shulkers are consumable operating supplies, not blocks to place in the schematic.
+
+Capacity:
+Four bonemeal input double chests: 216 full shulkers.
+Sixteen empty-return double chests: 864 emptied bonemeal shulkers.
+Kelp supply double chest: 54 separate empty shulkers.
+Six sell-wall double chests: 324 full kelp shulkers.
+Each full kelp box contains 1,728 kelp.
