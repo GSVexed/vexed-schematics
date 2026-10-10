@@ -26,7 +26,7 @@ Design credit: BasicRedstone / DaveRooney; Codex integration and right-side conn
 
 Original eight-cell raw-kelp build by GSVexed / Codex. **16 × 16 footprint, 13 high**, matching one bonemeal module. Stack identical independent modules at 13-block vertical spacing.
 
-The final file passed a 72,000-tick vanilla Java 26.2 test with natural growth disabled: **10,288 bonemeal used, 10,272 kelp delivered to the output chests** (99.84% collection). Roughly **10.3k raw kelp per hour at 20 TPS** per loaded, supplied module. Additional 26.3 validation is being completed.
+The final file passed a 72,000-tick vanilla Java 26.2 test with natural growth disabled: **10,288 bonemeal used, 10,272 kelp delivered to the output chests** (99.84% collection). Roughly **10.3k raw kelp per hour at 20 TPS** per loaded, supplied module. Native Java 26.3 also passed import, harvest, stop/restart, 13-block stacking, refill recovery, and age-25 kelp tests.
 
 Build paused. Set water and plant the eight kelp bases manually in survival. Use exactly one paper in the clock hopper at local **(14, 7, 14)**. The stop lever at **(11, 7, 15)** is powered for STOP, unpowered for RUN. Empty output before storage fills.
 

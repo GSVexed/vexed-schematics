@@ -30,8 +30,21 @@ Acceptance: at least 99% collection AND at least 99% reaching output chests,
 plus a useful clock rate and no harvested kelp in the bonemeal feed.
 The final candidate passed these assertions without changing its bytes.
 
-Native Minecraft Java 26.3: RUNNING (no pass claimed yet)
-Exact-file importer and lifecycle tests compiled successfully.
+Native Minecraft Java 26.3 lifecycle validation: PASS
+Fabric client GameTest ran the actual Minecraft 26.3 engine.
+Exact-file import: PASS; paused start consumed no bonemeal.
+Running benchmark: 1,200 ticks; 176 bonemeal used; 176 kelp collected;
+176 in the output chests; zero floating kelp after 200 settling ticks.
+Stop: PASS; supply unchanged during 200 paused ticks.
+Restart: PASS.
+Two modules stacked at pitch 13: PASS; lower used 40, upper used 32
+bonemeal over the 224-tick stack interval (independent clock phases).
+Empty supply followed by refill: PASS; kelp bases intact and growth resumed.
+All eight bases forced to age 25: PASS; powered growth resumed.
+Final marker: KELP_ALL_NATIVE_TESTS_PASS.
+CI job conclusion: success; no assertion failures.
+The native importer resource was independently decoded from the same
+final .litematic SHA-256 recorded above.
 CI commit: b3dafecf1f27b275c7474bcf49e8dd29772cf14c
 CI run: https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38066465214
 

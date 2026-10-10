@@ -54,6 +54,6 @@ If nothing runs, check the one paper, eight hopper directions, lever state, and 
 
 ## Validation scope
 
-The exact delivered `.litematic` was independently decoded, imported, and tested in the **vanilla Java 26.2 engine** for one simulated hour. Static checks also cover its 16 × 13 × 16 bounds, block entities, redstone supports, and paired chest states. A separate native Java 26.3 lifecycle test is currently running; that version is not yet marked as passed.
+The exact delivered `.litematic` was independently decoded, imported, and tested in the **vanilla Java 26.2 engine** for one simulated hour. Static checks also cover its 16 × 13 × 16 bounds, block entities, redstone supports, and paired chest states. The **native Java 26.3 engine** also passed the exact-file import, paused start, running harvest, stop/restart, **13-block stacking**, empty/refilled supply, and forced age-25 kelp tests. Its 1,200-tick run used 176 bonemeal and stored all 176 kelp, with no floating drops after settling.
 
 Tests use actual Minecraft block, fluid, inventory, and entity behavior. Server plugins, live DonutSMP rates, lag, and chunk unload/reload behavior are separate conditions; they have not been certified by these tests. Keep the farm loaded while it runs, and pause before leaving it.
