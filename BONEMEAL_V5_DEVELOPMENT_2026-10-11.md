@@ -103,3 +103,12 @@ E085 showed moss carpets obstruct both conversion and source fertilization, so a
 The integrated harness cleanup is corrected to click OFF and settle before unloading a fast module. Previously the final cleanup unloaded it while running; therefore a saved P09 area must be freshly rebuilt before another clean benchmark.
 
 Remaining work: select a materially higher-output architecture using uncontaminated mechanical tests; measure resource consumption and collection losses; full-buffer and empty-seed behavior; interruption phases; baseline and multiple-module load; actual Donut mechanics; exact Litematica creative paste; external shulker/storage/sell infrastructure. Existing prototypes and other concurrent PC projects are preserved.
+
+
+### Follow-up experiment decisions — 18:52 UTC
+
+E091 clean-reset test failed collection: the five-moss-cell strip collected 10 of 20 supplied moss blocks and 4 of 20 carpets across four trials. All 16 resets were verified clean. Mixed 2×2 trials collected all 8 supplied moss blocks, but that does not prove the all-moss worst case. E092 contained pickup follow-up stopped with a fixture error (power replaced a queried barrel); E094 corrects that coordinate and repeats the bounded test. Do not interpret the E092 error as mechanism failure.
+
+E093/P10 shortened only the harvest clock from 15 to 8 items. It failed sustained production: net zero over the initial 28,804 game ticks, only one monitored generator push, and no moss present at snapshots. After switching OFF, a delayed growth consumed one bonemeal and produced moss. Reject P10. E095/P11 now tests the faster interval together with a shorter growth delay (10 affected repeaters, summed delay 64→36 game ticks); this is a test hypothesis, not a speed claim. Fresh separate prototype areas and pre-test world backups are used.
+
+[E091 results](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/091-honey-hopper-clean-probe.json) · [E093 results](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/093-integrated-p10.json)
