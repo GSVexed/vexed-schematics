@@ -29,7 +29,9 @@ The user has a private GitHub repo `GSVexed/chatgpt-minecraft-testlab`, which a 
 - E05: **huge crimson fungus** grown with a dispenser produced **67 crimson nether wart blocks, 8 stems, one bonemeal consumed** in one growth; blocks were measured and removed using commands, not actually harvested. [Result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/039-20261011-v5-giant-fungus-yield/result.json) and [server log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/039-20261011-v5-giant-fungus-yield/minecraft-latest.log). **Serious high-yield challenger**, but giant fungus can exceed 16 blocks tall and playerless replant/harvest within 16³ is unproved.
 - E06: **underwater sea pickles on living coral**, 1 bonemeal application increased count from 4 to 12 (8 new), in five colonies. 65% compost success makes that trial insufficient to cover the 1 bonemeal spent on an expectation basis (8×0.65/7≈0.74). Not a proven self-sustaining system. [Server log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/040-20261011-v5-sea-pickle-net-growth/minecraft-latest.log).
 - E07: bone mealing a 5×5 patch of crimson nylium generated **one crimson fungus and eleven crimson roots** after the dispenser used 2 bonemeal in the experiment. This proves playerless *fungus seed formation*, not deterministic placement or a full fungus cycle. [Server log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/041-20261011-v5-nylium-auto-fungus-seed/minecraft-latest.log).
-- E08: single-cell real lava/water stone regeneration + piston push experiment queued as `jobs/042-20261011-v5-renewable-stone-cell/manifest.json`; inspect status/log before deciding next step.
+- E08: first lava/water test FAILED: direct water below a descending lava source did not create stone at the target, [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/042-20261011-v5-renewable-stone-cell/result.json).
+- E09: revised geometry **PASS**. Lava flows down into a target containing *horizontally flowing water* and produces real smooth stone, [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/043-20261011-v5-stone-flowing-water-geometry/result.json). This did not yet test pushing the stone.
+- E10: real piston pushes the initial generated stone, and flowing water/lava must regenerate another stone in the same spot. Submitted as [test job](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/044-20261011-v5-stone-cell-regeneration-piston/manifest.json); confirm its actual result and server log before progressing.
 
 All above are **isolated growth/mechanics tests, not bonemeal/hour production results**.
 
@@ -45,7 +47,7 @@ All above are **isolated growth/mechanics tests, not bonemeal/hour production re
 
 ## Next research/development steps
 
-1. Retrieve E08 actual engine result/log. If it failed, adjust the test cell and repeat until a physical reproducible stone generator makes and re-makes clean stone after piston removal.
+1. Retrieve E10 actual engine result/log; if failed, iterate on the E09-validated descending-lava/flowing-water cell until a physical piston can push the stone and replacement stone self-regenerates.
 2. Engineer (from scratch) a compact **self-regenerating stone cell → multi-cell stone pad → moss source → piston harvester** within an exact 16³ occupancy model. Do not command-replace stone during functional trials.
 3. Add pickup and composters as physical blocks; test initial seed, closed-loop bonemeal refill and surplus. Verify real counts in inventories and item entity loss at 20 TPS. The winner is **net bonemeal/time**, not moss conversions per shot.
 4. In parallel, test repeatable playerless fungus seeding/harvest without leakage beyond 16 height; if impossible within constraints, rule it out despite excellent yield in one test.
