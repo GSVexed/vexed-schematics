@@ -48,9 +48,16 @@ Compare by **verified net bonemeal/hour**, TPS cost, uptime, restart robustness,
 5. Explain vanilla/Carpet versus Donut SMP differences, especially anti-lag and TPS.
 6. Final delivery requires exact installation position, prime inventory, water/cart requirements, schematic checksum, tested variant, and setup instructions.
 
-## Immediate next step
+## Project mandate: original A-tier engineering, not a V4 upgrade
 
-Map V4 schematic moss blocks, dispensers, piston harvesters, redstone and composting/collection clusters to understand its production core, without modifying the existing schematic or user world. Then build two candidate core prototypes and test them.
+The user has explicitly confirmed that V4 was based on another builder's design and subsequently enhanced. **Do not use V4 as a V5 schematic template.** Reference its performance only. The goal is radical 16×16×16 spatial and throughput optimisation using new growth, stone-generation, harvest, recycling and congestion-control circuitry. Investigate unconventional architectures where worthwhile; measure rather than assume. See [original R&D programme and engine test data](BONEMEAL_V5_FROM_SCRATCH_RND.md).
+
+## Current engineering status
+
+- Verified the exact V4 component geometry on the PC for historical benchmarking.
+- Verified bottom-fed moss dispenser behaviour, 7×7 and 5×7 growth yields, 5×5 growth yields and 4/4 independent 5×5 simultaneous sources inside one chunk, on a real Minecraft Java 26.2 engine.
+- Evaluated five theoretical 16×16 grow-pad packings; **no automated closed-loop V5 core has yet been built, measured or released**.
+- **Next step:** create and prove a renewable, reload-resistant stone generator and moss harvester within the 16³ envelope. After validating production and collection, add parallel composting, local recycling and output backpressure.
 
 ## V4 structural mapping completed — 2026-10-11
 
