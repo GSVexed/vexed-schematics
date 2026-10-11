@@ -40,3 +40,14 @@ A release must identify the exact schematic SHA, Minecraft version, test harness
 ## Build strategy
 
 Preserve original V4 for comparison. Prototype alternative mechanisms in a separate branch or file. Only promote a new Litematica as a recommended build after the required behavioural tests pass.
+
+## 2026-10-11 Round 2 engine baseline
+
+A fresh local Minecraft **Java 26.2** engine test verified the **underlying** hopper/composter mechanics, not the complete V4 build:
+
+- Hopper successfully transferred bonemeal into a chest.
+- A moss-block input hopper fed a composter and collected resulting bonemeal into a separate chest.
+- Both outputs were asserted against actual container item states before the combined PASS was emitted.
+- [Test manifest](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/034-20261011-bonemeal-item-and-composter-engine/manifest.json), [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/034-20261011-bonemeal-item-and-composter-engine/result.json), [Minecraft log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/034-20261011-bonemeal-item-and-composter-engine/minecraft-latest.log).
+
+This establishes a repeatable starting point for validating the storage and composting components. **V4 functional performance, chunk-reload reliability, storage backup recovery and live Donut SMP equivalence remain unverified.**
