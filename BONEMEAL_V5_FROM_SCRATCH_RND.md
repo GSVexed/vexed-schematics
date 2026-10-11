@@ -93,4 +93,17 @@ The [first-principles space layout script](https://github.com/GSVexed/chatgpt-mi
 
 **Space packing is not a functional proof**. Specifically, theoretical four 7×7 pads leave extremely little lateral room for stone generation, composter input and collection hardware. Four smaller pads offer more room for the rest of the engineering, but require evidence that the stone supply and composter count can keep up. We must engineer/verify the full height envelope as well, not just 16×16 plan view.
 
-Pending: E04 four simultaneous 5×5 pads in a single chunk; exact test manifest [here](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/038-20261011-v5-quad-pad-simultaneous/manifest.json).
+**E04 — four independent 5×5 moss pads in a single chunk: PASS (mechanics only).**
+- All four dispensers consumed their bonemeal; their individual neighbouring stone blocks converted to moss.
+- A compound scoreboard verified **4/4 success** before emitting the pass marker, in a real 26.2 test server.
+- This means a 16×16 horizontal area can support four distinct moss growth sources without simple conversion interference. It **does not prove** the stone generators, harvesting or composters fit into the complete 16×16×16 module.
+- [Test manifest](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/038-20261011-v5-quad-pad-simultaneous/manifest.json) · [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/038-20261011-v5-quad-pad-simultaneous/result.json) · [actual Minecraft log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/038-20261011-v5-quad-pad-simultaneous/minecraft-latest.log).
+
+
+### Next hard technical constraint: renewable stone regeneration
+
+Moss cannot propagate onto cobblestone; high throughput requires **stone**, not cobblestone. The stone-generator fluid arrangement must ensure lava arrives *above pre-established water*, and prove that chunk unload/reload does not invert water/lava arrival order. Avoid external manual replacement or command-based reset in final testing.
+
+The next practical build is a compact, renewable stone generator and harvester attached to one independently bonemealed pad, inside a measured chunk and height budget, followed by item collection, parallel composters, closed-loop refill and backpressure recovery.
+
+Reference mechanics: https://minecraft.wiki/w/Tutorial:Cobblestone_farming (stone generated when lava enters water from above). A 2026 community report identifies mistimed lava/water on unload as a cause of cobblestone formation: https://www.reddit.com/r/technicalminecraft/comments/1teopse/what_causes_cobblestone_to_generate_in_moss_farms/ . These are research inputs, **not** a mandate to reuse other designers' circuits.
