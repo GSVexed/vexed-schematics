@@ -84,3 +84,22 @@ The [isolated engine runner](https://github.com/GSVexed/chatgpt-minecraft-testla
 ## Immediate next work
 
 Retrieve P06/E080 actual results. If a sustained surplus is established, compare slower/faster clocks and complete longer normal-TPS, shutdown and congestion tests. If it fails, follow typed inventories and physical control/field counters. The faster generator remains eligible with manual OFF before unloading; E066 lava shutoff remains shelved. Keep giant fungi as a separate challenger.
+
+
+## Verified continuation — 2026-10-11 18:40 UTC
+
+P09 is the first sustainable fast autonomous baseline, not the final A-tier design. E088 returned PRELIMINARY_PASS in the isolated Minecraft Java 26.2 lab. The complete original module fits a chunk-aligned 16×16×16 cube, recycles its own bonemeal and exports surplus.
+
+- One-hour phase: +87 net bonemeal over 72,002 measured game ticks, with no external replenishment.
+- Normal-speed measurement: +12 net bonemeal over 300.055 seconds / 6,001 game ticks, approximately 20 TPS.
+- Actual manual lever OFF, settling, saved server restart, witnessed true chunk unload, reload while OFF and manual RUN all passed. No cobblestone or lost-water fault was observed.
+- Fast generation remains included under the user's accepted manual OFF-before-unload operating procedure. The unsuccessful automatic lava gate remains shelved.
+- This output is modest. No A-tier, optimality, Donut compatibility, exact Litematica-paste, multi-module or final-release claim is justified yet.
+
+Evidence: [E088 full result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/088-integrated-p09.json), [actual PC run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38159860775), [P09 manifest](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/prototypes/v5/p09-module.json).
+
+E085 showed moss carpets obstruct both conversion and source fertilization, so a faster dry harvester must clear them. E087 demonstrated vertical honey/slime harvest and stone return, but collection was incomplete. E090's hopper-under-honey trials had partial pickup and a reset flaw: clearing old fixtures after killing entities could introduce drops into the next trial. Those collection totals must not rank architectures. E091 now uses a fresh isolated chunk and clears, settles, kills drops and asserts a clean reset before each of 16 bounded trials. [E091 run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38164945270).
+
+The integrated harness cleanup is corrected to click OFF and settle before unloading a fast module. Previously the final cleanup unloaded it while running; therefore a saved P09 area must be freshly rebuilt before another clean benchmark.
+
+Remaining work: select a materially higher-output architecture using uncontaminated mechanical tests; measure resource consumption and collection losses; full-buffer and empty-seed behavior; interruption phases; baseline and multiple-module load; actual Donut mechanics; exact Litematica creative paste; external shulker/storage/sell infrastructure. Existing prototypes and other concurrent PC projects are preserved.
