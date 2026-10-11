@@ -59,7 +59,9 @@ Primary research reference: [ncolyer's huge-fungus experiments and code analysis
 - The initial diagnosis of a clock stall was wrong. E075 observed transferring hopper inventories, moving redstone positions and changing piston phases. A blocked main piston does not establish a stalled clock.
 - Builder and console inspection identified unsupported water-sensor comparators. They broke, so growth could not trigger. The full-buffer sensor also lacked support.
 - P04/E076 lowers the source into the washable field plane, explicitly supports all diodes, and routes the growth delay/reserve under the field. Its comparators survive and show expected output. It still fired no automatic growth doses over 28,800 ticks. **FAIL.**
-- E077 is now tracing rising edges along every control diode and includes one explicitly command-powered growth probe. That probe must not be counted as autonomous production or merged into a benchmark net rate.
+- E077/E078 control traces measured cycling clocks, a self-powering push bus, discontinuous diagonal wire paths, failed glass-supported descents, and water washing away an elevator wire. One explicitly command-powered dose converted 17 cells; this is a mechanics probe, not autonomous production.
+- P05/E079 corrected those paths and seals. Over 28,800 ticks it fired 61 automatic dispenser triggers but consumed no bonemeal, made one main piston extension and retained all 128 startup bonemeal. **FAIL, net zero.** The center bucket was empty while water remained in the field, consistent with the three sources replenishing one another. Trigger counts do not establish successful growth.
+- P06/E080 is testing one water source with the **48-tick push clock**, a correspondingly faster harvest clock, diagnostic pulse/field counters and the user-approved manual OFF/settle/restart/unload protocol. Results are pending; do not claim a rate or working shutdown.
 
 These failures are retained as evidence. The module's intended generation, collection, composting, recycle and surplus blocks do not mean it works. No net bone meal/hour is claimed.
 
@@ -81,4 +83,4 @@ The [isolated engine runner](https://github.com/GSVexed/chatgpt-minecraft-testla
 
 ## Immediate next work
 
-Retrieve E077 control traces, fix the identified break in the automatic growth trigger, then establish a physically closed loop. Compare the 96- and 48-tick versions with corresponding growth intervals; test manual OFF, settling, unloading and restart. Keep giant fungi as a separate challenger, and prefer collection with fewer placement steps when measured pickup remains complete.
+Retrieve P06/E080 actual results. If a sustained surplus is established, compare slower/faster clocks and complete longer normal-TPS, shutdown and congestion tests. If it fails, follow typed inventories and physical control/field counters. The faster generator remains eligible with manual OFF before unloading; E066 lava shutoff remains shelved. Keep giant fungi as a separate challenger.

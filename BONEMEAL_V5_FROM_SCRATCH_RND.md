@@ -194,3 +194,12 @@ E068 verified 64/64 ordinary-hopper pickup through soul sand, mud, honey blocks,
 E058 world-limit Y304 samples: 64 growths, 150 bonemeal, 3,719 wart blocks, no leakage and no observed nylium loss. The ordinary roof failed to contain taller growths. No physical fungus harvest or playerless full loop is proven. E060 biome sampling is preliminary because of residual cross-case drops and basin leakage.
 
 Original chunk-aligned P01–P04 integrated prototypes are versioned in the testlab repository. P01–P03 lacked water-comparator supports; the earlier clock-stall diagnosis is corrected by E075 direct signal observations. P04 supports all diodes and lowers the seed but still produces no automatic growth. E077 traces every control diode and separately labels its single command-driven growth probe. No farm profit or sustainable rate is claimed; do not interpret geometry checks as a functional pass.
+
+
+## 2026-10-11 16:45 UTC — integrated wiring and fast-mode continuation
+
+E077/E078 trace control edges instead of inferring clock health from a blocked main piston. They expose a self-powering push bus, two-axis diagonal wire gaps, nonconducting descent supports, and generator water escaping onto an elevator wire. One diagnostic command-powered dose converted 17 moss cells; excluded from farm production.
+
+[P05/E079 full result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/079-integrated-p05.json): 28,800 accelerated game ticks, 61 dispenser triggers, one main piston extension, zero bonemeal consumed, all 128 startup bonemeal retained, net zero. Bucket empty plus field water present demonstrates that bucket state alone did not establish a dry field. FAIL preserved.
+
+[P06/E080 task](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38156544852) tests one water source and the eligible **48-tick push generator**, with a faster harvest clock, actual pulse/field diagnostics and manual OFF/settle before restart/unload. Results pending. User explicitly accepts switching OFF before unloading; do not spend further work on the failed E066 lava gate, and do not exclude fast mode on its known accidental-live-unload failure.

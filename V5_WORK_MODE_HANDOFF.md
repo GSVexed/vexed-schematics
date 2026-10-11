@@ -2,7 +2,7 @@
 
 Status at 2026-10-11: Active actual-engine development; continuous stone and alternatives are under test. **No complete production module or V5 Litematica build is proven yet.**
 
-**Latest continuation:** [2026-10-11 development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md), updated 16:15 UTC. E057 proved 130 continuous pushes across restart/unload; E063 fast mode failed live unload but is again eligible with a tested manual shutdown, per the user's clarification. E066 lava shutoff is shelved. E068 proves partial-block hopper/cart/water pickup. P01–P04 integrated prototypes failed to trigger growth; E077 is tracing controls. No sustainable module or net rate is proven.
+**Latest continuation:** [2026-10-11 development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md), updated 16:45 UTC. E057 proved continuous stone; E063 fast mode is eligible with user-approved manual OFF before unloading. E066 lava shutoff is shelved. E068 verifies hopper/cart/water pickup. P01–P05 integrated prototypes failed; E077/E078 traced actual wire faults, and P05/E079 cycles growth triggers but retains water and consumes no bonemeal. P06/E080 tests a single retractable source with the **48-tick generator** and manual shutdown. No sustainable module or net rate is proven yet.
 
 ## User's specific goals
 
