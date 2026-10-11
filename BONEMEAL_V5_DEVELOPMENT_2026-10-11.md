@@ -112,3 +112,12 @@ E091 clean-reset test failed collection: the five-moss-cell strip collected 10 o
 E093/P10 shortened only the harvest clock from 15 to 8 items. It failed sustained production: net zero over the initial 28,804 game ticks, only one monitored generator push, and no moss present at snapshots. After switching OFF, a delayed growth consumed one bonemeal and produced moss. Reject P10. E095/P11 now tests the faster interval together with a shorter growth delay (10 affected repeaters, summed delay 64→36 game ticks); this is a test hypothesis, not a speed claim. Fresh separate prototype areas and pre-test world backups are used.
 
 [E091 results](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/091-honey-hopper-clean-probe.json) · [E093 results](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/093-integrated-p10.json)
+
+
+### Additional measured decisions — 19:00 UTC
+
+E094 corrected containment test: four five-cell honey-strip trials collected all 20 supplied moss blocks and all 20 carpets; all carpets cleared and the five-stone strip returned all stones in 4/4 trials. Broader all-moss 2×2 case collected only 14/16 moss. Overall status FAIL, with a promising strip component subset; not an autonomous farm proof. E096 slime/cart five-cell strip collected 18/20 moss and 14/20 carpets, so its current collector does not qualify for dense mixed-material adoption.
+
+E095/P11 restored actual growth with shorter delays, but net remained -8 bonemeal after 28,804 game ticks. Reject this variant as a performance improvement; hour and real-time extensions were skipped. E097 physical 32-GT ring made 200 piston cycles over 6,403 ticks but only 11 stone-regeneration events and 24 cobblestone-detection ticks, water retained. Reject that timing. E098 tests a 40-GT intermediate with 200 cycles. Do not replace proven 48-GT baseline until an alternative passes.
+
+[E094](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/094-contained-honey-probe.json) · [E095](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/095-integrated-p11.json) · [E096](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/096-slime-cart-probe.json) · [E097](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/097-32gt-generator.json)
