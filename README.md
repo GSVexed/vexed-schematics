@@ -40,3 +40,9 @@ SHA-256: `b25750fcc8e7e86fefb6ba9a0b9c3d436fffc7369f4ac1883c9c76e38d16f261`.
 
 [Archived V1 schematic](https://github.com/GSVexed/vexed-schematics/raw/main/kelp-v1.litematic).
 
+
+## Schematic quality checks
+
+Every committed `.litematic` is now checked by [automated structural CI](https://github.com/GSVexed/vexed-schematics/actions/workflows/validate-schematics.yml) using a portable, standard-library NBT decoder. The first verified run on 2026-10-11 passed all five tracked schematics: [see actual test result](https://github.com/GSVexed/vexed-schematics/actions/runs/38136857710).
+
+These checks detect malformed block-state data, invalid palette indices, duplicate or out-of-bounds block entities, and metadata problems. **They do not establish that a farm produces items or remains reliable after lag/chunk unloads.** Functional testing requires real Minecraft engine tests, and Donut SMP server-specific claims require separate observation. See the [bonemeal V4 reliability and benchmarking plan](BONEMEAL_V4_VALIDATION_PLAN.md).
