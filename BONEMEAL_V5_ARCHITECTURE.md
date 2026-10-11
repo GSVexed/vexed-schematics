@@ -51,3 +51,17 @@ Compare by **verified net bonemeal/hour**, TPS cost, uptime, restart robustness,
 ## Immediate next step
 
 Map V4 schematic moss blocks, dispensers, piston harvesters, redstone and composting/collection clusters to understand its production core, without modifying the existing schematic or user world. Then build two candidate core prototypes and test them.
+
+## V4 structural mapping completed — 2026-10-11
+
+The exact V4 schematic was decoded on the user's real PC using a SHA-256-checked reference, with coordinate-order verification of **555 out of 555** block entities. [Successful inspection workflow](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38140353271).
+
+- Four moss seeds at V4-local coordinates **(7,8,10), (27,8,10), (7,22,10), (27,22,10)**: 20-block horizontal spacing and 14-block vertical spacing.
+- **8 dispensers and 8 droppers**, including machinery beyond the growth dispenser at each seed.
+- **44 composters:** 22 in the lower layer (Y=7), 22 upper (Y=21); **11 composters per production level/column combination**.
+- Full factory totals: **487 hoppers, 579 redstone wire, 120 pistons, 116 sticky pistons**. These include shared transport, control and storage parts; don't assume each core has one quarter of the hoppers.
+- V4 full footprint is **36×29×18** in its one schematic region, including shared infrastructure.
+
+**Implication:** The V5 goal is not just to copy an old mechanism into an extra three vertical blocks. Benchmark standalone V4 cores first, then compare simplified recycling/transport and an independently controllable local core. The existing V4 geometry does not establish how many hoppers are actually needed per independent core.
+
+**Still unknown:** V4 per-module net production, effective compost/feed capacity, reason the user's modules stalled, and whether the machine reliably restarts after chunk unloading. The above analysis is structural and is not an in-game functionality PASS.
