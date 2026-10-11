@@ -107,3 +107,43 @@ Moss cannot propagate onto cobblestone; high throughput requires **stone**, not 
 The next practical build is a compact, renewable stone generator and harvester attached to one independently bonemealed pad, inside a measured chunk and height budget, followed by item collection, parallel composters, closed-loop refill and backpressure recovery.
 
 Reference mechanics: https://minecraft.wiki/w/Tutorial:Cobblestone_farming (stone generated when lava enters water from above). A 2026 community report identifies mistimed lava/water on unload as a cause of cobblestone formation: https://www.reddit.com/r/technicalminecraft/comments/1teopse/what_causes_cobblestone_to_generate_in_moss_farms/ . These are research inputs, **not** a mandate to reuse other designers' circuits.
+
+## Radical mechanism survey — 2026-10-11
+
+The engineering contest now explicitly includes these **distinct routes** rather than assuming moss wins:
+
+| Technology | Why it matters | Critical caveat |
+|---|---|---|
+| Moss → stone regeneration → compost | Fully renewable, familiar, observed 22–27 new moss/dose on small test pads | Generator speed, vegetation clearance, pistons, composter throughput and collection footprint |
+| Huge crimson/warped fungi → wart blocks → compost | High 85% compost success for wart blocks, potentially dozens produced by one grown fungus | The fungus must be automatically **regrown** without player placement, harvested, and kept inside 16 block height; unexpected 27-block fungi are possible |
+| Underwater sea pickles on living coral → compost | Their bonemeal propagation uses **no stone generator**; 65% compost success | Coral must stay alive, source pickle must persist, no per-use inventory leak, and actual **net** gain must be demonstrated |
+| Melon/cactus/kelp/plant surplus → compost | Mature no-bonemeal crops require little active redstone | Generally large area, random-tick dependence, or slow throughput at a 16³ limit |
+| Skeleton bones or spawner output | High bonemeal per bone and an autocrafter can make bone meal | Spawning, mob cap, server restrictions, non-portable spawner or nearby-player dependency |
+| TNT-based harvest (supporting technology, not bonemeal generation itself) | Potentially fast wart harvesting and reduced piston footprint | Reportedly enabled on Donut SMP in June 2026, but current server restrictions, machine compatibility, grief/lag and footprint need explicit verification; general item duplication is prohibited |
+
+### Actual non-moss growth experiment: E05
+
+The original experiment built a single crimson fungus seed atop nylium with a dispenser aiming directly at the fungus. In Minecraft Java 26.2, growth produced **67 crimson nether wart blocks and 8 crimson stem blocks**, with the dispenser inventory moving from 32 to 31 bone meal: **one bone meal actually consumed in that run**.
+
+- [Manifest](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/039-20261011-v5-giant-fungus-yield/manifest.json)
+- [Result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/039-20261011-v5-giant-fungus-yield/result.json)
+- [Minecraft server log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/039-20261011-v5-giant-fungus-yield/minecraft-latest.log)
+
+**Do not label this bonemeal profit or a complete harvest.** The test used `fill ... air replace` to count and erase naturally generated blocks; it did not collect wart items, feed composters or recreate the fungus. Larger samples are needed. A giant fungus can overgrow 16 blocks high, which directly conflicts with the user-mandated 16³ size envelope unless we find a genuine, tested way to constrain production.
+
+The pending E06 experiment studies actual underwater pickle propagation using living coral, a bonemeal dispenser and per-colony inventory counts; [test manifest](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/040-20261011-v5-sea-pickle-net-growth/manifest.json).
+
+### Research references
+
+- [Huge fungus farming and growth mechanics](https://minecraft.wiki/w/Tutorial:Huge_fungus_generation); [technical breakdown](https://techmcdocs.github.io/pages/GameMechanics/HugeFungi/).
+- [Sea pickle farming](https://minecraft.wiki/w/Tutorial:Sea_Pickle_farming), [sea pickle 65% compost chance](https://minecraft.wiki/w/Sea_Pickle).
+- [Donut SMP TNT duping status as of September 2026](https://donutsmp.wiki/tnt-duping) and [general item-duplication restrictions](https://donutsmp.wiki/item-duplication).
+
+### Next gating questions
+
+1. Is full playerless fungus planting plus TNT-free or permitted-TNT wart harvesting possible inside 16³, *including worst-case height*?
+2. Do coral/sea pickle cycles return **more** bone meal than consumed with normal composter probabilities and realistic collection?
+3. Can moss stone-source/hopper architecture be replaced with fewer moving parts and still beat both techniques by net bonemeal per hour?
+4. Which design is reliable after chunk unload, depleted input, and full output?
+
+Do not select based on a single lucky growth.
