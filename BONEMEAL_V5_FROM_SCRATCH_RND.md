@@ -59,3 +59,38 @@ User explicitly rejected an incremental reskin of the legacy V4. V4 is a modifie
 - Timing pitfall worth testing: dispenser fires after several game ticks, while pistons actuate sooner; requires sequencing, source: https://www.reddit.com/r/technicalminecraft/comments/1vfaa8p/my_dispenser_wont_dispense_bone_meal_into_moss/
 
 Goal: design the world's best *for the user's constraints*, not claim a world record without comparison and measured evidence.
+
+## Experimental record — 2026-10-11 (all local Minecraft Java 26.2)
+
+The following test jobs executed on the user's PC through the recovered Minecraft TestLab, not simulated in the assistant. Trials are **growth only**: temporary stone platforms regenerated with test commands, so they are *not* sustainable farms or measurements of bonemeal profit.
+
+| Test | Setup | Doses | Stone converted to moss | Mean converted per dose | Outcome |
+|---|---|---:|---:|---:|---|
+| E01 | Upward-facing dispenser under source moss | 1 | Adjacent moss confirmed | n/a | **PASS**, confirmed dispenser consumed bonemeal |
+| E02a | 7×7 flat stone pad | 8 | 216 | **27.00** | PASS |
+| E02b | 5×7 flat stone pad | 8 | 182 | **22.75** | PASS |
+| E03 | 5×5 flat stone pad | 12 | 265 | **22.08** | PASS |
+
+E01 [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/035-20261011-v5-bottom-dispenser-moss/result.json) and [log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/035-20261011-v5-bottom-dispenser-moss/minecraft-latest.log).
+
+E02 [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/036-20261011-v5-moss-pad-geometry/result.json) and [log with per-trial scoreboard totals](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/036-20261011-v5-moss-pad-geometry/minecraft-latest.log).
+
+E03 [result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/037-20261011-v5-compact-five-square/result.json) and [log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/037-20261011-v5-compact-five-square/minecraft-latest.log).
+
+**Interpretation:** the 5×7 experiment used 35/49 = 71.4% as many stone-pad cells as 7×7 and produced 22.75/27 = 84.3% as many moss blocks per dose in these eight-trial sets. The 5×5 result is promising at 25 cells but has high small-sample uncertainty; do not rank architectures from these rates alone. Every trial re-created stones using Minecraft console commands, so stone-generator footprint, collection efficiency, moss vegetation drops, composter throughput, and net bonemeal production have **not** been tested here.
+
+### 16×16 horizontal layout budget study
+
+The [first-principles space layout script](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_layout_candidates.py) independently analysed five candidate arrangements, validated non-overlap and chunk bounds, and ran on the real PC [here](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38141318471):
+
+| Concept | Pads/level | Pad cells in a 16×16 slice | Free cells |
+|---|---:|---:|---:|
+| Four 7×7 | 4 | 196 | 60 |
+| Four 5×7 | 4 | 140 | 116 |
+| Four 5×5 | 4 | 100 | 156 |
+| Two 7×7 | 2 | 98 | 158 |
+| Six 3×5 | 6 | 90 | 166 |
+
+**Space packing is not a functional proof**. Specifically, theoretical four 7×7 pads leave extremely little lateral room for stone generation, composter input and collection hardware. Four smaller pads offer more room for the rest of the engineering, but require evidence that the stone supply and composter count can keep up. We must engineer/verify the full height envelope as well, not just 16×16 plan view.
+
+Pending: E04 four simultaneous 5×5 pads in a single chunk; exact test manifest [here](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/038-20261011-v5-quad-pad-simultaneous/manifest.json).
