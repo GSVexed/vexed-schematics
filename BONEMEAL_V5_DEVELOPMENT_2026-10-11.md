@@ -1,58 +1,84 @@
-# V5 development checkpoint — 2026-10-11, 14:17 UTC
+# V5 development checkpoint — 2026-10-11, 16:15 UTC
 
-This checkpoint continues the original research. **No complete production module, sustainable net bonemeal/hour, or final V5 schematic is proven yet.** Existing schematics, mods and user worlds remain preserved.
+**No sustainable complete V5 module or released Litematica is proven yet.** This is an active engineering record. Isolated engine experiments and versioned 16³ prototypes are real; prototype checks and queued jobs are not functional proof.
 
-## Actual new evidence
+## Current user decisions
 
-| Experiment | Actual observation | Interpretation |
+- Preserve every existing schematic, mod, working system and user world. New work uses a separate backed-up test world.
+- Explore original architectures, including giant fungi; V4 is a benchmark only.
+- The user specifically highlighted hopper-minecart placement and partial-height pickup blocks. E068 tested this rather than assuming a mechanism.
+- **Speed remains a priority.** E063's 48-game-tick generator is still a candidate under a tested manual shutdown procedure. The user accepts turning the machine off before unloading/leaving it. Accidental live unloading is a known failure of that variant, not concealed.
+- **E066 lava shutoff is shelved.** Do not spend more usage repairing that branch. A slower baseline does not select the final production speed.
+- Keep experiments bounded and inspect real failure traces before another layout change.
+
+## Verified component evidence
+
+| Experiment | Measured result | Scope and decision |
 |---|---|---|
-| E048 | No physical clocked push; escaped water damaged controls | FAIL. A queued job and a valid schematic cannot establish function. |
-| E049 | Clock did not actuate in isolated server; restart and true unload were exercised | FAIL. Initial harness lacked assertions and incorrectly emitted PASS; result was explicitly adjudicated and harness repaired. |
-| E051 | Repeater facing property identified its input orientation; revised circuit made two pushes, then stalled | FAIL. Bonemeal/headspace/output clearance remained unresolved. |
-| E052 | 80 trials, 76 fungus growths, 198 bonemeal used; 4,429 wart blocks inside nominal module, 347 outside; three leaking trials | An ordinary obsidian ceiling does not enforce the 16-block height requirement. Command resets/counts were used; no physical harvesting or farm profit claimed. |
-| E053 | Two-output-cell drain produced two pushes and then stalled; real chunk unload confirmed | FAIL. Persistent moss carpet above seed prevented later effective doses. |
-| E054 | Physical clock kept cycling; plant-clear wire received power but clearing piston never extended | Observation diagnostic. Replace indirect terminating dust with a directly aimed repeater. |
-| E056 | Corrected plant-clear circuit: 16 physical pushes, 17 stone formations; zero observed water loss or cobblestone; 100 bonemeal consumed during 9,600-tick phase | FAIL against continuous-operation assertions. Second output vegetation blocks further conversion; bonemeal input is external. |
-| E057 | Two headspaces now have separate positively powered pistons | Execution in progress; no result assumed. |
-| E055 | 48 samples per sea-pickle/nylium/moss-height case, first compost-layer control, and 120-second physical hopper-composter throughput | Execution in progress. First launch failed before Minecraft due to embedded Python import isolation; repaired and recorded. |
+| E057 | 100 pushes/101 stone formations over 9,600 ticks, then 10 after saved restart and 20 after confirmed unload; total 130 pushes/131 formations; zero observed cobble or lost water | Physical 96-tick primitive PASS. Externally supplied bonemeal, no compost/recycle. |
+| E059 | Stationary rail cart captured 98 moss, 12 carpet, 3 seeds, 2 azalea and 1 flowering azalea after 100 cycles; moss reached 128 after restart/reload phases | Pickup through the field is physically proven. Overall harness FAIL was a slot-zero seed count mistaken for moss; retain failure plus adjudication. No cart was pushed into another block. |
+| E063 | 48-tick primitive completed 100 initial pushes and 10 after restart; after confirmed unload it made cobble and stalled (114 pushes, 113 stone formations) | Fast operation is real. Live unload recovery failed. The exported count 1,068 is invalid: a temporary score was not reset for unmatched inventory slots. |
+| E066 | 251 clock/piston cycles across the test sequence, but only the initial stone and zero exported moss | Lava-shutoff prototype FAIL. Moving pistons and cobble-free empty operation do not prove generation. Shelved. |
+| E068 | Ordinary hopper: 64/64 items through soul sand, mud, honey block, farmland and bottom slab; 0/64 through stone or chest. Rail cart: 64/64 through stone, soul sand and air. Water channel: 64/64 | Externally supplied component PASS. Use water-to-hopper pickup where it fits; cart through stone remains an option. |
+| E068 | Water-bucket dispenser comparator signals: contained 2, released 1, recovered 2 | Actual usable water-state sensor; a level-2 comparison can select dry growth. |
+| E055 | 256/256 first wheat seeds advanced empty composters to level 1 | Guaranteed first layer verified. Expected homogeneous input is 1+6/p, not 7/p. |
+| E061 | Observer dropper clock measured 402 rising edges in 120 seconds; ordinary hopper/observer-fed wart columns output 30/34 bone meal, pumpkin pie 33/40 | Actual supplied component capacity; observer period is 6 ticks. Short moss difference is not a statistical conclusion. |
+| E062 | Attenuated comparator clock measured 603 rising edges in 120 seconds; hopper/dropper outputs: moss 24/41, wart 28/45, pie 33/50 | A measured ~4-tick dropper feed. Faster compost feeding is promising, not a farm-production result. |
 
-Fungus E050 without an active player paused at 60 seconds and completed only 20 growths. Its apparent lack of leakage is **inconclusive**, not evidence of roof containment. E052 adds an active Carpet fake player and confirms it survived through the test.
+See [permanent results](https://github.com/GSVexed/chatgpt-minecraft-testlab/tree/main/results), [specifications](https://github.com/GSVexed/chatgpt-minecraft-testlab/tree/main/experiments/v5), and [versioned scripts](https://github.com/GSVexed/chatgpt-minecraft-testlab/tree/main/pc-lab).
 
-## Testing improvements
+## Alternative production routes
 
-A separate disposable Minecraft 26.2 runtime and world live under `%LOCALAPPDATA%\ChatGPT-PCLab\v5-engine\runtime-049`. Only runtime dependencies were copied from the legacy installation; no user worlds, account data or security settings were copied or changed. Backups of this new isolated world precede subsequent mutating experiments.
+E055 independently sampled 48 trials per case. The first 5×5 pickle trial consumed no bonemeal and is excluded from its verified sample; the raw aggregate FAIL is preserved.
 
-The versioned [engine runner](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_engine_runner.py) records every console command, real server observations, specification hashes, numeric assertions and bounded phases. It stops only the process it created. Minecraft 26.2 gamerules use namespaced snake-case IDs. Automatic empty-server pausing is disabled in this isolated runtime.
+- Sea pickles: new-pickle means 4.383 (5×5, verified n=47), 4.792 (7×7, n=48), 5.354 (9×9, n=48).
+- Ordinary crimson/warped nylium drops: approximately 7.21–7.42 compostable roots/fungi per dose in the sampled 5×5 and 7×7 pads. These samples do not support a positive closed-loop return.
+- Moss 7×7: mean 26.75 new moss at field-level seed, 26.646 with seed raised 2, 23.979 raised 4, and zero raised 6. These are command-reset growth samples.
+- E060 biome water-harvest samples remain **preliminary**. Residual cross-case item contamination and a missing basin wall prevent using them to select or rule out a biome architecture. Do not silently promote the cherry/meadow counts to farm profit.
 
-- Accelerated tick sprints prove mechanical game-tick behavior. Their elapsed milliseconds/tick are **not** normal 20-TPS performance measurements.
-- Real-time runs record game time and tick-query output before/after; calculate rates from actual inventory deltas.
-- Removing a forceload is insufficient by itself: an `execute unless loaded` probe must actually confirm unload.
-- `OBSERVED` phases and `COMPLETED` observation jobs do not establish a working farm.
-- Result JSON is committed permanently; detailed console/command evidence is also uploaded as workflow artifacts with 30-day retention.
+### Giant crimson fungi remain a challenger
 
-## Candidate engineering decisions
+E058 ran 64 trials in each of four conditions, with command resets and block counts:
 
-1. **Moss, raised seed, burst refill and timed water wash.** Separate stationary seed from horizontally pushed stone. A raised seed may avoid inserting it in the refill plane. Test its actual scan depth before layout selection. Refill can stop safely against a fixed boundary if a subsequent growth destroys blocks in each piston lane. This needs measured recovery when any lane temporarily fails to convert.
-2. **Crimson/warped nylium with water wash.** No stone or lava machinery, potentially multiple shallow layers. Determine Java 26.2 compostable drops per verified dose; community claims conflict between editions. Ignore nether sprouts requiring tools unless physical harvest actually recovers them.
-3. **Coral/sea pickle.** No stone generator and dense item counts, but preserve the seed colony and prove compost return exceeds input. First-layer composter behavior can change a marginal ranking; investigate directly.
-4. **Giant fungus at the actual world ceiling.** An ordinary roof has failed. The build limit could reject or truncate tall growth; test exact behavior rather than infer it. A ceiling-only design sacrifices vertical stackability and still needs playerless replant, physical harvest, nylium survival and Donut support.
-5. **Biome-specific vegetation.** Investigate grass/wildflower/pink-petal water-harvest drops. Reusable soil could remove all stone machinery. Measure real drops, including seed chances and petal item counts; do not rank by visible plants.
-6. **Passive crop or bone-producing route.** Retain as an independent comparator and potential recovery source. Server-specific virtual spawners need verified mechanics and capital-cost accounting before being considered production-module substitutes.
+| Nylium placement | Bonemeal used | Wart blocks inside 16-height region | Outside warts | Leaking trials | Nylium lost |
+|---|---:|---:|---:|---:|---:|
+| Y80, open | 128 | 3,723 | 289 | 3 | 0 |
+| Y80, obsidian roof | 158 | 3,335 | 443 | 5 | 0 |
+| Y304, actual world limit | 150 | 3,719 | 0 | 0 | 0 |
+| Y308, actual world limit | 158 | 3,106 | 0 | 0 | 2 |
 
-The composter model is pending a direct first-layer test. If the first layer is guaranteed and all following layers succeed with probability (p), expected homogeneous input becomes (1+6/p), not (7/p). Full physical throughput also includes the ripening wait, hopper cooldowns, congestion and inventory routing.
+Y304 provides a genuine geometry clue: 58.11 wart blocks/growth, 2.344 bonemeal/growth in these samples, no observed leakage or nylium loss. **This is not net bone meal or a farm.** Playerless seeding, actual destruction, collection, composting, repeatability and Donut permission remain unproven. A build-limit layout also cannot vertically stack.
 
-## Reproducible evidence
+Primary research reference: [ncolyer's huge-fungus experiments and code analysis](https://techmcdocs.github.io/pages/GameMechanics/HugeFungi/). Engine tests supersede historical assumptions about the build limit.
 
-- [All versioned specifications](https://github.com/GSVexed/chatgpt-minecraft-testlab/tree/main/experiments/v5)
-- [Permanent V5 result records](https://github.com/GSVexed/chatgpt-minecraft-testlab/tree/main/results)
-- [E052 full engine log](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/052-20261011-v5-fungus-roof-active-control/minecraft-latest.log)
-- [E056 result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5-056/result.json)
-- [E057 and repaired E055 workflow](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38145888986)
+## Integrated original prototypes
 
-## Donut SMP compatibility
+[P01–P04 manifests](https://github.com/GSVexed/chatgpt-minecraft-testlab/tree/main/prototypes/v5) specify all blocks, inventories and cart coordinates inside a chunk-aligned 16×16×16 volume. Existing prototype areas are preserved; each revision uses another isolated chunk. No V4 blocks or geometry were used.
 
-**Unverified.** An independent Fabric/Carpet/TIS 26.2 runtime does not establish Donut backend equivalence. Public secondary reports describe non-vanilla hopper behavior and changing TNT support. Official rules and a safely isolated actual-server probe are required before reliance on those details. No current Donut hopper rate, TNT legality, redstone/entity limit or backend version is claimed.
+- P01/E072, P02/E073 and P03/E074 retained 128 startup bonemeal after 28,800 accelerated ticks, fired no growth doses and made one main piston extension. **FAIL, net zero, no sustained production.**
+- The initial diagnosis of a clock stall was wrong. E075 observed transferring hopper inventories, moving redstone positions and changing piston phases. A blocked main piston does not establish a stalled clock.
+- Builder and console inspection identified unsupported water-sensor comparators. They broke, so growth could not trigger. The full-buffer sensor also lacked support.
+- P04/E076 lowers the source into the washable field plane, explicitly supports all diodes, and routes the growth delay/reserve under the field. Its comparators survive and show expected output. It still fired no automatic growth doses over 28,800 ticks. **FAIL.**
+- E077 is now tracing rising edges along every control diode and includes one explicitly command-powered growth probe. That probe must not be counted as autonomous production or merged into a benchmark net rate.
 
-## Next execution
+These failures are retained as evidence. The module's intended generation, collection, composting, recycle and surplus blocks do not mean it works. No net bone meal/hour is claimed.
 
-Retrieve E057 and E055 actual results. If the stone cell cycles continuously, measure crop/item recovery and then expand to a wider pad; do not enlarge a failing cell. Execute controlled build-limit fungus and biome-vegetation tests. Use measured net return and physical bottlenecks to select full prototypes. The final module must include physical composting, recycle priority, surplus export, stop/backpressure and restart recovery inside 16³; shared shulker/storage/sell infrastructure remains external.
+## Benchmark discipline
+
+The [isolated engine runner](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_engine_runner.py) journals setup, mutations, console responses and timing. The [integrated test](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p01_test.py) reads every inventory by item identity and subtracts the 128-item startup supply.
+
+- Tick sprints establish game-tick operation; their speed/MSPT is not a normal-TPS measurement.
+- Real-time runs measure actual inventory deltas, game ticks and wall time.
+- Long tests, restart/unload and throughput comparisons are skipped while basic operation fails.
+- No commands replenish stone or bonemeal during an integrated benchmark.
+- Component inventory measurements must reset temporary scores for every filtered slot, or use typed real-inventory snapshots.
+- Keep explicit FAIL, ERROR, observation-only COMPLETED and preliminary functional results distinct.
+- Final validation still needs exact schematic paste, 72,000 game ticks, full-buffer stop/resume, empty seed, interrupted harvesting, two/four modules, and external shared infrastructure.
+
+## Donut SMP
+
+**Not verified.** Public server status, rules and actual server mechanics require their own evidence. The official support page links rules.donutsmp.net, but the rules endpoint is not retrievable in the current search environment. Secondary reports of batch hoppers and altered redstone/TNT behavior are leads only. Vanilla hopper clocks cannot be declared Donut compatible.
+
+## Immediate next work
+
+Retrieve E077 control traces, fix the identified break in the automatic growth trigger, then establish a physically closed loop. Compare the 96- and 48-tick versions with corresponding growth intervals; test manual OFF, settling, unloading and restart. Keep giant fungi as a separate challenger, and prefer collection with fewer placement steps when measured pickup remains complete.

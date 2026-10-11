@@ -1,6 +1,6 @@
 # Bonemeal V5 — 16×16×16 chunk-aligned production modules
 
-Status: **Architecture selected; no V5 schematic released or functionally tested yet.**
+Status: **Production requirements fixed; candidate architectures are being tested. No sustainable V5 module or released schematic is proven.**
 
 ## User-approved design (2026-10-11)
 
@@ -72,3 +72,7 @@ The exact V4 schematic was decoded on the user's real PC using a SHA-256-checked
 **Implication:** The V5 goal is not just to copy an old mechanism into an extra three vertical blocks. Benchmark standalone V4 cores first, then compare simplified recycling/transport and an independently controllable local core. The existing V4 geometry does not establish how many hoppers are actually needed per independent core.
 
 **Still unknown:** V4 per-module net production, effective compost/feed capacity, reason the user's modules stalled, and whether the machine reliably restarts after chunk unloading. The above analysis is structural and is not an in-game functionality PASS.
+
+## Latest engineering continuation — 2026-10-11, 16:15 UTC
+
+Read the [current development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md) before older status entries. The user accepts switching off before unloading and explicitly wants the 48-tick generator retained in the performance comparison. That variant failed accidental live unload; a tested OFF/settle/unload procedure is necessary. The unsuccessful lava-shutoff branch is shelved to conserve usage. Original P01–P04 full-volume prototypes exist but have not achieved automatic growth or positive net output. The final architecture and speed remain open. Stationary carts on ordinary rails, partial-height block pickup and water-to-hopper pickup have been tested; collection convenience is an engineering criterion, not a substitute for performance.
