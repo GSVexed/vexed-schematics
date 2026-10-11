@@ -1,12 +1,14 @@
 # Work Mode handoff — Minecraft bonemeal V5
 
-Status at 2026-10-11 18:58 UTC: **P09/E088 is a sustainable fast 16³ autonomous baseline, PRELIMINARY_PASS. No final A-tier release or exact Litematica paste is proven.**
+Status after E102 on 2026-10-11: **P09/E088 is a sustainable fast 16³ autonomous baseline, PRELIMINARY_PASS. No final A-tier release or exact Litematica paste is proven.**
 
 **Latest continuation:** [development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md). E088 measured +87 net bonemeal in 72,002 game ticks and +12 in a real 300-second test at approximately 20 TPS. Actual manual OFF/settle, saved restart, witnessed chunk unload, reload while OFF and manual RUN passed with zero cobblestone/lost-water faults. Keep the fast generator; the automatic lava gate remains shelved. Do not reuse its saved test area without a fresh paste: cleanup previously unloaded it while running; that harness bug is now corrected.
 
 Recent bounded tests: E091 fixed contaminated honey test resets and confirmed pickup losses. E094 containment collected all 20 moss and 20 carpets in four five-cell honey-strip trials, while one broader 2×2 trial still lost moss; component evidence only. E096 slime/cart strips lost items. P10/E093 faster water cadence produced net zero; P11/E095 shortened growth delay ended net -8 after 24 simulated minutes. Neither replaces P09. E097 (32 GT), E098 (40 GT) and E100 (conditional Nether 32 GT with command-created water) failed with cobblestone. E099 fresh 48-GT control passed 200 pushes / 201 stone formations with zero cobblestone or water loss. Results and scripts are versioned in the testlab repository. Preserve concurrent Club Sana work and use fresh GitHub HEAD leases.
 
-Next priorities: develop a synchronized dry honey core from the successful strip geometry, measure actual closed-loop output and resource use, then storage/empty-seed/interruption/multiple-module/Donut/exact-schematic acceptance. Shulker/storage/sell systems remain external and unfinished.
+E101's downward sticky-piston root harvested and restored all four five-cell moss/carpet trials and all four stone trials, with 20/20 moss and 20/20 carpets collected in the moss trials. COMPONENT_PASS only. The down-facing head also provides the stone-lane end stop. P12/E102 is the first complete dry integration: FAIL, only one dose, four generator pushes and net -1 over 28,804 game ticks; no cobble or water loss. Its master hoppers both became disabled while the manual lever was OFF. P13/E103 is running a bounded read-only signal trace after separating the master stop from its comparator output and boosting the long growth wire. These revisions do not replace P09. [E101 component](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/101-down-root-probe.json) · [E102 integration](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/102-integrated-p12.json) · [P13 trace run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38169255759).
+
+Next priorities: establish repeatable dry harvest, source clearing and regeneration together, measure actual closed-loop output and resource use, then storage/empty-seed/interruption/multiple-module/Donut/exact-schematic acceptance. Shulker/storage/sell systems remain external and unfinished.
 
 ## User's specific goals
 
