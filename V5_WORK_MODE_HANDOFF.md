@@ -1,8 +1,12 @@
 # Work Mode handoff — Minecraft bonemeal V5
 
-Status at 2026-10-11: Active actual-engine development; continuous stone and alternatives are under test. **No complete production module or V5 Litematica build is proven yet.**
+Status at 2026-10-11 18:58 UTC: **P09/E088 is a sustainable fast 16³ autonomous baseline, PRELIMINARY_PASS. No final A-tier release or exact Litematica paste is proven.**
 
-**Latest continuation:** [2026-10-11 development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md), updated 16:45 UTC. E057 proved continuous stone; E063 fast mode is eligible with user-approved manual OFF before unloading. E066 lava shutoff is shelved. E068 verifies hopper/cart/water pickup. P01–P05 integrated prototypes failed; E077/E078 traced actual wire faults, and P05/E079 cycles growth triggers but retains water and consumes no bonemeal. P06/E080 tests a single retractable source with the **48-tick generator** and manual shutdown. No sustainable module or net rate is proven yet.
+**Latest continuation:** [development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md). E088 measured +87 net bonemeal in 72,002 game ticks and +12 in a real 300-second test at approximately 20 TPS. Actual manual OFF/settle, saved restart, witnessed chunk unload, reload while OFF and manual RUN passed with zero cobblestone/lost-water faults. Keep the fast generator; the automatic lava gate remains shelved. Do not reuse its saved test area without a fresh paste: cleanup previously unloaded it while running; that harness bug is now corrected.
+
+Recent bounded tests: E091 fixed contaminated honey test resets and confirmed pickup losses. E094 containment collected all 20 moss and 20 carpets in four five-cell honey-strip trials, while one broader 2×2 trial still lost moss; component evidence only. E096 slime/cart strips lost items. P10/E093 faster water cadence produced net zero; P11/E095 shortened growth delay ended net -8 after 24 simulated minutes. Neither replaces P09. E097 is testing a physical 32-GT generator for 200 cycles in a new backed-up isolated fixture; no result yet. Results and scripts are versioned in the testlab repository. Preserve concurrent Club Sana work and use fresh GitHub HEAD leases.
+
+Next priorities: finish E097, develop a synchronized dry honey core from the successful strip geometry, measure actual closed-loop output and resource use, then storage/empty-seed/interruption/multiple-module/Donut/exact-schematic acceptance. Shulker/storage/sell systems remain external and unfinished.
 
 ## User's specific goals
 
