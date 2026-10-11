@@ -1,6 +1,8 @@
 # Work Mode handoff — Minecraft bonemeal V5
 
-Status at 2026-10-11: Active research, actual independent Minecraft mechanics tests completed. **No V5 Litematica build yet.**
+Status at 2026-10-11: Active actual-engine development; continuous stone and alternatives are under test. **No complete production module or V5 Litematica build is proven yet.**
+
+**Latest continuation:** [2026-10-11 development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md). Read this before the older experiment list below. New experiments E048–E057 include failed clock prototypes, actual interruption probes, 80-trial fungus roof data and an isolated engine harness. E052 found three roof leaks; an ordinary ceiling is not containment.
 
 ## User's specific goals
 

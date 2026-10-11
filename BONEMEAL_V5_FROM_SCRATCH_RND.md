@@ -177,3 +177,10 @@ In a real Minecraft 26.2 engine test, E13 confirmed **all** of: the first stone 
 - [Minecraft server log with each assertion](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/047-20261011-v5-stone-sealed-lava-shaft/minecraft-latest.log)
 
 **Not a full module:** this proves one physical regeneration cycle but not a stable continuously clocked stone factory. The next test must execute hundreds of repeated piston pulses, using physical redstone timing, then chunk unload/reload before incorporating the cell into a complete 16³ moss module.
+
+
+## Work Mode continuation — 2026-10-11
+
+Read the [versioned development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-11.md) for new experiments E048–E057, their failure adjudications and exact scope. Important new observations: E052 grew 76 fungi in 80 trials with 198 bonemeal and three out-of-module ceiling leaks; E056 made 16 physical push/regeneration cycles before output vegetation caused stalling. Numeric assertions now prevent observation-only tests being called farm PASS. The isolated runtime preserves existing worlds and backs up its own test world. No sustainable net bonemeal/hour is established.
+
+Earlier simple `7/p` compost equations above are provisional. A direct first-layer control is running: if the first layer is guaranteed, use `1+6/p` per homogeneous completed composter, and measure full hopper/ripening throughput separately. Neither formula constitutes farm proof.
