@@ -1,0 +1,41 @@
+name: Validate Litematica schematics
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '*.litematic'
+      - '**/*.litematic'
+      - 'tools/schematic_audit.py'
+      - '.github/workflows/validate-schematics.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  structural-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Decode and verify every Litematica file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          files = sorted(Path(".").rglob("*.litematic"))
+          if not files:
+              raise SystemExit("No Litematica files found")
+          print(f"Structural checks for {len(files)} schematics", flush=True)
+          for item in files:
+              print(f"VERIFY {item}", flush=True)
+              subprocess.run([sys.executable, "tools/schematic_audit.py", str(item)], check=True)
+          print("ALL_SCHEMATICS_STRUCTURAL_PASS", flush=True)
+          PY
