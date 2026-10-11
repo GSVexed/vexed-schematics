@@ -165,3 +165,15 @@ Do not select based on a single lucky growth.
 - **E11 queued:** Same setup with explicit target-cell diagnosis to distinguish stone, air, water, lava or cobblestone after the piston push. [Test manifest](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/045-20261011-v5-stone-reload-diagnostic/manifest.json).
 
 Any design relying on this fluid cell must wait for repeated renewal, lava-water gating proof and unload/reload reliability; one successful stone formation is insufficient.
+
+### E13 major fix: renewable stone after piston push — PASS
+
+The first E10 piston cycle failed because the target filled with lava instead of regenerating stone. E11 proved the lava state, and E12's timed gate also failed. **E13 fixed the actual geometry:** enclosing all four sides of the vertical lava drop at the level immediately above the water source prevents side lava from disrupting the water supply.
+
+In a real Minecraft 26.2 engine test, E13 confirmed **all** of: the first stone generated, the source water remained intact, the piston pushed the old stone aside, and a second ordinary stone block regenerated at the original location. Combined assertion **PASS**.
+
+- [Exact reproducible test](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/jobs/047-20261011-v5-stone-sealed-lava-shaft/manifest.json)
+- [Result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/047-20261011-v5-stone-sealed-lava-shaft/result.json)
+- [Minecraft server log with each assertion](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/047-20261011-v5-stone-sealed-lava-shaft/minecraft-latest.log)
+
+**Not a full module:** this proves one physical regeneration cycle but not a stable continuously clocked stone factory. The next test must execute hundreds of repeated piston pulses, using physical redstone timing, then chunk unload/reload before incorporating the cell into a complete 16³ moss module.
