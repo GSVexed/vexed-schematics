@@ -42,13 +42,21 @@ P23 is the preserved, sustainable 16×16×16 baseline. Its exact schematic was r
 | E136 / P29 exact file | 132 stems and hydration survived; no meaningful harvesting or output after 24 simulated minutes | FAIL preserved. Long benchmark skipped; do not rerun this file. |
 | E137 saved-fixture trace | Clock ran and 98 melons stood, but the downstream harvest pulse stayed disconnected | Diagnosed a missing direct pickup wire; no crop-growth retest needed. |
 | E138 controlled saved-fixture repair | Add the missing wire and restore 36 altered rail shapes. Both carts visited all 22 field rows; both decks harvested; 56 bonemeal reached external output | Repair evidence only. Existing standing melons make this a transient, not an hourly production result. |
-| E139 / P30 fresh exact file | Submitted; 1,804 non-air blocks, 132 mature stems, 36 hoppers, two carts in 16³ | Current next result to inspect. No winner or performance claim yet. |
+| E139 / P30 fresh exact file | PRELIMINARY_PASS: +149 net / 72,002 GT and +16 / real 300 seconds at 20 TPS; physical restart/unload and congestion/drain passed | Working alternative, not final winner; exact bytes preserved. |
 
 P30 consumes no fertiliser in steady operation and requires a nearby player for natural random ticks. The run generates a new schematic, preserves cart startup Motion, and builds only from decoded exact bytes. Rail shapes are placed with strict mode because ordinary sequential block updates rerouted P29's return curves. This setup is explicitly **not native Litematica or practical survival rail-placement acceptance**.
 
 The fresh-file test rejects unhealthy warm-up before a 72,000-tick production hour, a real five-minute measurement, actual manual OFF/restart/true unload/RUN, and full-output/external-drain scenarios. Fault-injected bonemeal is excluded from production.
 
 [E136 failure](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/136-passive-p29.json) · [E137 trace](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/137-saved-p29-trace.json) · [E138 repair](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/138-saved-p29-pulse-rail-repair.json) · [E139 Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38249096042) · [P30 builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p30_builder.py)
+
+## Current next test: E140 small-plant nylium economics
+
+This differs from the shelved giant-fungus layout: do **not** grow fungi into trees, use TNT or pay giant-growth/soil-repair costs. A fresh 7×7 static crimson-nylium pad receives 32 single real dispenser doses from a finite 64-bonemeal stock. Seven guarded water sources harvest the small plants into a physical hopper/composter/export chain. No crop resets or inventory conversion/replenishment occur between cycles.
+
+Tutorial literature labels profitable nylium-only farming Bedrock-specific, so this is a **bounded Java economic rejection screen**, not an assumption of viability. Reject an uneconomic fully functioning collector before engineering autonomous recycling. If collection/soil/water fails, record a fixture failure rather than a crop verdict. Provided control pulses do not establish an autonomous farm or hourly throughput.
+
+[Experiment source](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_nylium_roots_net_probe.py). Inspect the E140 run/result first on continuation.
 
 ## Keep these decisions
 
