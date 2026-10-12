@@ -2,6 +2,10 @@
 
 Updated 2026-10-12. **The [master directive](V5_MASTER_ENGINEERING_DIRECTIVE_2026-10-12.md) requires arbitrary-phase RUN-state unloading/restart and unattended recovery. Manual OFF is experimental preservation only. Moss leads; benchmark the original single module.** This ledger separates completed evidence, closed branches and the single current next test. Historical handoffs are preserved, but their old next-step lists are superseded.
 
+**Current checkpoint E152–156 (12 October):** The original fixed-target component passed **100/100 witnessed RUN unload/reloads,13 actual last-loaded states and saved RUN restart on both PC and independent Linux mirror**. Zero monitored cobblestone/water loss; finite-seed component only, not profitable full module. [PC result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/152-fixed-cell-phase-inversion.pc.json).
+
+Original P33 dual-root33-target bed physically generated33stone and recovered33lava buckets. E154 found flooded source headspaces and zero seed consumption. Adding only two chest floors in E155 drained both heads and restored consumption; E156 adding glass beneath inner pistons increased observed field moss16→31 on the same saved fixture. Next: verify all13 inner crop positions, then a fresh bounded16-cycle harvest/collection/economic screen with those causal repairs. No hourly/controller/recycling/native/Donut proof yet. Use fast independent Linux mechanics and PC acceptance; no repeated old branches.
+
 ## Preserved working baseline — do not rerun without a new acceptance reason
 
 | Evidence | Actual result | Decision |
