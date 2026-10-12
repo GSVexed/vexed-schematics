@@ -37,13 +37,20 @@ E131 24-minute screens ended +52, +57, +55 respectively, but these are **rejecte
 
 [E132](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/132-nylium-plunger.json) · [E133 run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38241148259)
 
-## Current different architecture: P29 passive melon module
+## Current different architecture: corrected P30 passive melon module
 
-E136 tests a new complete two-deck natural-growth candidate: 132 mature stems, 36 hoppers, two moving hopper carts, 1,803 non-air blocks in 16³. Mud fruit rows, waterlogged hydration slabs, local physical harvest clock, composting, full-buffer stop, local lever and boundary export. Initial bonemeal is zero and steady operation consumes none; natural growth requires a nearby player.
+| Evidence | Actual result | Decision |
+|---|---|---|
+| E136 / P29 exact file | 132 stems and hydration survived; no meaningful harvesting or output after 24 simulated minutes | FAIL preserved. Long benchmark skipped; do not rerun this file. |
+| E137 saved-fixture trace | Clock ran and 98 melons stood, but the downstream harvest pulse stayed disconnected | Diagnosed a missing direct pickup wire; no crop-growth retest needed. |
+| E138 controlled saved-fixture repair | Add the missing wire and restore 36 altered rail shapes. Both carts visited all 22 field rows; both decks harvested; 56 bonemeal reached external output | Repair evidence only. Existing standing melons make this a transient, not an hourly production result. |
+| E139 / P30 fresh exact file | Submitted; 1,804 non-air blocks, 132 mature stems, 36 hoppers, two carts in 16³ | Current next result to inspect. No winner or performance claim yet. |
 
-The run generates a versioned schematic, preserves cart startup Motion, then builds **only from decoded exact bytes**. A successful structural file check is explicitly not functional acceptance. Warm-up rejection precedes a 72,000-tick hour, a real five-minute measurement, actual manual OFF/restart/true unload/RUN, and physical full-output/drain scenarios. Fault-injected bonemeal is separate from production.
+P30 consumes no fertiliser in steady operation and requires a nearby player for natural random ticks. The run generates a new schematic, preserves cart startup Motion, and builds only from decoded exact bytes. Rail shapes are placed with strict mode because ordinary sequential block updates rerouted P29's return curves. This setup is explicitly **not native Litematica or practical survival rail-placement acceptance**.
 
-[E136 Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38246047435) · [Original P29 builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p29_builder.py). Result pending; no performance or winner claim.
+The fresh-file test rejects unhealthy warm-up before a 72,000-tick production hour, a real five-minute measurement, actual manual OFF/restart/true unload/RUN, and full-output/external-drain scenarios. Fault-injected bonemeal is excluded from production.
+
+[E136 failure](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/136-passive-p29.json) · [E137 trace](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/137-saved-p29-trace.json) · [E138 repair](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/138-saved-p29-pulse-rail-repair.json) · [E139 Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38249096042) · [P30 builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p30_builder.py)
 
 ## Rules for the next continuation
 
