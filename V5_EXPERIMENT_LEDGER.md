@@ -1,6 +1,6 @@
 # V5 experiment ledger — resume here, do not restart research
 
-Updated 2026-10-12. This ledger separates completed evidence, closed branches and the single current next test. Historical handoffs are preserved, but their old next-step lists are superseded.
+Updated 2026-10-12. **The [master directive](V5_MASTER_ENGINEERING_DIRECTIVE_2026-10-12.md) requires arbitrary-phase RUN-state unloading/restart and unattended recovery. Manual OFF is experimental preservation only. Moss leads; benchmark the original single module.** This ledger separates completed evidence, closed branches and the single current next test. Historical handoffs are preserved, but their old next-step lists are superseded.
 
 ## Preserved working baseline — do not rerun without a new acceptance reason
 
@@ -16,7 +16,7 @@ Updated 2026-10-12. This ledger separates completed evidence, closed branches an
 
 | Branch | Evidence | Decision |
 |---|---|---|
-| Automatic lava gate | E066 failed | Shelved; user accepts manual OFF/settle. Keep fast generator. |
+| Old automatic lava gate | E066 failed | Exact old gate remains shelved. A physically different sequenced-lava mechanism requires new causal evidence; manual OFF is no longer final acceptance. |
 | Faster 32/40-GT regeneration | E097/E098/E100 cobble; 48-GT control E099 passed | Rejected tested faster settings. |
 | Dense dry honey layout | P12–P16 integration failed despite isolated strip success | Shelved; no moving-cache redesign justified by usage. |
 | Denser opposed rear feeds on P23 | E128/P24 failed; E129/P25 seal closed water leak but still cobble | Failed full integrations preserved. |
@@ -60,13 +60,17 @@ Tutorial literature labels profitable nylium-only farming Bedrock-specific, so t
 
 **E140 complete: NET_SCREEN_REJECTED.** All 32 real single-dose/harvest cycles passed: 233 plants generated, every wash cleared all 49 cells, all seven buckets returned, nylium intact, no remaining loose item drops. 32 bone meal consumed, 22 physically recovered, **net −10** after drainage. This root-only Java route is closed; do not scale it or retest merely with a full controller. [Result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/140-nylium-small-plant-net.json).
 
-## Current next test: E141 / P31 vertical moss fields
+## Latest E141–E143 stacked continuation
 
-A different complete-crop geometry is now under a component test: two 35-cell stone/moss fields at local Y4/Y12, with raised sources Y6/Y14, **one moving cart per field**, a shared physical 48-GT generator clock, a merged hopper/composter output, and all blocks inside 16³. The expected five-block moss search should exclude the other deck; only the actual engine trial can establish that separation.
+E141/P31 failed after one growth: 27 moss and eight stone persisted, net −1. E142's saved-fixture trace found the clock and upper inputs working; the lower signal died at the first glass-supported descending step. E143 replaced exactly three descent supports with obsidian, recovered the prior shot, and passed three remaining lower-only, four upper-only and eight dual-deck cycles. Both fields renewed to 35 stone, all 96 rail shapes and both buckets survived, and no monitored cobble/water loss occurred. Stock ended 161 from original 128: **+33 net**.
 
-This is not a further P24–P28 hybrid rear-feed timing permutation. It uses the standalone dense field's proved mechanical geometry, vertically separated, replacing the old 35-carts-per-field measurement fixture. New questions are cross-deck growth, full-layer fluid renewal, moving pickup, and actual net after composting. Supplied finite seed and clear/grow/wash pulses are explicitly component controls; autonomous sequencing, recycling, boundary export and full stop remain absent.
+**Scope:** supplied finite seed and sequencing; repaired saved fixture rather than fresh exact-file/native paste. Candidate P32 bytes were generated. No complete autonomous recycling/export/hour/MSPT/RUN-unload acceptance. [E143 run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38254377614).
 
-A fresh exact component schematic is generated and decoded before placement. Four lower-only, four upper-only and eight dual-deck cycles reject failed geometry before complete architecture work. No timing sweep is scheduled. [Builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p31_builder.py) · [Test](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_stacked_moss_probe.py) · [Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38253508815). **Inspect E141 before making another task commit.**
+## New critical gate
+
+Gate complete-module integration on actual generator recovery from RUN-state unloading/restart. Apply a bounded phase sweep to the known sealed 48-GT component (ordinary cycles already passed), inspect Ryuuoy's actual reference material, recover the original single-module asset, and reproduce Java 26.2 composter-output backpressure loss.
+
+Keep one leading moss architecture and at most one evidence-based challenger. Preserve P30 without reopening broad crop research. Serious finalists need at least 100 varied RUN-unloads, complete net/TPS/recycle/export, scaling and native Litematica acceptance.
 
 ## Rules for the next continuation
 

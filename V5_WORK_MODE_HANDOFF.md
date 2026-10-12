@@ -1,10 +1,10 @@
 # Work Mode handoff — Minecraft bonemeal V5
 
-Current as of 2026-10-12: **Two exact-file working alternatives are preserved: P23 moss (+106 net/game hour) and P30 passive melon (+149 net/game hour, +16 in five real minutes). P30 also passed real lever OFF, saved restart, true unload/reload, resumed export and output congestion/drain. It uses two carts and 36 hoppers. Neither meets the final exceptional-production target; native client paste and Donut compatibility remain unverified.**
+**Authority:** [Master directive, 12 October 2026](V5_MASTER_ENGINEERING_DIRECTIVE_2026-10-12.md). Final modules must recover unattended from arbitrary-phase **RUNNING** unload/reload and restart. Manual OFF/settle preserves experimental fixtures only. Moss is the main programme. Compare one original single module against one V5 module.
 
-Read the [experiment ledger](V5_EXPERIMENT_LEDGER.md) and [development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-12.md) first. They supersede historical next-step lists. E139 is complete: preserve its exact schematic [here](prototypes/v5/Bonemeal_V5_P30_Passive_Prototype.litematic), with [operating/acceptance notes](prototypes/v5/P30_PASSIVE_NOTES.md). Do not rerun failed P29 or completed P23 merely after reconnecting. E140's 32 small-plant nylium cycles passed harvest but ended net −10; that route is closed. E141 now tests two vertically separated full moss fields with one moving cart per field, supplied sequencing and finite seed. Inspect E141 first; it is a component economic screen, not a complete autonomous module.
+Latest completed PC result: E143 repaired three descent supports in saved P31. Fifteen continuation crop/harvest/refill/compost trials passed, ending +33 net from original 128. This is finite-seed, supplied-sequence component evidence. No complete controller/recycled feed/hourly output/native paste/RUN-unload acceptance.
 
-Rear-feed P24–P28 and the eight-target giant-fungus partial-harvest layout are shelved. The fast generator remains available; manual OFF/settle is accepted and the automatic lava gate stays shelved. Strict rail placement supported P30's exact-file engine test; native-client acceptance is still needed.
+Preserve immutable P23 and P30. Read the [ledger](V5_EXPERIMENT_LEDGER.md) before the next task. Gate further full-module work on bounded RUN-unload/restart stone-mechanism tests. Investigate the provided unload-resistant reference and composter backpressure bug. Do not repeat E141–E143 or exact failed timing/gate variants.
 
 ## Historical handoff through E118 and E123 submission
 

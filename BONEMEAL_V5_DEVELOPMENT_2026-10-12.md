@@ -1,5 +1,7 @@
 # Bonemeal V5 development checkpoint — 2026-10-12
 
+**New acceptance:** [Master directive](V5_MASTER_ENGINEERING_DIRECTIVE_2026-10-12.md) replaces manual-OFF final operation with arbitrary-phase RUN-unload/restart recovery. Moss leads; benchmark the original single module. E143 passed a repaired stacked component (+33 net), with supplied sequencing; no complete/hourly/RUN-unload claim. See the updated [ledger](V5_EXPERIMENT_LEDGER.md) for the next gate.
+
 ## Current result and scope
 
 P23 is the preserved, sustainable 16×16×16 baseline. Its exact schematic was reconstructed from decoded file bytes in Minecraft Java 26.2 and measured in E123. It is a modest prototype, not the final A-tier design. Native Litematica client paste and live Donut SMP equivalence remain unverified.

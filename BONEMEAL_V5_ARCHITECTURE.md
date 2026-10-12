@@ -1,8 +1,12 @@
-# Bonemeal V5 — 16×16×16 chunk-aligned production modules
+# Bonemeal V5 — 16×16×16 independent production modules
 
-Status: **Requirements fixed. P23 is a tested sustainable baseline with an exact-file prototype; candidate improvements continue. No final A-tier design, native client paste or Donut equivalence is proven.**
+**Superseding acceptance, 12 October 2026:** [Master engineering directive](V5_MASTER_ENGINEERING_DIRECTIVE_2026-10-12.md) is authoritative. Moss is the leading technology. The final machine must unload/reload and restart **while RUNNING at arbitrary phases**, automatically recover without user intervention, and protect seed and output under congestion. Manual OFF + settling is experimental preservation only; it no longer satisfies final acceptance.
 
-Latest evidence: [2026-10-12 checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-12.md).
+P23 (+106 net/game hour) and P30 (+149) remain preserved baselines, neither a final high-performance release. E143 repaired P31's descending signal supports and passed 15 continuation cycles of two vertically separated fields with two moving carts, ending +33 net including the earlier shot. That is supplied-sequence component evidence, **not** an autonomous hourly benchmark, fresh exact-file acceptance or running-unload proof. Gate further complete-module integration on generator running-unload evidence.
+
+Benchmark **one original single module** (16×13×16, SHA-256 `1d51b0f0aa9575f2a6d5943588b6b6d2dd02d4fb8620649e0c628e0de82bc591`) against one complete V5 module; the four-module factory is a separate asset. Finalists need actual production and normal-TPS runs, idle-relative MSPT, two/four-module tests, varied RUN-state interruptions (target at least 100), native Litematica paste and precisely reported Donut limits.
+
+## Preserved earlier architecture and history — superseded where inconsistent
 
 ## User-approved design (2026-10-11)
 
