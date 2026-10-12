@@ -21,7 +21,15 @@ P23 is the preserved, sustainable 16×16×16 baseline. Its exact schematic was r
 
 [E128 complete P24 integration](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/128-integrated-p24.json), FAIL: two rear generators renewed former odd support lanes, raising productive cells from 20 to 30 with nine carts, full local recycling, export and stop controls. At 24 simulated minutes net was +49, but cobblestone was detected and rear piston activity stalled (132 at eight minutes, only 138 at 24 minutes). Hour and normal-speed phases were correctly skipped; OFF cleanup preserved the fixture. Initial positive output does not validate the added feeds.
 
-E129/P25 is currently submitted: [Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38237804549), commit `726a091aa03d7519d4b52dc830fafda8bfc005ee`, fresh base [3952,80,2928]. P24 omitted the rear centre generator but left its row slot [7,8,13] open between two water sources; P25 closes this one slot. Whether that fixes cobblestone is unproven until server results arrive. Added water-leak monitors are disjoint from the other diagnostic command chain and included in rejection criteria.
+[E129/P25](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/129-integrated-p25.json) failed: the centre seal eliminated monitored leakage, but cobblestone persisted; at 24 minutes net was +47 and rear pushes stalled. The seal was not the root-cause fix.
+
+[E130 first-fault trace](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/130-integrated-fluid-trace.json) captured cobblestone at both rear targets while their source water and falling lava remained intact. Cobblestone subsequently filled the five-cell growing lanes.
+
+[E131 rear pulse delays 2/3/4](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38239147786) all failed with cobblestone. The front fast clock remained six items. P26/P27/P28 ended +52/+57/+55 at 24 minutes, but fluid faults invalidate them as candidates. This rear-feed integration/timing branch is now shelved; do not run further timing variations.
+
+[E132 nylium plunger](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/132-nylium-plunger.json) is a different fungus mechanism: lift/retract the soil itself rather than sideways stem transfer. Eight-cell mechanical controls with 1/5/10 supplied stem blocks all passed. Actual first seeded fungus/growth/TNT cycle restored eight soil blocks and all gaps; the second cleared the gaps but lost one nylium. Overall FAIL preserved, two actual fungi, eight bonemeal removed, two supplied TNT.
+
+E133 resumes that same saved pad, inspects the missing soil and adds physical side bonemeal feeders. Passed controls and initial construction are skipped. [Run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38241148259); result pending. No collection, composted net or autonomous farm claim.
 
 ## Keep these decisions
 

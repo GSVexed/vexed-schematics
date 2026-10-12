@@ -1,8 +1,8 @@
 # Work Mode handoff — Minecraft bonemeal V5
 
-Current as of 2026-10-12: **P23 exact schematic passed sustainable production, export, saved restart/true unload and congestion/seed tests. P24's denser complete integration failed with cobblestone. P25 is running. No final A-tier winner or native Litematica client paste is proven.**
+Current as of 2026-10-12: **P23 exact schematic passed sustainable production, export, saved restart/true unload and congestion/seed tests. P24–P28's rear-feed integrations failed with cobblestone and are shelved. E133 resumes a different fungus soil-moving component. No final A-tier winner or native Litematica client paste is proven.**
 
-Read the [current development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-12.md) first. It supersedes the historical status and next-step statements below. Use real result links there; continue the submitted E129 before altering its task. The fast generator stays; the automatic lava gate remains shelved.
+Read the [experiment ledger](V5_EXPERIMENT_LEDGER.md) and [current development checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-12.md) first. It supersedes the historical status and next-step statements below. Use real result links there; inspect the submitted E133 before altering its task. The fast generator stays; the automatic lava gate remains shelved.
 
 ## Historical handoff through E118 and E123 submission
 
