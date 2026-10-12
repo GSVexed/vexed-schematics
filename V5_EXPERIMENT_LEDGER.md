@@ -66,6 +66,14 @@ E141/P31 failed after one growth: 27 moss and eight stone persisted, net −1. E
 
 **Scope:** supplied finite seed and sequencing; repaired saved fixture rather than fresh exact-file/native paste. Candidate P32 bytes were generated. No complete autonomous recycling/export/hour/MSPT/RUN-unload acceptance. [E143 run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38254377614).
 
+## E144 — new RUN-unload gate rejected
+
+[Result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/144-running-unload-gates.json), [run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38268243461). Two actual unloads were witnessed from a distant guarded audit. First recovered; second produced no new stone/push over 240 GT, with clear-piston activity continuing. Seed remained 568 after warmup. Zero monitored cobblestone/water loss; fluid-order blame is not established. No saved RUN restart was attempted after rejection.
+
+Static full output-hopper composter case retained level 8 on this Java 26.2 engine. Locked full case also retained and accepted one bone meal after capacity restored. Reported deletion bug not reproduced in this configuration; race/piston/hopper variants remain separate questions.
+
+Decision: hold full integration, close blind timing adjustments, inspect actual dispensed-lava/state-based reference and benchmark the recovered original single module. E145 public reference retrieval submitted at `a96b2fce58cdbc2f0e1aa9410ee0c5ca494e7d1c`; read it before any new task.
+
 ## New critical gate
 
 Gate complete-module integration on actual generator recovery from RUN-state unloading/restart. Apply a bounded phase sweep to the known sealed 48-GT component (ordinary cycles already passed), inspect Ryuuoy's actual reference material, recover the original single-module asset, and reproduce Java 26.2 composter-output backpressure loss.

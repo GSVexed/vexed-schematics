@@ -2,9 +2,9 @@
 
 **Authority:** [Master directive, 12 October 2026](V5_MASTER_ENGINEERING_DIRECTIVE_2026-10-12.md). Final modules must recover unattended from arbitrary-phase **RUNNING** unload/reload and restart. Manual OFF/settle preserves experimental fixtures only. Moss is the main programme. Compare one original single module against one V5 module.
 
-Latest completed PC result: E143 repaired three descent supports in saved P31. Fifteen continuation crop/harvest/refill/compost trials passed, ending +33 net from original 128. This is finite-seed, supplied-sequence component evidence. No complete controller/recycled feed/hourly output/native paste/RUN-unload acceptance.
+Latest completed PC result: **E144 RUN-unload gate rejected**. Trial 0 recovered, but the second witnessed RUN unload/reload produced no new stone or generator push in 240 game ticks despite clear-piston activity. No monitored cobblestone or water loss. Do not assign a fluid cause without evidence. The static full unlocked composter-output hopper retained ready level 8; the deletion bug did not reproduce in that case. [Evidence](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/144-running-unload-gates.json).
 
-Preserve immutable P23 and P30. Read the [ledger](V5_EXPERIMENT_LEDGER.md) before the next task. Gate further full-module work on bounded RUN-unload/restart stone-mechanism tests. Investigate the provided unload-resistant reference and composter backpressure bug. Do not repeat E141–E143 or exact failed timing/gate variants.
+E143 remains positive finite-seed stacked-crop evidence, not a complete autonomous or unload-safe farm. Preserve immutable P23/P30 and the recovered original single-module bytes (SHA-256 `1d51b0f0aa9575f2a6d5943588b6b6d2dd02d4fb8620649e0c628e0de82bc591`). E145 is submitted to retrieve Ryuuoy's public physical reference; do not re-submit it on reconnect. Next: read E145 results, prepare an exact original single-module benchmark, and test an original state-driven recovery mechanism before full moss integration. No blind delay sweeps.
 
 ## Historical handoff through E118 and E123 submission
 
