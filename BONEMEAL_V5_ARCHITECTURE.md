@@ -1,6 +1,8 @@
 # Bonemeal V5 — 16×16×16 chunk-aligned production modules
 
-Status: **Production requirements fixed; candidate architectures are being tested. No sustainable V5 module or released schematic is proven.**
+Status: **Requirements fixed. P23 is a tested sustainable baseline with an exact-file prototype; candidate improvements continue. No final A-tier design, native client paste or Donut equivalence is proven.**
+
+Latest evidence: [2026-10-12 checkpoint](BONEMEAL_V5_DEVELOPMENT_2026-10-12.md).
 
 ## User-approved design (2026-10-11)
 
@@ -8,7 +10,7 @@ Each module: **maximum 16 wide × 16 long × 16 tall**, **production-only**, wit
 
 ### Inside each production module
 
-- Moss generation, harvesting, item collection, composters and locally recycled bonemeal; initial bonemeal seed may be required.
+- Independent generation, harvesting, item collection, composting and locally recycled bonemeal; material choice remains open and initial bonemeal seed may be required.
 - Positive **net** bonemeal surplus after startup, not just impressive gross harvest counts.
 - Exactly one documented surplus output interface, a small bounded output buffer and backpressure-safe stop behaviour.
 - Independent local run/stop plus optional shared master STOP; a single disabled module must not break other modules.
