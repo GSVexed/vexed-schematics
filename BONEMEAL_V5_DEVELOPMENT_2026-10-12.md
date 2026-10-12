@@ -50,13 +50,21 @@ The fresh-file test rejects unhealthy warm-up before a 72,000-tick production ho
 
 [E136 failure](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/136-passive-p29.json) · [E137 trace](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/137-saved-p29-trace.json) · [E138 repair](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/138-saved-p29-pulse-rail-repair.json) · [E139 Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38249096042) · [P30 builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p30_builder.py)
 
-## Current next test: E140 small-plant nylium economics
+## Closed additional crop: E140 small-plant nylium economics
 
 This differs from the shelved giant-fungus layout: do **not** grow fungi into trees, use TNT or pay giant-growth/soil-repair costs. A fresh 7×7 static crimson-nylium pad receives 32 single real dispenser doses from a finite 64-bonemeal stock. Seven guarded water sources harvest the small plants into a physical hopper/composter/export chain. No crop resets or inventory conversion/replenishment occur between cycles.
 
 Tutorial literature labels profitable nylium-only farming Bedrock-specific, so this is a **bounded Java economic rejection screen**, not an assumption of viability. Reject an uneconomic fully functioning collector before engineering autonomous recycling. If collection/soil/water fails, record a fixture failure rather than a crop verdict. Provided control pulses do not establish an autonomous farm or hourly throughput.
 
-[Experiment source](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_nylium_roots_net_probe.py). Inspect the E140 run/result first on continuation.
+**E140 complete: NET_SCREEN_REJECTED.** All 32 real single-dose/harvest cycles passed: 233 plants generated, every wash cleared all 49 cells, all seven buckets returned, nylium intact, no remaining loose item drops. 32 bone meal consumed, 22 physically recovered, **net −10** after drainage. This root-only Java route is closed; do not scale it or retest merely with a full controller. [Result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/140-nylium-small-plant-net.json).
+
+## Current next test: E141 / P31 vertical moss fields
+
+A different complete-crop geometry is now under a component test: two 35-cell stone/moss fields at local Y4/Y12, with raised sources Y6/Y14, **one moving cart per field**, a shared physical 48-GT generator clock, a merged hopper/composter output, and all blocks inside 16³. The expected five-block moss search should exclude the other deck; only the actual engine trial can establish that separation.
+
+This is not a further P24–P28 hybrid rear-feed timing permutation. It uses the standalone dense field's proved mechanical geometry, vertically separated, replacing the old 35-carts-per-field measurement fixture. New questions are cross-deck growth, full-layer fluid renewal, moving pickup, and actual net after composting. Supplied finite seed and clear/grow/wash pulses are explicitly component controls; autonomous sequencing, recycling, boundary export and full stop remain absent.
+
+A fresh exact component schematic is generated and decoded before placement. Four lower-only, four upper-only and eight dual-deck cycles reject failed geometry before complete architecture work. No timing sweep is scheduled. [Builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p31_builder.py) · [Test](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_stacked_moss_probe.py) · [Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38253508815). **Inspect E141 before making another task commit.**
 
 ## Keep these decisions
 
