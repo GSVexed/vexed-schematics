@@ -29,7 +29,13 @@ P23 is the preserved, sustainable 16×16×16 baseline. Its exact schematic was r
 
 [E132 nylium plunger](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/132-nylium-plunger.json) is a different fungus mechanism: lift/retract the soil itself rather than sideways stem transfer. Eight-cell mechanical controls with 1/5/10 supplied stem blocks all passed. Actual first seeded fungus/growth/TNT cycle restored eight soil blocks and all gaps; the second cleared the gaps but lost one nylium. Overall FAIL preserved, two actual fungi, eight bonemeal removed, two supplied TNT.
 
-E133 resumes that same saved pad, inspects the missing soil and adds physical side bonemeal feeders. Passed controls and initial construction are skipped. [Run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38241148259); result pending. No collection, composted net or autonomous farm claim.
+[E133](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/133-nylium-soil-restoration.json) inspected that same saved pad: the lost soil was netherrack, not an air hole. Physical side bonemeal dispensers restored the soil; all eight continuation cycles passed. Five fungi grew, 54 bonemeal was removed. Passed controls and initial construction were skipped. This is soil/movement evidence, not net or autonomous farm proof.
+
+[E134](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/134-fungus-harvest-net.json) added real washing, hopper pickup and composting, but a bucket entered collection and was not returned. Original negative net is preserved with a collector-fixture adjudication.
+
+[E135](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/135-fungus-guarded-wash-net.json) reserved waterloggable source cells. Both buckets returned in all eight cycles. Two fungi grew; 42 bonemeal removed, 2 recovered in actual composted inventory: **net -40**, with 83 wart blocks still standing. This eight-target seeding/single-TNT harvest layout is shelved; do not extrapolate this partial harvest into a verdict against all fungus architectures. The nylium-movement component remains proven.
+
+E136/P29 is a genuinely different, complete passive melon candidate, currently submitted. Two growing decks, 132 mature stems, 36 hoppers, two moving carts, 1,803 non-air blocks inside 16³; zero ongoing fertiliser consumption and a nearby player required for natural ticks. Actual decoded schematic bytes drive the first run. [Run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38246047435). No measured performance claim until results arrive.
 
 ## Keep these decisions
 

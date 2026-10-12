@@ -31,9 +31,19 @@ E131 24-minute screens ended +52, +57, +55 respectively, but these are **rejecte
 | E113 | Physical nylium seeding/growth; no harvest/net | Existing growth evidence; do not repeat merely to recount wart. |
 | E117 | One-cell sideways stem transfer/clear; supplied sequence/TNT | Existing component only; not an autonomous 25-cell farm. |
 | E132 | Move **nylium itself** upward and retract, leaving air below floating stem. Eight-cell controls with 1/5/10 supplied stem blocks all passed; actual first growth/TNT cycle passed; second lost one nylium | New mechanical evidence. Overall FAIL preserved. |
-| E133 | Resume E132's saved failing fixture, inspect soil, add actual side bone-meal soil feeders; **skip all passed controls and do not reset/rebuild the pad** | Currently submitted; result pending. |
+| E133 | Resumed saved pad; lost block was netherrack. Side dispensers restored it; eight continuation cycles passed, five actual fungi, 54 bonemeal removed; passed controls skipped | COMPONENT_PASS, no net-farm proof. |
+| E134 | Added wash/pickup/composting; first water bucket was not returned | Collector fixture failed. Original -7 is not a crop sustainability verdict. |
+| E135 | Reserved two waterloggable source cells; eight harvest cycles, both buckets recovered; 42 bonemeal removed, 2 recovered, net -40; 83 wart blocks remained unharvested | Current eight-target seeding/partial-harvest layout is shelved. Soil mechanism remains a reusable component. No further small variants. |
 
 [E132](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/132-nylium-plunger.json) · [E133 run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38241148259)
+
+## Current different architecture: P29 passive melon module
+
+E136 tests a new complete two-deck natural-growth candidate: 132 mature stems, 36 hoppers, two moving hopper carts, 1,803 non-air blocks in 16³. Mud fruit rows, waterlogged hydration slabs, local physical harvest clock, composting, full-buffer stop, local lever and boundary export. Initial bonemeal is zero and steady operation consumes none; natural growth requires a nearby player.
+
+The run generates a versioned schematic, preserves cart startup Motion, then builds **only from decoded exact bytes**. A successful structural file check is explicitly not functional acceptance. Warm-up rejection precedes a 72,000-tick hour, a real five-minute measurement, actual manual OFF/restart/true unload/RUN, and physical full-output/drain scenarios. Fault-injected bonemeal is separate from production.
+
+[E136 Windows run](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38246047435) · [Original P29 builder](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/v5_module_p29_builder.py). Result pending; no performance or winner claim.
 
 ## Rules for the next continuation
 
