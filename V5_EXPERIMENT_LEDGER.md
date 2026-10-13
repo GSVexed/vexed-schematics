@@ -1,8 +1,8 @@
 # V5 experiment ledger — resume here, do not restart research
 
-## Latest checkpoint — E241–E249, 13 October 2026
+## Latest checkpoint — E241–E250, 13 October 2026
 
-**Resume the saved E248 inner-output diagnosis; do not restart research or rerun unchanged baselines.** The project is not finished. P36r13 remains the independent resource/export lead: Windows E206 measured **+74 net bonemeal over64 supplied crop cycles**, source127/reserve41/export34. Those controls were supplied; it is not the autonomous production winner.
+**Resume the E250 inner-output coupling diagnosis; do not restart research or rerun unchanged baselines.** The project is not finished. P36r13 remains the independent resource/export lead: Windows E206 measured **+74 net bonemeal over64 supplied crop cycles**, source127/reserve41/export34. Those controls were supplied; it is not the autonomous production winner.
 
 | Experiment | Actual result and limit |
 | --- | --- |
@@ -13,15 +13,19 @@
 | E246 | Upper controller OR branch shortened source growth power. Four native crops passed,128→131BM (**+3**), source125/reserve3/delivery1/export0. Actual delivery to the source resumed. This is not a64-cycle or real-hour pass. |
 | E247 | Resumed saved RUN fixture without repaste/provision/reset. Native recycling retained source125; observed total160BM (**+32**), reserve35/export0. Rejected at35 observed growth events because only21/23STONE existed before a growth event. The full local raw file is currently inaccessible; the committed observed-summary explicitly states this limitation. |
 | E248 | Actual Windows P36r22 test,929 blocks inside16³. Comparator hold change rejected at growth2:18STONE/23AIR, all7 inner targets, one dose. Five missing targets were still moss at local(6,6,6),(6,6,7),(7,6,6),(8,6,6),(8,6,7); no water/cobble in the fault mask. Total127BM, source126, no export. Full result preserved in Git, not merely an artifact. |
-| E249 | Submitted a read-only512GT signal/physical-state trace of saved E248. No module repaste, field/fluid/stock/phase resets or supplied crop inputs. Source3eabf6e83cc2fa8eb6411ac10f4add4336f550a6. Check actual result before the next change. |
+| E249 | Saved E248 read-only512GT trace completed. Both extender comparators actually20GT HIGH, but physical inner output/piston0 edges/0GT. Source6GT pulse, delivery82GT enabled per complete edge; phase1; BM127→129. Identified disconnected output, not a farm pass. |
+| E250 | Windows driven-output change,941blocks, source21730cddb8a2d727b5ebffc8a59ed88bdfe89fe5. First crop rejected:16STONE/16AIR before growth,0inner/13MOSS,1dose; inner84GT HIGH rather than20GT. Total127BM/source127/16buckets. New dust4,14,7 touches strong positive controller obsidian3,14,7; suspected84GT coupling, not yet physically isolated. |
+
 
 [E244 raw](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/244-native-supported-harvest/result.json) · [E246 raw](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/246-native-short-growth/result.json) · [E247 partial observed record](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/247-native-resource-resume/observed-summary.json) · [E248 full raw gzip](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/248-native-inner-hold.pc.full.json.gz) · [E248 workflow](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/38403274938) · [E249 plan](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/249-saved-inner-extender.plan.json).
 
-The five E248 targets are exactly the inner pistons that lack root-utility power. First measure whether the new pulse extender reaches the physical inner output; do not assume its theoretical width. E247's rare incomplete harvest remains unresolved. Initial priming and native Litematica startup are still separate acceptance requirements.
+The five E248 targets are exactly the inner pistons that lack root-utility power. E249 measured the disconnected output; E250's new output picked up an84GT signal. Inspect/isolate the new wire4,14,7 beside strong controller block3,14,7 before another fresh crop test. Measure actual output timing. E247's rare incomplete harvest remains unresolved. Initial priming and native Litematica startup are still separate acceptance requirements.
 
-**Execution recovery:** The chat's own temporary execution service returned409 `environment_offline` after E247 had stopped and saved its owned server. No exposed host restart/reconnect control was found. Connected GitHub and the Windows self-hosted runner remain operational: E248 ran on the PC. Source/results through E246 are durable; E247 has a clearly labelled partial observed summary; E248 full raw is durable. Use remote GitHub edits and backed-up PC execution rather than repeating failed local calls. No client/live-world/account/security changes.
+**Execution recovery:** The chat's own temporary execution service returned409 `environment_offline` after E247 had stopped and saved its owned server. No exposed host restart/reconnect control was found. Connected GitHub and the Windows self-hosted runner remain operational: E248 ran on the PC. Source/results through E246 are durable; E247 has a clearly labelled partial observed summary; E248–E250 full raw records are durable. Use remote GitHub edits and backed-up PC execution rather than repeating failed local calls. No client/live-world/account/security changes.
 
 **Remaining gates:** complete native resource/export run; optimize measured output against the exact original SINGLE benchmark; real-hour/TPS and material costs;>=100 varied full-module true RUN unload/restart trials plus lazy/loading/stock/output faults; native Litematica paste; Donut-specific verification;2/4 module scaling; external shulker/storage/sell infrastructure. No outstanding-performance or finish-date claim is justified by the short crop passes. All older “Next” entries below are historical and superseded by this checkpoint.
+
+**Chat transfer:** The user requested a paste to resume this exact project in “research bonemeal project”. No further experiments are being submitted from this Work Mode thread. E250 completed; E251 has not run. [Authoritative transfer](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/V5_CHAT_TRANSFER_2026-10-13.md) contains execution paths, exact wiring cause, records and next step. Do not run two writing/testing owners at once.
 
 ## Historical checkpoint — E230–E240, 13 October 2026
 
