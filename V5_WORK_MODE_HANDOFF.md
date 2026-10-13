@@ -1,6 +1,22 @@
 # Work Mode handoff — Minecraft bonemeal V5
 
-## Latest checkpoint — E222–E229, 13 October 2026
+## Latest checkpoint — E230–E240, 13 October 2026
+
+P36r13 remains the independently tested resource/export lead: Windows E206 measured **+74 net bonemeal/64 supplied crop cycles**, source127/reserve41/export34. Do not rerun it unchanged. The connected autonomous controller still has no accepted crop/output result; the final machine remains unfinished.
+
+- E230 rejected the first floor-growth route because the below-reserve export lock failed. E232/E233 recovered23STONE/23lava buckets but the short growth pulse recorded zero charged dose. E234's saved physical trace confirmed that the floor inverter reaches the source. Widening supplied growth to20GT/OFF8GT in E235 completed four crops, exactly one charged dose each, all seven guaranteed inner targets,23STONE regeneration and23buckets. Inventory128→130 (**+2 net**), source127→125/reserve5/export0. Raw overall status is COMPONENT_REJECTED because the short test wrongly required export below its42-item threshold. Preserve this as four supplied crop passes only; sustainable recycling, reserve and export on the new floor route remain unproved.
+- E231/E236/E238 connected native fixtures all rejected empty-source priming **before bonemeal loading**. E237's actual signal trace found grow permanently OFF and update/inner/outer controls held HIGH despite an84GT physical clock and intact one-item phase. Saved-wire analysis found a repeater loop and three unintended wire joins; E238 isolated them.
+- E238 reached a maximum16/23STONE, but failed safe priming. The saved field contained seven inner stones pushed up toY7; seven outer pistons were extended. Only16lava buckets remained in the dispenser inventories. These are a failed startup fixture, not production or a generator impossibility verdict. [E238 raw result](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/results/v5/238-native-feedback-isolated/result.json).
+- E239 resumed E238 read-only: clock period84GT,7GT HIGH, one timing item preserved. Grow remained OFF, floor-negative stayed HIGH; north/east harvest remained HIGH for most of each cycle. Actual wire components joined grow to the reserve lock at6,2,2↔6,1,1 and9,2,2↔8,1,2; the growth descent also joined outer harvest at14,6,1↔13,6,1. Update joined reserve comparator dust via3,2,7/4,2,7.
+- E240 backed up the exact owned chunk and entities to Git, then changed only29 wiring/support cells on that saved failed fixture, with expected-name/field/inventory guards. No field, stock or phase reset. Growth resumed with6GT pulses and north/east harvest returned to8GT pulses. The negative distribution still stayed HIGH nearly all the time; south harvest showed84GT HIGH. Two additional contacts were identified: the positive update repeater strongly powers block3,14,9 beside negative wire2,14,9; update descent1,6,14 joins south harvest1,6,13. This is causal signal work, **not crop/output proof**.
+
+Next: E241 is prepared to move the negative spiral one block south and turn the south-west harvest corner one block earlier, then measure the physical ports. Keep the saved failure intact; zero-bonemeal dry harvest pushes unconverted stone up into the dispenser roof, so do not mistake that startup protocol for a valid complete-farm rejection. Once signals are correct, use a fresh fixture with an explicitly counted initial stone field, an OFF growth phase and128BM loaded once before starting the clock; no continuing field/item/phase resets. That initial setup is not native Litematica paste acceptance.
+
+Current sources: v5_integrated_controller_builder.py (P36r17,895blocks,16³), v5_floor_growth_builder.py, parameterised v5_saved_connected_signal_timing.py, v5_wire_feedback_audit.py. Linux mirror uses independently owned loopback25596 and restored JRE java-restored-222; Windows acceptance/PC hardware timing still required. E240 process is closed. No Windows job was submitted in these local diagnostic experiments.
+
+Still required: sustainable native crop/recycle/export, production-hour and normal-speed TPS/material counts, ≥100 varied full-module true RUN unloads and saved/forced/lazy interruption recovery, fault/backpressure tests, exact native Litematica paste,2/4-module scaling, Donut mechanics/access verification and external shulker/storage/sell systems. No finish date or A-tier claim yet.
+
+## Previous checkpoint — E222–E229, 13 October 2026
 
 P36r13 remains the resource/export lead; its Windows E206 +74 net/64 supplied cycles is preserved, not rerun. Autonomous crop control, hourly output, full-module RUN recovery, native Litematica and Donut acceptance remain unfinished.
 
