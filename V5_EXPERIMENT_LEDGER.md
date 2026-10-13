@@ -1,6 +1,6 @@
 # V5 experiment ledger — resume here, do not restart research
 
-## Latest checkpoint — E222–E228, 13 October 2026
+## Latest checkpoint — E222–E229, 13 October 2026
 
 P36r13 remains the resource/export lead; its Windows E206 +74 net/64 supplied cycles is preserved, not rerun. Autonomous crop control, hourly output, full-module RUN recovery, native Litematica and Donut acceptance remain unfinished.
 
@@ -11,6 +11,8 @@ P36r13 remains the resource/export lead; its Windows E206 +74 net/64 supplied cy
 - E226: direct adjacent powered-block bulb connection passed49 clock edges/25 half-output edges. Component only.
 - E227: harvest gate with a side solid block rejected:48 pulses every42GT rather than one per84GT crop cycle.
 - E228: side dust correction passed **24 harvest pulses, exact84GT interval,4GT HIGH**,49 input/25 half-output edges and conserved timing item. The controller is separate from the crop bed. No crop/hour/RUN proof.
+
+**E229 physical control ordering passed:** growth rising → root blocked9GT → update ON19GT → harvest23GT. After growth falls, root opens9GT later; update falls10GT after root opening. Twenty-four actual harvest-piston edges, exact84GT interval,8GT HIGH; timing item conserved. These are test pistons, not a connected crop source. Startup emitter/retriever parity still requires an actual guarded crop test.
 
 **Next bounded work:** connect tested clock/divider/harvest components to an isolated P36 bed, verifying growth → root block → harvest → root reopening/source update ordering and the emitter/retriever phase. Initialization must not trigger a growth dose before stone exists. Preserve dedicated P36 source update (E220 omission rejected); do not assume P37 can omit it. Then measure unsupplied crop cycles and sustainable output. Address the six loose moss in the sole P37 density challenger using proven pickup geometry; do not repeat broad crop searches or unchanged baselines.
 
