@@ -890,7 +890,7 @@ local function build(full)
         table.insert(out,"t | restClass | hudRest | wolfRest | mode | stamina | max | regenPerSecond | health | healthMax | healthPerSecond | explicitRest | evidence | sprint | burst | trot | crouch | exhausted | speed | input | humanoidState")
         for _,r in ipairs(samples) do
             table.insert(out,string.format(
-                "%.2f | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s",
+                "%.2f | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s",
                 r.t,r.restClass,fmt(r.hudRest),fmt(r.wolfRest),
                 r.mode,fmt(r.stam),fmt(r.maximum),fmt(r.rate),
                 fmt(r.health),fmt(r.healthMax),fmt(r.healthRate),
