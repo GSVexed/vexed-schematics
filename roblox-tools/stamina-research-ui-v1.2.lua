@@ -282,6 +282,9 @@ local function disconnectSignals()
     boundCharacter = nil
 end
 
+-- Release event subscriptions if a fresh loader replaces this panel.
+gui.Destroying:Connect(disconnectSignals)
+
 local function connectSignals()
     local character = player.Character
     if boundCharacter ~= character then
@@ -325,7 +328,7 @@ local function captureRow(elapsed)
         mode = selectedMode,
         stamina = character and numeric(character:GetAttribute("Stamina")) or nil,
         maximum = character and numeric(character:GetAttribute("StaminaMax")) or nil,
-        exhausted = character and character:GetAttribute("StaminaOut") or nil,
+        exhausted = character and character:GetAttribute("StaminaOut"),
         sprint = player:GetAttribute("HudSprint"),
         walkSpeed = humanoid and humanoid.WalkSpeed or nil,
         physicalSpeed = horizontal,
