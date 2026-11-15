@@ -229,6 +229,7 @@ local detectedObjects = {}
 local knownSignals = {}
 local lastAnimationSignature = ""
 local lastBurstUI = ""
+local lastBurstUISample = -100
 local burstUIState = "Not yet observed"
 local lastReport = ""
 local mode = "Unknown"
@@ -298,6 +299,9 @@ local function observeAttributes(character, humanoid, root)
 end
 
 local function observeBurstHud()
+    local elapsed = now()
+    if elapsed - lastBurstUISample < 0.7 then return end
+    lastBurstUISample = elapsed
     local hud = playerGui:FindFirstChild("FeralHUD")
     if not hud then burstUIState = "FeralHUD not found"; return end
     local burst = hud:FindFirstChild("burst", true)
@@ -729,6 +733,7 @@ start.Activated:Connect(function()
     knownSignals = {}
     lastAnimationSignature = ""
     lastBurstUI = ""
+    lastBurstUISample = -100
     burstUIState = "Not yet observed"
     lastReport = ""
     mode, modeEvidence = "Unknown", "initializing"
