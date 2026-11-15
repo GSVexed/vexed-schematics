@@ -330,10 +330,10 @@ local function observe()
     if speed and speed < 80 and speed > peakSpeed then peakSpeed = speed end
 
     local chosen, evidence = inspectModeAttributes(char)
-    if not chosen then chosen, evidence = animationMode(humanoid) end
     if not chosen and sprint == true then
         chosen, evidence = "Sprint", "HUD sprint flag"
     end
+    if not chosen then chosen, evidence = animationMode(humanoid) end
     if not chosen then
         if (not speed or speed < 0.7) and (not input or input < 0.1) then
             chosen, evidence = "Idle / Rest", "low motion estimate"
