@@ -317,6 +317,10 @@ local function observeBurstHud()
         end
         if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
             fragment = fragment .. ":imageAlpha=" .. string.format("%.2f", obj.ImageTransparency)
+                .. ":imageRGB=" .. tostring(obj.ImageColor3)
+        end
+        if obj:IsA("GuiObject") then
+            fragment = fragment .. ":size=" .. tostring(obj.Size)
         end
         table.insert(parts, fragment)
     end
@@ -374,6 +378,7 @@ end
 local function animationMode(humanoid)
     if not humanoid then return nil, nil, "" end
     local animator = humanoid:FindFirstChildOfClass("Animator")
+        or (player.Character and player.Character:FindFirstChildWhichIsA("Animator", true))
     if not animator then return nil, nil, "" end
     local ok, tracks = pcall(function() return animator:GetPlayingAnimationTracks() end)
     if not ok then return nil, nil, "" end
@@ -533,7 +538,7 @@ local function observeCharacter()
     local function listen(key)
         local con = char:GetAttributeChangedSignal(key):Connect(function()
             if running and (key == "StaminaOut" or key == "StaminaMax") then
-                event("Character@" .. key .. " = " .. fmt(char:GetAttribute(key)))
+                event("Character@" .. key .. " = " .. fmt(char:GetAttribute(key)) .. " at stamina=" .. fmt(char:GetAttribute("Stamina")) .. "/" .. fmt(char:GetAttribute("StaminaMax")))
             end
         end)
         table.insert(characterSignals, con)
