@@ -1,0 +1,21 @@
+{
+  "schema": "feral-field-hub-checks/1.3",
+  "date": "2026-11-16",
+  "source": "feral-field-hub-v1.3.lua",
+  "source_bytes": 151229,
+  "source_sha256": "882c7031f2b04a0c24024b0c6b6c06583e9948edd790666ba4c7795e0523bf3c",
+  "compiler": "official Luau 0.747, compile-only",
+  "compile_passed": true,
+  "offline_core_cases_passed": 25,
+  "simulated_runtime_upgrade_cases_passed": 75,
+  "total_cases_passed": 100,
+  "test_command": "python roblox-tools/tests/test-feral-field-hub-v1.3.py",
+  "actual_roblox_velocity_v1_3_tested": false,
+  "prior_field_evidence": "v1.0 Bear user report; supplied v1.2 Tiger stamina observations; local HP trial reported failed.",
+  "game_source_bodies_executed": false,
+  "limits": [
+    "Simulation checks do not establish engine compatibility, server acceptance or safety of local travel.",
+    "New speed/leap/Rest/equip/claim effects need an actual Roblox run.",
+    "No arbitrary amber, extra HP regeneration, owner grant or restricted spawn implemented."
+  ]
+}

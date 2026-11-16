@@ -248,3 +248,13 @@ allowlisted reply-label observation. These field observations are user-reported
 evidence, separate from the verified diagnostic exports. No arbitrary spendable
 currency, permanent unlock, accepted restricted spawn or working health grant
 has been established.
+
+## Later field reports and whole-export review
+
+The two supplied v1.2 reports and the user's correction are covered in the
+[v1.3 review](FERAL-CLIENT-CODE-REVIEW-v1.3.md). The added health regeneration
+trial failed; ordinary game recovery in a later report is not a successful hub
+healing feature. Tiger stamina retention is now supported in recorded tuned
+sprint, burst and swim samples. Owner access and arbitrary spendable amber
+remain unestablished. The 471-event rolling-history loss is addressed by the
+new journal/checkpoint design. No additional full diagnostic is required.

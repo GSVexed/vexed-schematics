@@ -1,17 +1,21 @@
 # FERAL client project
 
-The current [Field Hub v1.2](README-field-hub-v1.2.md) preserves the stamina
-path reported working on Bear and adds repair/drift checks, an experimental
-movement adjustment, custom waypoints/bookmarks and a bounded uploadable field
-report. OWNER controls audit cached predicates and optionally check the native
-look/list interfaces for your own account. No gift, restore or other
-privileged mutation is submitted.
-See the [goal review](FERAL-GOAL-REVIEW-v1.2.md) for implemented work and the
-remaining health, currency, entitlement and spawn limitations. Full v1.2
-Roblox/Velocity testing is still outstanding.
+The current [Field Hub v1.3](README-field-hub-v1.3.md) follows a
+[whole-client-export review](FERAL-CLIENT-CODE-REVIEW-v1.3.md): all 339 logical
+game exports indexed, 221 distinct bodies read, and all 22,283 preserved Roblox
+platform source sets checked for FERAL markers. The [complete per-file inventory](FERAL-CLIENT-FILES-v1.3.md)
+and [surface index](FERAL-CLIENT-SURFACE-INDEX-v1.3.json) record the scope.
+
+v1.3 preserves the Bear/Tiger stamina path and adds reversible speed/leap
+profiles, native Rest assistance, owned-coat equips, eligible earned-reward
+claims, comfort settings, a broader travel atlas and checkpointed field reports.
+**Added HP regen failed in the user's test. Arbitrary amber, restricted spawns
+and owner grants are not implemented.** See the [goal review](FERAL-GOAL-REVIEW-v1.3.md).
+New v1.3 gameplay effects require Roblox testing; source/simulation checks are
+reported separately.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.2.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.3.lua"))()
 ```
 
 ## Completed diagnostic investigation
