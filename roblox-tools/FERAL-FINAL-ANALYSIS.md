@@ -226,3 +226,25 @@ limits described above.
 Raw pre-filter sources were not saved; those parse statuses are recorded
 runtime evidence. The saved bytes and source-reference integrity were checked
 independently. No reconstructed game code was executed in this analysis.
+
+## Subsequent Field Hub observations — 16 November 2026
+
+After the diagnostic analysis, the user tested Field Hub v1.0 in Roblox/Velocity
+and reported working unlimited-stamina behaviour on Bear with the cached client
+tuning enabled. This supports the practical value of targeting the controller's
+configuration rather than only its published attribute. It does not establish
+universal coverage of every species, cost or server rule.
+
+The user reported that local health refills rose and were overwritten. The
+exact authoritative health writer remains unresolved. Hidden animal cards were
+visible but did not permit purchase/spawn, confirming that this visibility
+change did not grant access in that run. The user also confirmed the oasis is a
+normal POI they had visited; its configuration label is not evidence of secrecy
+or protection.
+
+[Field Hub v1.1](README-field-hub-v1.1.md) retains the same stamina path, retires
+the failed HP writer and adds a native earned-rewards UI shortcut plus optional
+allowlisted reply-label observation. These field observations are user-reported
+evidence, separate from the verified diagnostic exports. No arbitrary spendable
+currency, permanent unlock, accepted restricted spawn or working health grant
+has been established.

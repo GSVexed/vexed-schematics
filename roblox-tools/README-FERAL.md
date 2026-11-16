@@ -1,14 +1,17 @@
 # FERAL client project
 
-The new [Field Hub v1.0](README-field-hub-v1.0.md) is a standalone in-game
-panel with live own-animal status, optional client resource experiments,
-checked one-shot travel, animal previews, local coat trials and searchable
-findings. It opens directly and does not repeat the diagnostic scan.
-It does not establish spendable amber, permanent unlocks or restricted spawns.
-Source/offline checks pass; Roblox/Velocity testing is still outstanding.
+The current [Field Hub v1.1](README-field-hub-v1.1.md) preserves the stamina
+tuning reported working by the user on Bear, retires the overwritten local HP
+trial, labels the oasis as an ordinary POI and adds a native earned-rewards
+shortcut with optional reply-label observation. It retains checked one-shot
+travel, animal previews, local coat trials and searchable findings.
+It opens directly and does not repeat the diagnostic scan. Arbitrary spendable
+amber, permanent unlocks, working HP regeneration and restricted spawns remain
+unestablished. The new release passes offline checks; complete v1.1 runtime
+testing is still outstanding.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.0.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.1.lua"))()
 ```
 
 ## Completed diagnostic investigation
@@ -46,7 +49,7 @@ supplement passed independent integrity checks.
 
 | Need | File |
 |---|---|
-| In-game Field Hub, controls and honest feature limits | [README-field-hub-v1.0.md](README-field-hub-v1.0.md) |
+| Current Field Hub, field results, controls and feature limits | [README-field-hub-v1.1.md](README-field-hub-v1.1.md) |
 | Final results, authority findings and remaining limits | [FERAL-FINAL-ANALYSIS.md](FERAL-FINAL-ANALYSIS.md) |
 | Final runtime evidence and closure status | [FERAL-COMPLETION-v3.2.json](FERAL-COMPLETION-v3.2.json) |
 | Small last-live-source collector | [README-final-v3.2.md](README-final-v3.2.md) |
