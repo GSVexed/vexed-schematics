@@ -1,0 +1,648 @@
+{
+  "schema": "feral-recovery-targets/3.1",
+  "baseline_session": "20261116_042419_33AB9E25F8D1",
+  "baseline_version": "3.0.3",
+  "known_syntax_failures": 64,
+  "additional_semantic_review": 7,
+  "targets": [
+    {
+      "key": "T0001",
+      "path": "game/ReplicatedStorage/FeralWorld/NeedsConfig",
+      "previous_id": 33,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 5251,
+      "previous_filtered_adler32": "a28d1d5f",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0002",
+      "path": "game/ReplicatedStorage/FeralWorld/FeedFinder",
+      "previous_id": 34,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 12793,
+      "previous_filtered_adler32": "77280d53",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0003",
+      "path": "game/ReplicatedStorage/FeralWorld/Species",
+      "previous_id": 35,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 28290,
+      "previous_filtered_adler32": "6853c63a",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0004",
+      "path": "game/ReplicatedStorage/FeralWorld/NPCConfig",
+      "previous_id": 40,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 13722,
+      "previous_filtered_adler32": "91897c0e",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0005",
+      "path": "game/ReplicatedStorage/FeralWorld/CombatConfig",
+      "previous_id": 41,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 16719,
+      "previous_filtered_adler32": "c6488be1",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0006",
+      "path": "game/ReplicatedStorage/FeralWorld/WeatherConfig",
+      "previous_id": 44,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 4109,
+      "previous_filtered_adler32": "ee0ce7d9",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0007",
+      "path": "game/ReplicatedStorage/FeralWorld/AmberConfig",
+      "previous_id": 45,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 1786,
+      "previous_filtered_adler32": "57fce78b",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0008",
+      "path": "game/ReplicatedStorage/FeralWorld/DevConfig",
+      "previous_id": 46,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 943,
+      "previous_filtered_adler32": "f879ea96",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0009",
+      "path": "game/ReplicatedStorage/FeralWorld/MapConfig",
+      "previous_id": 49,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 1202,
+      "previous_filtered_adler32": "b89a3457",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0010",
+      "path": "game/ReplicatedStorage/FeralWorld/SoundConfig",
+      "previous_id": 50,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 3630,
+      "previous_filtered_adler32": "88dd5f31",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0011",
+      "path": "game/ReplicatedStorage/FeralWorld/PackConfig",
+      "previous_id": 51,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 4121,
+      "previous_filtered_adler32": "16e4089d",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0012",
+      "path": "game/ReplicatedStorage/FeralWorld/ShopConfig",
+      "previous_id": 54,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 12056,
+      "previous_filtered_adler32": "19ca7489",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0013",
+      "path": "game/ReplicatedStorage/FeralWorld/AbilityConfig",
+      "previous_id": 56,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 66144,
+      "previous_filtered_adler32": "307f6469",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0014",
+      "path": "game/ReplicatedStorage/FeralWorld/OnboardingConfig",
+      "previous_id": 61,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 28637,
+      "previous_filtered_adler32": "47b69d2d",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0015",
+      "path": "game/ReplicatedStorage/FeralWorld/TutorialConfig",
+      "previous_id": 62,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 5886,
+      "previous_filtered_adler32": "4989e986",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0016",
+      "path": "game/ReplicatedStorage/FeralWorld/RewardConfig",
+      "previous_id": 64,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 1096,
+      "previous_filtered_adler32": "796b04ac",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0017",
+      "path": "game/ReplicatedStorage/FeralWorld/CoatConfig",
+      "previous_id": 65,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 13814,
+      "previous_filtered_adler32": "465ffd97",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0018",
+      "path": "game/ReplicatedStorage/FeralWorld/TerritoryConfig",
+      "previous_id": 67,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 12195,
+      "previous_filtered_adler32": "529494d7",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0019",
+      "path": "game/ReplicatedStorage/FeralWorld/FishConfig",
+      "previous_id": 68,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 1858,
+      "previous_filtered_adler32": "04f7d31c",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0020",
+      "path": "game/ReplicatedStorage/FeralWorld/GrowthConfig",
+      "previous_id": 72,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 4966,
+      "previous_filtered_adler32": "bc7906f4",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0021",
+      "path": "game/ReplicatedStorage/FeralWorld/HudConfig",
+      "previous_id": 74,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 27411,
+      "previous_filtered_adler32": "18485dd3",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0022",
+      "path": "game/ReplicatedStorage/FeralWorld/CarcassConfig",
+      "previous_id": 76,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 1170,
+      "previous_filtered_adler32": "c5ab1871",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0023",
+      "path": "game/ReplicatedStorage/FeralWorld/PassiveConfig",
+      "previous_id": 77,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 8210,
+      "previous_filtered_adler32": "97c90412",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0024",
+      "path": "game/ReplicatedStorage/FeralWorld/ScentConfig",
+      "previous_id": 79,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 2437,
+      "previous_filtered_adler32": "60994bb7",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0025",
+      "path": "game/ReplicatedStorage/FeralWorld/GoalConfig",
+      "previous_id": 81,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 2101,
+      "previous_filtered_adler32": "18dcf97e",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0026",
+      "path": "game/ReplicatedStorage/FeralWorld/CinematicConfig",
+      "previous_id": 82,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 17849,
+      "previous_filtered_adler32": "e2d730b7",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0027",
+      "path": "game/ReplicatedStorage/FeralWorld/StatusConfig",
+      "previous_id": 85,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 11155,
+      "previous_filtered_adler32": "72df2572",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0028",
+      "path": "game/ReplicatedStorage/FeralWorld/VenomConfig",
+      "previous_id": 103,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 3520,
+      "previous_filtered_adler32": "2709294e",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0029",
+      "path": "game/ReplicatedStorage/FeralWorld/ElderConfig",
+      "previous_id": 107,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 8374,
+      "previous_filtered_adler32": "ce889026",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0030",
+      "path": "game/ReplicatedStorage/FeralWorld/FilmConfig",
+      "previous_id": 116,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 8108,
+      "previous_filtered_adler32": "7d12e294",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0031",
+      "path": "game/ReplicatedStorage/FeralWorld/JumpLeapConfig",
+      "previous_id": 117,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 891,
+      "previous_filtered_adler32": "c3a7d12d",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0032",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralCombatClient",
+      "previous_id": 3630,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 146044,
+      "previous_filtered_adler32": "e6f36f1c",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0033",
+      "path": "game/ReplicatedStorage/FeralWorld/AnimProfiles",
+      "previous_id": 36,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 287885,
+      "previous_filtered_adler32": "00105eb9",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0034",
+      "path": "game/ReplicatedStorage/FeralWorld/UITheme",
+      "previous_id": 38,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 26306,
+      "previous_filtered_adler32": "2d7da57f",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0035",
+      "path": "game/ReplicatedStorage/FeralWorld/SoundboardList",
+      "previous_id": 47,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 111187,
+      "previous_filtered_adler32": "c84f2c1d",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0036",
+      "path": "game/ReplicatedStorage/FeralWorld/MapSpots",
+      "previous_id": 48,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 3257,
+      "previous_filtered_adler32": "a1169960",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0037",
+      "path": "game/ReplicatedStorage/FeralWorld/SnakeProfiles",
+      "previous_id": 86,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 8555,
+      "previous_filtered_adler32": "f53acbe4",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0038",
+      "path": "game/ReplicatedStorage/FeralWorld/BirdProfiles",
+      "previous_id": 94,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 22439,
+      "previous_filtered_adler32": "4f8f11d3",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0039",
+      "path": "game/ReplicatedStorage/FeralWorld/BirdRig",
+      "previous_id": 95,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 129732,
+      "previous_filtered_adler32": "be44a554",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0040",
+      "path": "game/ReplicatedStorage/FeralWorld/ElderPaint",
+      "previous_id": 109,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 6708,
+      "previous_filtered_adler32": "773de7ce",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0041",
+      "path": "game/ReplicatedStorage/FeralWorld/Clutter/Data_WolfValley",
+      "previous_id": 121,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 638,
+      "previous_filtered_adler32": "0f1a9af2",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0042",
+      "path": "game/Players/LocalPlayer/PlayerScripts/WolfAnimClient",
+      "previous_id": 3621,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 737032,
+      "previous_filtered_adler32": "e255d0a3",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0043",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralMenu",
+      "previous_id": 3625,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 658710,
+      "previous_filtered_adler32": "3cdc84f7",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0044",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralHUD",
+      "previous_id": 3626,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 458421,
+      "previous_filtered_adler32": "3786775a",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0045",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralNightVision",
+      "previous_id": 3638,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 15970,
+      "previous_filtered_adler32": "2765ceb6",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0046",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralPacksUI",
+      "previous_id": 3639,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 113093,
+      "previous_filtered_adler32": "8e0ae362",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0047",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralDust",
+      "previous_id": 3648,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 19230,
+      "previous_filtered_adler32": "1b2a5a47",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0048",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralOnbClient",
+      "previous_id": 3653,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 111988,
+      "previous_filtered_adler32": "84ef6c6f",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0049",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralRewardsUI",
+      "previous_id": 3658,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 96682,
+      "previous_filtered_adler32": "092ac502",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0050",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralDive",
+      "previous_id": 3660,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 67666,
+      "previous_filtered_adler32": "fd9f8847",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0051",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralClimb",
+      "previous_id": 3667,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 34665,
+      "previous_filtered_adler32": "809805b9",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0052",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralUIKit",
+      "previous_id": 3677,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 42027,
+      "previous_filtered_adler32": "ea3d74b9",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0053",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralTerritoryHUD",
+      "previous_id": 3690,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 178758,
+      "previous_filtered_adler32": "e9a596d9",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0054",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralFlight",
+      "previous_id": 3692,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 54595,
+      "previous_filtered_adler32": "25b11899",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0055",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralSaveAdminClient",
+      "previous_id": 3699,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 16352,
+      "previous_filtered_adler32": "e701e791",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0056",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralTextFit",
+      "previous_id": 3700,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 8749,
+      "previous_filtered_adler32": "4d0fbd1a",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0057",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralTitlePack",
+      "previous_id": 3709,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 37115,
+      "previous_filtered_adler32": "01bde82f",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0058",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralGiveUI",
+      "previous_id": 3719,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 45221,
+      "previous_filtered_adler32": "0e5ee969",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0059",
+      "path": "game/Players/LocalPlayer/PlayerScripts/FeralKingsClient",
+      "previous_id": 3723,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 35289,
+      "previous_filtered_adler32": "92b93f03",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0060",
+      "path": "game/Players/LocalPlayer/PlayerScripts/RbxCharacterSounds",
+      "previous_id": 3725,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 16153,
+      "previous_filtered_adler32": "cc18959a",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0061",
+      "path": "game/StarterPlayer/StarterPlayerScripts/WolfAnimClient",
+      "previous_id": 11837,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 737032,
+      "previous_filtered_adler32": "e255d0a3",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0062",
+      "path": "game/StarterPlayer/StarterPlayerScripts/FeralMenu",
+      "previous_id": 11841,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 658710,
+      "previous_filtered_adler32": "3cdc84f7",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0063",
+      "path": "game/StarterPlayer/StarterPlayerScripts/FeralHUD",
+      "previous_id": 11842,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 458421,
+      "previous_filtered_adler32": "3786775a",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0064",
+      "path": "game/StarterPlayer/StarterPlayerScripts/FeralTerritoryHUD",
+      "previous_id": 11906,
+      "reason": "known_syntax_failure",
+      "previous_filtered_bytes": 178758,
+      "previous_filtered_adler32": "e9a596d9",
+      "previous_parse_ok": false
+    },
+    {
+      "key": "T0065",
+      "path": "game/ReplicatedStorage/FeralWorld/RegrowConfig",
+      "previous_id": 112,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 2150,
+      "previous_filtered_adler32": "4b574220",
+      "previous_parse_ok": true
+    },
+    {
+      "key": "T0066",
+      "path": "game/ReplicatedStorage/FeralWorld/FloodConfig",
+      "previous_id": 102,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 915,
+      "previous_filtered_adler32": "6abde64b",
+      "previous_parse_ok": true
+    },
+    {
+      "key": "T0067",
+      "path": "game/ReplicatedStorage/FeralWorld/PerfConfig",
+      "previous_id": 92,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 1248,
+      "previous_filtered_adler32": "9aa5455a",
+      "previous_parse_ok": true
+    },
+    {
+      "key": "T0068",
+      "path": "game/Players/LocalPlayer/PlayerScripts/WolfController",
+      "previous_id": 3620,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 272983,
+      "previous_filtered_adler32": "472b37ae",
+      "previous_parse_ok": true
+    },
+    {
+      "key": "T0069",
+      "path": "game/ReplicatedStorage/FeralWorld/FlightConfig",
+      "previous_id": 93,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 4090,
+      "previous_filtered_adler32": "b7a6f049",
+      "previous_parse_ok": true
+    },
+    {
+      "key": "T0070",
+      "path": "game/ReplicatedStorage/FeralWorld/SurvivalConfig",
+      "previous_id": 70,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 2783,
+      "previous_filtered_adler32": "c6acf6f4",
+      "previous_parse_ok": true
+    },
+    {
+      "key": "T0071",
+      "path": "game/ReplicatedStorage/FeralWorld/CoatMasks",
+      "previous_id": 111,
+      "reason": "semantic_review_despite_syntax_pass",
+      "previous_filtered_bytes": 800356,
+      "previous_filtered_adler32": "3f2a901f",
+      "previous_parse_ok": true
+    }
+  ]
+}
