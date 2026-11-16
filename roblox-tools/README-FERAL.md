@@ -1,17 +1,17 @@
 # FERAL client project
 
-The current [Field Hub v1.1](README-field-hub-v1.1.md) preserves the stamina
-tuning reported working by the user on Bear, retires the overwritten local HP
-trial, labels the oasis as an ordinary POI and adds a native earned-rewards
-shortcut with optional reply-label observation. It retains checked one-shot
-travel, animal previews, local coat trials and searchable findings.
-It opens directly and does not repeat the diagnostic scan. Arbitrary spendable
-amber, permanent unlocks, working HP regeneration and restricted spawns remain
-unestablished. The new release passes offline checks; complete v1.1 runtime
-testing is still outstanding.
+The current [Field Hub v1.2](README-field-hub-v1.2.md) preserves the stamina
+path reported working on Bear and adds repair/drift checks, an experimental
+movement adjustment, custom waypoints/bookmarks and a bounded uploadable field
+report. OWNER controls audit cached predicates and optionally check the native
+look/list interfaces for your own account. No gift, restore or other
+privileged mutation is submitted.
+See the [goal review](FERAL-GOAL-REVIEW-v1.2.md) for implemented work and the
+remaining health, currency, entitlement and spawn limitations. Full v1.2
+Roblox/Velocity testing is still outstanding.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.1.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.2.lua"))()
 ```
 
 ## Completed diagnostic investigation
@@ -49,7 +49,8 @@ supplement passed independent integrity checks.
 
 | Need | File |
 |---|---|
-| Current Field Hub, field results, controls and feature limits | [README-field-hub-v1.1.md](README-field-hub-v1.1.md) |
+| Current Field Hub, owner checks and focused report | [README-field-hub-v1.2.md](README-field-hub-v1.2.md) |
+| Original goals, source evidence and owner-tool review | [FERAL-GOAL-REVIEW-v1.2.md](FERAL-GOAL-REVIEW-v1.2.md) |
 | Final results, authority findings and remaining limits | [FERAL-FINAL-ANALYSIS.md](FERAL-FINAL-ANALYSIS.md) |
 | Final runtime evidence and closure status | [FERAL-COMPLETION-v3.2.json](FERAL-COMPLETION-v3.2.json) |
 | Small last-live-source collector | [README-final-v3.2.md](README-final-v3.2.md) |
