@@ -5,6 +5,8 @@ local decompileCalls, writes, forbiddenWrites, eventCalls, cancelled = 0,0,0,0,0
 local stopTriggered, pauseTriggered, pausedCalls = false,false,nil
 local clipboard = ""
 local blockedAttempts = {}
+local waitCalls,deferCalls,spawnCalls = 0,0,0
+local activeDecompilers,maxActiveDecompilers = 0,0
 local nativeClock = os.clock
 os.clock = function() return clock end
 local function schedule(fn, delay, args)
@@ -13,11 +15,18 @@ local function schedule(fn, delay, args)
     return thread
 end
 task = {}
-function task.spawn(fn, ...) return schedule(fn,0,{...}) end
+function task.spawn(fn, ...)
+    spawnCalls=spawnCalls+1
+    local thread=type(fn)=="thread" and fn or coroutine.create(fn)
+    local ok,delay=coroutine.resume(thread,...)
+    assert(ok,tostring(delay))
+    if coroutine.status(thread)~="dead" then schedule(thread,delay or 0.016) end
+    return thread
+end
 if case == "no_background_spawn" then task.spawn = function() error("background spawn unavailable") end end
-function task.defer(fn, ...) return schedule(fn,0,{...}) end
+function task.defer(fn, ...) deferCalls=deferCalls+1; return schedule(fn,0,{...}) end
 function task.delay(delay,fn,...) return schedule(fn,delay,{...}) end
-function task.wait(delay) return coroutine.yield(delay or 0.016) end
+function task.wait(delay) waitCalls=waitCalls+1; return coroutine.yield(delay or 0.016) end
 local dead = {}
 function task.cancel(thread)
     if case == "uncancellable" then error("cannot cancel native thread") end
@@ -230,6 +239,16 @@ if case == "oversize" then addScript("ModuleScript","Oversize",config,string.rep
 if case == "scale" then
     for i=1,37983 do addScript("ModuleScript","PlatformModule"..i,services.CorePackages,"return {index="..i.."}") end
 end
+if case == "benchmark" then
+    for i=1,500 do addScript("ModuleScript","TimingModule"..i,services.CorePackages,"return {index="..i.."}") end
+end
+if case == "source_dedup" or case == "bytecode_dedup" or case == "bytecode_limit" then
+    for i=1,12 do addScript("ModuleScript","SameText"..i,services.CorePackages,"return {shared = 42}") end
+end
+if case == "hash_collision" or case == "bytecode_collision" then
+    addScript("ModuleScript","CollisionOne",services.CorePackages,"return 'c`c'")
+    addScript("ModuleScript","CollisionTwo",services.CorePackages,"return 'bbb'")
+end
 if case == "deep" then
     local parent=config
     for i=1,520 do parent=newNode("Folder","D"..i,parent) end
@@ -245,6 +264,9 @@ local function click(name)
 end
 function decompile(obj)
     decompileCalls=decompileCalls+1
+    activeDecompilers=activeDecompilers+1
+    maxActiveDecompilers=math.max(maxActiveDecompilers,activeDecompilers)
+    if case=="benchmark" then clock=clock+0.0004 end
     if case == "cancel" and decompileCalls==3 then click("Stop"); stopTriggered=true end
     if case == "pause" and decompileCalls==2 then
         click("Pause"); pauseTriggered=true; pausedCalls=decompileCalls
@@ -252,7 +274,8 @@ function decompile(obj)
     end
     if (case == "timeouts" or case == "uncancellable") and obj.Name~="StaminaController" then task.wait(1000) end
     if case == "yielding" then task.wait(0.1) end
-    if obj.Name=="Throws" then error("executor failure PRIVATE_EXCEPTION_TEXT") end
+    if obj.Name=="Throws" then activeDecompilers=activeDecompilers-1; error("executor failure PRIVATE_EXCEPTION_TEXT") end
+    activeDecompilers=activeDecompilers-1
     return obj._props.mockSource
 end
 local initiallyMissing = case=="missing_files"
@@ -263,6 +286,7 @@ end
 function isfolder(path) return folders[path] or false end
 function writefile(path,body)
     writes=writes+1
+    if case=="benchmark" then clock=clock+0.0001 end
     local extension=path:match("%.([^./]+)$")
     if (case=="blocked_scripts" and (extension=="ps1" or extension=="cmd" or extension=="bat"))
         or (case=="text_only_files" and extension~="txt") then
@@ -284,6 +308,13 @@ end
 function setclipboard(text) clipboard=text end
 function getloadedmodules() return allScripts end
 function getscripts() return allScripts end
+if case:match("^bytecode_") then
+    function getscriptbytecode(obj)
+        if case=="bytecode_failure" then error("unsupported bytecode getter") end
+        if case=="bytecode_invalid" then return "unsupported API" end
+        return string.char(14,3,0,1).."PRIVATE_BYTECODE_MARKER\0"..obj._props.mockSource
+    end
+end
 if case=="no_decompiler" then decompile=nil end
 if case=="no_readfile" then readfile=nil end
 if initiallyMissing then writefile,makefolder=nil,nil end
@@ -299,6 +330,7 @@ local text=assert(io.open(SOURCE_PATH,"rb")):read("*a")
 if case=="object_limit" then text=text:gsub("maxObjects = 600000","maxObjects = 20",1) end
 if case=="source_budget" then text=text:gsub("maxExportBytes = 2147483648","maxExportBytes = 16780000",1) end
 if case=="config_limit" then text=text:gsub("maxDecodedConfigNodes = 100000","maxDecodedConfigNodes = 2",1) end
+if case=="bytecode_limit" then text=text:gsub("bytecodeCacheMaxBytes = 16777216","bytecodeCacheMaxBytes = 1",1) end
 if case=="native_parts" then
     text=text:gsub("uploadPartBytes = 25165824","uploadPartBytes = 131072",1)
     text=text:gsub("sourceChunkBytes = 524288","sourceChunkBytes = 32768",1)
@@ -338,6 +370,7 @@ end
 assert(forbiddenWrites==0,"gameplay mutations occurred")
 assert(eventCalls==0,"gameplay remote was invoked")
 local result={case=case,disk=disk,decompile_calls=decompileCalls,writes=writes,cancelled=cancelled,
-    status=status,notice=notice,steps=steps,clock=clock,stop_triggered=stopTriggered,pause_triggered=pauseTriggered,warnings=warnings,clipboard=clipboard,blocked_attempts=blockedAttempts}
+    status=status,notice=notice,steps=steps,clock=clock,stop_triggered=stopTriggered,pause_triggered=pauseTriggered,warnings=warnings,clipboard=clipboard,blocked_attempts=blockedAttempts,
+    waits=waitCalls,defers=deferCalls,spawns=spawnCalls,max_active_decompilers=maxActiveDecompilers}
 dumping = true -- encode arbitrary file bytes as reversible U+00xx JSON escapes
 local output=assert(io.open(OUTPUT_PATH,"wb")); output:write(json(result)); output:close()

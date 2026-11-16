@@ -1,5 +1,7 @@
 # FERAL Complete Diagnostic v3.0.2
 
+**[V3.0.3](README-v3.0.3.md) optimises source collection while keeping the full game/platform scope.** It removes unnecessary waits and reuses exactly matching code. Switching versions starts a new run; Stop & Save the current export first.
+
 The reported v3.0.1 run passed its small text-file check, then failed while writing `Pack-FERAL.ps1`, before inventory began. That is consistent with an executable-file restriction, although the native error did not identify the exact rule. Packaging helpers should not have been required to start a read-only inventory.
 
 V3.0.2 exports **plain text data only**. It does not write, rename, encode for later execution, or run packaging programs. Windows creates the ZIP after collection.

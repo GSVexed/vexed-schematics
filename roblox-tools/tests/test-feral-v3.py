@@ -16,7 +16,7 @@ import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / os.environ.get('FERAL_SOURCE','feral-complete-diagnostic-v3.0.2.lua')
+SOURCE = ROOT / os.environ.get('FERAL_SOURCE','feral-complete-diagnostic-v3.0.3.lua')
 lib_name = ctypes.util.find_library('lua5.4')
 if not lib_name:
     raise SystemExit('Install liblua5.4 to run these offline mock tests.')
@@ -112,7 +112,7 @@ def inspect_export(result):
                    'PRIVATE_MESSAGE_ATTRIBUTE', 'PRIVATE_COMMENT_TOKEN', 'PRIVATE_SOURCE_TOKEN',
                    'PRIVATE_LONG_LITERAL', 'PRIVATE_INLINE_COMMENT', 'private@example.test',
                    'PRIVATE_SERVER_SOURCE', 'PRIVATE_EXCEPTION_TEXT','PRIVATE_JSON_PASSWORD',
-                   'PRIVATE_JSON_OTHER_DATA','PRIVATE_ENV_TOKEN']:
+                   'PRIVATE_JSON_OTHER_DATA','PRIVATE_ENV_TOKEN','PRIVATE_BYTECODE_MARKER']:
         assert secret.encode() not in all_payload, 'privacy leak: ' + secret
     for record in records.get('source-results', []):
         if record['status'] != 'exported':
@@ -178,7 +178,8 @@ def main():
         'timeouts','uncancellable','object_limit','memory_limit','deep','chunked','oversize',
         'stop_inventory','write_failure','read_corruption','missing_files','source_budget','config_limit','scale',
         'manual_ready','environment_apis','no_background_spawn','ui_optional_property','ui_drag_unavailable','makefolder_false','click_only',
-        'blocked_scripts','text_only_files','native_parts']
+        'blocked_scripts','text_only_files','native_parts','source_dedup','hash_collision','benchmark',
+        'bytecode_dedup','bytecode_failure','bytecode_invalid','bytecode_limit','bytecode_collision']
     with tempfile.TemporaryDirectory(prefix='feral-v3-tests-') as tmp:
         if not sys.argv[1:] or 'blocked_scripts' in cases:
             previous = run_lua('blocked_scripts',Path(tmp)/'previous-failure.json',source=ROOT/'feral-complete-diagnostic-v3.0.1.lua')
@@ -194,7 +195,7 @@ def main():
                 print('PASS manual_ready: visible Start control; no collection before the click')
                 continue
             if case in ('missing_files','makefolder_false','read_corruption'):
-                assert 'FERAL STARTUP REPORT v3.0.2' in result['clipboard']
+                assert 'FERAL STARTUP REPORT v3.0.3' in result['clipboard']
                 expected = {'missing_files':'missing_writefile_and_makefolder','makefolder_false':'makefolder_failed','read_corruption':'file_read_back_failed'}[case]
                 assert expected in result['clipboard']
             inspected = inspect_export(result)
@@ -238,6 +239,37 @@ def main():
                 if case == 'native_parts':
                     assert len(manifest['upload_parts']) >= 4
                     assert all(p['accounted_bytes'] <= 131072 for p in manifest['upload_parts'][1:])
+                if case == 'source_dedup':
+                    shared = [r for r in records['source-results'] if 'SameText' in str(r['path'])]
+                    assert len(shared)==12 and all(r['status']=='exported' for r in shared)
+                    assert manifest['counts']['sourceBodiesReused']==11
+                    assert len({r['files'][0]['path'] for r in shared})==1
+                if case in ('hash_collision','bytecode_collision'):
+                    assert adler(b"return 'c`c'")==adler(b"return 'bbb'")
+                    collision = [r for r in records['source-results'] if 'Collision' in str(r['path'])]
+                    assert len(collision)==2 and collision[0]['files'][0]['path']!=collision[1]['files'][0]['path']
+                    bodies = [next(v.encode('latin1') for p,v in result['disk'].items() if p.endswith('/'+r['files'][0]['path'])) for r in collision]
+                    assert set(bodies)=={b"return 'c`c'",b"return 'bbb'"}
+                if case == 'bytecode_dedup':
+                    assert manifest['counts']['bytecodeReused']==11
+                    assert result['decompile_calls']==7, result['decompile_calls']
+                    assert manifest['counts']['sourceExported']==17
+                    assert manifest['source_pending']==0
+                if case in ('bytecode_failure','bytecode_invalid'):
+                    assert manifest['counts']['bytecodeCacheFailures']==1
+                    assert manifest['counts']['sourceExported']==5
+                if case == 'bytecode_limit':
+                    assert manifest['counts']['bytecodeReused']==0
+                    assert manifest['counts']['sourceExported']==17
+                if case == 'benchmark':
+                    baseline = run_lua(case,Path(tmp)/'baseline-timing.json',source=ROOT/'feral-complete-diagnostic-v3.0.2.lua')
+                    old_manifest,old_records=inspect_export(baseline)
+                    expected = {str(r['path']):(r['status'],r.get('exported_adler32'),r.get('exported_bytes')) for r in old_records['source-results']}
+                    actual = {str(r['path']):(r['status'],r.get('exported_adler32'),r.get('exported_bytes')) for r in records['source-results']}
+                    assert actual==expected, 'Speed change omitted or altered source outcomes'
+                    assert result['clock'] < baseline['clock']/4, (result['clock'],baseline['clock'])
+                    assert result['max_active_decompilers']==1
+                    print(f"PASS timing model: {baseline['clock']:.2f}s -> {result['clock']:.2f}s; identical source outcomes; one decompiler")
                 print(f"PASS {case}: {manifest['phase']}, {manifest['counts']['objects']} objects, {manifest['files']['payload_count']} payload files")
             else:
                 assert result['status'] == 'FAILED_PARTIAL'
