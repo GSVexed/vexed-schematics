@@ -1,4 +1,17 @@
-# FERAL diagnostic project
+# FERAL client project
+
+The new [Field Hub v1.0](README-field-hub-v1.0.md) is a standalone in-game
+panel with live own-animal status, optional client resource experiments,
+checked one-shot travel, animal previews, local coat trials and searchable
+findings. It opens directly and does not repeat the diagnostic scan.
+It does not establish spendable amber, permanent unlocks or restricted spawns.
+Source/offline checks pass; Roblox/Velocity testing is still outstanding.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.0.lua"))()
+```
+
+## Completed diagnostic investigation
 
 Read-only client collection and evidence-based analysis for PlaceId
 `108901361810209`. The full dataset, menu/Tiger comparisons and main analysis
@@ -33,6 +46,7 @@ supplement passed independent integrity checks.
 
 | Need | File |
 |---|---|
+| In-game Field Hub, controls and honest feature limits | [README-field-hub-v1.0.md](README-field-hub-v1.0.md) |
 | Final results, authority findings and remaining limits | [FERAL-FINAL-ANALYSIS.md](FERAL-FINAL-ANALYSIS.md) |
 | Final runtime evidence and closure status | [FERAL-COMPLETION-v3.2.json](FERAL-COMPLETION-v3.2.json) |
 | Small last-live-source collector | [README-final-v3.2.md](README-final-v3.2.md) |
