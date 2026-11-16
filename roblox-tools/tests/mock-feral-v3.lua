@@ -3,6 +3,7 @@ local case = TEST_CASE or "normal"
 local clock, queue, disk, folders, nodes, warnings = 0, {}, {}, {}, {}, {}
 local decompileCalls, writes, forbiddenWrites, eventCalls, cancelled = 0,0,0,0,0
 local stopTriggered, pauseTriggered, pausedCalls = false,false,nil
+local clipboard = ""
 local nativeClock = os.clock
 os.clock = function() return clock end
 local function schedule(fn, delay, args)
@@ -12,6 +13,7 @@ local function schedule(fn, delay, args)
 end
 task = {}
 function task.spawn(fn, ...) return schedule(fn,0,{...}) end
+if case == "no_background_spawn" then task.spawn = function() error("background spawn unavailable") end end
 function task.defer(fn, ...) return schedule(fn,0,{...}) end
 function task.delay(delay,fn,...) return schedule(fn,delay,{...}) end
 function task.wait(delay) return coroutine.yield(delay or 0.016) end
@@ -79,7 +81,10 @@ end
 function methods:FindFirstChildOfClass(class)
     for _,child in ipairs(self._children) do if child.ClassName == class then return child end end
 end
-function methods:GetService(name) return services[name] or error("unknown service " .. name) end
+function methods:GetService(name)
+    if case == "ui_drag_unavailable" and name == "UserInputService" then error("optional input unavailable") end
+    return services[name] or error("unknown service " .. name)
+end
 function methods:GetPlayers() return self._props.playerList end
 function methods:GetState() return Enum.HumanoidStateType.Running end
 function methods:GetPlayingAnimationTracks() return self._props.mockTracks or {} end
@@ -95,6 +100,7 @@ local mt = {
     end,
     __newindex = function(self,key,value)
         if not self._own then forbiddenWrites = forbiddenWrites + 1; error("gameplay write: " .. key) end
+        if case == "ui_optional_property" and key == "TextEditable" then error("optional UI property unavailable") end
         if key == "Parent" then
             self._props.Parent = value
             if value then value._children[#value._children+1] = self end
@@ -105,7 +111,7 @@ local mt = {
 local function newNode(class,name,parent,props,attrs,own)
     local p = props or {}; p.Name,p.Parent,p.Archivable = name,parent,true
     if class=="Script" or class=="LocalScript" then p.Enabled,p.Disabled=true,false end
-    for _,key in ipairs({"Activated","Destroying","InputBegan","CharacterAdded","PlayerAdded"}) do p[key] = signal() end
+    for _,key in ipairs({"Activated","MouseButton1Click","Destroying","InputBegan","CharacterAdded","PlayerAdded"}) do p[key] = signal() end
     local self = setmetatable({_class=class,_props=p,_attrs=attrs or {},_children={},_own=own or false,__type="Instance"},mt)
     if parent then parent._children[#parent._children+1] = self end
     nodes[#nodes+1] = self
@@ -229,7 +235,10 @@ if case == "deep" then
 end
 local function click(name)
     for _,node in ipairs(nodes) do
-        if node._own and node._props.Name==name then node._props.Activated:Fire(); return end
+        if node._own and node._props.Name==name then
+            local event = name == "Start" and case == "click_only" and "MouseButton1Click" or "Activated"
+            node._props[event]:Fire(); return
+        end
     end
     error("missing button "..name)
 end
@@ -246,10 +255,14 @@ function decompile(obj)
     return obj._props.mockSource
 end
 local initiallyMissing = case=="missing_files"
-function makefolder(path) folders[path]=true end
+function makefolder(path)
+    if case=="makefolder_false" then return false end
+    folders[path]=true
+end
 function isfolder(path) return folders[path] or false end
 function writefile(path,body)
     writes=writes+1
+    assert(folders[path:match("^(.*)/[^/]+$")],"directory missing")
     if case == "write_failure" and path:find("objects/",1,true) then error("disk full") end
     disk[path]=body
     if case == "stop_inventory" and not stopTriggered and path:find("objects/",1,true) then
@@ -261,18 +274,35 @@ function readfile(path)
     if case=="read_corruption" then return disk[path].."CORRUPTION" end
     return disk[path]
 end
-function setclipboard(_) end
+function setclipboard(text) clipboard=text end
 function getloadedmodules() return allScripts end
 function getscripts() return allScripts end
 if case=="no_decompiler" then decompile=nil end
 if case=="no_readfile" then readfile=nil end
 if initiallyMissing then writefile,makefolder=nil,nil end
+if case == "environment_apis" then
+    local environment = {writefile=writefile,readfile=readfile,makefolder=makefolder,isfolder=isfolder,
+        decompile=decompile,setclipboard=setclipboard,getloadedmodules=getloadedmodules,getscripts=getscripts,
+        secret="PRIVATE_ENV_TOKEN"}
+    setmetatable(environment,{__pairs=function() error("executor environment must not be enumerated") end})
+    getgenv=function() return environment end
+    writefile,readfile,makefolder,isfolder,decompile,setclipboard,getloadedmodules,getscripts=nil,nil,nil,nil,nil,nil,nil,nil
+end
 local text=assert(io.open(SOURCE_PATH,"rb")):read("*a")
 if case=="object_limit" then text=text:gsub("maxObjects = 600000","maxObjects = 20",1) end
 if case=="source_budget" then text=text:gsub("maxExportBytes = 2147483648","maxExportBytes = 16780000",1) end
 if case=="config_limit" then text=text:gsub("maxDecodedConfigNodes = 100000","maxDecodedConfigNodes = 2",1) end
 if case=="memory_limit" then gcinfo=function() return clock>0.05 and 400000 or 1024 end end
 assert(load(text,"@feral-complete-diagnostic-v3.0.lua"))()
+local hasStart = false
+for _,node in ipairs(nodes) do if node._own and node._props.Name=="Start" then hasStart=true end end
+if hasStart then
+    assert(writes==0 and decompileCalls==0,"collection started before Start click")
+    if case ~= "manual_ready" then
+        task.defer(function() click("Start") end)
+        if case == "normal" then task.defer(function() click("Start") end) end
+    end
+end
 local steps=0
 while #queue>0 do
     table.sort(queue,function(a,b) return a.at<b.at end)
@@ -287,6 +317,7 @@ while #queue>0 do
     assert(steps<1500000,"scheduler did not finish")
     if case=="uncancellable" and clock>100 then break end
 end
+if case=="manual_ready" or case=="missing_files" or case=="makefolder_false" or case=="read_corruption" then click("CopyStartup") end
 os.clock=nativeClock
 local status,notice
 for _,node in ipairs(nodes) do
@@ -296,6 +327,6 @@ end
 assert(forbiddenWrites==0,"gameplay mutations occurred")
 assert(eventCalls==0,"gameplay remote was invoked")
 local result={case=case,disk=disk,decompile_calls=decompileCalls,writes=writes,cancelled=cancelled,
-    status=status,notice=notice,steps=steps,clock=clock,stop_triggered=stopTriggered,pause_triggered=pauseTriggered,warnings=warnings}
+    status=status,notice=notice,steps=steps,clock=clock,stop_triggered=stopTriggered,pause_triggered=pauseTriggered,warnings=warnings,clipboard=clipboard}
 dumping = true -- encode arbitrary file bytes as reversible U+00xx JSON escapes
 local output=assert(io.open(OUTPUT_PATH,"wb")); output:write(json(result)); output:close()

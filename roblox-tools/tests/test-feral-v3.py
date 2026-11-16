@@ -16,7 +16,7 @@ import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'feral-complete-diagnostic-v3.0.lua'
+SOURCE = ROOT / os.environ.get('FERAL_SOURCE','feral-complete-diagnostic-v3.0.1.lua')
 lib_name = ctypes.util.find_library('lua5.4')
 if not lib_name:
     raise SystemExit('Install liblua5.4 to run these offline mock tests.')
@@ -55,12 +55,12 @@ def run_lua(case, output):
 def inspect_export(result):
     disk = result['disk']
     if not isinstance(disk, dict):
-        assert result['case'] == 'missing_files'
+        assert result['case'] in ('missing_files','manual_ready','makefolder_false')
         return None
     disk = {key: value.encode('latin1') for key, value in disk.items()}
     manifests = [p for p in disk if p.endswith('/manifest.json')]
     if not manifests:
-        assert result['case'] == 'read_corruption', result['notice']
+        assert result['case'] in ('read_corruption','makefolder_false'), result['notice']
         return None
     prefix = manifests[0][:-len('manifest.json')]
     manifest = json.loads(disk[manifests[0]])
@@ -111,7 +111,7 @@ def inspect_export(result):
                    'PRIVATE_MESSAGE_ATTRIBUTE', 'PRIVATE_COMMENT_TOKEN', 'PRIVATE_SOURCE_TOKEN',
                    'PRIVATE_LONG_LITERAL', 'PRIVATE_INLINE_COMMENT', 'private@example.test',
                    'PRIVATE_SERVER_SOURCE', 'PRIVATE_EXCEPTION_TEXT','PRIVATE_JSON_PASSWORD',
-                   'PRIVATE_JSON_OTHER_DATA']:
+                   'PRIVATE_JSON_OTHER_DATA','PRIVATE_ENV_TOKEN']:
         assert secret.encode() not in all_payload, 'privacy leak: ' + secret
     for record in records.get('source-results', []):
         if record['status'] != 'exported':
@@ -143,10 +143,21 @@ def main():
         assert forbidden not in source, forbidden
     cases = sys.argv[1:] or ['normal','yielding','no_decompiler','no_readfile','cancel','pause',
         'timeouts','uncancellable','object_limit','memory_limit','deep','chunked','oversize',
-        'stop_inventory','write_failure','read_corruption','missing_files','source_budget','config_limit','scale']
+        'stop_inventory','write_failure','read_corruption','missing_files','source_budget','config_limit','scale',
+        'manual_ready','environment_apis','no_background_spawn','ui_optional_property','ui_drag_unavailable','makefolder_false','click_only']
     with tempfile.TemporaryDirectory(prefix='feral-v3-tests-') as tmp:
         for case in cases:
             result = run_lua(case, Path(tmp) / (case + '.json'))
+            if case == 'manual_ready':
+                assert result['status'] == 'READY - CLICK START SCAN'
+                assert result['writes'] == 0 and result['decompile_calls'] == 0
+                assert 'waiting_for_start' in result['clipboard']
+                print('PASS manual_ready: visible Start control; no collection before the click')
+                continue
+            if case in ('missing_files','makefolder_false','read_corruption'):
+                assert 'FERAL STARTUP REPORT v3.0.1' in result['clipboard']
+                expected = {'missing_files':'missing_writefile_and_makefolder','makefolder_false':'makefolder_failed','read_corruption':'file_read_back_failed'}[case]
+                assert expected in result['clipboard']
             inspected = inspect_export(result)
             if inspected:
                 manifest, records = inspected
@@ -157,6 +168,9 @@ def main():
                     assert configs[0]['decoded']['stamina']['regen'] == 5
                     assert configs[0]['decoded']['password']['redacted']
                     assert any(isinstance(r['name'],dict) and r['name'].get('encoding')=='base64' for r in records['objects'])
+                    assert len({p.split('/')[0] for p in result['disk']}) == 1, 'Start ran twice'
+                if case == 'environment_apis':
+                    assert manifest['api_resolution']['writefile'] == 'executor_environment'
                 if case == 'scale':
                     assert manifest['counts']['scripts'] == 37991
                     assert manifest['counts']['eligible'] == 37990
