@@ -16,7 +16,7 @@ import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / os.environ.get('FERAL_SOURCE','feral-complete-diagnostic-v3.0.1.lua')
+SOURCE = ROOT / os.environ.get('FERAL_SOURCE','feral-complete-diagnostic-v3.0.2.lua')
 lib_name = ctypes.util.find_library('lua5.4')
 if not lib_name:
     raise SystemExit('Install liblua5.4 to run these offline mock tests.')
@@ -36,11 +36,11 @@ LUA.lua_close.argtypes = [C.c_void_p]
 def adler(data):
     return f'{zlib.adler32(data) & 0xffffffff:08x}'
 
-def run_lua(case, output):
+def run_lua(case, output, source=None):
     state = LUA.luaL_newstate()
     LUA.luaL_openlibs(state)
     try:
-        for key, value in {'TEST_CASE': case, 'SOURCE_PATH': str(SOURCE), 'OUTPUT_PATH': str(output)}.items():
+        for key, value in {'TEST_CASE': case, 'SOURCE_PATH': str(source or SOURCE), 'OUTPUT_PATH': str(output)}.items():
             LUA.lua_pushstring(state, value.encode())
             LUA.lua_setglobal(state, key.encode())
         code = LUA.luaL_loadfilex(state, str(ROOT / 'tests/mock-feral-v3.lua').encode(), None)
@@ -58,11 +58,12 @@ def inspect_export(result):
         assert result['case'] in ('missing_files','manual_ready','makefolder_false')
         return None
     disk = {key: value.encode('latin1') for key, value in disk.items()}
-    manifests = [p for p in disk if p.endswith('/manifest.json')]
+    manifests = [p for p in disk if p.endswith('/manifest.json') or p.endswith('/manifest.json.txt')]
     if not manifests:
         assert result['case'] in ('read_corruption','makefolder_false'), result['notice']
         return None
-    prefix = manifests[0][:-len('manifest.json')]
+    native_parts = manifests[0].endswith('/manifest.json.txt')
+    prefix = manifests[0].split('/UPLOAD_PART_000_METADATA/')[0] + '/' if native_parts else manifests[0][:-len('manifest.json')]
     manifest = json.loads(disk[manifests[0]])
     files = []
     def verify(meta):
@@ -94,8 +95,8 @@ def inspect_export(result):
     records = {}
     for meta in files:
         path = meta['path']
-        if path.endswith('.ndjson'):
-            family = path.split('/')[0]
+        if path.endswith('.ndjson') or path.endswith('.ndjson.txt'):
+            family = path.split('/')[1] if native_parts else path.split('/')[0]
             records.setdefault(family, []).extend(json.loads(line) for line in disk[prefix + path].splitlines())
     if manifest['phase'] not in ('starting', 'inventory', 'sources'):
         assert len(records.get('scripts', [])) == manifest['counts']['scripts']
@@ -131,12 +132,44 @@ def inspect_export(result):
             assert archive.testzip() is None
             for meta in files:
                 assert adler(archive.read(meta['path'])) == meta['adler32']
+    if native_parts:
+        assert manifest['output_format'] == 'data_only_text'
+        assert all(path.endswith('.txt') for path in disk)
+        assert not result['blocked_attempts']
+        expected_folders = {part['folder'] for part in manifest['upload_parts']}
+        actual_folders = {p[len(prefix):].split('/')[0] for p in disk if p.startswith(prefix+'UPLOAD_PART_')}
+        if manifest['phase'] in ('starting','inventory','sources'):
+            # A failed write can leave later files outside the last checkpoint.
+            # They are retained locally but are not claimed by that manifest.
+            assert expected_folders.issubset(actual_folders)
+        else:
+            assert expected_folders == actual_folders
+        # Recreate Windows' per-folder ZIP structure and recover each root prefix.
+        reconstructed = {}
+        for part in manifest['upload_parts']:
+            folder = part['folder']
+            members = {p[len(prefix+folder+'/'):]: body for p,body in disk.items() if p.startswith(prefix+folder+'/')}
+            info = json.loads(members['UPLOAD_PART.json.txt'])
+            assert info['root_relative_prefix'] == folder
+            assert info['session_id'] == manifest['session_id']
+            # On a failed pipeline the latest advisory marker may be older than
+            # uncheckpointed files; the immutable master remains authoritative.
+            assert info['total_parts'] == len(manifest['upload_parts'])
+            with tempfile.TemporaryFile() as fp:
+                with zipfile.ZipFile(fp,'w',compression=zipfile.ZIP_DEFLATED) as z:
+                    for name,body in members.items(): z.writestr(name,body)
+                fp.seek(0)
+                with zipfile.ZipFile(fp) as z:
+                    assert z.testzip() is None
+                    for name in z.namelist(): reconstructed[folder+'/'+name] = z.read(name)
+        for meta in files + list(manifest['catalogs']) + list(manifest['controls']):
+            assert len(reconstructed[meta['path']]) == meta['bytes']
+            assert adler(reconstructed[meta['path']]) == meta['adler32']
     return manifest, records
 
 def main():
     source = SOURCE.read_text()
-    embedded = re.search(r'local PACKER = \[====\[\n(.*?)\n\]====\]', source, re.S).group(1)
-    assert embedded + '\n' == (ROOT / 'Pack-FERAL.ps1').read_text(), 'embedded packer differs'
+    assert 'local PACKER =' not in source and 'local PACK_CMD =' not in source
     assert '__FERAL_PACKER_BODY__' not in source
     for forbidden in [':FireServer(', ':InvokeServer(', ':Fire(', ':Invoke(', ':SetAttribute(',
                       'getrawmetatable(', 'hookmetamethod(', 'gethiddenproperty(', 'getgc(']:
@@ -144,8 +177,14 @@ def main():
     cases = sys.argv[1:] or ['normal','yielding','no_decompiler','no_readfile','cancel','pause',
         'timeouts','uncancellable','object_limit','memory_limit','deep','chunked','oversize',
         'stop_inventory','write_failure','read_corruption','missing_files','source_budget','config_limit','scale',
-        'manual_ready','environment_apis','no_background_spawn','ui_optional_property','ui_drag_unavailable','makefolder_false','click_only']
+        'manual_ready','environment_apis','no_background_spawn','ui_optional_property','ui_drag_unavailable','makefolder_false','click_only',
+        'blocked_scripts','text_only_files','native_parts']
     with tempfile.TemporaryDirectory(prefix='feral-v3-tests-') as tmp:
+        if not sys.argv[1:] or 'blocked_scripts' in cases:
+            previous = run_lua('blocked_scripts',Path(tmp)/'previous-failure.json',source=ROOT/'feral-complete-diagnostic-v3.0.1.lua')
+            assert previous['status'] == 'FAILED_PARTIAL'
+            assert 'Pack-FERAL.ps1' in previous['clipboard'] and 'file_write_failed' in previous['clipboard']
+            print('PASS reproduction: v3.0.1 fails at Pack-FERAL.ps1 under an executable-extension restriction')
         for case in cases:
             result = run_lua(case, Path(tmp) / (case + '.json'))
             if case == 'manual_ready':
@@ -155,7 +194,7 @@ def main():
                 print('PASS manual_ready: visible Start control; no collection before the click')
                 continue
             if case in ('missing_files','makefolder_false','read_corruption'):
-                assert 'FERAL STARTUP REPORT v3.0.1' in result['clipboard']
+                assert 'FERAL STARTUP REPORT v3.0.2' in result['clipboard']
                 expected = {'missing_files':'missing_writefile_and_makefolder','makefolder_false':'makefolder_failed','read_corruption':'file_read_back_failed'}[case]
                 assert expected in result['clipboard']
             inspected = inspect_export(result)
@@ -196,6 +235,9 @@ def main():
                     assert 'json_configuration_structure_limit' in json.dumps(records['values'])
                 if case == 'chunked':
                     assert any(len(r.get('files',[])) > 1 for r in records['source-results'])
+                if case == 'native_parts':
+                    assert len(manifest['upload_parts']) >= 4
+                    assert all(p['accounted_bytes'] <= 131072 for p in manifest['upload_parts'][1:])
                 print(f"PASS {case}: {manifest['phase']}, {manifest['counts']['objects']} objects, {manifest['files']['payload_count']} payload files")
             else:
                 assert result['status'] == 'FAILED_PARTIAL'

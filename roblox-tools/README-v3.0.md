@@ -1,5 +1,7 @@
 # FERAL Complete Diagnostic v3.0
 
+**Current release: [v3.0.2](README-v3.0.2.md)** removes executable helper exports and saves text-only data, which can be zipped with Windows. Use that version for new runs. The older auto-start/PowerShell instructions below describe v3.0 only.
+
 **Startup fix available:** [v3.0.1](README-v3.0.1.md) adds a visible Start button and a copyable startup report. Use that version if the original v3.0 panel appears without scanning. The instructions below describe the original v3.0 auto-start behavior and shared export format.
 
 Read-only collection for **[COBRA] FERAL Animal Survival**, PlaceId `108901361810209`. The diagnostic saves a complete set of its collected records to Velocity's local workspace. A concise clipboard summary is supplementary.

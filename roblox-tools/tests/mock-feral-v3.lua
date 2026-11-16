@@ -4,6 +4,7 @@ local clock, queue, disk, folders, nodes, warnings = 0, {}, {}, {}, {}, {}
 local decompileCalls, writes, forbiddenWrites, eventCalls, cancelled = 0,0,0,0,0
 local stopTriggered, pauseTriggered, pausedCalls = false,false,nil
 local clipboard = ""
+local blockedAttempts = {}
 local nativeClock = os.clock
 os.clock = function() return clock end
 local function schedule(fn, delay, args)
@@ -224,7 +225,7 @@ addScript("ModuleScript","RobloxModule",services.CorePackages,"return { platform
 addScript("LocalScript","RobloxGuiScript",services.CoreGui,"return { ui = true }")
 addScript("ModuleScript","Throws",config,"throws")
 addScript("ModuleScript","CommentOnly",config,"-- decompile failed")
-if case == "chunked" then addScript("ModuleScript","Big",config,'return [=['..string.rep('αβText\n',130000)..']=]') end
+if case == "chunked" or case == "native_parts" then addScript("ModuleScript","Big",config,'return [=['..string.rep('αβText\n',130000)..']=]') end
 if case == "oversize" then addScript("ModuleScript","Oversize",config,string.rep('local a=1\n',850000)) end
 if case == "scale" then
     for i=1,37983 do addScript("ModuleScript","PlatformModule"..i,services.CorePackages,"return {index="..i.."}") end
@@ -262,6 +263,12 @@ end
 function isfolder(path) return folders[path] or false end
 function writefile(path,body)
     writes=writes+1
+    local extension=path:match("%.([^./]+)$")
+    if (case=="blocked_scripts" and (extension=="ps1" or extension=="cmd" or extension=="bat"))
+        or (case=="text_only_files" and extension~="txt") then
+        blockedAttempts[#blockedAttempts+1]=path
+        error("disallowed file extension")
+    end
     assert(folders[path:match("^(.*)/[^/]+$")],"directory missing")
     if case == "write_failure" and path:find("objects/",1,true) then error("disk full") end
     disk[path]=body
@@ -292,6 +299,10 @@ local text=assert(io.open(SOURCE_PATH,"rb")):read("*a")
 if case=="object_limit" then text=text:gsub("maxObjects = 600000","maxObjects = 20",1) end
 if case=="source_budget" then text=text:gsub("maxExportBytes = 2147483648","maxExportBytes = 16780000",1) end
 if case=="config_limit" then text=text:gsub("maxDecodedConfigNodes = 100000","maxDecodedConfigNodes = 2",1) end
+if case=="native_parts" then
+    text=text:gsub("uploadPartBytes = 25165824","uploadPartBytes = 131072",1)
+    text=text:gsub("sourceChunkBytes = 524288","sourceChunkBytes = 32768",1)
+end
 if case=="memory_limit" then gcinfo=function() return clock>0.05 and 400000 or 1024 end end
 assert(load(text,"@feral-complete-diagnostic-v3.0.lua"))()
 local hasStart = false
@@ -317,7 +328,7 @@ while #queue>0 do
     assert(steps<1500000,"scheduler did not finish")
     if case=="uncancellable" and clock>100 then break end
 end
-if case=="manual_ready" or case=="missing_files" or case=="makefolder_false" or case=="read_corruption" then click("CopyStartup") end
+if case=="manual_ready" or case=="missing_files" or case=="makefolder_false" or case=="read_corruption" or case=="blocked_scripts" then click("CopyStartup") end
 os.clock=nativeClock
 local status,notice
 for _,node in ipairs(nodes) do
@@ -327,6 +338,6 @@ end
 assert(forbiddenWrites==0,"gameplay mutations occurred")
 assert(eventCalls==0,"gameplay remote was invoked")
 local result={case=case,disk=disk,decompile_calls=decompileCalls,writes=writes,cancelled=cancelled,
-    status=status,notice=notice,steps=steps,clock=clock,stop_triggered=stopTriggered,pause_triggered=pauseTriggered,warnings=warnings,clipboard=clipboard}
+    status=status,notice=notice,steps=steps,clock=clock,stop_triggered=stopTriggered,pause_triggered=pauseTriggered,warnings=warnings,clipboard=clipboard,blocked_attempts=blockedAttempts}
 dumping = true -- encode arbitrary file bytes as reversible U+00xx JSON escapes
 local output=assert(io.open(OUTPUT_PATH,"wb")); output:write(json(result)); output:close()

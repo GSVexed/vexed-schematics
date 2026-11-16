@@ -1,4 +1,8 @@
-"""Execute the actual PowerShell packer against a synthetic v3.0 export.
+"""Execute the legacy PowerShell packer against a synthetic v3.0.1 export.
+
+Current v3.0.2 exports no executable helpers and uses Windows ZIP; its native
+upload folders are tested in test-feral-v3.py. This retains the earlier packer
+regression checks without requiring the new diagnostic to save PowerShell files.
 
 Usage: python3 roblox-tools/tests/test-packer-v3.py /path/to/pwsh
 Runs locally without Roblox. Windows PowerShell 5.1 still needs a Windows check.
@@ -17,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('feral_tests', HERE / 'test-feral-v3.py')
 tests = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tests)
+tests.SOURCE = tests.ROOT / 'feral-complete-diagnostic-v3.0.1.lua'
 PWSH = sys.argv[1] if len(sys.argv) > 1 else 'pwsh'
 
 def descriptor(path, body):

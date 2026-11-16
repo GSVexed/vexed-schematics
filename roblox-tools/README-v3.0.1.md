@@ -1,5 +1,7 @@
 # FERAL Complete Diagnostic v3.0.1
 
+**Use [v3.0.2](README-v3.0.2.md) for the current fix.** A runtime report showed that v3.0.1 stopped while saving its PowerShell helper. V3.0.2 exports text data only and uses Windows' normal ZIP operation afterward.
+
 Startup fix for the reported v3.0 panel that appeared without a scan starting. The exact failure inside Velocity has not yet been established; this version makes startup explicit and reports where it stops.
 
 ```lua
