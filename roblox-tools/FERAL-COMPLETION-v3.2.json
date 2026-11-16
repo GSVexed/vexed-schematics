@@ -1,0 +1,45 @@
+{
+  "schema": "feral-diagnostic-completion/3.2",
+  "date": "2026-11-16",
+  "status": "diagnostic_phase_complete_with_recorded_limits",
+  "scope": "Identified client-source gaps in the three supplied snapshot datasets; original server source and perfect reconstruction are not claimed",
+  "no_additional_scan_required_for_this_phase": true,
+  "baseline_session": "20261116_042419_33AB9E25F8D1",
+  "recovery_session": "20261116_052501_0B08C69B24CD",
+  "final_session": "20261116_111605_2F5D0A6CD78D",
+  "final_capture": {
+    "phase": "live_supplement_saved",
+    "started_utc": "2026-11-16T11:16:05Z",
+    "finished_utc": "2026-11-16T11:16:15Z",
+    "payload_files_verified": 60,
+    "payload_bytes_verified": 12661699,
+    "parts_verified": 2,
+    "limits_hit": [],
+    "reported_read_errors": 0,
+    "reported_write_errors": 0
+  },
+  "live_source": {
+    "path": "game/Workspace/LocalPlayer/Animate",
+    "status": "exported",
+    "attempts": 1,
+    "bytes": 265,
+    "adler32": "d00a5361",
+    "raw_syntax": "pass",
+    "filtered_syntax": "pass",
+    "independent_filtered_template_byte_equality": true,
+    "original_source_or_bytecode_identity_proven": false,
+    "record_file": "UPLOAD_PART_001_DATA/captures/C001_ingame/target-results/game_00001.ndjson.txt",
+    "source_files": [
+      "UPLOAD_PART_001_DATA/captures/C001_ingame/sources/game/L0001_A01_part001.source.txt"
+    ]
+  },
+  "remaining_limits": {
+    "game_canonical_syntax_rejections": 64,
+    "platform_canonical_compiler_rejections": 431,
+    "syntax_acceptance_proves_semantic_fidelity": false,
+    "server_only_source_collected": false,
+    "historical_health_correction_writer": "unconfirmed",
+    "privacy_and_streaming_scope_retained": true
+  },
+  "collector_code_changes_required_after_this_run": false
+}

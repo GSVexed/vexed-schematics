@@ -6,8 +6,15 @@
   sources exported, zero pending and no reported collection limits.
 - User's v3.1 menu and Tiger captures both reached `finished`, each exporting
   the 71 selected paths. Before/after compiler checks ran in that session.
-- Those runs establish actual behaviour of those versions, not of v3.2.
-  **The final v3.2 collector has not been tested inside Roblox here.**
+- User's v3.2 in-game Tiger capture reached `live_supplement_saved` in session
+  `20261116_111605_2F5D0A6CD78D`. Its one live Animate target exported on the
+  first attempt; raw/filtered compiler statuses both passed. All 60 payloads,
+  three catalogs, five control files and source references independently
+  verify. The filtered source exactly equals the prior starter template.
+- This is actual user-run evidence for v3.2's targeted in-game workflow,
+  not an assistant-operated Roblox session or a claim that every optional
+  UI control was exercised live. The optional v3.2 menu path retains offline
+  validation; v3.1's menu capture was actually observed in its uploaded run.
 
 ## Completed offline checks
 
@@ -60,5 +67,5 @@ objects, server authority rules or faithful reconstruction were recovered.
 Native executor calls may block the engine despite cooperative Luau timeout
 handling. Syntax checks are compiler-version-specific and do not validate
 logic. GUI rendering, replication timing and current Velocity API behaviour
-remain runtime checks. The actual final live source must be collected on the
-user's client; no offline fixture can stand in for it.
+remain runtime-dependent. The final identified live-source gap is now closed
+by uploaded live evidence; the completed phase needs no further scan.

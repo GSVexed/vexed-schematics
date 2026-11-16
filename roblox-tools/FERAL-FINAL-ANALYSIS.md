@@ -3,18 +3,23 @@
 Evidence as of 16 November 2026. This is a read-only client investigation.
 It does not implement unlimited resources or alter game/server state.
 
+**Diagnostic phase complete within the recorded client scope:** the last
+identified live-source gap is closed by the verified v3.2 Tiger capture.
+No additional scans are required for this phase. This does not resolve the
+known reconstruction defects or the unobserved server implementation.
+
 ## Completion status
 
 | Deliverable | Status and evidence |
 |---|---|
 | Comprehensive client inventory and game/platform sources | Published v3.0.3; actual uploaded run finished in 621 seconds with 37,987 eligible source exports |
-| Complete uploadable dataset | Eight baseline parts and eleven recovery parts supplied; both complete ZIP sets pass the standalone integrity verifier |
+| Complete uploadable dataset | Eight baseline, eleven recovery and two final-supplement parts supplied; all three ZIP sets pass the standalone integrity verifier |
 | Menu and active Tiger capture buttons | Published v3.1; both modes actually ran and exported all 71 selected paths |
 | Explanation of the 64 invalid game reconstructions | Raw text already rejected before filtering; both attempts and both modes unchanged |
 | Health/stamina investigation | Client stamina overwrite mechanism identified; exact historical health writer remains unconfirmed |
 | Broader systems investigation | Growth, elder progression, survival rewards, weather/ecology, territory, specialised movement, cosmetics and cinematics identified with evidence below |
 | Entire preserved source set syntax-audited | All 22,511 canonical bodies checked without executing them; detailed counts below |
-| Last identified live source gap | v3.2 capture implemented and offline-tested; actual live Animate source still requires a client capture |
+| Last identified live source gap | Closed by the actual v3.2 capture: live Animate exported, syntax accepted, independently verified and exactly equal to the filtered starter-template reconstruction |
 | Original server source / perfect decompilation | Not retrieved; not claimed as complete |
 
 ## Dataset integrity
@@ -32,6 +37,13 @@ The uploaded ZIP named `UPLOAD_PART_010_DATA.zip` contained all eleven parts.
 It contained 1,037 payloads (236,938,231 bytes); every catalogued payload and
 source reference verifies. It finished in a reported 184 seconds, including
 startup and idle time between captures. [R-M]
+
+Final live session: `20261116_111605_2F5D0A6CD78D`.
+The ZIP named `UPLOAD_PART_000_METADATA.zip` contains both metadata part 000
+and data part 001. All 60 payloads (12,661,699 bytes), three catalogs, five
+manifest-listed controls and the whole-source references verify. The capture
+ran from 11:16:05 to 11:16:15 UTC and reached `live_supplement_saved`, with
+zero reported read/write/property/attribute failures and no limits hit. [F-M]
 
 The verifier distinguishes file integrity from collection completeness and
 source fidelity. It supports complete ZIPs, ZIPs wrapped in a parent folder,
@@ -141,19 +153,35 @@ map/ecology indexes and cinematic/cosmetic analysis. There is no need to
 discard the Roblox platform material; it remains in the complete baseline.
 CorePackages/CoreGui account for 98.95% of its script inventory.
 
-## Known remaining live gap and the final collector
+## Final live-source gap: closed
 
 The recovery inventory introduced two paths: own-character Health (server or
 unknown context, correctly not reconstructed) and own-character Animate
 (eligible client source, outside the 71-path experiment). [R-S]
 
-The starter Animate template is already in the baseline; it is not proof of
-the live source's identity. The live source has not yet been obtained.
-The final [v3.2 collector](README-final-v3.2.md) resolves the actual character
-object, captures only that source plus own hierarchy/state, and reports
-missing or invalid output explicitly. It does not repeat the 64 failures or
-the full world/platform scan. The actual capture requires Roblox/Velocity;
-offline tests cannot supply the missing live bytes.
+The final [v3.2 collector](README-final-v3.2.md) resolved the actual character
+object and collected live Animate in one decompile attempt. Its raw and
+filtered runtime syntax checks both passed. The exported filtered body is
+265 bytes with Adler-32 `d00a5361`. Independent byte comparison confirms it
+is exactly equal to the prior StarterCharacterScripts Animate reconstruction;
+this conclusion now uses collected live bytes rather than an assumption of
+clone identity. Original bytecode/source identity is not established. [F-S]
+
+The readable reconstruction waits for Humanoid/Animator, obtains currently
+playing animation tracks, and stops each with `Stop(0)`. It contains no
+health or stamina operations. The diagnostic did not execute that code.
+
+The final capture also recorded 36 active Tiger samples over the requested
+five-second observation. Health/MaxHealth stayed 118/118; stamina/max stamina
+rose together from 42.7/42.7 to 42.8/42.8 while growth increased. These are
+again full-resource observations, not a measurement of recovery from a
+deficit. The exact historical health-correction writer remains unconfirmed.
+
+All known eligible live-source gaps identified in the supplied snapshots
+are now closed. Server/unknown-context Health remains intentionally outside
+source collection. Streaming, explicit property/privacy scope, the 64 game
+reconstruction defects and the compiler-specific platform quality results
+remain recorded limitations. The dataset is not an original server project.
 
 ## Evidence references
 
@@ -172,6 +200,8 @@ text or NDJSON lines, not original developer source lines.
 | R-T | Recovery corresponding `target-results/game_*` streams; follow each record's ordered `files[]` |
 | R-O | Recovery `UPLOAD_PART_005_DATA/captures/C002_ingame/observations/local_00001.ndjson.txt`, line 1, through `local_00006.ndjson.txt`, line 32 |
 | R-S | Recovery `UPLOAD_PART_010_DATA/captures/C002_ingame/scripts/game_00002.ndjson.txt`, lines 1-2 |
+| F-M | Final supplement `UPLOAD_PART_000_METADATA/manifest.json.txt` and its catalogs |
+| F-S | Final supplement `UPLOAD_PART_001_DATA/captures/C001_ingame/target-results/game_00001.ndjson.txt`, line 1; source `UPLOAD_PART_001_DATA/captures/C001_ingame/sources/game/L0001_A01_part001.source.txt` |
 
 Broader-system entry points are the named modules under
 `game/ReplicatedStorage/FeralWorld` and corresponding live PlayerScripts.

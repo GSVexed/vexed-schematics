@@ -5,8 +5,15 @@ Read-only client collection and evidence-based analysis for PlaceId
 are complete within their recorded scope. Reconstruction defects remain
 explicit limitations, not missing-file claims.
 
-**Already supplied the v3.0.3 and v3.1 ZIPs? Do not repeat either scan.**
-The only newly identified live client-source gap is `Character.Animate`.
+**The diagnostic phase is complete within its recorded client scope.** All
+three supplied ZIP sets verify. The final v3.2 Tiger capture collected the live
+`Character.Animate` source; its filtered reconstruction exactly matches the
+previous starter template. No additional scans or uploads are needed for this
+phase. The known decompiler/authority limitations remain documented.
+
+See the [completion record](FERAL-COMPLETION-v3.2.json) and
+[final findings](FERAL-FINAL-ANALYSIS.md). The following loader is retained for
+optional future use; the completed investigation does not require rerunning it.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-final-gap-v3.2.lua"))()
@@ -18,15 +25,16 @@ workspace, and compress the **entire folder** to ZIP. Upload that small ZIP.
 There is no requirement to repeat the menu capture. The observation lasts
 five seconds; source and own-hierarchy collection follow.
 
-This final collector is published and offline-tested. Its actual live-source
-capture still requires the user's Roblox/Velocity session. It cannot obtain
-that file from a previous ZIP where it was never collected.
+The final collector is published, offline-tested and now backed by an actual
+successful Roblox/Velocity in-game capture. All 60 payload files in that
+supplement passed independent integrity checks.
 
 ## Project entry points
 
 | Need | File |
 |---|---|
 | Final results, authority findings and remaining limits | [FERAL-FINAL-ANALYSIS.md](FERAL-FINAL-ANALYSIS.md) |
+| Final runtime evidence and closure status | [FERAL-COMPLETION-v3.2.json](FERAL-COMPLETION-v3.2.json) |
 | Small last-live-source collector | [README-final-v3.2.md](README-final-v3.2.md) |
 | Original complete client/platform collector | [README-v3.0.3.md](README-v3.0.3.md) |
 | Historical menu/Tiger recovery experiment | [README-recovery-v3.1.md](README-recovery-v3.1.md) |

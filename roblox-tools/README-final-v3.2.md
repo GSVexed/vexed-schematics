@@ -3,6 +3,12 @@
 A small follow-up for the one known live client source not exported by the
 71-path v3.1 recovery pass: `game/Workspace/LocalPlayer/Animate`.
 
+**Completed:** the user's 16 November 2026 capture exported this live source,
+passed both syntax checks and independent file verification, and closed the
+identified gap. Its 265-byte filtered reconstruction exactly matches the
+previous starter template. These instructions remain for optional reuse;
+the completed diagnostic phase requires no repeat capture.
+
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-final-gap-v3.2.lua"))()
 ```
@@ -73,5 +79,7 @@ exceptions, chat/input text, credentials and other-player subtrees are not
 exported. No reconstructed game code is executed, required or invoked.
 
 Build with `python3 roblox-tools/build-feral-final-v3.2.py`.
-The new collector has offline validation; it has not been run inside Roblox
-by this assistant. See [VALIDATION-final-v3.2.md](VALIDATION-final-v3.2.md).
+The collector has offline validation and a successful user-run Roblox/Velocity
+in-game capture. The assistant independently verified the uploaded result;
+it did not operate that live client. See
+[VALIDATION-final-v3.2.md](VALIDATION-final-v3.2.md).
