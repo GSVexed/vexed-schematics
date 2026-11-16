@@ -301,8 +301,12 @@ local function newExportRoot()
     if MAKE_FOLDER then
         local folder="FERAL_Client_Snapshot_v2_4"
         local ok=pcall(MAKE_FOLDER,folder)
-        if ok or (type(isfolder)=="function" and pcall(function()
-             return isfolder(folder) end)) then
+        local exists=ok
+        if not exists and type(isfolder)=="function" then
+            local checked,folderPresent=pcall(isfolder,folder)
+            exists=checked and folderPresent
+        end
+        if exists then
             exportRoot=folder
             local child=folder.."/client_scripts"
             local okChild=pcall(MAKE_FOLDER,child)
