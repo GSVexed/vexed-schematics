@@ -1,5 +1,80 @@
 # Booga Booga Reborn — continuation handoff
 
+## LATEST DELIVERABLE: Booga VALUE ENGINE v1.0 (Nov 17 2026)
+
+User demanded a genuinely useful game economy/
+value advantage rather than more fake
+infinite-money buttons or an AFK axe swinger.
+The assistant re-opened the original exact
+33-MB archive at
+`/mnt/data/UPLOAD_PART_010_DATA(1).zip`,
+reviewed recovered `Game/pickup`,
+`Game/tool`, `Game/tool/Rod`,
+`Game/fisherman`, `Game/structures`,
+`Game/globalMarket`,
+`Modules/util/gameUtil`,
+`Modules/util/packets`,
+`Modules/data/marketCodes`,
+`Modules/data/fishermanData`.
+
+**Published executable Booga-only hub**:
+`booga-reborn/booga-value-engine-v1.0.lua`.
+One-line launcher:
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-value-engine-v1.0.lua"))()`
+Detailed documentation:
+[README-booga-value-engine-v1.0.md](README-booga-value-engine-v1.0.md)
+CI workflow:
+`.github/workflows/booga-value-engine-v1-validate.yml`.
+
+Seven toggles / three tabs:
+- FARM: existing `Pickup`-tag drop magnet using
+  `packets.Pickup.send(entityID)` within 23 studs,
+  auto-ore targeting with valid `SwingTool`
+  entity IDs, optional normal pathfinding
+  to high-value ore nodes within 155 studs,
+  **auto Coin Press** uses real existing
+  inventory Gold + nearby Coin Press
+  and confirms Gold decrement.
+- FISH: auto-cast by actual recovered
+  `Game/tool/Rod` module when equipped and
+  aimed at water, auto-reel triggered by
+  typed `BobberState` owner/state=hooked;
+  Fisherman sales with
+  `SellFish.send(fishName)` close to
+  `Fisherman Trader`, **requires actual
+  Fisherman Coin increase to count a sale**.
+- MARKET: scans 15 actual item IDs, uses
+  `MarketRequest.itemView`, listens
+  `MarketPayload.item`, compares lowest
+  asking price against most recent RAP;
+  optional one-item purchase at >=35% below
+  RAP requires TWO intentional clicks
+  within 5s, known spendable market wallet,
+  fresh listing and exact expected price.
+  NO automatic buying when scan is enabled.
+
+Displays two distinct currencies, actual
+deltas/rates, Raw Gold/Gold, observed
+inventory gains, packet attempts vs
+confirmed results, statuses, F6.
+No invented items/balances. No live
+Velocity/server verification; official
+Luau compiler and static checks only.
+Roblox/game may reject or sanction
+automation; do not promise guaranteed
+profit or an infinite-currency exploit.
+Source comments and documentation
+are explicit about these boundaries.
+
+External wiki booga.gg (Oct 3 2026)
+supports Fish Trap generates Raw Fish
+every 100 seconds, the Fish Tokens
+currency is distinct, and Coin Press
+converts 1 Gold into 5 standard Coins.
+This supports a passive Fish Trap +
+Pickup Magnet + later Trader loop,
+but no server-controlled "free Gold".
+
 ## Latest investigation: Can we smelt nonexistent Raw Gold to get real Gold?
 
 The user explicitly proposed fabricating a completed
