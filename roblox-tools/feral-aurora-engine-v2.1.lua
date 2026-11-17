@@ -72,7 +72,8 @@ function Engine.new(atlas)
     local S={
         alive=true,theme="teal",scale=1,closed=false,hidden=false,
         flags={recovery=false,vision=false,calm=false,performance=false,
-            mobility=false,speed=false,leap=false,playerFinder=false,
+            mobility=false,speed=false,leap=false,lowNeedsAssist=false,
+            playerFinder=false,
             tags=true,outlines=true,throughWalls=false,alerts=true,
             localAutosave=false,miniHUD=false},
         range=300,limit=24,tagScale=1,outlineStyle="subtle",
@@ -296,6 +297,17 @@ function Engine.new(atlas)
             local b=patchTable(injury,{SLOW_PER_POINT=0})
             if not a or not b then restoreEntries(a);restoreEntries(b);return false end
             S.leases.mobilityA=a;S.leases.mobilityB=b;return true
+        elseif key=="lowNeedsAssist" then
+            if not on then
+                restoreEntries(S.leases.lowNeedsAssist)
+                S.leases.lowNeedsAssist=nil
+                return true
+            end
+            local c=module("NeedsConfig")
+            if not c or not finite(c.STAMINA_LOW_NEEDS)
+                or c.STAMINA_LOW_NEEDS<0 or c.STAMINA_LOW_NEEDS>1 then return false end
+            S.leases.lowNeedsAssist=patchTable(c,{STAMINA_LOW_NEEDS=1})
+            return S.leases.lowNeedsAssist~=nil
         elseif key=="speed" then
             if not on then
                 restoreEntries(S.leases.speed);S.leases.speed=nil;return true
@@ -340,7 +352,7 @@ function Engine.new(atlas)
     local labels={
         recovery="Recovery Assist",vision="Brighter View",calm="Calm Camera",
         performance="Native Performance",mobility="Injury Slowdown Inputs",
-        speed="1.10x Speed Inputs",leap="1.10x Leap Inputs",
+        lowNeedsAssist="Client Low-Needs Stamina Penalty",speed="1.10x Speed Inputs",leap="1.10x Leap Inputs",
         playerFinder="Player Finder",tags="Name Tags",outlines="Character Outlines",
         throughWalls="Through-Wall Outlines",alerts="Survival Alerts",
         localAutosave="Local Report Auto-Save",miniHUD="Compact Status HUD"
@@ -364,7 +376,8 @@ function Engine.new(atlas)
         ctx.onUI()
     end
     function ctx.reset()
-        for _,key in ipairs({"recovery","mobility","speed","leap","vision",
+        for _,key in ipairs({"recovery","mobility","lowNeedsAssist","speed",
+            "leap","vision",
             "calm","performance","playerFinder","throughWalls","localAutosave",
             "miniHUD"}) do
             if S.flags[key] then ctx.toggle(key,false) end
@@ -692,7 +705,8 @@ function Engine.new(atlas)
                 "ARMED • WAITING FOR NEED"
         elseif key=="playerFinder" then
             return S.finderReason
-        elseif key=="mobility" or key=="speed" or key=="leap" then
+        elseif key=="mobility" or key=="speed" or key=="leap"
+            or key=="lowNeedsAssist" then
             local lease=S.leases[key] or S.leases[key.."A"]
             if not lease then return "CLIENT PATCH NOT AVAILABLE" end
             local matches=true
