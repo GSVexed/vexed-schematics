@@ -1,5 +1,59 @@
 # Booga Booga Reborn — continuation handoff
 
+## FIRST ARCHIVE RECEIVED AND VERIFIED — 17 Nov 2026, ~17:41 UTC
+
+The user uploaded `UPLOAD_PART_010_DATA(1).zip` to this conversation.
+**Despite the name, it is the WHOLE archive**: 11 upload parts including
+metadata + data 001–010. No need to request other ZIP parts.
+
+Analyzed in the container from the attached file (not GitHub).
+**Checksum/integrity verified**:
+- 23,296 payload files, 217,037,246 bytes, 125 catalogs, zero missing,
+  mismatched or duplicate payload paths; all part markers coherent.
+- 38,111 exported client source records verified against concatenated
+  chunk lengths and Adler-32; 22,676 unique source file groups; zero
+  source reconstruction **reference integrity** mismatches.
+- 97,686 objects: 56,254 game-classified and 41,432 platform.
+- 38,124 scripts: 451 game-classified (438 exported, 11
+  server/unknown-context, 2 Animate decompile failures), and 37,673
+  platform-classified all exported. No main `ReplicatedStorage/Game/*`
+  source reconstruction failures.
+- 203 remotes/bindables including 171 game; 2,957 ValueBase entries;
+  18,704 attributes. `inventory_traversal_exhausted=true`,
+  `source_pass_finished=true`, `limits_hit=[]`, `writeErrors=0`.
+- Source status `finished_with_gaps` owing to 2 inaccessible Animate
+  reconstruction attempts and 11 non-client Script objects.
+- Place version 32961, session `20261117_172831_7DA66D788F0F`,
+  started 17:28:31Z, updated 17:38:55Z.
+- **Key discovery: 230 typed ByteNet packet definitions** in
+  `ReplicatedStorage/Modules/util/packets`, beyond the 171
+  game-classified remote/bindable objects.
+- Significant verified game modules for inventory, crafting, structures,
+  combat, tool variants, boost data, spells, Mojo, clans, tribes,
+  colonies, progression, market and unusual entity replication.
+- `Game/boosts/data`: explicit client boost descriptions (Haste,
+  Strength, Swiftness, Healing, Weakness, SpiderWebSlow, etc.).
+  `Game/classes/statusEffects`: watched player attribute names
+  OnFire, OnIce, OnPoison, OnBossPoison, Silenced, OnQueenPoison,
+  Debuff, Swiftness, Haste, SpiderWebSlow.
+- `Game/stats` tracks `food`, not yet evidence of a separate
+  thirst meter; do not transplant FERAL's survival assumptions.
+- Debug/admin-esque remote names (FreeCoins, Testing, Invisafy etc)
+  are **names only**, not proven callable or authorised endpoints.
+
+**Derived results saved:** [BOOGA-FIRST-ARCHIVE-FINDINGS.md](BOOGA-FIRST-ARCHIVE-FINDINGS.md),
+a 246-line report with source paths, counts, typed network architecture,
+boost definitions, privacy and server limits.
+Raw user ZIP was **NOT** uploaded to GitHub. Never claim it was synced.
+The report is grounded in the uploaded data; no external Booga
+information was substituted.
+
+The user wants comprehensive game understanding before a powerful hub.
+**DO NOT ask for another full diagnostic or missing parts**; we have the
+complete first archive. Continue code analysis of the existing recovered
+game-classified sources. Optional later snapshots are for streamed-out
+regions, not mandatory to start development.
+
 ## Identifiers and project ownership
 - Target game: https://www.roblox.com/games/11729688377/Booga-Booga
 - PlaceId: `11729688377`
