@@ -397,6 +397,9 @@ hudButton.Activated:Connect(function()
     else
         state.hudOn=true
         state.hudChar=char
+        state.hudWrites, state.hudResets, state.hudAttempts = 0, 0, 0
+        state.hudFailures, state.hudTrue, state.hudFalse = 0, 0, 0
+        state.hudCleanup="Pending"
         state.hudStarted=os.clock()
         state.hudLastSet=-math.huge
         state.hudBlockedAt=nil
