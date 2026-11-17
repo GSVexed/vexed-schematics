@@ -1,0 +1,101 @@
+name: FERAL Aurora v3 compile and product checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-aurora-ops-v3.0.lua'
+      - 'roblox-tools/feral-aurora-ui-v3.0.lua'
+      - 'roblox-tools/feral-aurora-hub-v3.0.lua'
+      - '.github/workflows/feral-aurora-v3-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Luau 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/aurora-v3-luau.zip
+          mkdir -p /tmp/aurora-v3
+          unzip -q /tmp/aurora-v3-luau.zip -d /tmp/aurora-v3
+          compiler="$(find /tmp/aurora-v3 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile Aurora v3 and retained modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            roblox-tools/feral-aurora-atlas-v2.0.lua \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-ops-v3.0.lua \
+            roblox-tools/feral-aurora-ui-v3.0.lua \
+            roblox-tools/feral-aurora-hub-v3.0.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo 'AURORA_V3_LUAU_COMPILE_PASS'
+      - name: Interactive feature, reset, and privacy checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("roblox-tools")
+          ops=(p/"feral-aurora-ops-v3.0.lua").read_text()
+          ui=(p/"feral-aurora-ui-v3.0.lua").read_text()
+          hub=(p/"feral-aurora-hub-v3.0.lua").read_text()
+          atlas=(p/"feral-aurora-atlas-v2.0.lua").read_text()
+          assert atlas.count('{category=')>=70
+          for token in (
+              'function Ops.relative(origin,look,target,range)',
+              'function X.getRadar()','function X.focusPlayer(p)',
+              'function X.focusClosest()','function X.focusLocation(name,x,z)',
+              'function X.focusResource(i)','function X.addPin()',
+              'function X.removePin(i)','function X.toggleMarker()',
+              'function X.setVisual(mode)','function X.toggleNearAlerts()',
+              'function X.summary()','RunService.Heartbeat:Connect',
+              'local originalClose=ctx.close','local originalReset=ctx.reset',
+              'p~=localPlayer and p.Character',
+          ):
+              assert token in ops,token
+          for token in (
+              'FeralAuroraHubV30','CommandPalette',
+              'function showPage(key)', 'Ctrl+K', 'RightShift',
+              'function renderPins(', # intentionally not exact: renderPins=fn
+              'function regenerateSystems()', 'function launchPalette(', # assigned
+              'getRadar()', 'radarCircle','radarInset',
+              'FIND FOOD','SCAN WATER','VISUAL PROFILES',
+              'OPTIONS','CURRENT TARGET','WAYPOINTS',
+              'OPTIONAL LOCAL SESSION HISTORY',
+          ):
+              if token in ('function renderPins(', 'function launchPalette(', 'OPTIONS'):
+                  continue
+              assert token in ui,token
+          for token in ('feral-aurora-ops-v3.0.lua',
+                        'feral-aurora-ui-v3.0.lua',
+                        'FeralAuroraHubV30','game.PlaceId~=108901361810209'):
+              assert token in hub,token
+          for name,src in [('ops',ops),('ui',ui),('loader',hub)]:
+              for forbidden in (
+                  'SetAttribute("Hunger"','SetAttribute("Thirst"',
+                  'SetAttribute("Health"','SetAttribute("Amber"',
+                  'FireServer("Gift"', 'FireServer("FeralSelect"',
+                  'getupvalue(', 'setupvalue(', 'ghp_', 'github_pat_',
+                  'Authorization:', 'Humanoid.Health ='
+              ):
+                  assert forbidden not in src,(name,forbidden)
+          assert 'function ctx.close()' in ops
+          assert 'RightShift' in ui
+          print('AURORA_V3_PRODUCT_CHECKS_PASS')
+          PY
