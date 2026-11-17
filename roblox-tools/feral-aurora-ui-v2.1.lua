@@ -745,6 +745,25 @@ function UI.mount(ctx)
         ctx.notice("Comfort preset enabled. All risky movement controls left OFF.")
     end)
     comfortable.Position=UDim2.new(1,-170,1,-42)
+    local survivalPreset,survivalPresetInfo=card(settings,"ONE-CLICK SURVIVAL PRESET",
+        "Enable smart needs warnings and a compact own-status HUD. Doesn't fake food, water or healing.",108,"PRESET")
+    local survivalApply=button(survivalPreset,"SURVIVAL HUD",154,30,c.panel2,function()
+        for _,key in ipairs({"alerts","miniHUD"}) do
+            if not s.flags[key] then ctx.toggle(key,true) end
+        end
+        ctx.notice("Survival preset: own HUD and warnings enabled. No resources changed.")
+    end)
+    survivalApply.Position=UDim2.new(1,-170,1,-42)
+    local explorerPreset,explorerPresetInfo=card(settings,"ONE-CLICK EXPLORER PRESET",
+        "Enable visible-only player outlines and tags, the compact status HUD, and needs warnings. Through-wall mode remains OFF.",108,"PRESET")
+    local explorerApply=button(explorerPreset,"EXPLORER HUD",154,30,c.panel2,function()
+        if s.flags.throughWalls then ctx.toggle("throughWalls",false) end
+        for _,key in ipairs({"playerFinder","tags","outlines","miniHUD","alerts"}) do
+            if not s.flags[key] then ctx.toggle(key,true) end
+        end
+        ctx.notice("Explorer preset enabled; through-wall visibility left OFF.")
+    end)
+    explorerApply.Position=UDim2.new(1,-170,1,-42)
     local themeCard,themeDetail=card(settings,"COLOUR THEMES",
         "Choose an accent. Your preference is saved locally if writefile is available.",118,"STYLE")
     for i,x in ipairs({{"TEAL","teal"},{"VIOLET","violet"},{"CORAL","coral"}}) do
