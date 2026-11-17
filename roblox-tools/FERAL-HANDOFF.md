@@ -1,5 +1,65 @@
 # FERAL project continuation
 
+## Most recent hub release: Aurora v2.1 (17 November 2026)
+
+The user tried Aurora v2.0 in the animal-selection menu (confirmed in chat)
+and pasted a status with Species/HP/Stamina/Hunger/Thirst/Growth all --,
+Amber=8272, recovery ON, 4 Rest requests/2 local WolfRest echoes,
+Player Finder ON at 900 range but count 0; mobility/speed/calm and
+throughWalls also locally enabled. Missing own stats in menu is NORMAL.
+v2.0 Player Finder incorrectly required own spawned HumanoidRootPart, so
+it skipped other players when menu was active. Existing Windows GitHub
+runner was inspected; **no automatic Velocity status-to-GitHub upload
+bridge exists**. Script source/code and handoff are synced by assistant
+GitHub commits, not live game telemetry.
+
+Responding to strong user feedback ("upgrade everything", hunger/thirst
+fill, enable effects, tons of missing features, no more diagnostics),
+published full v2.1 hub:
+- [v2.1 launcher](feral-aurora-hub-v2.1.lua)
+- [v2.1 engine](feral-aurora-engine-v2.1.lua)
+- [v2.1 UI](feral-aurora-ui-v2.1.lua)
+- [v2.1 guide](README-feral-aurora-v2.1.md)
+- 74-entry v2.0 atlas retained
+- [Luau/static workflow](../.github/workflows/feral-aurora-v2.1-validate.yml)
+
+Loader:
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-hub-v2.1.lua"))()`
+
+11 pages HOME, SURVIVAL, EFFECTS, RECOVERY, MOVEMENT, PLAYER FINDER,
+AMBER, PROGRESSION, WORLD, ATLAS, SETTINGS. New Survival scans bounding
+parts by replicated food/water names with explicit click, limit 1100 parts
+within 500 studs, adds water POI candidates, seven pin-to-compass rows and
+native guidance. Does NOT claim to actually fill Hunger/Thirst. Player
+Finder now can use current camera position in animal menu, has explicit
+search origin, total other players, replicated living characters and
+in-range count with reason for zero. New Effects page shows nine
+individual replicated ailments/bonuses and actual helpful available
+Recovery Assist, reversible local injury movement inputs, warnings and
+food/water shortcut; no faux Thriving or Grazing grant. Session state
+now says ANIMAL MENU, IN GAME or SPAWNING in UI and clipboard export,
+and no misleading unavailable values as zero.
+
+Other v2.1 improvements: mini own-stat HUD, local-only JSON own-status
+autosave every 120 seconds if enabled + writefile supported, up to 60
+own-character records per session; opt-in OFF by default, no other-player
+names, coords, chat, credentials or server sources. GitHub auto-sync
+NOT configured: no secret/token passed to Velocity, no silent network
+telemetry. Settings include Comfort/Survival/Explorer presets, Restore All,
+and feature statuses ARMED/WAITING vs LOCAL CLIENT VALUES APPLIED.
+Re-running launcher closes v2.0/v2.1 screens and known earlier FERAL hubs.
+World selector clears a previously pinned food/water point.
+Neither build has been live-tested by assistant in Velocity; official
+Luau 0.747 compile and source static checks are the current validation.
+Preserve prior script versions; don't claim all features affect server
+authority or protect against long Burst deaths.
+
+User doesn't want more diagnostics. Future changes should be code-first,
+respond to concrete UI reports without requesting full live scans.
+If auto GitHub report sync is desired, it needs an explicitly opted-in
+local file collector plus private upload pipeline; do not claim runner
+automatically transfers Velocity clipboard/file data.
+
 ## New active interface build: FERAL AURORA v2.0 (17 November 2026)
 
 User asked for a major self-directed upgrade: LOTS of features, beautiful
