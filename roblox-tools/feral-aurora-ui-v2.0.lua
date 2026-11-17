@@ -220,6 +220,7 @@ function UI.mount(ctx)
     end
     for _,entry in ipairs(navData) do createPage(entry[1]) end
     local current="HOME"
+    local rerenderAtlas=function() end
     local function showPage(key)
         current=key
         for name,p in pairs(pages) do p.Visible=name==key end
@@ -229,8 +230,11 @@ function UI.mount(ctx)
         end
         local v=pageTitles[key]
         sectionTitle.Text=v[1];sectionSub.Text=v[2]
-        if key=="ATLAS" and ctx.atlasReady then
-            sectionSub.Text=tostring(#ctx.atlas).." entries • filter, search and favourite."
+        if key=="ATLAS" then
+            if ctx.atlasReady then
+                sectionSub.Text=tostring(#ctx.atlas).." entries • filter, search and favourite."
+            end
+            rerenderAtlas()
         end
     end
     for i,entry in ipairs(navData) do
@@ -530,6 +534,7 @@ function UI.mount(ctx)
     for i,filter in ipairs(filters) do
         local b=button(findBox,filter,83,29,c.panel2,function()
             s.atlasCategory=filter;s.atlasPage=1
+            rerenderAtlas()
             ctx.onUI()
         end)
         b.TextSize=9;b.Position=UDim2.fromOffset(10+(i-1)*87,58)
@@ -550,10 +555,10 @@ function UI.mount(ctx)
         Position=UDim2.fromOffset(163,4),Size=UDim2.fromOffset(382,32)
     },pagination)
     button(pagination,"PREV",131,29,c.panel,function()
-        s.atlasPage=math.max(1,s.atlasPage-1);ctx.onUI()
+        s.atlasPage=math.max(1,s.atlasPage-1);rerenderAtlas();ctx.onUI()
     end).Position=UDim2.fromOffset(10,7)
     button(pagination,"NEXT",131,29,c.panel,function()
-        s.atlasPage=s.atlasPage+1;ctx.onUI()
+        s.atlasPage=s.atlasPage+1;rerenderAtlas();ctx.onUI()
     end).Position=UDim2.new(1,-140,0,7)
     local filtered={}
     local lastCatalogSignature=""
@@ -598,6 +603,7 @@ function UI.mount(ctx)
             local favourite=button(row,s.favourites[entry.title] and "★" or "☆",
                 32,27,c.panel2,function()
                     ctx.toggleFavourite(entry.title)
+                    rerenderAtlas()
                 end)
             favourite.Position=UDim2.new(1,-49,1,-34)
             favourite.TextColor3=s.favourites[entry.title] and c.amber or c.dim
@@ -614,6 +620,7 @@ function UI.mount(ctx)
             b.TextColor3=(key==tab) and c.bg or c.text
         end
     end
+    rerenderAtlas=rebuildCatalog
     search:GetPropertyChangedSignal("Text"):Connect(function()
         s.atlasPage=1;rebuildCatalog()
     end)
@@ -645,7 +652,7 @@ function UI.mount(ctx)
     end)
     larger.Position=UDim2.fromOffset(160,68)
     local infoCard,infoDesc=card(settings,"COPY OWN STATUS",
-        "Copy a short own-character status including enabled features and conditions. No other-player names or coordinates are included.",109,"EXPORT")
+        "Copy a short own-character status including enabled features and conditions. No other-player names or coordinates are included.",197,"EXPORT")
     local copyField=nil
     local copied=button(infoCard,"COPY STATUS",151,30,c.panel2,function()
         local success,report=ctx.copyStatus()
@@ -656,9 +663,9 @@ function UI.mount(ctx)
                 TextColor3=c.text,Font=Enum.Font.Code,TextSize=10,
                 ClearTextOnFocus=false,TextXAlignment=Enum.TextXAlignment.Left,
                 TextYAlignment=Enum.TextYAlignment.Top,
-                Position=UDim2.fromOffset(8,8),Size=UDim2.fromOffset(450,80),
+                Position=UDim2.fromOffset(16,105),Size=UDim2.fromOffset(661,75),
                 BackgroundColor3=c.panel2
-            },settings),8)
+            },infoCard),8)
         end
     end)
     copied.Position=UDim2.new(1,-169,1,-41)
@@ -742,23 +749,29 @@ function UI.mount(ctx)
         end
         sessionLabel.Text="Session elapsed: "..math.floor(os.clock()-s.sessionStart).." seconds."
             .."\n"..(s.log[#s.log] or "No actions yet.")
-        local signature=(search.Text or "").."|"..s.atlasCategory.."|"..
-            tostring(s.atlasPage).."|"..tostring(s.favourites)
-        if current=="ATLAS" or signature~=lastCatalogSignature then
-            lastCatalogSignature=signature
-            if current=="ATLAS" then rebuildCatalog() end
-        end
+        -- Atlas cards are rebuilt only on search, filter, page or favourite
+        -- changes. A heartbeat must not destroy controls mid-click.
     end
     -- Avoid rebuilding cards every 0.5s unless the user changes the atlas UI.
-    local atlasDirty=true
-    local oldRefresh=refresh
     ctx.onUI=function()
-        oldRefresh()
+        refresh()
     end
     ctx.onNotice=function()
         if notice and notice.Parent then notice.Text=s.notice end
     end
     -- Restyle the relevant accent on theme changes, retaining current page.
+    local globalConnections={}
+    local function globalConnect(signal,handler)
+        local connection=signal:Connect(handler)
+        globalConnections[#globalConnections+1]=connection
+        return connection
+    end
+    ctx.cleanupUI=function()
+        for _,connection in ipairs(globalConnections) do
+            pcall(function()connection:Disconnect()end)
+        end
+        table.clear(globalConnections)
+    end
     local dragged=false
     local dragStart,frameStart
     top.InputBegan:Connect(function(input)
@@ -767,7 +780,7 @@ function UI.mount(ctx)
             dragged=true;dragStart=input.Position;frameStart=shell.Position
         end
     end)
-    UIS.InputChanged:Connect(function(input)
+    globalConnect(UIS.InputChanged,function(input)
         if dragged and (input.UserInputType==Enum.UserInputType.MouseMovement
             or input.UserInputType==Enum.UserInputType.Touch) then
             local delta=input.Position-dragStart
@@ -775,11 +788,11 @@ function UI.mount(ctx)
                 frameStart.Y.Scale,frameStart.Y.Offset+delta.Y)
         end
     end)
-    UIS.InputEnded:Connect(function(input)
+    globalConnect(UIS.InputEnded,function(input)
         if input.UserInputType==Enum.UserInputType.MouseButton1
             or input.UserInputType==Enum.UserInputType.Touch then dragged=false end
     end)
-    UIS.InputBegan:Connect(function(input,gameProcessed)
+    globalConnect(UIS.InputBegan,function(input,gameProcessed)
         if gameProcessed then return end
         if input.KeyCode==Enum.KeyCode.RightShift then hidePanel() end
     end)
