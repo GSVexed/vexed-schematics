@@ -37,6 +37,7 @@ local lastError=nil
 local conn={}
 local savedSetting=nil
 local savedSettingTable=nil
+local savedSettingTouched=false
 local MAX_DISTANCE=10
 local CYAN=Color3.fromRGB(85,231,216)
 local BG=Color3.fromRGB(13,22,34)
@@ -196,7 +197,7 @@ local function releaseInput()
     inputHeld=false
 end
 local function restoreHoldSetting()
-    if savedSettingTable and savedSetting~=nil then
+    if savedSettingTable and savedSettingTouched then
         pcall(function()
             if savedSettingTable.holdToSwing==true then
                 savedSettingTable.holdToSwing=savedSetting
@@ -204,6 +205,7 @@ local function restoreHoldSetting()
         end)
     end
     savedSettingTable=nil
+    savedSettingTouched=false
     savedSetting=nil
 end
 local function setNativeHold()
@@ -217,6 +219,7 @@ local function setNativeHold()
     if type(settings)~="table" then return false end
     savedSettingTable=settings
     savedSetting=settings.holdToSwing
+    savedSettingTouched=true
     settings.holdToSwing=true
     return settings.holdToSwing==true
 end
@@ -389,6 +392,19 @@ conn[#conn+1]=RunService.Heartbeat:Connect(function()
     if not alive or now-lastUI<.25 then return end
     lastUI=now
     pcall(draw)
+end)
+-- Avoid a routine idle disconnect during a legitimately active held swing
+-- when VirtualUser is permitted. Does not defeat server restarts or resets.
+conn[#conn+1]=player.Idled:Connect(function()
+    if not alive or not running then return end
+    local ok,vu=pcall(function()return game:GetService("VirtualUser")end)
+    if not ok or not vu then return end
+    pcall(function()
+        vu:CaptureController()
+        vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+        task.wait(.1)
+        vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    end)
 end)
 conn[#conn+1]=UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode==Enum.KeyCode.F6 then
