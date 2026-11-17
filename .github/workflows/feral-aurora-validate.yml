@@ -1,0 +1,82 @@
+name: FERAL Aurora Luau compile and safety checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-aurora-*.lua'
+      - '.github/workflows/feral-aurora-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official pinned Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/aurora-luau.zip
+          mkdir -p /tmp/aurora-luau
+          unzip -q /tmp/aurora-luau.zip -d /tmp/aurora-luau
+          compiler="$(find /tmp/aurora-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile all four Aurora modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            roblox-tools/feral-aurora-atlas-v2.0.lua \
+            roblox-tools/feral-aurora-engine-v2.0.lua \
+            roblox-tools/feral-aurora-ui-v2.0.lua \
+            roblox-tools/feral-aurora-hub-v2.0.lua; do
+            "$LUAU_COMPILER" --null "$f"
+          done
+          echo "AURORA_LUAU_COMPILE_PASS"
+      - name: Static feature and non-grant checks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path("roblox-tools")
+          files={name:(base/("feral-aurora-"+name+"-v2.0.lua")).read_text()
+                 for name in ["atlas","engine","ui","hub"]}
+          assert files["atlas"].count('{category=')>=70
+          assert 'game.PlaceId~=108901361810209' in files["hub"]
+          assert 'FeralAuroraHubV20' in files["ui"]
+          assert 'AuroraShutdown' in files["hub"]
+          engine=files["engine"]
+          for token in ['BillboardGui','Highlight','MaxDistance=S.range',
+                        'Enum.HighlightDepthMode.Occluded',
+                        'Enum.HighlightDepthMode.AlwaysOnTop',
+                        'if p~=player and p.Character then',
+                        'if not S.flags.playerFinder then',
+                        'S.limit=24', 'function ctx.reset()', 'function ctx.close()',
+                        'function ctx.refreshTracker(force)']:
+              assert token in engine, token
+          ui=files["ui"]
+          for token in ['PLAYER FINDER','THROUGH-WALL VISIBILITY',
+                        'AESTHETIC NAME TAGS','CHARACTER OUTLINES',
+                        'filterButtons','ctx.setRange','RightShift',
+                        'ctx.reset()','ctx.openNative("rewards")',
+                        'ctx.toggleFavourite','ui("UIGradient"']:
+              assert token in ui, token
+          forbidden=['SetAttribute("Health"','SetAttribute("Amber"',
+                     'hum.Health=','hum.Health =',
+                     'FireServer("Gift"','FireServer("buy"',
+                     'FireServer("select"','FireServer("FeralSelect"',
+                     'getupvalue(', 'setupvalue(']
+          for name,content in files.items():
+              for text in forbidden:
+                  assert text not in content, (name,text)
+          print('AURORA_STATIC_CHECKS_PASS')
+          PY
