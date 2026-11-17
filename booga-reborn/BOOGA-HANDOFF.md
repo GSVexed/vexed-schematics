@@ -1,5 +1,66 @@
 # Booga Booga Reborn — continuation handoff
 
+## Latest investigation: Can we smelt nonexistent Raw Gold to get real Gold?
+
+The user explicitly proposed fabricating a completed
+Raw Gold smelt to convince Booga server to grant Gold
+without any initial ore. Reopened the **exact original**
+attached `UPLOAD_PART_010_DATA(1).zip` (available in
+/mnt/data), not prior summaries. Traced item data,
+physical world item IDs, fuel/campfire structures,
+`Game/cooking`, `Game/tutorial`,
+`Game/inventory`, `Game/pickup`,
+`Game/stats`, `Game/structures`, and
+all **438** exported game source bodies.
+
+Full report committed: [BOOGA-RAW-GOLD-SMELTING-AUTHORITY-AUDIT-v1.md](BOOGA-RAW-GOLD-SMELTING-AUTHORITY-AUDIT-v1.md).
+
+Principal findings:
+- `Raw Gold` item ID **258** -> `Gold` ID **597**,
+  client `cooksTo={name="Gold",steps=100}`.
+  Note reconstructed `Raw Iron=t3` and `Raw Gold=t3`
+  are unreliable aliases (decompiler t3 overwrite).
+- `Events/cookingStream` is a RemoteEvent but
+  `Game/cooking` ONLY uses `.OnClientEvent`
+  to display progress, reading float64 timestamp,
+  then each 11-byte record: u32 entityID,
+  float32 progress base, u8 rate, u16 goal.
+  No observed client "smelt finished/credit Gold"
+  request and no `cookingStream:FireServer`.
+- `Game/inventory` requests DropBagItem with
+  current inventory key/index; server-linked
+  ItemAdded/Changed/Removed are incoming listens.
+  `Game/pickup` sends a real existing world EntityID.
+- `Game/tutorial` cooks physical dropped raw meat
+  next to lit Campfire; patchNotes explicitly
+  mention newly spawned smelted world items
+  auto reattaching to chests. Strong evidence
+  server-managed world-item conversion.
+- Campfire `InteractStructure` uses structure
+  EntityID plus actual chosen fuel itemID.
+  Coin Press `InteractStructure` uses structure
+  EntityID plus inventory Gold item ID; in
+  source Gold has `gold=true` flag and
+  `cost=12` (shop price flag; not live-verified).
+  Neither is a server-authenticated smelt receipt.
+- Smelter Mojo item ID **1054**, client tier
+  descriptions 10/25/40/50% chance for
+  real ores to auto-smelt when mined.
+  This needs actual ore and owned Mojo.
+- Current world snapshot: 3 real Raw Gold
+  drops, 1 Coin Press model, 0 live Workspace
+  Campfire models (though template present).
+- External game wiki (booga.gg and Booga Reborn Wiki)
+  reports Gold smelting ~100s, Gold Node
+  drops six Raw Gold, and Coin Press converts
+  1 Gold to 5 Coins. These are **public wiki
+  assertions**, not server-source verified.
+- No server-side business logic available.
+  Thus no demonstrated method for forging
+  a nonexistent ore or profitably minting Gold.
+  Don't claim impossibility or invent a
+  gold spawner; don't build another placebo.
+
 ## Latest focus: money, item spawning, false Gold records
 
 The user paused Dave and asked for "lots of money",
