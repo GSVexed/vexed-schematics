@@ -1,5 +1,43 @@
 # FERAL project continuation
 
+## Most recent live HUD result and corrected follow-up (17 November 2026)
+
+User supplied **Rest-State Lab v1.1** live output, 66.29 sec:
+- Rest request ON, eight sends / zero local send failures; WolfRest local true
+  observed once and local pose masked once.
+- Latest 12-second HudRest probe: one client write, no observed resets,
+  23/23 HUD probe samples had HudRest=true; script did not report movement
+  blocked; user had Sprint and Burst samples as well as ordinary movement.
+- Reported client stamina net/s: off_moving -3.00 (15 pairs);
+  on_moving -0.03 (20 pairs); on_hud_moving +0.19 (39 pairs).
+  HP at max; no eligible health recovery measurement.
+- **Important measurement bug/confound:** v1.1 resets the current HudRest
+  probe sample counters on each probe start but *not* cumulative on_hud rate
+  groups. 44 on_hud moving intervals versus only 23 samples in the latest
+  12s probe strongly suggests >1 probe aggregate. Also the "moving" bucket
+  merged ordinary walking, Sprint and Burst, which have different costs.
+  DO NOT call +0.19 proof of Rest regeneration or server acceptance.
+- Client HudRest remaining true alone is insufficient: the controller's private
+  rest state and server eligibility are not directly read from that flag.
+
+New correction **Rest-State Lab v1.2**:
+- Source [feral-rest-state-lab-v1.2.lua](feral-rest-state-lab-v1.2.lua)
+- Guide [README-rest-state-lab-v1.2.md](README-rest-state-lab-v1.2.md)
+- Loader `loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-rest-state-lab-v1.2.lua"))()`
+- Luau 0.747 compile-only + static checks PASS:
+  https://github.com/GSVexed/vexed-schematics/actions/runs/44107710995
+- No changes to stamina or HP. Existing native Rest request, pose mask and
+  optional 12-second local HudRest test remain. Report now isolates Still,
+  ordinary Moving, Sprint and Burst for each phase, captures mean horizontal
+  movement speed, resets HUD rate counts **per HUD trial** and reports trial
+  count and actual duration.
+- Next user task: fresh load v1.2, partial stamina, **walking only** for
+  ~10-15 sec Rest OFF, ~10-15 sec Rest ON, then 12-second HUD probe while
+  continuing the same walk. COPY REPORT. Compare off_Moving, on_Moving and
+  on_hud_Moving only if average speeds/stamina ranges comparable. Don't
+  deliberately run Burst; earlier deaths remain unresolved.
+- No live v1.2 Roblox test yet. v1.3 Recovery Hub remains intact.
+
 ## Follow-up — HudRest cancellation test (17 November 2026)
 
 User tested Rest-Only Lab v1.0 (70.61 sec, 137 samples): eight successful
