@@ -588,14 +588,18 @@ function Engine.new(atlas)
         end
         local h,t=a.hunger,a.thirst
         local advice={}
-        if finite(h) and h<20 then
+        if not finite(h) then
+            advice[#advice+1]="HUNGER UNKNOWN: this animal has no readable needs value."
+        elseif h<20 then
             advice[#advice+1]="HUNGER CRITICAL: native feeding needed; client edits won't refill it."
-        elseif finite(h) and h<45 then
+        elseif h<45 then
             advice[#advice+1]="HUNGER LOW: look for edible prey, carcasses or forage for your species."
         else advice[#advice+1]="Hunger: "..fmt(h,1).." (currently adequate)." end
-        if finite(t) and t<20 then
+        if not finite(t) then
+            advice[#advice+1]="THIRST UNKNOWN: this animal has no readable needs value."
+        elseif t<20 then
             advice[#advice+1]="THIRST CRITICAL: reach drinking water; no remote refill available."
-        elseif finite(t) and t<45 then
+        elseif t<45 then
             advice[#advice+1]="THIRST LOW: navigate toward a water source."
         else advice[#advice+1]="Thirst: "..fmt(t,1).." (currently adequate)." end
         return table.concat(advice,"\n")
