@@ -157,8 +157,8 @@ local state = {
     begun=os.clock(), samples=0, recent={}, groups={}
 }
 for _, mode in ipairs({"off_still","off_moving","on_still","on_moving"}) do
-    state.groups[mode] = {intervals=0, hpN=0, hpSum=0,
-        hpDamage=0, stN=0, stSum=0, stPositive=0}
+    state.groups[mode] = {intervals=0, hpN=0, hpSum=0, hpTime=0, hpPositive=0,
+        hpDamage=0, stN=0, stSum=0, stTime=0, stPositive=0}
 end
 local renderName = "FeralRestOnlyMask_" .. tostring(os.time()) ..
     "_" .. tostring(math.random(100000,999999))
@@ -253,9 +253,13 @@ local function sample(now)
                 and maxHp > 0 and maxHp == previous.maxHp
                 and previous.hp < maxHp - .05 and hp < maxHp - .05 then
                 local dh = hp - previous.hp
-                if dh > 0 and dh < maxHp * .08 then
+                if dh >= -.01 and dh < maxHp * .08 then
                     group.hpN = group.hpN + 1
-                    group.hpSum = group.hpSum + dh / maxHp * 100 / dt
+                    group.hpTime = group.hpTime + dt
+                    if dh > 0 then
+                        group.hpPositive = group.hpPositive + 1
+                        group.hpSum = group.hpSum + dh / maxHp * 100
+                    end
                 elseif dh < -.01 then
                     group.hpDamage = group.hpDamage + 1
                 end
@@ -264,7 +268,8 @@ local function sample(now)
                 and maxSt > 0 and maxSt == previous.maxSt
                 and previous.st < maxSt - .02 and st < maxSt - .02 then
                 group.stN = group.stN + 1
-                group.stSum = group.stSum + (st - previous.st) / dt
+                group.stSum = group.stSum + (st - previous.st)
+                group.stTime = group.stTime + dt
                 if st > previous.st then group.stPositive = group.stPositive + 1 end
             end
         end
@@ -300,10 +305,10 @@ local function report()
     }
     for _, key in ipairs({"off_still","off_moving","on_still","on_moving"}) do
         local group = state.groups[key]
-        local hpRate = group.hpN > 0 and number(group.hpSum / group.hpN) or "-"
-        local stRate = group.stN > 0 and number(group.stSum / group.stN) or "-"
+        local hpRate = group.hpTime > 0 and number(group.hpSum / group.hpTime) or "-"
+        local stRate = group.stTime > 0 and number(group.stSum / group.stTime) or "-"
         lines[#lines+1] = key .. ": intervals=" .. group.intervals
-            .. ", HP positive=%max/s " .. hpRate .. " (" .. group.hpN .. " pairs)"
+            .. ", HP gain %max/s=" .. hpRate .. " (" .. group.hpPositive .. "/" .. group.hpN .. " positive/valid pairs)"
             .. ", damage pairs=" .. group.hpDamage
             .. ", stamina net/s=" .. stRate .. " (" .. group.stN .. " pairs)"
     end
