@@ -1,5 +1,36 @@
 # FERAL project continuation
 
+## New continuation checkpoint — 17 November 2026, normal Chat
+
+After Work usage ran out, the user requested continuing this FERAL project
+in normal Chat. Their newer decision supersedes the earlier pause on gameplay
+changes: focus on whether the **normal server Rest request** has measurable
+benefits while walking, even at **full health**, without the previous 3x
+client-side stamina pool modification. Do not claim server acceptance yet.
+
+Published **Rest-Only Lab v1.0**:
+- Source: [feral-rest-only-lab-v1.0.lua](feral-rest-only-lab-v1.0.lua)
+- Guide: [README-rest-only-lab-v1.0.md](README-rest-only-lab-v1.0.md)
+- Loader: `loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-rest-only-lab-v1.0.lua"))()`
+- Official Luau 0.747 compile-only and static scope checks passed:
+  https://github.com/GSVexed/vexed-schematics/actions/runs/44103217850
+- v1.3 Recovery Hub source and its 3x client regeneration remain unchanged.
+- New lab: OFF on load, no health/stamina/config writes; it sends native
+  `WolfActions("Rest", true)` no faster than once per five seconds while ON,
+  including at full HP, and masks only local `WolfRest` pose. OFF tries a
+  same-character `Rest=false` cleanup. Observations are bounded and own-only.
+- Not yet run in live Roblox/Velocity; game-server acceptance still unknown.
+
+**Next action:** user pastes the new loader into Velocity in FERAL, gets a
+~10–15-second moving baseline with partial stamina while OFF, enables
+CONTINUOUS REST for ~15–20 seconds at the same walking pace, then clicks COPY
+REPORT and pastes output in Chat. Avoid prolonged Burst because prior unexplained
+deaths remain unresolved. Compare OFF/ON moving stamina trends, visible Rest
+echoes and health intervals only if HP was below maximum; do not infer
+server-only stamina budgets or combat healing from a client sample.
+No additional bulk diagnostic, server-source retrieval or PC-runner reboot
+is needed for this immediate comparison.
+
 Updated 17 November 2026. Read this and [README-FERAL.md](README-FERAL.md)
 before continuing in a new Chat, Work or local desktop task.
 
