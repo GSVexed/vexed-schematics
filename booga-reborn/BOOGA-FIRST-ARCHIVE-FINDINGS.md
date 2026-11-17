@@ -227,6 +227,19 @@ and permissions are not confirmed:
 - Accurate original code where reconstruction is intentionally redacted
   or the script was server-only/unavailable
 
+## Second-pass correction to custom replication interpretation
+
+The separate `Modules/util/flags` module in the same export
+gates `customPlayerReplication` behind Studio/test PlaceIds
+and selected private-server conditions. The captured game's
+ordinary public PlaceId `11729688377` is not in the
+explicit allowlist. The presence of
+`EntityPositionalReplication` and its client encoder therefore
+**does not establish that the custom player-position protocol is
+active in a normal public server**. See
+[BOOGA-DEEP-MECHANICS-AUDIT-v1.md](BOOGA-DEEP-MECHANICS-AUDIT-v1.md)
+for source relationships and limitations.
+
 ## Best next engineering step
 
 **Do not run another broad diagnostic yet.** This first snapshot is
