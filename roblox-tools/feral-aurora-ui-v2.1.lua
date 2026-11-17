@@ -395,6 +395,8 @@ function UI.mount(ctx)
     local survival=pages.SURVIVAL
     local needsCard,needsText=card(survival,"HUNGER & THIRST",
         "Spawn an animal to check your real needs.",137,"LIVE")
+    switch(survival,"lowNeedsAssist","LOW-NEEDS STAMINA RECOVERY (CLIENT)",
+        "Experimental: set the cached local low-needs stamina-regeneration multiplier to 1x instead of 0.5x. Does NOT refill hunger/thirst or prevent starvation. OFF by default.","ADVANCED")
     action(survival,"FIND FOOD CANDIDATES",
         "Look through nearby replicated named geometry for food, prey, fish, grass and carcass leads. Does not feed your animal.",
         "SCAN FOR FOOD",function()ctx.findResources("food")end,"LOCAL")
@@ -453,6 +455,8 @@ function UI.mount(ctx)
         "Optional native Rest request when injured, bleeding, poisoned or missing HP. Request acceptance and mobile healing are unverified.","NATIVE REQUEST")
     switch(effectsPage,"mobility","LOCAL INJURY SLOWDOWN TUNING",
         "Reversible local movement input change. Does not actually cure injury or reduce server damage.","CLIENT")
+    switch(effectsPage,"lowNeedsAssist","LOCAL LOW-NEEDS PENALTY ASSIST",
+        "Only affects the already-loaded client's stamina recovery calculation. Hunger, thirst and server-survival effects remain untouched.","ADVANCED")
     switch(effectsPage,"alerts","CONDITION AND NEEDS WARNINGS",
         "Notify when exhaustion or a critical hunger/thirst penalty is visible.","LOCAL")
     action(effectsPage,"GET HEALTHIER THE NORMAL WAY",
@@ -902,8 +906,8 @@ function UI.mount(ctx)
         activeText.Text=#running>0 and table.concat(running,"   ·   ")
             or "All gameplay and visual experiments OFF."
         local featureLines={}
-        for _,key in ipairs({"recovery","mobility","speed","leap",
-            "playerFinder","localAutosave"}) do
+        for _,key in ipairs({"recovery","mobility","lowNeedsAssist",
+            "speed","leap","playerFinder","localAutosave"}) do
             if s.flags[key] then
                 featureLines[#featureLines+1]=key..": "..ctx.featureStatus(key)
             end
