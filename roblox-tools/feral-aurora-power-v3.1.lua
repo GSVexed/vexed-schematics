@@ -188,8 +188,12 @@ function Power.attach(ctx)
     function P.toggleNoDrain()
         P.noDrain=not P.noDrain
         maintainFlag()
-        log(P.noDrain and "Local no-stamina-cost flag ON (not a server guarantee)."
-            or "Local no-stamina-cost flag OFF; own flag restored.")
+        local state=P.noDrain and
+            "Standalone client no-stamina-cost flag ON (not a server guarantee)." or
+            P.stamina=="APEX" and
+            "Standalone flag OFF; Apex profile still owns WolfDbgNoStamina." or
+            "Standalone client no-drain flag OFF; original attribute restored."
+        log(state)
     end
     function P.setSpeed(multiplier)
         if multiplier~=1 and multiplier~=1.15
