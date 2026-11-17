@@ -6,6 +6,7 @@ on:
     paths:
       - 'roblox-tools/feral-rest-only-lab-v1.0.lua'
       - 'roblox-tools/feral-rest-state-lab-v1.1.lua'
+      - 'roblox-tools/feral-rest-state-lab-v1.2.lua'
       - '.github/workflows/feral-rest-luau-compile.yml'
   workflow_dispatch:
 
@@ -37,13 +38,14 @@ jobs:
           set -euo pipefail
           "$LUAU_COMPILER" --null roblox-tools/feral-rest-only-lab-v1.0.lua
           "$LUAU_COMPILER" --null roblox-tools/feral-rest-state-lab-v1.1.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-rest-state-lab-v1.2.lua
           echo 'REST_LUAU_COMPILE_PASS'
       - name: Static resource-write and scope checks
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          for file in ['feral-rest-only-lab-v1.0.lua', 'feral-rest-state-lab-v1.1.lua']:
+          for file in ['feral-rest-only-lab-v1.0.lua', 'feral-rest-state-lab-v1.1.lua', 'feral-rest-state-lab-v1.2.lua']:
               code = Path('roblox-tools/' + file).read_text()
               assert 'game.PlaceId ~= 108901361810209' in code
               assert 'remote:FireServer("Rest", value == true)' in code
@@ -57,6 +59,11 @@ jobs:
           assert 'state.hudResets >= 36' in code
           assert 'player.Character == state.hudChar' in code
           assert 'on_hud_moving' in code
+          v12 = Path('roblox-tools/feral-rest-state-lab-v1.2.lua').read_text()
+          assert 'previous.mode == mode' in v12
+          assert 'state.groups["on_hud_" .. gait] = newGroup()' in v12
+          assert 'state.hudSampleCount = state.hudSampleCount + 1' in v12
+          assert 'local gaitNames = {"Still", "Moving", "Sprint", "Burst"}' in v12
           code = Path('roblox-tools/feral-rest-only-lab-v1.0.lua').read_text()
           assert 'game.PlaceId ~= 108901361810209' in code
           assert 'remote:FireServer("Rest", value == true)' in code
