@@ -1,5 +1,58 @@
 # Booga Booga Reborn — continuation handoff
 
+## CURRENT INVESTIGATION RESULT: second-pass source audit
+
+The assistant reopened and studied the user's actual attached
+`UPLOAD_PART_010_DATA(1).zip` and local source references
+(not just prior conversation summaries). A full 355-line
+**[BOOGA-DEEP-MECHANICS-AUDIT-v1.md](BOOGA-DEEP-MECHANICS-AUDIT-v1.md)**
+was committed, with evidence-backed values, source module paths,
+unknowns and a ranked hub plan. Highlights:
+- Workspace: 23,294 objects, Resources 1,712 models (53 kinds),
+  Critters 357 models (34 kinds), Deployables 46 models (14 kinds),
+  1,259 `Pickup` tags. Use real `Workspace.Resources`,
+  `Critters`, `Items`, `Deployables`, `EntityID`,
+  `Entity` and `Pickup` tags for ESP. No fake categories.
+- ItemData `v513` final table: 1,194 named entries (389 inline
+  and 805 aliased), 11 potion effect types, at least 5
+  blacklisted spell-like entries and four special Glide capes
+  with flyspeed 95/115/190/380 (not proof of entitlement).
+- Native QoL settings `Modules/data/settingsData`:
+  `autoFpickup`, `holdToSwing`, `dontReclickCraft`,
+  `quickDrop`, `structureSnapping`, `visualizeHitboxes`,
+  `animalRenderDistance`. `Game/pickup` checks 25-stud
+  distance, bag capacity, held input; no infinite range.
+- `Game/spawning` speed inputs 16 base, 50 jump, affected
+  by Voodoo Vortex/poison/web/Swiftness/water/Water Walker.
+  Complex decomp contains nonsense locals: do not treat exact
+  code as production-safe. `Game/tool/Glide` has client
+  BodyGyro/Velocity mechanics, but gear/server constraints unknown.
+- Resourceful half-cost deployable ingredients
+  `max(ceil(required/2),1)` in BOTH crafting UI and
+  gameUtil.canCraftItem.
+- Owned Mojo tiers and disabledMojo are separated and listen
+  to `MojoChanged`/`UpdateMojoItem`; combat/inventory
+  sends `SwingTool`, `Pickup`, `CraftItem`, etc;
+  boosts listen to `SetBoost`/`RemoveBoost`.
+- Flags: `inventoryBurstLimitations=false`,
+  `newMap=false`, `npcDebugHitboxes=false`,
+  `anticheatDebug=IsStudio()`. `customPlayerReplication`
+  is conditional and generally NOT enabled for normal
+  public PlaceId 11729688377 despite encoder presence.
+- Static typed packet usage: 230 unique definitions;
+  105 used via sends, 121 via listeners, 6 overlap, 10
+  no direct static Game/* send/listen call sites.
+- Ranked actionable hub priorities: resource+creature+item ESP,
+  real data-based inventory/crafting assistant, native QoL
+  switches, movement/effects, equipment/potion information.
+  These are better evidenced than fake infinite HP/coins etc.
+- No additional full diagnostic is necessary to build phase 1.
+
+The user asked "ok continue the investigation and analysis", not
+specifically to build a hub yet. Avoid implying implemented controls
+until code is actually committed. The report is on GitHub; raw ZIP
+remains attached to ChatGPT, not uploaded to GitHub.
+
 ## FIRST ARCHIVE RECEIVED AND VERIFIED — 17 Nov 2026, ~17:41 UTC
 
 The user uploaded `UPLOAD_PART_010_DATA(1).zip` to this conversation.
