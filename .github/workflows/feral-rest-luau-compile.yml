@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'roblox-tools/feral-rest-only-lab-v1.0.lua'
+      - 'roblox-tools/feral-rest-state-lab-v1.1.lua'
       - '.github/workflows/feral-rest-luau-compile.yml'
   workflow_dispatch:
 
@@ -35,12 +36,27 @@ jobs:
         run: |
           set -euo pipefail
           "$LUAU_COMPILER" --null roblox-tools/feral-rest-only-lab-v1.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-rest-state-lab-v1.1.lua
           echo 'REST_LUAU_COMPILE_PASS'
       - name: Static resource-write and scope checks
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          for file in ['feral-rest-only-lab-v1.0.lua', 'feral-rest-state-lab-v1.1.lua']:
+              code = Path('roblox-tools/' + file).read_text()
+              assert 'game.PlaceId ~= 108901361810209' in code
+              assert 'remote:FireServer("Rest", value == true)' in code
+              assert 'on=false' in code
+              for token in ('getupvalue', 'setupvalue', 'getconnections', 'debug.getupvalue',
+                            'SetAttribute("Stamina"', 'SetAttribute("Health"',
+                            'STAMINA_REGEN =', 'hum.Health =', 'FireServer("Gift"'):
+                  assert token not in code, (file, token)
+          code = Path('roblox-tools/feral-rest-state-lab-v1.1.lua').read_text()
+          assert 'now - state.hudStarted >= 12' in code
+          assert 'state.hudResets >= 36' in code
+          assert 'player.Character == state.hudChar' in code
+          assert 'on_hud_moving' in code
           code = Path('roblox-tools/feral-rest-only-lab-v1.0.lua').read_text()
           assert 'game.PlaceId ~= 108901361810209' in code
           assert 'remote:FireServer("Rest", value == true)' in code
