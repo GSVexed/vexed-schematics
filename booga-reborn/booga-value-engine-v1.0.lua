@@ -56,13 +56,14 @@ local function rod()
 end
 
 local live=true
-local flags={fish=false,sell=false,loot=false,mine=false,market=false,navigate=false}
+local flags={fish=false,sell=false,loot=false,mine=false,market=false,navigate=false,press=false}
 local connections={}
-local counts={pickupRequests=0,fishCaught=0,fishSales=0,oreHits=0,marketQueries=0}
-local stamp={loot=0,fish=0,sell=0,mine=0,market=0,ui=0}
-local status={fish="Equip a rod and point at water.",sell="Find a Fisherman Trader.",loot="Pickup magnet idle.",mine="Ore miner idle.",market="Deal scanner idle."}
+local counts={pickupRequests=0,fishCaught=0,fishSales=0,oreHits=0,marketQueries=0,goldPressed=0}
+local stamp={loot=0,fish=0,sell=0,mine=0,market=0,press=0,ui=0}
+local status={fish="Equip a rod and point at water.",sell="Find a Fisherman Trader.",loot="Pickup magnet idle.",mine="Ore miner idle.",market="Deal scanner idle.",press="Gold press idle."}
 local fishState={lastCast=0,lastReel=0,lastCatchAt=0,pendingCatch=false}
 local sellState={pending=nil,next=0,lastCoins=0}
+local pressState={pending=nil,next=0}
 local mineState={target=nil,bad=setmetatable({},{__mode="k"}),lastHP=nil,lastHPAt=0,started=0,routeID=0,walking=false}
 local marketState={watch={},pointer=1,pending=nil,results={},selected=nil,wallet=nil,lastError="",notice="",lastQuery=0}
 local initialCoins=nil
@@ -147,6 +148,7 @@ local function flagButton(page,name,txt,x,y,w,h)
             mineState.target=nil;mineState.routeID+=1;mineState.walking=false
         end
         if not flags.sell then sellState.pending=nil end
+        if not flags.press then pressState.pending=nil end
     end)
     buttons[name]={node=b,prefix=txt}
     return b
@@ -156,8 +158,9 @@ label(farm,"AUTO LOOT + ORE ROUTE",13,10,360,26,14,colors.accent,true)
 flagButton(farm,"loot","PICKUP MAGNET",12,45,178,33)
 flagButton(farm,"mine","AUTO MINE ORES",199,45,178,33)
 flagButton(farm,"navigate","WALK TO NODES",386,45,180,33)
-local farmNotes=label(farm,"",13,89,552,83,12,colors.text)
-local oreInfo=label(farm,"",13,180,552,83,11,colors.muted)
+flagButton(farm,"press","AUTO PRESS GOLD → COINS",12,87,270,32)
+local farmNotes=label(farm,"",13,124,552,79,11,colors.text)
+local oreInfo=label(farm,"",13,210,552,45,11,colors.muted)
 label(farm,"Pick an appropriate mining tool. Walk mode uses normal pathfinding, not teleportation.",
     13,262,550,23,10,colors.warn)
 local fish=pages.FISH
@@ -252,6 +255,59 @@ local function nearbyTrader()
         end
     end
     return nil
+end
+-- Converts *existing* Gold through an actual nearby Coin Press.
+-- Server must decrement inventory to approve the conversion.
+local function pressStep(now)
+    if not flags.press or now-stamp.press<.55 then return end
+    stamp.press=now
+    if not packets.InteractStructure or type(packets.InteractStructure.send)~="function" then
+        flags.press=false;status.press="Structure packet unavailable.";return
+    end
+    local amounts=inventoryCounts()
+    local gold=amounts.Gold or 0
+    local pending=pressState.pending
+    if pending then
+        if gold<pending.before then
+            counts.goldPressed+=pending.before-gold
+            status.press=string.format("Gold consumed by server: %d total; collect Coin Press drops.",
+                counts.goldPressed)
+            pressState.pending=nil;pressState.next=now+.75
+        elseif now-pending.time>6 then
+            flags.press=false;pressState.pending=nil
+            status.press="Gold was NOT consumed after 6 seconds; stopped."
+        end
+        return
+    end
+    if gold<1 then
+        status.press="No Gold in inventory. Mine, smelt and collect Gold first."
+        return
+    end
+    if now<pressState.next then return end
+    local folder=WS:FindFirstChild("Deployables")
+    local structure=nil
+    if folder then
+        for _,node in ipairs(folder:GetChildren()) do
+            if node:IsA("Model") and node.Name=="Coin Press" and
+                near(node,18) and validEntity(node) then structure=node;break end
+        end
+    end
+    if not structure then
+        status.press="No Coin Press within 18 studs. Walk up to one."
+        return
+    end
+    local id=validEntity(structure)
+    local goldID=itemIDS and itemIDS["Gold"]
+    if type(goldID)~="number" then
+        flags.press=false;status.press="Gold item ID unavailable.";return
+    end
+    local ok=pcall(packets.InteractStructure.send,{entityID=id,itemID=goldID})
+    if ok then
+        pressState.pending={before=gold,time=now}
+        status.press="Sent normal press request; waiting for Gold to be consumed."
+    else
+        flags.press=false;status.press="Coin Press request was rejected locally."
+    end
 end
 local function sellStep(now)
     if not flags.sell or not packets.SellFish or type(packets.SellFish.send)~="function" then return end
@@ -698,6 +754,7 @@ local function stopAll()
     status.fish="Stopped."
     status.loot="Stopped."
     status.sell="Stopped."
+    status.press="Stopped."
     status.market="Stopped."
     buyConfirm=false
 end
@@ -734,14 +791,14 @@ local function paint()
         formatNumber(fishcoins),signed(fishcoins-initialFishCoins),
         (os.clock()-uptime)/60)
     local target=mineState.target
-    farmNotes.Text="PICKUP: "..status.loot.."\n\nORE: "..status.mine
+    farmNotes.Text="PICKUP: "..status.loot.."\nORE: "..status.mine..
+        "\nPRESS: "..status.press
     local root=playerRoot()
     local resources=WS:FindFirstChild("Resources")
     local loaded=resources and #resources:GetChildren() or 0
-    oreInfo.Text=string.format("Visible resource models: %d   •   Ground pickups requested: %d\n"..
-        "Ore attacks attempted: %d   •   Navigation: %s\n"..
-        "Node: %s",loaded,counts.pickupRequests,counts.oreHits,
-        flags.navigate and "enabled" or "off",target and target.Name or "none")
+    oreInfo.Text=string.format("Resource models %d | Pickup requests %d | Ore hits %d | Gold pressed %d\n"..
+        "Navigation %s   •   Target %s",loaded,counts.pickupRequests,counts.oreHits,
+        counts.goldPressed,flags.navigate and "ON" or "OFF",target and target.Name or "none")
     local name=select(1,equippedInfo()) or "none"
     fishNotes.Text="ROD: "..status.fish.."\n\nSALE: "..status.sell..
         "\n\nEquipped: "..name.."  •  New fish observed: "..counts.fishCaught..
@@ -794,6 +851,7 @@ connections[#connections+1]=Run.Heartbeat:Connect(function()
             mineStep(now)
             fishStep(now)
             sellStep(now)
+            pressStep(now)
             marketStep(now)
         end
         if now-stamp.ui>.5 then
