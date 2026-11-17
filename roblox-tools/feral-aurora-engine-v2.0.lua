@@ -77,7 +77,7 @@ function Engine.new(atlas)
         range=300,limit=24,tagScale=1,outlineStyle="subtle",
         restChar=nil,mask=nil,lastRest=-math.huge,
         restSent=0,restFailed=0,restEchoed=0,lastTracker=-math.huge,
-        leases={},attrLeases={},byPlayer={},light=nil,log={},
+        leases={},attrLeases={},byPlayer={},highlightFolder=nil,light=nil,log={},
         notice="Aurora ready. All gameplay changes are OFF.",
         stat={},statusText={},nearby={},survivalMinutes=0,
         favourites={},query="",atlasCategory="All",atlasPage=1,
@@ -371,13 +371,20 @@ function Engine.new(atlas)
             pcall(function()if r.b then r.b:Destroy() end end)
         end
     end
+    local function getHighlightFolder()
+        if S.highlightFolder and S.highlightFolder.Parent then return S.highlightFolder end
+        -- Client-created workspace descendants render as 3D highlights,
+        -- unlike PlayerGui-parented Highlight instances on some Roblox builds.
+        S.highlightFolder=make("Folder",{Name="FeralAuroraLocalHighlightsV2"},workspace)
+        return S.highlightFolder
+    end
     local function newRecord(plr,character)
         local c=ctx.palette
         local h=make("Highlight",{
             Name="Aurora_PlayerOutline",Adornee=character,
             DepthMode=Enum.HighlightDepthMode.Occluded,
             FillTransparency=.82,OutlineTransparency=.06,
-            FillColor=c.teal,OutlineColor=c.teal,Enabled=true},player.PlayerGui)
+            FillColor=c.teal,OutlineColor=c.teal,Enabled=true},getHighlightFolder())
         local b=make("BillboardGui",{
             Name="Aurora_PlayerTag",Adornee=character:FindFirstChild("Head")
                 or character:FindFirstChild("HumanoidRootPart"),
@@ -418,6 +425,10 @@ function Engine.new(atlas)
         S.lastTracker=now
         if not S.flags.playerFinder then
             for p in pairs(S.byPlayer) do clearRecord(p) end
+            if S.highlightFolder then
+                pcall(function()S.highlightFolder:Destroy()end)
+                S.highlightFolder=nil
+            end
             S.nearby={};return
         end
         local char,hum,root=own()
@@ -615,6 +626,10 @@ function Engine.new(atlas)
             if not okTracker and S.flags.playerFinder then
                 S.flags.playerFinder=false
                 for p in pairs(S.byPlayer) do clearRecord(p) end
+                if S.highlightFolder then
+                    pcall(function()S.highlightFolder:Destroy()end)
+                    S.highlightFolder=nil
+                end
                 ctx.notice("Player Finder stopped after an unexpected local rendering error.")
             end
             local current=ctx.stats()
@@ -641,6 +656,10 @@ function Engine.new(atlas)
         if ctx.connection then ctx.connection:Disconnect() end
         if ctx.cleanupUI then pcall(ctx.cleanupUI) end
         for p in pairs(S.byPlayer) do clearRecord(p) end
+        if S.highlightFolder then
+            pcall(function()S.highlightFolder:Destroy()end)
+            S.highlightFolder=nil
+        end
         if ctx.ui then pcall(function()ctx.ui:Destroy()end)end
     end
     return ctx
