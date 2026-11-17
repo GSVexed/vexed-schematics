@@ -1,0 +1,60 @@
+{
+  "schema": "feral-health-checks/1.1",
+  "version": "1.1",
+  "date_utc": "2026-11-17",
+  "source": "feral-health-recovery-v1.1.lua",
+  "source_bytes": 38596,
+  "source_sha256": "d9182f849941ae2393b3070946010fbd8f4e29282366082002b64346d6705399",
+  "test": "tests/test-feral-health-recovery-v1.1.py",
+  "test_sha256": "770154c666b7fe43eeb981ac31e40e086cda0f6a44f9de5d834ba0f54db9a00e",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "static_checks": {
+    "result": "passed",
+    "no_health_or_condition_assignments": true,
+    "no_combat_flag_tuning": true,
+    "only_gameplay_remote_call": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_writes": [
+      "WolfRest",
+      "WolfDbgNoStamina"
+    ],
+    "no_purchase_gift_spawn_account_or_other_player_requests": true
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 37,
+    "environment": "Engine substitute; reconstructed game sources not executed",
+    "coverage": [
+      "earlier combat/burst request lifecycle and five-second throttle",
+      "own local pose masking and failure cleanup",
+      "HP gain retention, growth exclusion and reversal handling",
+      "each condition can activate recovery at full HP",
+      "last condition clearing ends signal at full HP",
+      "remaining HP deficit keeps signal active",
+      "numeric condition drops versus explicit attribute removals",
+      "invalid/nonfinite conditions do not activate requests",
+      "condition observers disconnect from old characters",
+      "frozen stamina cache does not block recovery",
+      "multiple simultaneous recovery reasons",
+      "real v1.0/v1.4 shutdown and settings restoration",
+      "file errors, exact-readback corruption, queued final save and explicit log omissions"
+    ]
+  },
+  "prior_v1_0_user_supplied_runtime_evidence": {
+    "scope": "Cumulative Bear session; later files preserve earlier event prefixes, not independent trials",
+    "latest_events": 1142,
+    "latest_errors": 0,
+    "latest_omitted": 0,
+    "out_of_combat_recovery": "about 1 percent max HP/s before signal; about 2 percent max HP/s after signal while moving",
+    "combat_clotting": "Short on/off observations consistent with reconstructed rest clotting multiplier",
+    "combat_hp_healing": "not_established",
+    "rendered_pose_and_server_attack_acceptance": "not_established"
+  },
+  "v1_1_roblox_velocity_execution": "not_performed",
+  "v1_1_condition_only_activation_live": "not_established",
+  "injury_venom_effects_live": "not_established",
+  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.1.py"
+}

@@ -1,14 +1,16 @@
 # FERAL client project
 
-Current work is focused on **health only**, one result at a time. The small
-[Health Recovery v1.0](README-health-recovery-v1.0.md) panel separately tests the
-local combat-regeneration flag and an optional continuous recovery request,
-including during combat. It attempts local rest-pose suppression and exports
-a small HP evidence report. **New healing remains unverified in Roblox.**
-Amber and restricted-spawn work is parked while health is investigated.
+Current work is focused on **health only**, one result at a time.
+[Health Recovery v1.1](README-health-recovery-v1.1.md) uses one recovery switch
+for missing HP or active conditions, with a small self-only report. Prior v1.0
+Bear captures support roughly 2x recovery outside combat while moving and
+faster clotting during combat. **Combat HP recovery remains unresolved; v1.1
+itself and injury/venom benefits remain unverified in Roblox.** The ineffective
+local combat-regen flag experiment was removed. Amber and restricted-spawn
+work is parked. See [the health findings](FERAL-HEALTH-FINDINGS-v1.1.md).
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.0.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.1.lua"))()
 ```
 
 The retained broader build is below.

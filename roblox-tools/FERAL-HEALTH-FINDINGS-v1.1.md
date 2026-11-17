@@ -1,0 +1,69 @@
+# Health findings and next implementation — 2026-11-17
+
+The useful next step is to keep the observed mobile recovery bonus and extend
+its activation to active conditions. Repeating identical combat HP tests has
+not produced a new healing path. Amber and restricted spawning remain parked.
+
+## Supplied runtime observations
+
+The three health reports are cumulative snapshots of the same v1.0 session,
+not three independent trials. Each later event list exactly preserves the
+earlier prefix. The latest supplied report contains 1,142 events over about
+17.5 minutes, with zero reported errors and zero omitted events. It contains
+20 true and five false Rest requests. Reports remain private; no raw capture
+or reconstructed game source is included in this repository change.
+
+| Observation | Interpretation and limit |
+|---|---|
+| Same-MaxHealth windows before/after enabling Rest requests changed from 1.016 HP/s at 101 maximum to 2.022 HP/s at 101 and 2.048 HP/s at 102 | Consistent with the native 2x rest bonus while moving; observational support from Bear, not a universal species/condition guarantee |
+| Later out-of-combat recovery continued at about 2% max HP/s with the local combat-regen flag experiment off | That local flag change is unnecessary for the observed mobile bonus |
+| During combat, HP remained flat or fell; positive increases coincided with MaxHealth growth | No demonstrated combat HP regeneration from the local flag or continuous Rest requests |
+| In one combat interval with Rest active, bleed amount went 6 → 2 → absent; after Rest stopped, another combat interval went 3 → 2 → 1 → absent | Consistent with faster clotting while resting, including combat; shorter, non-randomized comparison with differing initial bleed amounts |
+| Own local WolfRest remained false in the masked observations | Attribute suppression worked; actual rendered pose, other clients' view and server attack acceptance still need verification |
+
+The bleeding comparison is visible near 1029–1031 and 1034–1037 seconds from
+the original launch in the latest uploaded report. This is a condition benefit,
+not evidence that HP rises during combat. Reported null/absent attributes are
+not treated as measured numerical zero in the v1.1 export.
+
+## Targeted source review
+
+This review uses the existing reconstructed client export. It does not claim
+server-only source, flawless reconstruction, or proof that no other server
+mechanism exists. Earlier distinct-body review found no literal client Health
+writer; the Health Script inventory entry remained server/unknown context.
+
+| Exported source | Relevant evidence |
+|---|---|
+| `sources/game/S0000033_part001.source.txt` — NeedsConfig, lines 121–123 | Normal HP rate 0.01, rest multiplier 2 and combat-regeneration restriction true |
+| `sources/game/S0000085_part001.source.txt` — StatusConfig, lines 23–29, 68–80, 88–105 | Reconstructed injury HEAL and rest multiplier; bleeding CLOT and REST_MULT; venom FADE and REST_MULT. These are configuration leads, not a recovered authoritative status updater |
+| `sources/game/S0003681_part001.source.txt` — FeralStatusUI, around 605–651 | Reads own status amount and WolfRest for display; it does not grant an HP cure |
+| `sources/game/S0003620_part001.source.txt` — WolfController, around 6205–6253 | Normal Rest state sends the boolean action. v1.1 reuses that action, without altering native private variables |
+| `sources/game/S0000034_part001.source.txt` — FeedFinder | Food lookup; no separately recovered health-grant call identified |
+| `sources/game/S0000065_part001.source.txt` — CoatConfig | No separate recovered combat-healing grant identified |
+| `sources/game/S0000056_part001.source.txt` — AbilityConfig | Recovered HP-ratio references concern combat eligibility, not a discovered healing action |
+| `sources/game/S0000077_part001.source.txt` — PassiveConfig, around 249–258 | HP=0.4 belongs to the Vulture Death Sense detection threshold, not recovery |
+| `sources/game/S0000089_part001.source.txt` — LitterConfig | REGEN/REGEN_AFTER belong to the disabled litter/sibling configuration, not an established player-heal route |
+| `sources/game/S0000055_part001.source.txt` and `S0003645_part001.source.txt` — DeathConfig/DeathUI | Revival/death flow, including credit/prompt paths; not continuous healing for a living animal. v1.1 does not invoke it |
+
+These identifiers refer to the original uploaded export parts; this change
+does not republish those bodies. Generic remote names or an unimplemented
+client setting are not sufficient evidence to fabricate a server healing verb.
+
+## v1.1 implementation boundary
+
+One recovery toggle requests the existing Rest signal when a living own animal
+has missing HP **or** positive bleeding, injury or venom. It stays enabled
+through respawns and combat, masks only local WolfRest and ends its signal when
+no recovery need remains. It never writes HP, MaxHealth, injuries, bleed,
+venom or the combat flag. Only the optional earlier stamina method tunes its
+specific cached stamina fields and own-character debug stamina flag.
+
+Faster clotting has supplied runtime support. Injury and venom recovery effects
+remain unverified; the reconstruction's rest multipliers motivate observation,
+not a claim of an effective cure. All v1.1 condition-only activation and new
+condition logging were checked in a substitute, not inside Roblox.
+
+The remaining health goal is combat HP recovery. No additional recovered
+client action currently establishes it. Visual pose suppression and attack
+acceptance are also not established by a false local attribute alone.
