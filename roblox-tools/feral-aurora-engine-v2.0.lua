@@ -625,6 +625,7 @@ function Engine.new(atlas)
         ctx.reset()
         S.alive=false
         if ctx.connection then ctx.connection:Disconnect() end
+        if ctx.cleanupUI then pcall(ctx.cleanupUI) end
         for p in pairs(S.byPlayer) do clearRecord(p) end
         if ctx.ui then pcall(function()ctx.ui:Destroy()end)end
     end
