@@ -1,0 +1,78 @@
+name: Booga Reborn full-client collector validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-complete-client-archive-v1.0.lua'
+      - 'booga-reborn/verify-booga-client-export.py'
+      - '.github/workflows/booga-reborn-collector-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official Luau compiler version 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/booga-luau.zip
+          mkdir -p /tmp/booga-luau
+          unzip -q /tmp/booga-luau.zip -d /tmp/booga-luau
+          compiler="$(find /tmp/booga-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile full Booga Luau collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null booga-reborn/booga-complete-client-archive-v1.0.lua
+          echo BOOGA_FULL_CLIENT_LUAU_PASS
+      - name: Compile offline verifier and check coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile booga-reborn/verify-booga-client-export.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-complete-client-archive-v1.0.lua').read_text()
+          p=Path('booga-reborn/verify-booga-client-export.py').read_text()
+          for word in (
+              'placeId = 11729688377','BoogaRebornCollectorV10',
+              'D.inventoryComplete = D.walk(game',
+              'D.supplementalInventory()',
+              'function D.inspect(obj, frame)','function D.boogaTag(path,id,category,restricted)',
+              'booga_system_index','crafting=','harvesting=','progression=',
+              'tribes=','construction=','network=',
+              'getloadedmodules','getscripts','getscriptbytecode',
+              'source-results/','sources/%s/S%07d_part%03d.source.txt',
+              'D.sourceResult(entry','function D.collectSources()',
+              'function D.checkpoint()','function D.manifest()',
+              'source_abort_reason','collection_gaps',
+              'COPY STARTUP REPORT','START FULL SCAN',
+              'PAUSE','STOP & SAVE','SAVE CHECKPOINT',
+              'readfile','writefile','makefolder',
+              'No gameplay remotes or arbitrary game modules are invoked'
+          ):
+              assert word in s,word
+          assert 'booga-reborn-client-archive/1.0' in s
+          assert 'booga-reborn-client-archive/1.0' in p
+          assert '108901361810209' not in s
+          assert 'Feral' not in s and 'FERAL' not in s
+          assert 'FireServer(' not in s and 'InvokeServer(' not in s
+          assert 'getgc(' not in s
+          assert 'setidentity(' not in s
+          assert 'setthreadidentity(' not in s
+          assert 'require(obj)' not in s
+          assert 'Http:PostAsync(' not in s
+          print('BOOGA_FULL_CLIENT_SCOPE_PASS')
+          PY
