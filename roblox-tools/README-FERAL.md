@@ -1,25 +1,26 @@
 # FERAL client project
 
-The current menu is **[Recovery Hub v1.1](README-recovery-hub-v1.1.md)**.
-It adds optional recovery alongside normal ground sprint/Burst drain, using a
-matched internal client stamina pool. The working walking-rate option and
-the earlier health/condition recovery assist remain separate. All controls
-start OFF. There are no diagnostic reports to collect or upload.
+The current menu is **[Recovery Hub v1.2](README-recovery-hub-v1.2.md)**.
+One **3X STAMINA REGEN** switch combines the rate and internal-pool recovery
+across movement modes, including Trot and climbing. Normal movement costs
+and low-needs penalties remain. The earlier health/condition assist is a
+separate switch. Both start OFF. There are no diagnostic reports to upload.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-recovery-hub-v1.1.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-recovery-hub-v1.2.lua"))()
 ```
 
 Earlier captures support roughly 2x HP recovery outside combat and faster
 bleed/venom clearance. **Combat HP regeneration and reliable unlimited Burst
 remain unresolved.** The latest old-tuning death capture returned only the
 native cause `other`, with no reason or code. No exact anti-cheat cause or
-safe Burst duration was established. The user confirmed v1.0 gave 3x recovery
-while walking, with no recovery during running/sprinting. v1.1 adds an optional
-path for that drain branch. Its new internal-pool access and server acceptance
-remain unverified in Roblox/Velocity.
+safe Burst duration was established. The user confirmed v1.0's 3x walking
+recovery and v1.1's recovery during sprinting, with a slight surplus. Burst
+still decreased, Trot stayed flat, and Bear climbing still lost stamina.
+v1.2 combines the two former stamina switches and removes those mode gaps.
+Its new unified/climbing behavior and server acceptance remain unverified.
 
-Official Luau compilation and [56 simulated checks](FERAL-RECOVERY-HUB-v1.1-CHECKS.json)
+Official Luau compilation and [48 simulated checks](FERAL-RECOVERY-HUB-v1.2-CHECKS.json)
 passed. This new menu has not been run in Roblox/Velocity by the developer.
 Amber, restricted animal spawns, code menus and additional effects remain
 parked; successful server grants are not established.
@@ -28,7 +29,8 @@ parked; successful server grants are not established.
 
 | Material | Entry point |
 |---|---|
-| Current menu controls, moving recovery and limits | [Recovery Hub v1.1 guide](README-recovery-hub-v1.1.md) |
+| Current single 3x stamina switch, climbing and limits | [Recovery Hub v1.2 guide](README-recovery-hub-v1.2.md) |
+| Earlier separate stamina controls with user-confirmed sprint recovery | [Recovery Hub v1.1 guide](README-recovery-hub-v1.1.md) |
 | Earlier menu with user-confirmed 3x walking recovery | [Recovery Hub v1.0 guide](README-recovery-hub-v1.0.md) |
 | Earlier HP/bleed/venom capture findings | [Health findings](FERAL-HEALTH-FINDINGS-v1.1.md) |
 | Earlier native death/stamina trace tool | [Health Recovery v1.3](README-health-recovery-v1.3.md) |

@@ -1,0 +1,132 @@
+{
+  "schema": "feral-recovery-hub-checks/1.2",
+  "version": "1.2",
+  "date_utc": "2026-11-17",
+  "source": "feral-recovery-hub-v1.2.lua",
+  "source_bytes": 37574,
+  "source_sha256": "c1013f3fc15586ca8ee017c56622845aaf976c7d5f9af0d9d29ab620f7d0af58",
+  "test": "tests/test-feral-recovery-hub-v1.2.py",
+  "test_sha256": "5f228e2d411ed97512088bdda981a7b998296978270deee122ad2ef19dddb593",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "standalone_analysis": {
+    "expected_unknown_roblox_executor_globals": 60,
+    "other_diagnostics": 0,
+    "roblox_definitions_available": false
+  },
+  "stamina_control": {
+    "single_switch": "3X STAMINA REGEN",
+    "default": "off",
+    "requested_multiplier": 3,
+    "current_original_base_rate": 1.31,
+    "current_active_base_rate": 3.93,
+    "extra_native_rest_multiplier_while_active": 1,
+    "rate_and_pool_access_enable_stop_and_fail_together": true,
+    "no_separate_one_times_option": true,
+    "activity_modes": [
+      "idle",
+      "walk",
+      "trot",
+      "sprint",
+      "burst",
+      "climb",
+      "flight",
+      "swim",
+      "burrow",
+      "held"
+    ],
+    "adds_when_native_pool": "flat or draining",
+    "positive_native_recovery_double_counted": false,
+    "native_costs_and_low_needs_penalty": "preserved",
+    "menu_downed_death": "extra increments paused",
+    "venom_disables_added_recovery": false,
+    "oxygen_or_condition_amounts_changed": false
+  },
+  "matching": {
+    "target": "exact current own Humanoid.StateChanged callback in local WolfController",
+    "required_functions": [
+      "getconnections",
+      "getconstants",
+      "getupvalues",
+      "setupvalue",
+      "getfenv",
+      "getloadedmodules"
+    ],
+    "exact_config_and_current_character_reference_required": true,
+    "changing_hud_samples_before_writes": 4,
+    "minimum_sample_range": 0.25,
+    "numeric_tolerance": 0.051,
+    "max_connections": 128,
+    "max_constants": 2048,
+    "max_upvalues": 128,
+    "max_numeric_candidates": 16,
+    "startup_match_retry_seconds": 2,
+    "startup_match_timeout_seconds": 10,
+    "native_movement_priority_in_export": 101,
+    "added_recovery_render_priority": 102,
+    "frame_gain_time_limit_seconds": 0.1,
+    "maximum_added_value": "rounded StaminaMax minus 0.05",
+    "write_readback_required": true,
+    "flat_stale_hud": "bounded resume only while current pool still matches displayed value"
+  },
+  "static_boundaries": {
+    "result": "passed",
+    "only_gameplay_request": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_write": "WolfRest",
+    "config_writes": [
+      "STAMINA_REST_MULT",
+      "STAMINA_REGEN"
+    ],
+    "internal_resource_write": "matched own stamina upvalue only",
+    "no_hp_hud_combat_currency_permission_or_condition_writes": true,
+    "no_exports_getgc_scan_or_function_hooks": true
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 48,
+    "retained_health_cases": 11,
+    "combined_stamina_and_upgrade_cases": 37,
+    "environment": "Synthetic native pool and HUD publisher; actual recovered game code not executed",
+    "coverage": [
+      "single control exact 3x and atomic stop",
+      "four native readings before pool writes",
+      "sprint Burst walking idle Trot",
+      "no double positive recovery or nine-times rest stacking",
+      "flat delay intervals",
+      "Bear climbing with simulated cost",
+      "other shared-pool mode flags and venom",
+      "low-needs penalty",
+      "menu downed death pauses",
+      "missing and frozen API/config",
+      "partial config rollback",
+      "external edits",
+      "ambiguous callbacks/cells",
+      "no-op setter and failed readback",
+      "HUD mismatch and stopped controller",
+      "stale flat bars and missing HUD publication",
+      "frame gap/max clamps",
+      "cancellation and rapid toggles",
+      "respawn new callback",
+      "all-off close rerun",
+      "actual v1.1 upgrade",
+      "health lifecycle"
+    ]
+  },
+  "prior_user_feedback": {
+    "v1_0_walking_rate": "reported working at 3x",
+    "v1_1_sprint": "reported working with slight surplus",
+    "v1_1_burst": "stamina decreased; slower loss not established",
+    "v1_1_trot": "reported flat",
+    "v1_1_bear_climbing": "reported stamina loss",
+    "exact_rates_and_old_switch_states": "not supplied"
+  },
+  "new_v1_2_roblox_velocity_execution": "not_performed",
+  "new_unified_and_climbing_gameplay_effect": "unverified",
+  "combat_hp_regen": "unresolved",
+  "exact_burst_death_cause": "unresolved",
+  "server_acceptance_or_enforcement_bypass": "not_established",
+  "reproduce": "LUAU=/path/to/luau python roblox-tools/tests/test-feral-recovery-hub-v1.2.py"
+}
