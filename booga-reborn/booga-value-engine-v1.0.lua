@@ -184,6 +184,7 @@ local function formatNumber(v)
     return string.format("%.0f",v)
 end
 local function signed(v)
+    if type(v)~="number" then return "--" end
     return (v>=0 and "+" or "")..formatNumber(v)
 end
 local function data()
@@ -210,7 +211,7 @@ local function inventoryCounts()
 end
 local function snapshotBalances()
     local d=data() or {}
-    return tonumber(d.coins) or 0,tonumber(d.fishermanCoins) or 0
+    return tonumber(d.coins),tonumber(d.fishermanCoins)
 end
 local function pointOf(entity)
     if entity:IsA("Model") then
@@ -320,10 +321,12 @@ local function sellStep(now)
     if sellState.pending then
         local p=sellState.pending
         local quantity=inventoryCounts()[p.name] or 0
-        if fishCoins>p.before or quantity<p.quantity then
+        if (fishCoins and p.before and fishCoins>p.before)
+            or quantity<p.quantity then
             counts.fishSales+=1
-            status.sell=string.format("SOLD %s • %s Fisherman Coins delta",p.name,
-                formatNumber(fishCoins-p.before))
+            local delta=fishCoins and p.before and fishCoins-p.before or nil
+            status.sell=string.format("SOLD %s • Fisherman Coins change: %s",p.name,
+                formatNumber(delta))
             sellState.pending=nil
             sellState.next=now+1.2
         elseif now-p.time>6 then
@@ -750,6 +753,7 @@ local function stopAll()
     for k in pairs(flags) do flags[k]=false end
     mineState.target=nil;mineState.routeID+=1;mineState.walking=false
     sellState.pending=nil
+    pressState.pending=nil
     status.mine="All automation stopped."
     status.fish="Stopped."
     status.loot="Stopped."
@@ -759,6 +763,23 @@ local function stopAll()
     buyConfirm=false
 end
 btn(main,"STOP ALL  [F6]",444,12,150,30,stopAll,Color3.fromRGB(126,48,63))
+-- Best effort against normal Roblox idle disconnect while automation is active.
+-- Does not protect against game server shutdown, anti-AFK rules or tool errors.
+connections[#connections+1]=lp.Idled:Connect(function()
+    if not live then return end
+    local working=false
+    for _,enabled in pairs(flags) do if enabled then working=true;break end end
+    if not working then return end
+    local ok,vu=pcall(S,"VirtualUser")
+    if ok and vu and WS.CurrentCamera then
+        pcall(function()
+            vu:CaptureController()
+            vu:Button2Down(Vector2.zero,WS.CurrentCamera.CFrame)
+            task.wait(.08)
+            vu:Button2Up(Vector2.zero,WS.CurrentCamera.CFrame)
+        end)
+    end
+end)
 connections[#connections+1]=UIS.InputBegan:Connect(function(input)
     if input.KeyCode==Enum.KeyCode.F6 then stopAll() end
 end)
@@ -767,8 +788,8 @@ local lastFish=0
 local footer=label(main,"",17,422,575,43,12,colors.accent,true)
 local function paint()
     local coins,fishcoins=snapshotBalances()
-    if not initialCoins then initialCoins=coins end
-    if not initialFishCoins then initialFishCoins=fishcoins end
+    if initialCoins==nil and coins~=nil then initialCoins=coins end
+    if initialFishCoins==nil and fishcoins~=nil then initialFishCoins=fishcoins end
     local list,total=sellableFish()
     local newest=inventoryCounts()
     if fishSeen then
@@ -786,10 +807,16 @@ local function paint()
         b.BackgroundColor3=flags[key] and Color3.fromRGB(20,113,95)
             or Color3.fromRGB(42,63,81)
     end
-    footer.Text=string.format("Coins %s (%s)  |  Fisherman Coins %s (%s)  |  Uptime %.0fm",
-        formatNumber(coins),signed(coins-initialCoins),
-        formatNumber(fishcoins),signed(fishcoins-initialFishCoins),
-        (os.clock()-uptime)/60)
+    local coinDelta=coins and initialCoins and coins-initialCoins or nil
+    local fishDelta=fishcoins and initialFishCoins and fishcoins-initialFishCoins or nil
+    local hours=math.max((os.clock()-uptime)/3600,0.0001)
+    footer.Text=string.format(
+        "Coins %s (%s) | Fisherman Coins %s (%s) | Uptime %.0fm\nRates: Coins %s/h  •  Fisherman Coins %s/h",
+        formatNumber(coins),signed(coinDelta),
+        formatNumber(fishcoins),signed(fishDelta),
+        (os.clock()-uptime)/60,
+        formatNumber(coinDelta and coinDelta/hours or nil),
+        formatNumber(fishDelta and fishDelta/hours or nil))
     local target=mineState.target
     farmNotes.Text="PICKUP: "..status.loot.."\nORE: "..status.mine..
         "\nPRESS: "..status.press
@@ -799,6 +826,10 @@ local function paint()
     oreInfo.Text=string.format("Resource models %d | Pickup requests %d | Ore hits %d | Gold pressed %d\n"..
         "Navigation %s   •   Target %s",loaded,counts.pickupRequests,counts.oreHits,
         counts.goldPressed,flags.navigate and "ON" or "OFF",target and target.Name or "none")
+    local inventoryNow=inventoryCounts()
+    local rawGold=inventoryNow["Raw Gold"] or 0
+    local gold=inventoryNow.Gold or 0
+    oreInfo.Text=oreInfo.Text..string.format("\nHeld ore: Raw Gold %d  |  Gold %d",rawGold,gold)
     local name=select(1,equippedInfo()) or "none"
     fishNotes.Text="ROD: "..status.fish.."\n\nSALE: "..status.sell..
         "\n\nEquipped: "..name.."  •  New fish observed: "..counts.fishCaught..
