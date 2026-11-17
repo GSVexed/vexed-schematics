@@ -88,7 +88,8 @@ function Engine.new(atlas)
         lastPoll=-math.huge,lastHealth=nil,lastStamina=nil,
         lastHPTime=nil,lastChar=nil,lastSpeed=0,
         resource={kind="none",origin="none",candidates={},at=0,summary="Not searched yet"},
-        lastLocalSave=0,localSaveCount=0,localSaveResult="Not saved. GitHub sync is not connected.",
+        lastLocalSave=0,localSaveCount=0,localHistory={},
+        localSaveResult="Not saved. GitHub sync is not connected.",
         statusPath="FERAL_Aurora_Status_v2_1.json.txt"
     }
     ctx.state=S
@@ -717,14 +718,26 @@ function Engine.new(atlas)
             finder_reason=S.finderReason,
             note="LOCAL ONLY. No other-player identifiers, coordinates, source code or credentials. GitHub upload not configured."
         }
-        local ok,encoded=pcall(function()return HttpService:JSONEncode(data)end)
+        -- Retain up to sixty own-state snapshots in this current session.
+        -- This is local-only; no other players or positions are exported.
+        S.localHistory[#S.localHistory+1]=data
+        while #S.localHistory>60 do table.remove(S.localHistory,1) end
+        local ok,encoded=pcall(function()
+            return HttpService:JSONEncode({
+                schema="feral_aurora_v2_1_local_session_history",
+                record_count=#S.localHistory,
+                records=S.localHistory,
+                note="Own-character snapshots only; GitHub auto-sync is not configured."
+            })
+        end)
         if not ok then
             S.localSaveResult="Could not encode own status.";return false
         end
         local written=pcall(function()writefile(S.statusPath,encoded)end)
         if written then
             S.lastLocalSave=os.clock();S.localSaveCount=S.localSaveCount+1
-            S.localSaveResult="Saved "..S.statusPath.." in executor workspace. GitHub: not synced."
+            S.localSaveResult="Saved "..#S.localHistory.." own-state records to "..
+                S.statusPath.." in executor workspace. GitHub: not synced."
             ctx.notice("Local own-status file saved; GitHub sync is not configured.")
             return true
         end
