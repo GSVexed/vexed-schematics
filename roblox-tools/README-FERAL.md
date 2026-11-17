@@ -1,8 +1,11 @@
 # FERAL client project
 
 Current work is focused on **health only**, one result at a time.
-[Health Recovery v1.1](README-health-recovery-v1.1.md) uses one recovery switch
-for missing HP or active conditions, with a small self-only report. Prior v1.0
+[Recovery + Combat Trace v1.2](README-health-recovery-v1.2.md) keeps one recovery
+switch for missing HP or active conditions and passively observes your own
+native hit feedback, combat timer and protection indicators. **No working
+combat-off bypass is established.** See the
+[combat-state audit](FERAL-COMBAT-STATE-AUDIT-v1.2.md). Prior v1.0
 Bear captures support roughly 2x recovery outside combat while moving and
 faster clotting during combat. A v1.1 capture now also supports faster venom
 clearance during combat, with zero reported runtime errors. **Combat HP
@@ -12,7 +15,7 @@ local combat-regen flag experiment was removed. Amber and restricted-spawn
 work is parked. See [the health findings](FERAL-HEALTH-FINDINGS-v1.1.md).
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.1.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.2.lua"))()
 ```
 
 The retained broader build is below.

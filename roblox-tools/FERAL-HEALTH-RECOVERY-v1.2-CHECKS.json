@@ -1,0 +1,63 @@
+{
+  "schema": "feral-health-checks/1.2",
+  "version": "1.2",
+  "date_utc": "2026-11-17",
+  "source": "feral-health-recovery-v1.2.lua",
+  "source_bytes": 46445,
+  "source_sha256": "5ef81a845e7ad8aec4501f072c13ef09def5cc2131e352989f128be8f740ca53",
+  "test": "tests/test-feral-health-recovery-v1.2.py",
+  "test_sha256": "3ed6862bd9cb083a37bbc1821c5a3500ffd506b07ff9d3227af659d832f93eaf",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "static_checks": {
+    "result": "passed",
+    "only_gameplay_request": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_writes": [
+      "WolfRest",
+      "WolfDbgNoStamina"
+    ],
+    "combat_safety_tutorial_attributes_modified": false,
+    "attack_packets_modified": false,
+    "raw_hit_packets_saved": false,
+    "other_actor_identities_or_hp_saved": false
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 50,
+    "prior_recovery_cases": 37,
+    "new_trace_cases": 13,
+    "environment": "Engine substitute; no reconstructed game source executed",
+    "coverage": [
+      "own outgoing native feedback with damage and broad actor type only",
+      "unrelated traffic ignored",
+      "unsupported damage fields remain unknown without raw value retention",
+      "delayed tag update after hit feedback",
+      "untagged NPC feedback not labelled a bypass",
+      "safety-block feedback not labelled positive damage",
+      "character-change cancellation",
+      "close/disconnect/queued-followup cancellation",
+      "32-job budget with explicit omissions",
+      "missing/replaced remote without duplicate listeners",
+      "combat/protection values observed without writes",
+      "invalid clocks unknown without raw values",
+      "actual v1.1 shutdown upgrade"
+    ]
+  },
+  "source_review": {
+    "saved_texts": 339,
+    "distinct_sha256_bodies": 221,
+    "combat_until_direct_reads": 24,
+    "combat_until_signal_subscriptions": 3,
+    "combat_until_literal_writes": 0,
+    "combat_until_distinct_bodies": 10,
+    "scope_limit": "Literal reconstructed-client review; not proof against indirect writes, missing bodies or server-only paths."
+  },
+  "prior_health_runtime_evidence": "v1.0/v1.1 Bear captures support mobile out-of-combat rest recovery and faster bleed/venom clearance",
+  "v1_2_roblox_velocity_execution": "not_performed",
+  "new_hit_correlation_live": "not_established",
+  "combat_disable_while_effective_combat": "not_established",
+  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.2.py"
+}
