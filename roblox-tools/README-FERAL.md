@@ -1,5 +1,7 @@
 # FERAL client project
 
+For a new Chat or a local PC task, start with [the project handoff](FERAL-HANDOFF.md).
+
 The current menu is **[Recovery Hub v1.3](README-recovery-hub-v1.3.md)**.
 One **3X STAMINA REGEN** switch combines the rate and internal-pool recovery
 across movement modes, including Trot and climbing. Normal movement costs
@@ -21,8 +23,11 @@ still decreased, Trot stayed flat, and Bear climbing still lost stamina.
 v1.2 combined the two former stamina switches and removed those mode gaps,
 but the user reported repeated native-match stops. v1.3 fixes a timing flaw
 reproduced with deferred callbacks in simulation, briefly rechecks mismatches
-before stopping, and preserves status details for copying. Its revised live
-behavior and server acceptance remain unverified.
+before stopping, and preserves status details for copying. The latest user-run
+v1.3 status showed zero mismatches/failure stops and 8,129 client pool writes,
+with nearly full stamina and full HP in the last sampled Bear Burst frame.
+The user still died. The capture did not record the death transition or a
+cause, so server acceptance and the death trigger remain unresolved.
 
 Official Luau compilation and [63 simulated checks](FERAL-RECOVERY-HUB-v1.3-CHECKS.json)
 passed. This new menu has not been run in Roblox/Velocity by the developer.
