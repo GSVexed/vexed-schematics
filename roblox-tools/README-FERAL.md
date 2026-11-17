@@ -1,10 +1,12 @@
 # FERAL client project
 
-Current work is focused on **health only**, one result at a time.
-[Recovery + Combat Trace v1.2](README-health-recovery-v1.2.md) keeps one recovery
-switch for missing HP or active conditions and passively observes your own
-native hit feedback, combat timer and protection indicators. **No working
-combat-off bypass is established.** See the
+Current work is focused on **health, stamina and combat reliability**, one result at a time.
+[Death + Stamina Trace v1.3](README-health-recovery-v1.3.md) adds the native
+death-cause message, current death-screen heading, client stamina/oxygen,
+Burst timing and a bounded pre-death trace. The optional recovery method and
+stamina tuning values are retained. **The exact Burst-death cause, a safe
+Burst duration and a combat-off bypass remain unresolved.** See the
+[death protocol](FERAL-DEATH-PROTOCOL-v1.3.md) and
 [combat-state audit](FERAL-COMBAT-STATE-AUDIT-v1.2.md). Prior v1.0
 Bear captures support roughly 2x recovery outside combat while moving and
 faster clotting during combat. A v1.1 capture now also supports faster venom
@@ -20,10 +22,12 @@ is unresolved; no anti-cheat verdict, safe duration or bypass is established.**
 See the [runtime investigation](FERAL-COMBAT-STATE-AUDIT-v1.2.md).
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.2.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.3.lua"))()
 ```
 
-The retained broader build is below.
+Redemption/code menus, additional persistent effects and the survival-based
+Amber multiplier are queued for later. Current work remains on the health,
+stamina and combat reliability questions. The retained broader build is below.
 
 The retained [Field Hub v1.4](README-field-hub-v1.4.md) targets three goals:
 **amber, actual restricted-animal spawns and lasting recovery**. It adds self-only

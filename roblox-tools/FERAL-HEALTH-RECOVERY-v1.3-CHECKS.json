@@ -1,0 +1,87 @@
+{
+  "schema": "feral-health-checks/1.3",
+  "version": "1.3",
+  "date_utc": "2026-11-17",
+  "source": "feral-health-recovery-v1.3.lua",
+  "source_bytes": 63787,
+  "source_sha256": "774dd72e6f417e0dcc6c6b1619ecd74317d42339a4cde8cb3d10310214fb047d",
+  "test": "tests/test-feral-health-recovery-v1.3.py",
+  "test_sha256": "b487c764c67bc55588ee36f8852f668ba31a9109e286b4f46b3d04eefa440aa5",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "static_checks": {
+    "result": "passed",
+    "only_gameplay_request": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_writes": [
+      "WolfRest",
+      "WolfDbgNoStamina"
+    ],
+    "no_hp_stamina_oxygen_burst_or_combat_value_writes": true,
+    "no_death_revive_purchase_transfer_or_debug_request": true,
+    "raw_death_or_hit_payloads_saved": false
+  },
+  "stamina_semantics": {
+    "five_field_tuning_unchanged_from_1_2": true,
+    "owned_flag_logic_unchanged": true,
+    "new_log_events_only": true
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 67,
+    "previous_recovery_and_hit_cases": 50,
+    "new_death_trace_cases": 17,
+    "environment": "Engine substitute; no reconstructed game sources executed",
+    "coverage": [
+      "native cause and lifetime without identities",
+      "unknown cause/optional-field redaction",
+      "fixed investigation labels retained only if delivered",
+      "generic other does not become an anti-cheat conclusion",
+      "native event before Health zero",
+      "late old-model message after respawn",
+      "separate fatalities after same-model revival",
+      "read-only stamina/oxygen/separate Burst flags",
+      "bounded frozen trace without absolute position",
+      "sampling gaps and stale pre-death frames",
+      "16-record history budget and explicit omissions",
+      "current-heading capture without a new death",
+      "unknown/absent heading handling",
+      "evidence autosave after native feedback",
+      "missing/replaced death remote",
+      "close cancellation/disconnection",
+      "actual v1.2 upgrade"
+    ]
+  },
+  "source_protocol": {
+    "source_id": "S0003645",
+    "client": "FeralDeathUI",
+    "remote": "FeralDeath",
+    "event": "dead",
+    "known_cause_labels": [
+      "killed",
+      "hunger",
+      "thirst",
+      "other"
+    ],
+    "numeric_lifetime_field": "alive",
+    "optional_reason_code_fields": "checked only when present; no claim the game implements additional filter labels",
+    "server_only_health_enforcement_handler": "not_retrieved"
+  },
+  "capture_limits": {
+    "journal_events": 6000,
+    "fatal_records": 16,
+    "trace_window_seconds": 15,
+    "trace_samples": 60,
+    "fatal_trace_including_transition_max_samples": 61,
+    "trace_minimum_interval_seconds": 0.25,
+    "sampling_gaps_and_omissions_explicit": true,
+    "automatic_evidence_save_delay_seconds": 1.25
+  },
+  "v1_3_roblox_velocity_execution": "not_performed",
+  "exact_burst_death_cause": "unresolved",
+  "anti_cheat_bypass_or_safe_burst_duration": "not_established",
+  "combat_disable": "not_established",
+  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.3.py"
+}

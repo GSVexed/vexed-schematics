@@ -1,0 +1,1038 @@
+-- FERAL Health Recovery v1.3 | PlaceId 108901361810209
+-- One recovery switch: native Rest signal for missing HP or active own conditions.
+-- Bear captures support 2x out-of-combat HP recovery and faster clotting in combat.
+-- Combat HP regeneration remains unestablished. Faster venom fade has live support; injury effect is unverified.
+-- No HP, condition or combat-flag writes; optional earlier stamina tuning.
+-- Only the local rest-pose flag is masked. Native downed/death state is untouched.
+-- Combat/safety attributes are observed, never changed. No combat-disable claim.
+-- Native hit feedback is filtered to own attacks/hits without storing other actors.
+-- Native death cause and bounded pre-death telemetry are observed. No bypass claim.
+-- Stamina tuning values/flag behaviour remain unchanged; all new fields are reads.
+-- No full scan, purchases, gifts, spawn requests, identities or other actors' HP.
+
+-- BEGIN TESTABLE CORE
+local Core = {}
+function Core.finite(n)
+    return type(n) == "number" and n == n and n > -math.huge and n < math.huge
+end
+function Core.errorMeta(value)
+    local text = type(value) == "string" and value or ""
+    local lower = string.lower(text)
+    local kind = "runtime_error"
+    if lower:find("permission", 1, true) or lower:find("security", 1, true) then kind = "permission_error"
+    elseif lower:find("readonly", 1, true) or lower:find("read-only", 1, true) then kind = "readonly_error"
+    elseif lower:find("not a valid member", 1, true) then kind = "missing_member" end
+    return {kind = kind, line = tonumber(text:match(":(%d+):"))}
+end
+function Core.restore(lease)
+    local errors = 0
+    for i = #(lease and lease.entries or {}), 1, -1 do
+        local entry = lease.entries[i]
+        local ok = pcall(function()
+            if lease.target[entry.key] == entry.wanted then lease.target[entry.key] = entry.old end
+        end)
+        if not ok then errors = errors + 1 end
+    end
+    return errors
+end
+function Core.patch(target, changes)
+    local lease = {target = target, entries = {}, expected = table.clone(changes)}
+    for key, wanted in pairs(changes) do
+        local ok, old = pcall(function() return target[key] end)
+        if not ok then Core.restore(lease); return nil end
+        if old ~= wanted then
+            if not pcall(function() target[key] = wanted end) then Core.restore(lease); return nil end
+            lease.entries[#lease.entries + 1] = {key = key, old = old, wanted = wanted}
+        end
+    end
+    return lease
+end
+function Core.matches(lease)
+    if not lease then return false end
+    for key, value in pairs(lease.expected) do if lease.target[key] ~= value then return false end end
+    return true
+end
+Core.species = {"Wolf", "Fox", "Deer", "Elk", "Bear", "Cougar", "SnowLeopard", "Eagle", "Vulture", "Falcon", "Tiger", "Otter", "Porcupine", "Bison", "Hippo", "Rhino", "Elephant", "Alligator", "Python", "Komodo", "RedPanda", "Gorilla", "KingCobra", "Phantosuchus"}
+function Core.speciesName(value)
+    for _, item in ipairs(Core.species) do if value == item then return item end end
+    return "other"
+end
+function Core.push(log, item)
+    log.total = log.total + 1
+    if #log.events < log.limit then log.events[#log.events + 1] = item
+    else log.omitted = log.omitted + 1 end
+end
+Core.conditions = {
+    {key = "bleed", attribute = "FeralBleed"},
+    {key = "injury", attribute = "FeralInjury"},
+    {key = "venom", attribute = "FeralVenomAmt"},
+}
+function Core.recoveryReasons(sample)
+    local reasons = {}
+    if Core.finite(sample.health) and Core.finite(sample.health_max) and sample.health > 0
+        and sample.health < sample.health_max - .001 then reasons[#reasons + 1] = "health" end
+    for _, condition in ipairs(Core.conditions) do
+        if Core.finite(sample[condition.key]) and sample[condition.key] > 0 then
+            reasons[#reasons + 1] = condition.key
+        end
+    end
+    return reasons
+end
+function Core.ownHit(payload, own)
+    if not own or type(payload) ~= "table" then return nil end
+    if payload.a ~= own and payload.v ~= own then return nil end
+    local ok, model = pcall(function() return payload.v:IsA("Model") end)
+    if not ok or not model then return nil end
+    local result = {direction = payload.a == own and "outgoing" or "incoming",
+        safety_block_reported = payload.safe == true, damage_value_type = type(payload.dmg)}
+    if payload.a == own and payload.v == own then result.direction = "self" end
+    if Core.finite(payload.dmg) then result.reported_damage = payload.dmg end
+    result.positive_damage_reported = not result.safety_block_reported
+        and Core.finite(payload.dmg) and payload.dmg > 0
+    result.damage_state = result.safety_block_reported and "safety_block_reported"
+        or (result.positive_damage_reported and "positive_damage_reported"
+            or (Core.finite(payload.dmg) and "nonpositive_damage_reported" or "amount_unavailable"))
+    return result
+end
+Core.sourceDeathCodes = {killed = true, hunger = true, thirst = true, other = true}
+-- Additional fixed labels are accepted only if actually delivered in a code field;
+-- their presence in this whitelist is not evidence the game implements them.
+Core.investigationDeathCodes = {anticheat = true, anti_cheat = true, ["anti-cheat"] = true,
+    stamina = true, exhaustion = true, tired = true, swim_tired = true, drown = true,
+    drowning = true, fall = true, reset = true, void = true, speed = true, movement = true,
+    exploit = true, speed_check = true, speed_violation = true, movement_check = true,
+    movement_violation = true, stamina_check = true, stamina_violation = true,
+    burst_check = true, burst_violation = true}
+function Core.deathInfo(payload)
+    local result = {payload_table = type(payload) == "table"}
+    if type(payload) == "table" and Core.finite(payload.alive) and payload.alive >= 0 then
+        result.alive_seconds_reported = payload.alive
+    end
+    for _, field in ipairs({"cause", "reason", "code"}) do
+        local value = type(payload) == "table" and payload[field] or nil
+        if value == nil then result[field .. "_status"] = "absent"
+        elseif type(value) ~= "string" then result[field .. "_status"] = "non_string_redacted"
+        else
+            local normalized = #value <= 48 and string.lower(value) or ""
+            if Core.sourceDeathCodes[normalized] then
+                result[field], result[field .. "_status"] = normalized, "fixed_source_code"
+            elseif Core.investigationDeathCodes[normalized] then
+                result[field], result[field .. "_status"] = normalized, "fixed_investigation_code"
+            else result[field .. "_status"] = "unrecognized_redacted" end
+        end
+    end
+    return result
+end
+function Core.headingCategory(value)
+    if type(value) ~= "string" or #value > 4096 then return "unavailable_or_oversized" end
+    local normalized = string.lower(value):gsub("<[^>]*>", ""):gsub("[^a-z]", "")
+    if normalized == "youstarved" then return "hunger" end
+    if normalized == "youdiedofthirst" then return "thirst" end
+    if normalized == "youdied" then return "other" end
+    if normalized:sub(1, 9) == "youdiedto" then return "killed" end
+    return "unrecognized_redacted"
+end
+function Core.copy(value, depth)
+    depth = depth or 0
+    assert(depth < 16, "Evidence schema depth exceeded.")
+    if type(value) ~= "table" then
+        assert(value == nil or type(value) == "string" or type(value) == "boolean" or Core.finite(value), "Non-data evidence value.")
+        return value
+    end
+    local result = {}
+    for key, item in pairs(value) do result[key] = Core.copy(item, depth + 1) end
+    return result
+end
+-- END TESTABLE CORE
+
+local abort, phase = nil, "place_check"
+local function run()
+    if game.PlaceId ~= 108901361810209 then warn("[FERAL Health] Open FERAL first."); return end
+    phase = "services"
+    local Players, RS = game:GetService("Players"), game:GetService("ReplicatedStorage")
+    local RunService, UIS = game:GetService("RunService"), game:GetService("UserInputService")
+    local Http = game:GetService("HttpService")
+    local player = Players.LocalPlayer
+    local parent = player and (player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui", 8))
+    if not parent then warn("[FERAL Health] PlayerGui unavailable; rerun after joining."); return end
+    for _, name in ipairs({"FeralFieldHubV10", "FeralFieldHubV11", "FeralFieldHubV12", "FeralFieldHubV13", "FeralFieldHubV14", "FeralHealthRecoveryV10", "FeralHealthRecoveryV11", "FeralHealthRecoveryV12", "FeralHealthRecoveryV13"}) do
+        local old = parent:FindFirstChild(name)
+        if old then
+            local shutdown = old:FindFirstChild("HubShutdown")
+            if shutdown and shutdown:IsA("BindableEvent") then shutdown:Fire() end
+            if old.Parent then old:Destroy() end
+        end
+    end
+    local s = {
+        alive = true, born = os.clock(), connections = {}, charConnections = {},
+        recovery = false, stamina = false,
+        log = {events = {}, total = 0, omitted = 0, limit = 6000}, errors = 0,
+        counts = {true_requests = 0, false_requests = 0, hp_up = 0, hp_down = 0,
+            max_changes = 0, retained_gains = 0, retained_combat_gains = 0,
+            gains_invalidated = 0, rest_echoes_masked = 0, bite_inputs_observed = 0},
+        generation = 0, candidates = {}, status = "Off. Enable Recovery Assist when ready.",
+        conditionCounts = {bleed = {decreases = 0, removals = 0}, injury = {decreases = 0, removals = 0}, venom = {decreases = 0, removals = 0}},
+        moduleStatus = "No module checked.", lastSample = -math.huge, lastAutoSave = os.clock(),
+        lastRequest = -math.huge, revision = 0, fileStatus = "No file saved yet.",
+        leases = {}, cacheBusy = false, cacheWaiters = {}, saveBusy = false,
+        hitEpoch = 0, hitJobs = 0, hitSerial = 0, lastHitBind = -math.huge,
+        hitStatus = "waiting", hits = {outgoing = 0, incoming = 0, self = 0,
+            positive_outgoing = 0, safety_blocked_outgoing = 0,
+            tag_followups_present = 0, tag_followups_absent = 0,
+            followups_cancelled = 0, followups_omitted = 0},
+        deathStatus = "waiting", lastDeathBind = -math.huge, lastUiPoll = -math.huge,
+        deathMessages = 0, fatalRecords = {}, fatalsOmitted = 0, fatalSerial = 0,
+        preTrace = {samples = {}, omitted = 0, gaps = 0, lastAt = -math.huge},
+        burstTotal = 0, burstLastAt = os.clock(), burstActive = false,
+    }
+    local token = tostring(os.time()) .. "_" .. tostring(math.random(100000, 999999))
+    s.base = "FERAL_Health_Report_v1_3_" .. token
+    local renderName = "FeralHealthPose_" .. token
+    local C = {bg = Color3.fromRGB(14, 23, 30), surface = Color3.fromRGB(28, 44, 55),
+        text = Color3.fromRGB(236, 245, 241), muted = Color3.fromRGB(170, 192, 195),
+        blue = Color3.fromRGB(38, 100, 143), green = Color3.fromRGB(30, 130, 101), red = Color3.fromRGB(153, 59, 77)}
+    local function emit(kind, data)
+        data = table.clone(data or {}); data.kind, data.t = kind, math.max(0, os.clock() - s.born)
+        data.generation = s.generation
+        Core.push(s.log, data)
+    end
+    local function failure(where, detail)
+        s.errors = s.errors + 1
+        local meta = Core.errorMeta(detail); meta.where = where
+        s.lastError = meta; emit("error", {where = where, error_kind = meta.kind, line = meta.line})
+    end
+    local function optional(name)
+        local found = ({writefile = writefile, readfile = readfile, setclipboard = setclipboard,
+            toclipboard = toclipboard, getloadedmodules = getloadedmodules})[name]
+        if type(found) == "function" then return found end
+        if type(getgenv) == "function" then
+            local ok, env = pcall(getgenv)
+            if ok and type(env) == "table" and type(env[name]) == "function" then return env[name] end
+        end
+    end
+    local function new(class, props, owner)
+        local item = Instance.new(class)
+        for key, value in pairs(props or {}) do item[key] = value end
+        item.Parent = owner
+        return item
+    end
+    local function connect(signal, fn, bucket)
+        local c = signal:Connect(fn); table.insert(bucket or s.connections, c); return c
+    end
+    local function disconnect(bucket)
+        for _, c in ipairs(bucket) do pcall(function() c:Disconnect() end) end
+        table.clear(bucket)
+    end
+    local stopHealth, cleanup, save, refresh
+    local recordFatal, scheduleEvidenceSave, captureDeathScreen
+    phase = "gui"
+    local gui = new("ScreenGui", {Name = "FeralHealthRecoveryV13", ResetOnSpawn = false, DisplayOrder = 85}, parent)
+    abort = function() if cleanup then cleanup("startup_error") elseif gui.Parent then gui:Destroy() end end
+    local shutdown = new("BindableEvent", {Name = "HubShutdown"}, gui)
+    local frame = new("Frame", {Name = "HealthPanel", BackgroundColor3 = C.bg, BorderSizePixel = 0,
+        Size = UDim2.fromOffset(500, 548), Position = UDim2.new(0, 22, 0.5, -274)}, gui)
+    new("UICorner", {CornerRadius = UDim.new(0, 10)}, frame)
+    local scale = new("UIScale", {Scale = 1}, frame)
+    local title = new("TextLabel", {Text = "FERAL / DEATH + STAMINA TRACE v1.3", Font = Enum.Font.Gotham, Active = true,
+        TextSize = 14, TextColor3 = C.text, TextXAlignment = Enum.TextXAlignment.Left,
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -100, 0, 40)}, frame)
+    local close = new("TextButton", {Text = "X", TextSize = 15, TextColor3 = C.text, BackgroundColor3 = C.red,
+        Size = UDim2.fromOffset(32, 28), Position = UDim2.new(1, -40, 0, 7), BorderSizePixel = 0}, frame)
+    local hide = new("TextButton", {Text = "-", TextSize = 17, TextColor3 = C.text, BackgroundColor3 = C.blue,
+        Size = UDim2.fromOffset(32, 28), Position = UDim2.new(1, -78, 0, 7), BorderSizePixel = 0}, frame)
+    local body = new("ScrollingFrame", {BackgroundTransparency = 1, BorderSizePixel = 0,
+        Position = UDim2.fromOffset(14, 44), Size = UDim2.new(1, -28, 1, -56), ScrollBarThickness = 4,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new()}, frame)
+    new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body)
+    local order = 0
+    local function label(text, height)
+        order = order + 1
+        return new("TextLabel", {Text = text, TextSize = 12, Font = Enum.Font.Gotham,
+            TextColor3 = C.muted, RichText = false, TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+            BackgroundTransparency = 1, Size = UDim2.new(1, -8, 0, height), LayoutOrder = order}, body)
+    end
+    local function button(text, color)
+        order = order + 1
+        return new("TextButton", {Text = text, TextSize = 12, Font = Enum.Font.GothamBold,
+            TextColor3 = C.text, BackgroundColor3 = color or C.blue, BorderSizePixel = 0,
+            Size = UDim2.new(1, -8, 0, 34), LayoutOrder = order}, body)
+    end
+    label("Death/stamina trace starts automatically. Recovery and stamina tuning start OFF. Sustained Burst with stamina tuning has an unresolved sudden-death report.", 48)
+    local live = label("Waiting for your animal...", 52)
+    local combatText = label("Combat trace: waiting for native hit feedback...", 40)
+    local staminaText = label("Stamina and Burst trace: waiting...", 40)
+    local deathText = label("Native death cause: waiting / unavailable.", 36)
+    local readDeathButton = button("READ CURRENT DEATH SCREEN", C.surface)
+    local conditionsText = label("Conditions: waiting...", 24)
+    local recoveryButton = button("RECOVERY ASSIST: OFF")
+    local recoveryText = label("Uses the native recovery signal when HP is missing or bleeding, injury or venom is active. The local rest pose is masked. Injury benefit remains unverified; venom clearance has live support.", 48)
+    local evidence = label("HP recovery and condition changes are recorded separately.", 52)
+    local staminaButton = button("STAMINA TUNING: OFF", C.surface)
+    local stopButton = button("STOP & SAVE", C.red)
+    local saveButton = button("SAVE HEALTH REPORT .JSON", C.surface)
+    local copyButton = button("COPY REPORT FILENAME", C.surface)
+    local fileText = label("Small report only; no full diagnostic needed. Reports go in Velocity's workspace.", 44)
+    local function action(control, fn)
+        connect(control.Activated, function()
+            if not s.alive then return end
+            local ok, detail = pcall(fn)
+            if not ok then failure("control", detail); if stopHealth then stopHealth("control_error") end end
+        end)
+    end
+    local function context()
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local result = {generation = s.generation, species = Core.speciesName(char and char:GetAttribute("Species")),
+            recovery_enabled = s.recovery, request_active = s.signal ~= nil, pose_mask_active = s.mask ~= nil,
+            stamina_applied = Core.matches(s.leases.stamina),
+            combat = false, mode = "idle"}
+        local untilTime = player:GetAttribute("FeralCombatUntil")
+        local clockOK, serverTime = pcall(function() return workspace:GetServerTimeNow() end)
+        result.combat_tag_present = untilTime ~= nil
+        result.combat_tag_numeric = Core.finite(untilTime)
+        result.combat_known = clockOK and Core.finite(serverTime)
+            and (untilTime == nil or Core.finite(untilTime))
+        if result.combat_known and Core.finite(untilTime) then result.combat = untilTime > serverTime end
+        if result.combat_known then
+            result.combat_seconds_remaining = Core.finite(untilTime) and math.max(0, untilTime - serverTime) or 0
+        end
+        local values = {health = hum and hum.Health, health_max = hum and hum.MaxHealth,
+            growth = char and char:GetAttribute("Growth"), hunger = char and char:GetAttribute("Hunger"),
+            thirst = char and char:GetAttribute("Thirst"), injury = char and char:GetAttribute("FeralInjury"),
+            bleed = char and char:GetAttribute("FeralBleed"), venom = char and char:GetAttribute("FeralVenomAmt"),
+            client_stamina = char and char:GetAttribute("Stamina"),
+            client_stamina_max = char and char:GetAttribute("StaminaMax"),
+            oxygen = char and char:GetAttribute("Oxygen"), walk_speed = hum and hum.WalkSpeed}
+        for key, value in pairs(values) do if Core.finite(value) then result[key] = value end end
+        result.stamina_tuning_enabled = s.stamina
+        if char then
+            result.client_stamina_flag = char:GetAttribute("WolfDbgNoStamina") == true
+            local out = char:GetAttribute("StaminaOut")
+            if type(out) == "boolean" then result.client_stamina_out = out end
+            result.hud_burst = player:GetAttribute("HudBurst") == true
+            result.character_burst = char:GetAttribute("WolfBurst") == true
+            result.burst_intent_observed = result.hud_burst or result.character_burst
+            if char == s.burstChar then
+                local now = os.clock()
+                result.cumulative_burst_observed_seconds = s.burstTotal
+                    + (s.burstActive and math.max(0, now - s.burstLastAt) or 0)
+                result.continuous_burst_observed_seconds = s.burstActive and result.burst_intent_observed
+                    and s.burstStart and math.max(0, now - s.burstStart) or 0
+            end
+            local safeUntil = char:GetAttribute("FeralSafeUntil")
+            result.safe_timer_present = safeUntil ~= nil
+            if clockOK and Core.finite(serverTime) and Core.finite(safeUntil) then
+                result.safe_seconds_remaining = math.max(0, safeUntil - serverTime)
+            end
+            result.own_forcefield_present = char:FindFirstChildOfClass("ForceField") ~= nil
+            result.tutorial_flag_present = player:GetAttribute("FeralTut") ~= nil
+            result.local_rest = char:GetAttribute("WolfRest") == true
+            result.downed = char:GetAttribute("FeralDowned") == true
+            if char:GetAttribute("FeralPinned") or char:GetAttribute("CarriedBy") then result.mode = "grab"
+            elseif char:GetAttribute("FeralFlyLocal") then result.mode = "flight"
+            elseif char:GetAttribute("FeralClimbLocal") then result.mode = "climb"
+            elseif char:GetAttribute("FeralSwimLocal") or char:GetAttribute("FeralUnderwater") then result.mode = "swim"
+            elseif char:GetAttribute("FeralBurrowed") then result.mode = "burrow"
+            elseif player:GetAttribute("HudBurst") then result.mode = "burst"
+            elseif player:GetAttribute("HudSprint") then result.mode = "sprint"
+            elseif hum and hum.MoveDirection and hum.MoveDirection.Magnitude > .1 then result.mode = "move" end
+        end
+        if root then
+            local velocity = root.AssemblyLinearVelocity
+            result.root_velocity_finite = Core.finite(velocity.X) and Core.finite(velocity.Y) and Core.finite(velocity.Z)
+            local speed = math.sqrt(velocity.X * velocity.X + velocity.Z * velocity.Z)
+            if Core.finite(speed) then result.horizontal_speed = speed end
+            if Core.finite(velocity.Y) then result.vertical_speed = velocity.Y end
+        end
+        result.recovery_reasons = Core.recoveryReasons(result)
+        return result, char, hum, root
+    end
+    local function compact(snapshot)
+        local frame = {t = math.max(0, os.clock() - s.born), generation = s.generation}
+        for _, key in ipairs({"health", "health_max", "client_stamina", "client_stamina_max", "client_stamina_out",
+            "client_stamina_flag", "stamina_applied", "oxygen", "horizontal_speed", "vertical_speed",
+            "root_velocity_finite", "walk_speed", "mode", "hud_burst", "character_burst", "combat",
+            "combat_known", "continuous_burst_observed_seconds", "cumulative_burst_observed_seconds"}) do
+            frame[key] = snapshot[key]
+        end
+        return frame
+    end
+    local function staminaConfig()
+        local lease = s.leases.stamina
+        local result = {available = lease ~= nil}
+        if lease then
+            for key in pairs(lease.expected) do
+                local ok, value = pcall(function() return lease.target[key] end)
+                if ok and Core.finite(value) then result[key] = value end
+            end
+        end
+        return result
+    end
+    scheduleEvidenceSave = function()
+        if s.deathSavePending then return end
+        s.deathSavePending = true
+        task.delay(1.25, function()
+            s.deathSavePending = false
+            if s.alive and save then save(false) end
+        end)
+    end
+    recordFatal = function(snapshot, previousHealth)
+        s.fatalSerial = s.fatalSerial + 1
+        local record = {id = s.fatalSerial, generation = s.generation,
+            observed_at = math.max(0, os.clock() - s.born), previous_health = previousHealth,
+            context = Core.copy(snapshot), stamina_config = staminaConfig(),
+            trace = {}, trace_omitted_before_window = s.preTrace.omitted,
+            trace_sampling_gaps = s.preTrace.gaps, native_reason_status = "not_received_at_transition"}
+        for _, frame in ipairs(s.preTrace.samples) do
+            if record.observed_at - frame.t <= 15 then record.trace[#record.trace + 1] = Core.copy(frame)
+            else record.trace_omitted_before_window = record.trace_omitted_before_window + 1 end
+        end
+        if #s.preTrace.samples > 0 then
+            record.trace_gap_to_transition_seconds = record.observed_at - s.preTrace.samples[#s.preTrace.samples].t
+        end
+        if s.lastObservationClock then record.seconds_since_previous_health_observation = os.clock() - s.lastObservationClock end
+        record.trace[#record.trace + 1] = compact(snapshot)
+        if #s.fatalRecords < 16 then s.fatalRecords[#s.fatalRecords + 1] = record
+        else s.fatalsOmitted = s.fatalsOmitted + 1 end
+        s.lastFatal, s.lastFatalChar, s.lastFatalAt = record, s.char, os.clock()
+        if s.lastNativeDeath and s.lastNativeDeath.associated_generation == s.generation
+            and not s.lastNativeDeath.associated_fatal_id and os.clock() - s.lastNativeDeath.received_at_clock <= 10 then
+            record.native_feedback = Core.copy(s.lastNativeDeath.info)
+            record.native_reason_status = "native_feedback_same_generation_close_timing"
+            s.lastNativeDeath.associated_fatal_id = record.id
+        end
+        emit("health_zero_transition", {fatal_id = record.id, previous_health = previousHealth,
+            health = snapshot.health, mode = snapshot.mode, cause = "not_inferred"})
+        scheduleEvidenceSave()
+    end
+    local function bindDeathFeedback()
+        local target = RS:FindFirstChild("FeralDeath")
+        if target == s.deathTarget and s.deathConnection then return end
+        if s.deathConnection then s.deathConnection:Disconnect(); s.deathConnection = nil end
+        s.deathTarget = target
+        if not target or not target:IsA("RemoteEvent") then s.deathStatus = "unavailable"; return end
+        s.deathConnection = target.OnClientEvent:Connect(function(kind, payload)
+            if not s.alive or target ~= s.deathTarget or kind ~= "dead" then return end
+            local info = Core.deathInfo(payload)
+            local current = context()
+            local generation, association = s.generation, "current_context_timing_only"
+            local corpse = type(payload) == "table" and payload.corpse or nil
+            local pendingNewFatal = current.health and current.health <= 0 and s.lastHP and s.lastHP > 0
+            local mayLinkPrevious = not pendingNewFatal and (not current.health or current.health <= 0)
+            local matchesOldModel = corpse and corpse == s.lastFatalChar and player.Character ~= s.lastFatalChar
+            if (mayLinkPrevious or matchesOldModel) and corpse and corpse == s.lastFatalChar then
+                generation, association = s.lastFatal.generation, "matches_previous_own_model"
+            elseif corpse and corpse == player.Character then association = "matches_current_own_model"
+            elseif mayLinkPrevious and s.lastFatal and os.clock() - s.lastFatalAt <= 15 then
+                generation, association = s.lastFatal.generation, "recent_fatal_timing_only"
+            end
+            s.deathMessages = s.deathMessages + 1
+            s.lastNativeDeath = {info = Core.copy(info), associated_generation = generation,
+                association = association, received_at_clock = os.clock(),
+                received_seconds = math.max(0, os.clock() - s.born)}
+            if (mayLinkPrevious or matchesOldModel) and s.lastFatal and generation == s.lastFatal.generation
+                and os.clock() - s.lastFatalAt <= 15 then
+                s.lastFatal.native_feedback, s.lastFatal.native_association = Core.copy(info), association
+                s.lastFatal.native_reason_status = "native_feedback_received"
+                s.lastNativeDeath.associated_fatal_id = s.lastFatal.id
+            end
+            emit("native_death_feedback", {info = Core.copy(info), associated_generation = generation,
+                association = association})
+            scheduleEvidenceSave()
+        end)
+        s.deathStatus = "listening"
+    end
+    captureDeathScreen = function(force)
+        local deathGui = parent:FindFirstChild("FeralDeath")
+        local title = deathGui and deathGui:IsA("ScreenGui") and deathGui:FindFirstChild("Title", true)
+        if not title or not title:IsA("TextLabel") then
+            if force then
+                s.lastUiDeath = {status = "current_death_heading_unavailable"}
+                emit("death_screen_snapshot", Core.copy(s.lastUiDeath))
+            end
+            return
+        end
+        local category = Core.headingCategory(title.Text)
+        if force or deathGui ~= s.lastDeathGui or category ~= s.lastUiCategory then
+            s.lastUiDeath = {status = "ui_heading_snapshot", category = category,
+                screen_enabled = deathGui.Enabled == true, screen_flag_active = player:GetAttribute("FeralDeathScreen") == true,
+                provenance = "local_ui_not_native_server_message"}
+            s.lastDeathGui, s.lastUiCategory = deathGui, category
+            emit("death_screen_snapshot", Core.copy(s.lastUiDeath))
+        end
+    end
+    local function traceTick(sample, char, root, now)
+        if char ~= s.burstChar then
+            s.burstChar, s.burstTotal, s.burstStart = char, 0, nil
+            s.burstActive, s.burstLastAt = false, now
+        end
+        if s.burstActive then s.burstTotal = s.burstTotal + math.max(0, now - s.burstLastAt) end
+        local active = sample.burst_intent_observed == true and sample.health ~= nil and sample.health > 0
+        if active and not s.burstActive then s.burstStart = now end
+        if not active then s.burstStart = nil end
+        s.burstActive, s.burstLastAt = active, now
+        if not char or not sample.health or now - s.preTrace.lastAt < .25 then return end
+        local frame = compact(context())
+        local previousAt = s.preTrace.lastAt
+        if previousAt > -math.huge and now - previousAt > .75 then s.preTrace.gaps = s.preTrace.gaps + 1 end
+        while #s.preTrace.samples > 0 and (frame.t - s.preTrace.samples[1].t > 15 or #s.preTrace.samples >= 60) do
+            table.remove(s.preTrace.samples, 1); s.preTrace.omitted = s.preTrace.omitted + 1
+        end
+        if root then
+            local position = root.Position
+            frame.position_finite = Core.finite(position.X) and Core.finite(position.Y) and Core.finite(position.Z)
+            if frame.position_finite and s.preTrace.lastPosition and previousAt > -math.huge and now > previousAt then
+                local delta = position - s.preTrace.lastPosition
+                local speed = math.sqrt(delta.X * delta.X + delta.Z * delta.Z) / (now - previousAt)
+                if Core.finite(speed) then frame.horizontal_displacement_speed = speed end
+            end
+            s.preTrace.lastPosition = frame.position_finite and position or nil
+        end
+        s.preTrace.samples[#s.preTrace.samples + 1] = frame
+        s.preTrace.lastAt = now
+    end
+    local function bindHitFeedback()
+        local target = RS:FindFirstChild("FeralHit")
+        if target == s.hitTarget and s.hitConnection then return end
+        if s.hitConnection then s.hitConnection:Disconnect(); s.hitConnection = nil end
+        s.hitTarget = target
+        if not target or not target:IsA("RemoteEvent") then s.hitStatus = "unavailable"; return end
+        s.hitConnection = target.OnClientEvent:Connect(function(kind, payload)
+            if not s.alive or target ~= s.hitTarget or kind ~= "hit" then return end
+            local char = player.Character
+            local summary = Core.ownHit(payload, char)
+            if not summary then return end
+            local snapshot = context()
+            s.hitSerial = s.hitSerial + 1
+            snapshot.hit_id, snapshot.direction = s.hitSerial, summary.direction
+            snapshot.reported_damage = summary.reported_damage
+            snapshot.damage_state, snapshot.damage_value_type = summary.damage_state, summary.damage_value_type
+            snapshot.safety_block_reported = summary.safety_block_reported
+            snapshot.positive_damage_reported = summary.positive_damage_reported
+            local other = summary.direction == "outgoing" and payload.v or payload.a
+            local actorKind = "unknown"
+            if summary.direction == "self" then actorKind = "self"
+            elseif other then
+                local ok, actorPlayer = pcall(function() return Players:GetPlayerFromCharacter(other) end)
+                if ok then actorKind = actorPlayer and "player" or "npc_or_other" end
+            end
+            snapshot.other_actor_kind = actorKind
+            s.hits[summary.direction] = s.hits[summary.direction] + 1
+            if summary.direction == "outgoing" then
+                if summary.safety_block_reported then s.hits.safety_blocked_outgoing = s.hits.safety_blocked_outgoing + 1 end
+                if summary.positive_damage_reported then s.hits.positive_outgoing = s.hits.positive_outgoing + 1 end
+            end
+            emit("own_native_hit_feedback", snapshot)
+            if summary.direction ~= "outgoing" or not summary.positive_damage_reported then return end
+            if s.hitJobs >= 32 then
+                s.hits.followups_omitted = s.hits.followups_omitted + 1
+                emit("hit_followup_omitted", {hit_id = s.hitSerial, reason = "32_pending_followup_limit"})
+                return
+            end
+            local id, epoch, generation = s.hitSerial, s.hitEpoch, s.generation
+            s.hitJobs = s.hitJobs + 1
+            task.delay(1, function()
+                if epoch ~= s.hitEpoch then return end
+                s.hitJobs = s.hitJobs - 1
+                if not s.alive then return end
+                if player.Character ~= char or s.generation ~= generation then
+                    s.hits.followups_cancelled = s.hits.followups_cancelled + 1
+                    emit("hit_followup_cancelled", {hit_id = id, reason = "character_changed"})
+                    return
+                end
+                local later = context()
+                later.hit_id, later.other_actor_kind = id, actorKind
+                later.outcome = not later.combat_known and "tag_unknown"
+                    or (later.combat and "tag_observed" or "tag_not_observed")
+                if later.combat_known then
+                    local key = later.combat and "tag_followups_present" or "tag_followups_absent"
+                    s.hits[key] = s.hits[key] + 1
+                end
+                emit("own_hit_tag_followup", later)
+            end)
+        end)
+        s.hitStatus = "listening"
+    end
+    local function restPacket(char, enabled)
+        -- Remote has no character argument. Never send an old-character cleanup to a replacement.
+        if player.Character ~= char then return false end
+        local remote = RS:FindFirstChild("WolfActions")
+        if not remote or not remote:IsA("RemoteEvent") then return false end
+        local ok, detail = pcall(function() remote:FireServer("Rest", enabled) end)
+        if not ok then failure("rest_request", detail) end
+        if ok then
+            local key = enabled and "true_requests" or "false_requests"
+            s.counts[key] = s.counts[key] + 1
+        end
+        emit("rest_request", {enabled = enabled, api_call_succeeded = ok, server_acceptance = "unknown"})
+        return ok
+    end
+    local function releaseMask()
+        local mask = s.mask; s.mask = nil
+        if not mask then return end
+        if mask.connection then mask.connection:Disconnect() end
+        pcall(function() RunService:UnbindFromRenderStep(renderName) end)
+        -- Keep false after our request ends; do not restore the server's earlier true echo.
+        pcall(function() if mask.char.Parent then mask.char:SetAttribute("WolfRest", false) end end)
+    end
+    local function stopSignal(reason)
+        local signal = s.signal; s.signal = nil
+        if signal then
+            local restored = restPacket(signal.char, false)
+            emit("recovery_signal_stopped", {reason = reason, false_request_sent = restored,
+                character_still_current = player.Character == signal.char})
+        end
+        releaseMask()
+    end
+    local function beginMask(char)
+        local mask = {char = char, writing = false}
+        s.mask = mask
+        local function enforce()
+            if s.mask ~= mask or mask.writing or not s.alive then return end
+            if player.Character ~= char then stopSignal("character_changed"); return end
+            local ok, detail = pcall(function()
+                if char:GetAttribute("WolfRest") == true then
+                    s.counts.rest_echoes_masked = s.counts.rest_echoes_masked + 1
+                    mask.writing = true; char:SetAttribute("WolfRest", false); mask.writing = false
+                end
+            end)
+            mask.writing = false
+            if not ok then
+                failure("pose_mask", detail); s.recovery = false
+                s.status = "Pose mask failed. Recovery stopped; no further true requests."
+                stopSignal("pose_mask_failed")
+            end
+        end
+        local ok, detail = pcall(function()
+            mask.connection = char:GetAttributeChangedSignal("WolfRest"):Connect(enforce)
+            -- Native WolfAnim renders at Camera+2 (202). Run before it, without hooking it.
+            RunService:BindToRenderStep(renderName, 199, enforce)
+            char:SetAttribute("WolfRest", false)
+        end)
+        if not ok then failure("pose_mask_start", detail); releaseMask(); return false end
+        return true
+    end
+    local function needsModule(key, callback)
+        s.cacheWaiters[key] = callback
+        if s.cacheBusy then return end
+        s.cacheBusy = true; s.moduleStatus = "Checking the already-loaded NeedsConfig cache..."
+        task.delay(6, function()
+            if s.alive and s.cacheBusy then s.moduleStatus = "Cache check still waiting; UI remains usable. No duplicate job started." end
+        end)
+        task.spawn(function()
+            if not s.alive then s.cacheBusy = false; s.cacheWaiters = {}; return end
+            local fw = RS:FindFirstChild("FeralWorld")
+            local target = fw and fw:FindFirstChild("NeedsConfig")
+            local loaded = optional("getloadedmodules")
+            local ok, config = pcall(function()
+                if not target or not target:IsA("ModuleScript") or not loaded then return nil end
+                local list = loaded()
+                if type(list) ~= "table" then return nil end
+                local count = 0
+                for _, module in pairs(list) do
+                    count = count + 1
+                    if module == target then return require(target) end
+                    if count >= 100000 or not s.alive then break end
+                    if count % 512 == 0 then task.wait() end
+                end
+            end)
+            s.cacheBusy = false
+            local waiters = s.cacheWaiters; s.cacheWaiters = {}
+            if not s.alive then return end
+            local current = RS:FindFirstChild("FeralWorld")
+            if not ok then failure("cached_module", config) end
+            if not ok or type(config) ~= "table" or not current or current:FindFirstChild("NeedsConfig") ~= target then config = nil end
+            s.moduleStatus = config and "NeedsConfig read from the loaded cache." or "Loaded cache unavailable. No new game module was started."
+            for _, callback1 in pairs(waiters) do callback1(config) end
+        end)
+    end
+    local function releaseFlag()
+        local flag = s.staminaFlag; s.staminaFlag = nil
+        if not flag then return end
+        local ok, detail = pcall(function()
+            if flag.char:GetAttribute("WolfDbgNoStamina") == true then flag.char:SetAttribute("WolfDbgNoStamina", flag.old) end
+        end)
+        if not ok then failure("stamina_flag_restore", detail) end
+    end
+    local function applyFlag(char)
+        if not char or s.staminaFlag then return end
+        local old = char:GetAttribute("WolfDbgNoStamina")
+        char:SetAttribute("WolfDbgNoStamina", true)
+        s.staminaFlag = {char = char, old = old}
+    end
+    local function restoreLease(key)
+        local errors = Core.restore(s.leases[key]); s.leases[key] = nil
+        for _ = 1, errors do failure("config_restore", "") end
+    end
+    local function stopStamina()
+        s.stamina = false; s.staminaEpoch = (s.staminaEpoch or 0) + 1
+        restoreLease("stamina"); releaseFlag()
+        emit("stamina_toggled", {enabled = false})
+    end
+    stopHealth = function(reason)
+        s.recovery = false
+        stopSignal(reason)
+        s.status = "Recovery off. No HP or condition values were written."
+        emit("health_experiments_stopped", {reason = reason})
+    end
+    action(recoveryButton, function()
+        if s.updateFailed then s.status = "Update stopped. Save report and rerun before starting a trial."; return end
+        s.recovery = not s.recovery
+        if not s.recovery then stopSignal("toggle_off") end
+        s.status = s.recovery and "Armed across respawns. Waiting for missing HP or active conditions."
+            or "Recovery requests off."
+        emit("recovery_toggled", {enabled = s.recovery, includes_combat = true})
+    end)
+    action(staminaButton, function()
+        if s.updateFailed then s.status = "Update stopped. Save report and rerun before starting a trial."; return end
+        if s.stamina then stopStamina(); return end
+        s.stamina = true; s.staminaEpoch = (s.staminaEpoch or 0) + 1
+        emit("stamina_toggled", {enabled = true})
+        local epoch = s.staminaEpoch
+        applyFlag(player.Character)
+        needsModule("stamina", function(config)
+            if not s.alive or not s.stamina or s.staminaEpoch ~= epoch then return end
+            local changes = {STAMINA_SPRINT_DRAIN = 0, STAMINA_JUMP_COST = 0,
+                STAMINA_REGEN = 250, STAMINA_REGEN_DELAY = 0, STAMINA_LOW_NEEDS = 1}
+            if not config then s.moduleStatus = "Stamina flag only; cached tuning unavailable."; return end
+            for key in pairs(changes) do
+                if not Core.finite(config[key]) then s.moduleStatus = "Stamina flag only; config fields do not match."; return end
+            end
+            s.leases.stamina = Core.patch(config, changes)
+            emit("stamina_cache_result", {applied = s.leases.stamina ~= nil})
+            if not s.leases.stamina then
+                failure("stamina_config_write", ""); s.moduleStatus = "Stamina flag only; cached table write failed."
+            end
+        end)
+    end)
+    local function observe(kind)
+        if not s.alive or not s.hum or player.Character ~= s.char then return end
+        local snapshot = context()
+        local hp, maximum = snapshot.health, snapshot.health_max
+        if not hp or not maximum then return end
+        if s.lastMax and maximum ~= s.lastMax then
+            s.maxEpoch = (s.maxEpoch or 0) + 1; s.maxAt = os.clock()
+            s.counts.max_changes = s.counts.max_changes + 1
+        end
+        local difference = s.lastHP and hp - s.lastHP or 0
+        for _, candidate in ipairs(s.candidates) do candidate.minimum = math.min(candidate.minimum, hp) end
+        if difference > .001 then
+            s.counts.hp_up = s.counts.hp_up + 1
+            if #s.candidates < 64 then
+                s.candidates[#s.candidates + 1] = {at = os.clock(), health = hp, gain = difference,
+                    minimum = hp, epoch = s.maxEpoch, stableBefore = os.clock() - (s.maxAt or s.born) >= 1.5,
+                    combat = snapshot.combat and snapshot.combat_known, generation = s.generation,
+                    requested = snapshot.request_active,
+                    continuousCombat = snapshot.combat and snapshot.combat_known}
+            else
+                s.counts.gains_invalidated = s.counts.gains_invalidated + 1
+                emit("gain_not_classified", {reason = "64_pending_candidate_limit"})
+            end
+        elseif difference < -.001 then s.counts.hp_down = s.counts.hp_down + 1 end
+        if s.lastHP and s.lastHP > 0 and hp <= 0 then recordFatal(snapshot, s.lastHP) end
+        s.lastHP, s.lastMax, s.lastObservationClock = hp, maximum, os.clock()
+        snapshot.change = difference
+        emit(kind, snapshot)
+    end
+    local function bindCharacter(char, hum)
+        if char == s.char and hum == s.hum then return end
+        stopSignal("character_or_humanoid_changed"); releaseFlag(); disconnect(s.charConnections)
+        s.counts.gains_invalidated = s.counts.gains_invalidated + #s.candidates
+        s.candidates = {}; s.char, s.hum = char, hum
+        s.preTrace = {samples = {}, omitted = 0, gaps = 0, lastAt = -math.huge}
+        s.burstChar, s.burstTotal, s.burstStart = char, 0, nil
+        s.burstActive, s.burstLastAt = false, os.clock()
+        s.generation = s.generation + 1; s.maxEpoch = 0; s.maxAt = os.clock()
+        s.lastHP, s.lastMax, s.lastObservationClock = nil, nil, nil
+        emit("own_character_changed", {humanoid_present = hum ~= nil})
+        if char then
+            connect(char:GetAttributeChangedSignal("FeralSafeUntil"), function()
+                if s.alive and player.Character == char then emit("own_safety_timer_changed", context()) end
+            end, s.charConnections)
+            for _, condition in ipairs(Core.conditions) do
+                local previous = char:GetAttribute(condition.attribute)
+                connect(char:GetAttributeChangedSignal(condition.attribute), function()
+                    if not s.alive or s.char ~= char or player.Character ~= char then return end
+                    local current = char:GetAttribute(condition.attribute)
+                    local snapshot = context()
+                    snapshot.condition = condition.key
+                    snapshot.attribute_present = current ~= nil
+                    snapshot.numeric_value = Core.finite(current)
+                    if Core.finite(previous) then snapshot.previous_condition_value = previous end
+                    if Core.finite(current) then snapshot.condition_value = current end
+                    if Core.finite(current) and Core.finite(previous) then
+                        snapshot.condition_change = current - previous
+                        if current < previous then
+                            s.conditionCounts[condition.key].decreases = s.conditionCounts[condition.key].decreases + 1
+                        end
+                    elseif current == nil and Core.finite(previous) and previous > 0 then
+                        s.conditionCounts[condition.key].removals = s.conditionCounts[condition.key].removals + 1
+                        snapshot.positive_attribute_removed = true
+                    end
+                    emit("condition_changed", snapshot)
+                    previous = current
+                end, s.charConnections)
+            end
+            connect(char:GetAttributeChangedSignal("WolfBiteAt"), function()
+                s.counts.bite_inputs_observed = s.counts.bite_inputs_observed + 1
+                emit("native_bite_marker", {attack_accepted_by_server = "unknown"})
+            end, s.charConnections)
+        end
+        if hum then
+            connect(hum:GetPropertyChangedSignal("Health"), function() observe("health_changed") end, s.charConnections)
+            connect(hum:GetPropertyChangedSignal("MaxHealth"), function() observe("health_max_changed") end, s.charConnections)
+            observe("initial_health")
+        end
+        if s.stamina then applyFlag(char) end
+    end
+    local function report()
+        return {schema = "feral-health-report/1.3", version = "1.3", place_id = game.PlaceId,
+            seconds = math.max(0, os.clock() - s.born), current = context(), counts = table.clone(s.counts),
+            status = s.status, errors = s.errors, last_error = s.lastError, module_status = s.moduleStatus,
+            condition_counts = s.conditionCounts,
+            current_stamina_config = staminaConfig(),
+            fatal_records = Core.copy(s.fatalRecords), fatal_records_omitted = s.fatalsOmitted,
+            latest_fatal_id = s.lastFatal and s.lastFatal.id or nil,
+            death_trace = {listener = s.deathStatus, native_messages = s.deathMessages,
+                latest_native = s.lastNativeDeath and {info = Core.copy(s.lastNativeDeath.info),
+                    associated_generation = s.lastNativeDeath.associated_generation,
+                    associated_fatal_id = s.lastNativeDeath.associated_fatal_id,
+                    association = s.lastNativeDeath.association,
+                    received_seconds = s.lastNativeDeath.received_seconds} or nil,
+                latest_ui_hint = Core.copy(s.lastUiDeath), automatic_save_pending = s.deathSavePending == true,
+                fatal_limit = 16, trace_max_samples = 60, trace_window_seconds = 15, trace_minimum_interval_seconds = .25,
+                current_recent_samples = Core.copy(s.preTrace.samples), current_trace_omitted = s.preTrace.omitted,
+                current_sampling_gaps = s.preTrace.gaps,
+                reason_limit = "Native cause may be other or absent; the private server check is not retrieved. Fixed-code whitelist only; other strings redacted."},
+            combat_trace = {listener = s.hitStatus, counts = table.clone(s.hits),
+                pending_followups = s.hitJobs, followup_delay_seconds = 1, pending_limit = 32,
+                combat_attribute_modified = false, safety_attribute_modified = false},
+            timeline = {events = s.log.events, total = s.log.total, stored = #s.log.events, omitted = s.log.omitted,
+                limit = s.log.limit, policy = "first_events_preserved_later_events_counted_as_omitted"},
+            pending_gain_classifications = #s.candidates, previous_export = s.lastExport,
+            limits = {health_writes = 0, condition_writes = 0, combat_flag_tuning = "not_attempted",
+                server_health_code_available = false, server_flag_changed = false,
+                combat_disable = "not_established",
+                stamina_scope = "Stamina, flags, oxygen and burst durations are client observations, not access to a server stamina budget.",
+                fatal_context = "A health-zero transition does not identify anti-cheat. Native cause is separately recorded, with explicit timing/model association. UI hints are not server verdicts.",
+                hit_feedback = "Native FeralHit feedback about own actions only. Reported damage is not an independent victim-HP measurement; tag followups are local observations and can be delayed.",
+                server_rest_acknowledgement_available = false, causal_healing_effect = "not_established",
+                gains = "Observed HP increases retained 3s with stable MaxHealth, not proof of extra healing or server acceptance.",
+                conditions = "Own attribute changes only; removal is marked explicitly. Faster clotting and venom fade have prior observational support; injury benefit remains unverified.",
+                local_pose_mask = "Only own local WolfRest attribute; server/other-client pose and attack acceptance unknown.",
+                scope = "Own HP, conditions, combat/safety observations and own hit reports. No raw packets, identities, target HP, positions, credentials or unrelated-actor events."}}
+    end
+    save = function(auto)
+        if s.saveBusy then
+            if not auto then s.pendingManualSave = true end
+            return
+        end
+        local writer = optional("writefile")
+        if not writer then
+            s.fileStatus = "writefile unavailable. Save cannot create a file in this executor."
+            return
+        end
+        s.saveBusy = true
+        s.revision = s.revision + 1
+        local name = s.base .. (auto and ("_CHECKPOINT_" .. (s.revision % 2 == 0 and "A" or "B"))
+            or ("_SAVE_" .. string.format("%03d", s.revision))) .. ".json.txt"
+        -- Snapshot/encode before dispatch: a later UI close cannot mutate this export.
+        local ok, encoded = pcall(function() return Http:JSONEncode(report()) end)
+        if not ok then s.saveBusy = false; failure("json_encode", encoded); s.fileStatus = "JSON encoding failed; no file marked saved."; return end
+        s.fileStatus = "Saving " .. name .. "..."
+        task.spawn(function()
+            local written, detail = pcall(writer, name, encoded)
+            local verified, reader = false, optional("readfile")
+            if written and reader then
+                local readOK, data = pcall(reader, name)
+                verified = readOK and data == encoded
+            end
+            if not written then failure("file_write", detail) end
+            s.lastExport = {file = name, bytes = #encoded, written = written, readback_verified = verified}
+            s.lastFilename = written and name or s.lastFilename
+            s.fileStatus = written and (name .. (verified and "\nSaved and exact readback verified."
+                or "\nWritten; readback verification unavailable or failed.")) or "File write failed. No export marked saved."
+            s.saveBusy = false
+            if s.pendingManualSave then s.pendingManualSave = false; save(false) end
+        end)
+    end
+    refresh = function()
+        local sample = context()
+        local hp = sample.health and string.format("%.2f / %.2f", sample.health, sample.health_max or 0) or "waiting"
+        live.Text = "HP: " .. hp .. " | combat: " .. (sample.combat_known and tostring(sample.combat) or "unknown")
+            .. " | " .. sample.mode .. "\n" .. s.status
+        local function readable(value)
+            return Core.finite(value) and string.format("%.1f", value) or "--"
+        end
+        staminaText.Text = "Client stamina: " .. readable(sample.client_stamina) .. " / " .. readable(sample.client_stamina_max)
+            .. " | tuning flag: " .. tostring(sample.client_stamina_flag)
+            .. "\nBurst observed: " .. readable(sample.continuous_burst_observed_seconds) .. "s | Oxygen: " .. readable(sample.oxygen)
+        local info = s.lastNativeDeath and s.lastNativeDeath.info
+        deathText.Text = "Native cause: " .. (info and (info.cause or info.cause_status) or "waiting")
+            .. " | code: " .. (info and (info.code or info.code_status) or "waiting")
+            .. "\nScreen hint: " .. (s.lastUiDeath and (s.lastUiDeath.category or s.lastUiDeath.status) or "unavailable")
+        combatText.Text = "Observed combat tag: " .. (sample.combat_known and string.format("%.1fs", sample.combat_seconds_remaining) or "unknown")
+            .. " | hit feed: " .. s.hitStatus .. "\nOwn outgoing reports: " .. s.hits.outgoing
+            .. " | positive damage: " .. s.hits.positive_outgoing .. " | safety blocked: " .. s.hits.safety_blocked_outgoing
+        local function conditionValue(value)
+            return Core.finite(value) and string.format("%.1f", value) or "--"
+        end
+        conditionsText.Text = "Bleed " .. conditionValue(sample.bleed) .. " | Injury " .. conditionValue(sample.injury)
+            .. " | Venom " .. conditionValue(sample.venom) .. "  (-- = absent/unavailable)"
+        recoveryButton.Text = "RECOVERY ASSIST: " .. (s.recovery and "ON" or "OFF")
+        recoveryButton.BackgroundColor3 = s.recovery and C.green or C.blue
+        recoveryText.Text = "Request: " .. (s.signal and "active (acceptance unknown)" or "standby/off")
+            .. " | local pose mask: " .. tostring(s.mask ~= nil)
+            .. "\nNeeds: " .. (#sample.recovery_reasons > 0 and table.concat(sample.recovery_reasons, ", ") or "none")
+        evidence.Text = "HP gains retained 3s: " .. s.counts.retained_gains .. " | throughout combat: " .. s.counts.retained_combat_gains
+            .. "\nBear captures: ~2x HP recovery outside combat; faster bleed/venom clearance during combat. Injury benefit unverified."
+            .. (s.log.omitted > 0 and (" LOG FULL: " .. s.log.omitted .. " later events omitted; save and restart.") or "")
+        staminaButton.Text = "STAMINA TUNING: " .. (s.stamina and "ON" or "OFF")
+        fileText.Text = s.fileStatus
+    end
+    action(stopButton, function() stopHealth("manual_stop"); save(false); refresh() end)
+    action(saveButton, function() save(false); refresh() end)
+    action(readDeathButton, function() captureDeathScreen(true); save(false); refresh() end)
+    action(copyButton, function()
+        local copy = optional("setclipboard") or optional("toclipboard")
+        if not s.lastFilename then s.fileStatus = "Save a report first."; return end
+        if not copy or not pcall(copy, s.lastFilename) then s.fileStatus = "Clipboard unavailable. Filename is shown below." end
+    end)
+    local minimized = false
+    action(hide, function()
+        minimized = not minimized; body.Visible = not minimized
+        frame.Size = UDim2.fromOffset(500, minimized and 40 or 548); hide.Text = minimized and "+" or "-"
+    end)
+    local drag
+    connect(title.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            drag = {start = input.Position, position = frame.Position}
+        end
+    end)
+    connect(UIS.InputChanged, function(input)
+        if drag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - drag.start
+            frame.Position = UDim2.new(drag.position.X.Scale, drag.position.X.Offset + delta.X,
+                drag.position.Y.Scale, drag.position.Y.Offset + delta.Y)
+        end
+    end)
+    connect(UIS.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then drag = nil end
+    end)
+    cleanup = function(reason)
+        if not s.alive then return end
+        stopHealth(reason); stopStamina(); s.alive = false
+        s.hits.followups_cancelled = s.hits.followups_cancelled + s.hitJobs
+        s.hitJobs, s.hitEpoch = 0, s.hitEpoch + 1
+        if s.hitConnection then s.hitConnection:Disconnect(); s.hitConnection = nil end
+        s.hitTarget, s.hitStatus = nil, "stopped"
+        if s.deathConnection then s.deathConnection:Disconnect(); s.deathConnection = nil end
+        s.deathTarget, s.deathStatus = nil, "stopped"
+        disconnect(s.charConnections); disconnect(s.connections)
+        save(false)
+        if gui.Parent then gui:Destroy() end
+    end
+    action(close, function() cleanup("closed") end)
+    connect(shutdown.Event, function() cleanup("replaced") end)
+    connect(gui.Destroying, function() cleanup("external_destroy") end)
+    connect(player.CharacterRemoving, function(char)
+        if char == s.char then
+            emit("own_character_removing", context())
+            stopSignal("character_removing"); releaseFlag(); disconnect(s.charConnections)
+            scheduleEvidenceSave()
+        end
+    end)
+    connect(player:GetAttributeChangedSignal("FeralCombatUntil"), function()
+        if s.alive then emit("combat_tag_changed", context()) end
+    end)
+    local function tick()
+        local now = os.clock()
+        if now - s.lastHitBind >= 5 then s.lastHitBind = now; bindHitFeedback() end
+        if now - s.lastDeathBind >= 5 then s.lastDeathBind = now; bindDeathFeedback() end
+        local sample, char, hum, root = context()
+        bindCharacter(char, hum)
+        traceTick(sample, char, root, now)
+        if now - s.lastUiPoll >= 2 then s.lastUiPoll = now; captureDeathScreen(false) end
+        if s.recovery then
+            local reason
+            if not char or not hum or not root or sample.species == "other" then reason = "waiting_for_spawned_animal"
+            elseif not sample.health or sample.health <= 0 or sample.downed then reason = "dead_or_downed_standby"
+            elseif player:GetAttribute("FeralMenuOpen") or player:GetAttribute("FeralTitleOpen") then reason = "menu_standby"
+            elseif not sample.health_max then reason = "health_max_unavailable"
+            elseif #sample.recovery_reasons == 0 then reason = "no_recovery_needed"
+            elseif not s.signal and char:GetAttribute("WolfRest") == true then reason = "stand_up_normally_first" end
+            if reason then
+                stopSignal(reason)
+                s.status = reason == "no_recovery_needed" and "Armed. Full HP / no active condition; waiting."
+                    or ("Armed / " .. reason)
+            elseif now - s.lastRequest >= 5 then
+                s.lastRequest = now
+                if not s.mask and not beginMask(char) then
+                    s.recovery = false; s.status = "Local pose mask unavailable. No true request sent."
+                else
+                    -- Establish ownership before FireServer, including synchronous mock/server echoes.
+                    s.signal = s.signal or {char = char}
+                    if not restPacket(char, true) then
+                        s.recovery = false; stopSignal("true_request_failed")
+                        s.status = "Recovery request unavailable/failed. Toggle off; no retry loop."
+                    elseif s.recovery then s.status = sample.combat and "Recovery active. Combat HP healing remains unestablished."
+                        or "Recovery active for missing HP or conditions." end
+                end
+            end
+        end
+        sample = context()
+        if s.signal and s.recovery then
+            s.status = sample.combat and "Recovery active. Combat HP healing remains unestablished."
+                or "Recovery active for missing HP or conditions."
+        end
+        for i = #s.candidates, 1, -1 do
+            local candidate = s.candidates[i]
+            candidate.continuousCombat = candidate.continuousCombat and sample.combat and sample.combat_known
+            if now - candidate.at >= 3 then
+                local retained = candidate.generation == s.generation and candidate.stableBefore
+                    and candidate.epoch == s.maxEpoch and candidate.minimum >= candidate.health - .001
+                if retained then
+                    s.counts.retained_gains = s.counts.retained_gains + 1
+                    if candidate.continuousCombat then s.counts.retained_combat_gains = s.counts.retained_combat_gains + 1 end
+                else s.counts.gains_invalidated = s.counts.gains_invalidated + 1 end
+                emit("gain_classified", {gain = candidate.gain, retained_3s_stable_max = retained,
+                    combat_at_gain = candidate.combat, observed_combat_throughout = candidate.continuousCombat,
+                    request_at_gain = candidate.requested,
+                    causal_effect = "unknown"})
+                table.remove(s.candidates, i)
+            end
+        end
+        if now - s.lastSample >= 1 then
+            s.lastSample = now; observe("sample")
+            local camera = workspace.CurrentCamera
+            if camera then scale.Scale = math.clamp(math.min(camera.ViewportSize.X / 540, camera.ViewportSize.Y / 590), .4, 1) end
+            refresh()
+        end
+        if now - s.lastAutoSave >= 30 then s.lastAutoSave = now; save(true) end
+    end
+    phase = "heartbeat"
+    connect(RunService.Heartbeat, function()
+        if not s.alive then return end
+        local ok, detail = pcall(tick)
+        if not ok then
+            s.updateFailed = true
+            failure("update", detail); stopHealth("update_error"); stopStamina()
+            s.status = "Update failed. Health/stamina stopped; save report and rerun."
+            disconnect(s.charConnections)
+            -- Disconnect this update and retain the GUI/export controls.
+            if s.heartbeat then s.heartbeat:Disconnect() end
+        end
+    end)
+    s.heartbeat = s.connections[#s.connections]
+    bindCharacter(player.Character, player.Character and player.Character:FindFirstChildOfClass("Humanoid"))
+    emit("started", {health_experiments_default = "off", combat_request_allowed = true})
+    refresh(); phase = "ready"
+end
+local ok, detail = pcall(run)
+if not ok then
+    if abort then pcall(abort) end
+    local meta = Core.errorMeta(detail)
+    warn("[FERAL Health] Startup failed at " .. phase .. " / " .. meta.kind .. " / line " .. tostring(meta.line or "unknown"))
+end
