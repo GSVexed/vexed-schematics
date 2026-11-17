@@ -1,5 +1,61 @@
 # FERAL project continuation
 
+## Most recent: Aurora FORCE v3.1 — power-first pivot (17 Nov 2026)
+
+The user explicitly rejected Aurora v3.0's target selection/waypoints,
+saying they are useless and that they want "gamebreaking" high-impact game
+features. A long list of informational research cards and weak controls
+wasn't meeting this goal. The just-created waypoint-oriented v3.0 repo
+files should **NOT** be linked as the recommended build.
+
+Built Aurora FORCE v3.1:
+- [launcher](feral-aurora-force-v3.1.lua)
+- [own-client power module](feral-aurora-power-v3.1.lua)
+- [POWER/ESP/SURVIVAL/SETTINGS UI](feral-aurora-force-ui-v3.1.lua)
+- [guide](README-feral-aurora-force-v3.1.md)
+- [Official Luau CI](../.github/workflows/feral-aurora-force-v3.1-validate.yml)
+- Reuses existing v2.1 engine for status, ESP, Rest requests, low-needs,
+  injury slowdown, comfort/settings and optional local status storage.
+
+One-line Velocity paste:
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-force-v3.1.lua"))()`
+
+Actual meaningful controls:
+1. Stamina STOCK / RECOVER / APEX. RECOVER patches client
+   STAMINA_REGEN 3x + STAMINA_REST_MULT 1, regen delay 0, low-needs
+   factor 1. APEX uses recovered earlier Field Hub v1.4 combination
+   STAMINA_SPRINT_DRAIN=0, STAMINA_JUMP_COST=0, STAMINA_REGEN=250,
+   STAMINA_REGEN_DELAY=0, STAMINA_LOW_NEEDS=1, and own
+   WolfDbgNoStamina=true. As tested previously on Bear and Tiger client
+   samples: user-reported near-full local stamina during movement; **NOT**
+   proven server-approved, universal or safe; previous 107/107 HP ->0
+   death during Burst remains unresolved. Aggressive power OFF by default.
+2. Standalone WolfDbgNoStamina client flag toggle, owned restoration
+   including respawns, with notice if APEX still owns flag.
+3. Bounded 1.15/1.30/1.50 cached RUN_SPEED and SWIM_SPEED profiles;
+   1.15/1.35 cached forward-leap profiles; reversible restoring original
+   module values where still owned.
+4. Optional ALT-held rapid Space (170ms pulses) using executor
+   keypress/keyrelease if available, stops when chat textbox focused;
+   in-game acceptance unverified.
+5. Reuses local injury slow inputs, low-needs recovery factor, optional
+   native Rest Request Assist, colour-coded locally rendered ESP
+   150/300/600/900 range, tags, health, through-wall display, comfort,
+   compact own-resource HUD and optional local autosave.
+6. New status panel visibly separates applied client config from
+   server-held buffs; no bogus health/food/water/Amber toggles.
+The standalone low-needs setting is disabled before enabling a stamina
+profile so the same config field isn't leased twice; UI prevents
+standalone toggle while profile already includes it.
+
+All power features start OFF and Restore All/close attempt owned
+reversion; full CI runs official Luau compile + source-based checks.
+**No assistant live Velocity test.** Only one-line launcher needed;
+user explicitly doesn't want another diagnostic.
+
+Project source updated on GitHub. Live game reports still are NOT
+automatically sent to GitHub; PC runner lacks a wired Velocity collector.
+
 ## Most recent hub release: Aurora v2.1 (17 November 2026)
 
 The user tried Aurora v2.0 in the animal-selection menu (confirmed in chat)
