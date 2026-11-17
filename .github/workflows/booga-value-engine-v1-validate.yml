@@ -56,7 +56,7 @@ jobs:
               'packets.RodEnd.send',
               'function sellStep(now)',
               'packets.SellFish.send',
-              'or quantity<p.quantity',
+              'elseif quantity<p.quantity then',
               'function pressStep(now)',
               'packets.InteractStructure.send',
               'gold<pending.before','Gold was NOT consumed',
