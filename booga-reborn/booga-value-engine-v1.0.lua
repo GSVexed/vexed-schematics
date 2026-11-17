@@ -68,6 +68,8 @@ local marketState={watch={},pointer=1,pending=nil,results={},selected=nil,wallet
 local initialCoins=nil
 local initialFishCoins=nil
 local lastInventory={}
+local fishSeen=false
+local buttons={}
 local uptime=os.clock()
 local colors={bg=Color3.fromRGB(15,22,33),panel=Color3.fromRGB(25,39,55),
     accent=Color3.fromRGB(58,215,189),text=Color3.fromRGB(236,246,252),
@@ -146,6 +148,7 @@ local function flagButton(page,name,txt,x,y,w,h)
         end
         if not flags.sell then sellState.pending=nil end
     end)
+    buttons[name]={node=b,prefix=txt}
     return b
 end
 local farm=pages.FARM
@@ -176,6 +179,9 @@ local function formatNumber(v)
     if math.abs(v)>=1e6 then return string.format("%.2fm",v/1e6) end
     if math.abs(v)>=1e3 then return string.format("%.1fk",v/1e3) end
     return string.format("%.0f",v)
+end
+local function signed(v)
+    return (v>=0 and "+" or "")..formatNumber(v)
 end
 local function data()
     return gameUtil and gameUtil.Data or nil
@@ -491,6 +497,7 @@ local function mineStep(now)
             return
         end
         status.mine=string.format("PATHING → %s (%.0f studs)",target.Name,distance)
+        mineState.lastHPAt=now
         if not mineState.walking then
             mineState.walking=true;mineState.routeID+=1
             local route=mineState.routeID
@@ -706,9 +713,25 @@ local function paint()
     if not initialCoins then initialCoins=coins end
     if not initialFishCoins then initialFishCoins=fishcoins end
     local list,total=sellableFish()
-    footer.Text=string.format("Coins %s (%+s)  |  Fisherman Coins %s (%+s)  |  Uptime %.0fm",
-        formatNumber(coins),formatNumber(coins-initialCoins),
-        formatNumber(fishcoins),formatNumber(fishcoins-initialFishCoins),
+    local newest=inventoryCounts()
+    if fishSeen then
+        for name in pairs(sellPrices) do
+            if (newest[name] or 0)>(lastInventory[name] or 0) then
+                counts.fishCaught+=(newest[name] or 0)-(lastInventory[name] or 0)
+            end
+        end
+    end
+    lastInventory=newest
+    fishSeen=true
+    for key,value in pairs(buttons) do
+        local b=value.node
+        b.Text=value.prefix..(flags[key] and "  [ON]" or "  [OFF]")
+        b.BackgroundColor3=flags[key] and Color3.fromRGB(20,113,95)
+            or Color3.fromRGB(42,63,81)
+    end
+    footer.Text=string.format("Coins %s (%s)  |  Fisherman Coins %s (%s)  |  Uptime %.0fm",
+        formatNumber(coins),signed(coins-initialCoins),
+        formatNumber(fishcoins),signed(fishcoins-initialFishCoins),
         (os.clock()-uptime)/60)
     local target=mineState.target
     farmNotes.Text="PICKUP: "..status.loot.."\n\nORE: "..status.mine
@@ -721,7 +744,8 @@ local function paint()
         flags.navigate and "enabled" or "off",target and target.Name or "none")
     local name=select(1,equippedInfo()) or "none"
     fishNotes.Text="ROD: "..status.fish.."\n\nSALE: "..status.sell..
-        "\n\nEquipped: "..name.."  •  Sales confirmed: "..counts.fishSales
+        "\n\nEquipped: "..name.."  •  New fish observed: "..counts.fishCaught..
+        "  •  Sales confirmed: "..counts.fishSales
     local pieces={}
     for i=1,math.min(4,#list) do
         pieces[#pieces+1]=list[i].name.." ×"..formatNumber(list[i].amount)
@@ -765,11 +789,13 @@ connections[#connections+1]=Run.Heartbeat:Connect(function()
     if now<nextTick then return end
     nextTick=now+.16
     local ok,err=pcall(function()
-        pickupStep(now)
-        mineStep(now)
-        fishStep(now)
-        sellStep(now)
-        marketStep(now)
+        if not UIS:GetFocusedTextBox() then
+            pickupStep(now)
+            mineStep(now)
+            fishStep(now)
+            sellStep(now)
+            marketStep(now)
+        end
         if now-stamp.ui>.5 then
             stamp.ui=now
             paint()
@@ -779,27 +805,6 @@ connections[#connections+1]=Run.Heartbeat:Connect(function()
         stopAll()
         status.mine="Stopped on local error; check Velocity console."
         warn("[VALUE] Guarded runtime error: "..tostring(err))
-    end
-end)
--- Keep visible tab button state honest after F6.
-local function resyncButtons()
-    for _,panel in pairs(pages) do
-        for _,node in ipairs(panel:GetChildren()) do
-            if node:IsA("TextButton") and node.Text:find("%[ON%]") then
-                if not flags.fish and not flags.sell and not flags.loot and not flags.mine
-                    and not flags.market and not flags.navigate then
-                    node.Text=node.Text:gsub("%[ON%]","[OFF]")
-                    node.BackgroundColor3=Color3.fromRGB(42,63,81)
-                end
-            end
-        end
-    end
-end
-connections[#connections+1]=Run.Heartbeat:Connect(function()
-    if not live then return end
-    if not flags.fish and not flags.sell and not flags.loot and
-        not flags.mine and not flags.market and not flags.navigate then
-        resyncButtons()
     end
 end)
 paint()
