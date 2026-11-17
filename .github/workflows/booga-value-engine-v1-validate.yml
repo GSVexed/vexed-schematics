@@ -1,0 +1,83 @@
+name: Booga Value Engine v1 validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-value-engine-v1.0.lua'
+      - '.github/workflows/booga-value-engine-v1-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Luau
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/booga-value-luau.zip
+          mkdir -p /tmp/booga-value-luau
+          unzip -q /tmp/booga-value-luau.zip -d /tmp/booga-value-luau
+          compiler="$(find /tmp/booga-value-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile economy engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null booga-reborn/booga-value-engine-v1.0.lua
+          echo BOOGA_VALUE_ENGINE_COMPILE_PASS
+      - name: Source path and safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-value-engine-v1.0.lua').read_text()
+          for term in (
+              'PlaceId ~= 11729688377',
+              'BoogaValueEngineV10','KeyCode.F6',
+              'function pickupStep(now)','packets.Pickup.send',
+              'CS:HasTag(entity,"Pickup")','distance<=23',
+              'function mineStep(now)','packets.SwingTool.send',
+              'function walkTo(node,routeID)',
+              'PFS:CreatePath','AgentCanJump=true',
+              'function fishStep(now)',
+              'packets.BobberState','event.state~="hooked"',
+              'packets.RodEnd.send',
+              'function sellStep(now)',
+              'packets.SellFish.send',
+              'fishCoins>p.before or quantity<p.quantity',
+              'function pressStep(now)',
+              'packets.InteractStructure.send',
+              'gold<pending.before','Gold was NOT consumed',
+              'function marketStep(now)',
+              'packets.MarketRequest.send',
+              'marketCodes.itemOrder.code.priceAscending',
+              'rapHistoryTenths','priceTenths',
+              'marketState.wallet','buy={listingId=best.listingId',
+              'buyConfirm=true','function stopAll()',
+              'UIS:GetFocusedTextBox()',
+              'local function rankedDeals()',
+              'local function paint()'
+          ):
+              assert term in s,term
+          for forbidden in (
+              'Health.Value=0','Health.Value = 0',
+              'SetAttribute("EntityID"', 'ItemAdded.send',
+              'FreeCoins:FireServer','Data.coins =','Data.inventory =',
+              'PostAsync(', 'writefile(', 'ghp_', 'github_pat_'
+          ):
+              assert forbidden not in s,forbidden
+          assert s.count('packets.InteractStructure.send') >= 1
+          print('BOOGA_VALUE_ENGINE_SCOPE_PASS')
+          PY
