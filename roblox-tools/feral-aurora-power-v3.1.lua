@@ -78,12 +78,17 @@ function Power.attach(ctx)
         fallbackInfo="No status data sampled yet."
     }
     ctx.power=P
+    local environment=nil
+    if type(getgenv)=="function" then
+        local ok,result=pcall(getgenv)
+        if ok and type(result)=="table" then environment=result end
+    end
     local press=type(keypress)=="function" and keypress
-        or type(getgenv)=="function" and type(getgenv().keypress)=="function"
-        and getgenv().keypress or nil
+        or environment and type(environment.keypress)=="function"
+        and environment.keypress or nil
     local release=type(keyrelease)=="function" and keyrelease
-        or type(getgenv)=="function" and type(getgenv().keyrelease)=="function"
-        and getgenv().keyrelease or nil
+        or environment and type(environment.keyrelease)=="function"
+        and environment.keyrelease or nil
     if press and release then
         P.turboSupported=true
         P.turboSignal="Executor key events available; native game handling still unverified."
