@@ -1,5 +1,68 @@
 # FERAL project continuation
 
+## New active interface build: FERAL AURORA v2.0 (17 November 2026)
+
+User asked for a major self-directed upgrade: LOTS of features, beautiful
+cohesive Roblox UI, responsive toggles/interaction, no missed obvious QoL;
+then specifically requested attractive player nametags and character outline
+ESP to find other people. No more huge diagnostics are wanted.
+
+Published **AURORA v2.0** as modular Lua under roblox-tools:
+- [One-line launcher](feral-aurora-hub-v2.0.lua)
+- [Engine and player finder](feral-aurora-engine-v2.0.lua)
+- [Original nine-page UI](feral-aurora-ui-v2.0.lua)
+- [74-entry mechanic atlas](feral-aurora-atlas-v2.0.lua)
+- [Full guide](README-feral-aurora-v2.0.md)
+- [Luau 0.747 compile + static check workflow](../.github/workflows/feral-aurora-validate.yml)
+
+Velocity launcher:
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-hub-v2.0.lua"))()`
+
+Pages HOME, RECOVERY, MOVEMENT, PLAYER FINDER, AMBER, PROGRESSION,
+WORLD, ATLAS, SETTINGS. Original dark-glass teal/violet/coral design,
+header drag, Right Shift show/hide and floating reopen chip, responsive
+scale and hover styling. Restore All and X cleanup. Favourite atlas entries,
+search/categories/page navigation, optional local JSON preferences.
+Compass to 18 known POIs in a compact 3-column selector; no teleport.
+
+Player Finder: **disabled by default**, shows nearest 24 players whose
+character, Humanoid and root are already replicated to current client;
+BillboardGui dark nameplate shows display name/species/distance/HP bar.
+Outline Highlights are placed in a client-local Workspace folder to avoid
+inconsistent PlayerGui rendering. Teal/amber/coral distance colour, subtle
+or bold; 150/300/600/900-stud range, optional through-wall (OFF by default,
+visible-only via HighlightDepthMode.Occluded). Explicit individual tag and
+outline switches, live nearby names in hub; destroying overlays on OFF,
+character changes, out of range and X. No other-player server queries or
+outbound copies.
+
+Other actual opt-in controls: native Recovery Assist (as earlier), local
+brightness, calm camera, native performance setting, client injury slow
+cache patch, capped 1.10x speed and leap cache experiments, warnings,
+native rewards/guide UI open. All gameplay-affecting switches default OFF;
+older **3x stamina pool tweak is parked and NOT loaded** because of previous
+unexplained Burst deaths. Atlas documents 74 relevant code-backed systems:
+exhaustion, regeneration, Amber x1-x3, Thriving+50%, regrowth x2,
+Elder, grazing/home turf, 10+% damage bonus config, anti-teaming,
+passives, disabled quest/ability/litter flags, etc. These are informational
+not automatic rewards or server grants.
+
+Official Luau workflow validates all 4 modules and feature scope.
+**No live in-game Aurora test has occurred**; compile/static test alone
+does not establish executor compatibility, visual rendering or accepted
+Rest/movement effects. Source is client-side only; server death causes and
+benefit eligibility are not known. Avoid stating hub guarantees survival.
+
+The old Recovery Hub v1.3 remains unchanged in its own file for historical
+reference. On new Aurora load, its old screen is closed using HubShutdown so
+concurrent scripts do not unknowingly conflict. Running old hubs afterward
+can coexist, so don't encourage simultaneous untested modifications.
+
+Next user step: run single Velocity launcher, use new PLAYER FINDER page to
+enable visual outlines/nametags and other desired features. If they report
+a concrete UI issue, fix source directly on GitHub without asking for another
+full diagnostic.
+
 ## Latest Rest-Only v1.0 live report — 17 November 2026
 
 User ran the conservative Rest-Only Lab v1.0 again: 116.47s, 227 own
