@@ -58,7 +58,7 @@ end
 local live=true
 local flags={fish=false,sell=false,loot=false,mine=false,market=false,navigate=false,press=false}
 local connections={}
-local counts={pickupRequests=0,fishCaught=0,fishSales=0,oreHits=0,marketQueries=0,goldPressed=0}
+local counts={pickupRequests=0,fishCaught=0,fishSales=0,oreHits=0,marketQueries=0,goldPressed=0,inventoryAdded=0}
 local stamp={loot=0,fish=0,sell=0,mine=0,market=0,press=0,ui=0}
 local status={fish="Equip a rod and point at water.",sell="Find a Fisherman Trader.",loot="Pickup magnet idle.",mine="Ore miner idle.",market="Deal scanner idle.",press="Gold press idle."}
 local fishState={lastCast=0,lastReel=0,lastCatchAt=0,pendingCatch=false}
@@ -321,16 +321,20 @@ local function sellStep(now)
     if sellState.pending then
         local p=sellState.pending
         local quantity=inventoryCounts()[p.name] or 0
-        if (fishCoins and p.before and fishCoins>p.before)
-            or quantity<p.quantity then
+        if fishCoins and p.before and fishCoins>p.before then
             counts.fishSales+=1
-            local delta=fishCoins and p.before and fishCoins-p.before or nil
-            status.sell=string.format("SOLD %s • Fisherman Coins change: %s",p.name,
+            local delta=fishCoins-p.before
+            status.sell=string.format("PAID for %s: +%s Fisherman Coins",p.name,
                 formatNumber(delta))
             sellState.pending=nil
             sellState.next=now+1.2
-        elseif now-p.time>6 then
-            status.sell="Seller did not confirm "..p.name..". Stopped to avoid repeat requests."
+        elseif quantity<p.quantity then
+            p.removedAt=p.removedAt or now
+            status.sell="Fish inventory decreased; awaiting Fisherman Coin confirmation..."
+        end
+        if sellState.pending and ((p.removedAt and now-p.removedAt>3)
+            or now-p.time>7) then
+            status.sell="Fish sale payout not confirmed. Stopped to avoid repeat requests."
             flags.sell=false;sellState.pending=nil
         end
         return
@@ -793,9 +797,11 @@ local function paint()
     local list,total=sellableFish()
     local newest=inventoryCounts()
     if fishSeen then
-        for name in pairs(sellPrices) do
-            if (newest[name] or 0)>(lastInventory[name] or 0) then
-                counts.fishCaught+=(newest[name] or 0)-(lastInventory[name] or 0)
+        for name,quantity in pairs(newest) do
+            local positive=quantity-(lastInventory[name] or 0)
+            if positive>0 then
+                counts.inventoryAdded+=positive
+                if sellPrices[name] then counts.fishCaught+=positive end
             end
         end
     end
@@ -829,7 +835,9 @@ local function paint()
     local inventoryNow=inventoryCounts()
     local rawGold=inventoryNow["Raw Gold"] or 0
     local gold=inventoryNow.Gold or 0
-    oreInfo.Text=oreInfo.Text..string.format("\nHeld ore: Raw Gold %d  |  Gold %d",rawGold,gold)
+    oreInfo.Text=oreInfo.Text..string.format(
+        "\nHeld Raw Gold %d | Gold %d | New inventory units %d",
+        rawGold,gold,counts.inventoryAdded)
     local name=select(1,equippedInfo()) or "none"
     fishNotes.Text="ROD: "..status.fish.."\n\nSALE: "..status.sell..
         "\n\nEquipped: "..name.."  •  New fish observed: "..counts.fishCaught..
