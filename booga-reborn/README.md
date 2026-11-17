@@ -1,5 +1,36 @@
 # Booga Booga Reborn — research & hub project
 
+## Raw Gold smelting and gold creation — traced
+
+**[Raw Gold → Gold smelting authority audit](BOOGA-RAW-GOLD-SMELTING-AUTHORITY-AUDIT-v1.md)**.
+All 438 exported game-classified source bodies were scanned. The
+`Game/cooking` module listens for inbound `cookingStream`
+progress (timestamp + 11-byte entity/progress/rate/goal records);
+there is **no discovered outgoing "smelt completed,
+award Gold" call**. Smelting appears to be a server-owned
+world-item transformation near a fuelled Campfire.
+
+`DropBagItem` requests an existing inventory slot;
+`Pickup` requires an existing world `EntityID`;
+`InteractStructure` adds genuine existing fuel to
+Campfire or uses existing `Gold` for Coin Press.
+A client-created Raw Gold item or 100%-progress bar
+is not demonstrated to mint real Gold. The source
+archive has no private server-side handlers, so
+unseen validation flaws are unverified, not disproven.
+
+Other concrete findings: Gold item ID 597; Raw Gold
+258; conversion `cooksTo=Gold, steps=100`; three
+world Raw Gold instances, one actual Coin Press,
+but no active Workspace Campfire in the snapshot.
+`Smelter` Mojo advertises tiered 10%–50%
+auto-smelt chance on real mined ore. Community
+documentation puts Coin Press payout at five coins
+per actual Gold. No arbitrary gold or money grant
+is proven.
+
+---
+
 ## Item spawning / money-source investigation
 
 **[Economic item-grant and Gold audit](BOOGA-ECONOMY-ITEM-GRANT-AUDIT-v1.md)**:
