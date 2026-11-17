@@ -58,6 +58,17 @@ The server-held Hunger and Thirst values cannot be reliably filled just by
 setting local attributes, and no verified safe direct fill protocol was
 recovered. v2.1 deliberately does not fake a "FULL HUNGER" button.
 
+### Optional low-needs stamina penalty assist
+
+The recovered client uses `NeedsConfig.STAMINA_LOW_NEEDS=0.5` for
+a stamina-recovery penalty at low hunger/thirst. The **LOW-NEEDS
+STAMINA RECOVERY (CLIENT)** switch changes that cached *local client*
+multiplier to `1` while ON, then restores its original value when OFF.
+It starts OFF and does not set Hunger/Thirst, create food, defeat
+server-side survival damage, prevent death, or verify the server's
+resource decisions. Use only with awareness that local movement-state
+experiments may behave differently from the server's simulation.
+
 ### Effects — watch and use real available controls
 
 The EFFECTS page now displays each status independently:
