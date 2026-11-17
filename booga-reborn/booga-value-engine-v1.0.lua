@@ -736,14 +736,14 @@ main.InputBegan:Connect(function(input)
         end
     end
 end)
-UIS.InputChanged:Connect(function(input)
+connections[#connections+1]=UIS.InputChanged:Connect(function(input)
     if drag and input.UserInputType==Enum.UserInputType.MouseMovement then
         local delta=input.Position-dragPos
         main.Position=UDim2.new(panelPos.X.Scale,panelPos.X.Offset+delta.X,
             panelPos.Y.Scale,panelPos.Y.Offset+delta.Y)
     end
 end)
-UIS.InputEnded:Connect(function(input)
+connections[#connections+1]=UIS.InputEnded:Connect(function(input)
     if input==drag then drag=nil end
 end)
 local function stopAll()
