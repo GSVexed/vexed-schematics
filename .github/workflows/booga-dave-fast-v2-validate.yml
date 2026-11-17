@@ -1,0 +1,68 @@
+name: Booga Dave Fast Break v2 Luau compile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-dave-fast-break-v2.0.lua'
+      - '.github/workflows/booga-dave-fast-v2-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/dave-luau.zip
+          mkdir -p /tmp/dave-luau
+          unzip -q /tmp/dave-luau.zip -d /tmp/dave-luau
+          compiler="$(find /tmp/dave-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile v2 client attack accelerator
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null booga-reborn/booga-dave-fast-break-v2.0.lua
+          echo BOOGA_DAVE_FAST_V2_LUAU_PASS
+      - name: Verify feedback loop and bounded output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("booga-reborn/booga-dave-fast-break-v2.0.lua").read_text()
+          for needle in (
+              'game.PlaceId ~= 11729688377','BoogaDaveFastBreakV20',
+              'local stages={','NORMAL-ISH','MULTI-HIT CHECK',
+              'local maxPacketRate=10','function nativeGameModules()',
+              'packets.SwingTool.send','clientPackets.SwingTool.send',
+              'entityIDs=ids','timestamp=clock.getServerTime(true)',
+              'function verifyPosition()','function begin()',
+              'function finishStage(now)','stageResults',
+              'best.dps>=baseline*1.5','function hpOf(d)',
+              'lastHPChangeAt>22','KeyCode.F6',
+              'stop("NO FAST BREAK FOUND:',
+              'No accepted damage proven.',
+              'local shutdown=create("BindableEvent"'
+          ):
+              assert needle in s,needle
+          for forbidden in (
+              'Health.Value=','Health.Value =',
+              'SetAttribute("Health"', 'ModelBroken.send(',
+              'FireServer(', 'InvokeServer(', 'PostAsync(',
+              'writefile(', 'ghp_', 'github_pat_'):
+              assert forbidden not in s,forbidden
+          print('BOOGA_DAVE_FAST_V2_SCOPE_PASS')
+          PY
