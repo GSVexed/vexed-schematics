@@ -30,7 +30,10 @@ Loader:
 AMBER, PROGRESSION, WORLD, ATLAS, SETTINGS. New Survival scans bounding
 parts by replicated food/water names with explicit click, limit 1100 parts
 within 500 studs, adds water POI candidates, seven pin-to-compass rows and
-native guidance. Does NOT claim to actually fill Hunger/Thirst. Player
+native guidance. Does NOT claim to actually fill Hunger/Thirst.
+Also adds an opt-in reversible client NeedsConfig.STAMINA_LOW_NEEDS
+0.5-to-1 multiplier switch for the *local* low-needs stamina recovery
+penalty. This is NOT actual hunger/thirst restoration or survival protection. Player
 Finder now can use current camera position in animal menu, has explicit
 search origin, total other players, replicated living characters and
 in-range count with reason for zero. New Effects page shows nine
