@@ -78,7 +78,7 @@ bulk diagnostic or a forced death.
 
 Source: [feral-rest-only-lab-v1.0.lua](feral-rest-only-lab-v1.0.lua).
 This is a fresh focused build, not an update to the successful v1.3 stamina
-method. Static review verified request frequency, native own-character Rest
-packet, bounded reporting, absence of HP/stamina/config writes and cleanup
-scope. A static check is not a Luau execution test. **No live Roblox/Velocity
-result has yet been collected for this build.**
+method. Official Luau **0.747 compile-only** and static resource-write/scope checks
+passed in [GitHub Actions run 44103217850](https://github.com/GSVexed/vexed-schematics/actions/runs/44103217850).
+This verifies script syntax and selected invariants, **not** live game behavior.
+**No live Roblox/Velocity result has yet been collected for this build.**
