@@ -63,7 +63,7 @@ function UI.mount(ctx)
         or player:WaitForChild("PlayerGui",8)
     if not pg then return nil end
     local gui=ui("ScreenGui",{
-        Name="FeralAuroraHubV20",ResetOnSpawn=false,
+        Name="FeralAuroraHubV21",ResetOnSpawn=false,
         DisplayOrder=130,IgnoreGuiInset=false,
         ZIndexBehavior=Enum.ZIndexBehavior.Sibling
     },pg)
