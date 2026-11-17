@@ -156,7 +156,7 @@ local state = {
     lastSample=0, lastUi=0, last=nil, packets=0, failures=0,
     echoes=0, maskWrites=0, cleanup="none", status="No Rest request sent.",
     begun=os.clock(), samples=0, recent={}, groups={},
-    hudOn=false, hudChar=nil, hudStarted=0, hudLastSet=0,
+    hudOn=false, hudChar=nil, hudOriginal=nil, hudStarted=0, hudLastSet=0,
     hudWrites=0, hudResets=0, hudBlockedAt=nil,
     hudAttempts=0, hudFailures=0, hudTrue=0, hudFalse=0,
     hudCleanup="Not used", hudOutcome="Not tested"
@@ -185,8 +185,8 @@ local function stopHud(reason)
     -- The test begins when native Rest is absent. Restore only the
     -- local HudRest flag we held, on the still-current character.
     if same and player:GetAttribute("HudRest") == true then
-        local ok = pcall(function() player:SetAttribute("HudRest", false) end)
-        state.hudCleanup = ok and "Local HudRest restored false" or "Local HudRest restore failed"
+        local ok = pcall(function() player:SetAttribute("HudRest", state.hudOriginal) end)
+        state.hudCleanup = ok and "Original local HudRest restored" or "Local HudRest restore failed"
     else
         state.hudCleanup = same and "Game already cleared HudRest" or "Character changed"
     end
@@ -397,6 +397,7 @@ hudButton.Activated:Connect(function()
     else
         state.hudOn=true
         state.hudChar=char
+        state.hudOriginal=player:GetAttribute("HudRest")
         state.hudWrites, state.hudResets, state.hudAttempts = 0, 0, 0
         state.hudFailures, state.hudTrue, state.hudFalse = 0, 0, 0
         state.hudCleanup="Pending"
@@ -519,7 +520,7 @@ heartbeat = RunService.Heartbeat:Connect(function()
             end
             if state.hudOn and now - state.hudLastSet >= .2 then
                 state.hudLastSet = now
-                if player:GetAttribute("HudRest") == false then
+                if player:GetAttribute("HudRest") ~= true then
                     if state.hudWrites > 0 then state.hudResets=state.hudResets+1 end
                     if state.hudResets >= 36 then
                         stopHud("Native movement kept cancelling HudRest; stopped after repeated resets")
