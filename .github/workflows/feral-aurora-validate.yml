@@ -60,7 +60,7 @@ jobs:
                         'Enum.HighlightDepthMode.AlwaysOnTop',
                         'if p~=player and p.Character then',
                         'if not S.flags.playerFinder then',
-                        'S.limit=24', 'function ctx.reset()', 'function ctx.close()',
+                        'limit=24', 'function ctx.reset()', 'function ctx.close()',
                         'function ctx.refreshTracker(force)']:
               assert token in engine, token
           ui=files["ui"]
