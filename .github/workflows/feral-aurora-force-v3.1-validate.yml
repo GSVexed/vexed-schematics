@@ -94,6 +94,6 @@ jobs:
                   'Humanoid.Health ='
               ):
                   assert danger not in source,(tag,danger)
-          assert 'all power profiles OFF' in loader.lower()
+          assert 'all power profiles off' in loader.lower()
           print('AURORA_FORCE_31_SCOPE_PASS')
           PY
