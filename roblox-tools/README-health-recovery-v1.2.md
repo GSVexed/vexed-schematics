@@ -71,5 +71,22 @@ packet filtering/privacy, delayed timer updates, safety blocks, NPC cases,
 invalid timers, remote replacement and bounded/cancelled followups.
 See [the check record](FERAL-HEALTH-RECOVERY-v1.2-CHECKS.json) and
 [reproducible test](tests/test-feral-health-recovery-v1.2.py).
-**v1.2 has not been run inside Roblox/Velocity by the developer.** Its new
-correlation behaviour and the requested combat bypass remain unverified.
+**A user-supplied v1.2 live capture is now available:** 351 events over about
+297.9 seconds, with zero reported errors and zero omitted events. The hit
+listener captured 15 incoming reports: four safety-blocked and 11 positive
+damage reports. No local bite markers or outgoing hit reports occurred, so
+outgoing-hit followups and effective-combat-without-a-tag remain untested.
+
+The same capture contains a stamina reliability failure reported by the user.
+In a later Bear life, HP went from 107 to 0 between the last regular sample and
+the next health event (about 0.675 seconds), while Burst was active, no combat
+tag or incoming hit feedback was present, and the cached stamina settings
+still matched the tuning. Recovery requests were inactive throughout that
+life. This is an abrupt unexplained death, not proof of an anti-cheat verdict.
+The report does not include the authoritative death cause or actual stamina
+pool values; the user's report supplies the observation that stamina stayed
+working. **Sustained Burst with stamina tuning is not established reliable.**
+There is no source-backed safe duration or anti-cheat bypass established.
+
+The stamina tuning and flag code are unchanged from v1.1. This verification
+update changes documentation only. No new gameplay patch is presented as a fix.

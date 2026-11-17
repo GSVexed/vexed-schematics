@@ -88,5 +88,38 @@ Official Luau compilation and 50 offline simulated cases pass, including the
 37 existing recovery cases plus hit filtering/privacy, unsupported damage fields, safety blocks, delayed
 timer refresh, NPC interpretation, pending-work limits, remote replacement,
 invalid clocks, cancellation and the actual v1.1 upgrade. These do not
-establish live hit-correlation behaviour or a combat bypass. v1.2 itself still
-needs a user-supplied live capture. No new full-source scan is required.
+establish a combat bypass. No new full-source scan is required.
+
+## First v1.2 runtime result and stamina failure
+
+The first supplied v1.2 capture contains 351 events in about 297.9 seconds,
+with zero reported runtime errors and no omitted events. All 15 native hit
+reports were incoming: four reported safety blocks with zero damage and no
+combat tag, followed later by 11 positive-damage reports with combat deadline
+refreshes around ten seconds. The first death followed those hits and bleed
+damage. This validates incoming hit classification and tag observation within
+that capture; no outgoing hit or local bite marker was recorded. It therefore
+does not establish whether effective outgoing attacks coexist with protection
+or without the combat tag.
+
+A later Bear life ended abruptly while Burst was active: 107/107 HP in the
+last regular sample, followed about 0.675 seconds later by a Health=0 event.
+That life had no combat tag, incoming native hit feedback or recorded harmful
+condition. Hunger and thirst were about 61.93 and 54.62 at the final event.
+The configured stamina lease remained applied; the recovery request was
+inactive throughout this life. The source's stamina tuning/flag blocks are
+identical between v1.1 and v1.2; the new trace only observes native feedback.
+
+The user reports stamina continued working and attributes the death to
+anti-cheat after prolonged Burst. The capture supports an abrupt unexplained
+kill/reset, but does not contain an explicit anti-cheat decision, the server
+handler, actual stamina pool values or a cause-of-death field. It cannot
+distinguish a server enforcement action from other unreported reset/kill
+paths. Full client stamina does not establish server acceptance of sustained
+Burst. Reliability of that usage is now unresolved.
+
+The later life lasted about 192 seconds and included swimming and multiple
+Burst segments. The final uninterrupted observed Burst segment was about
+25 seconds. These timings do not establish a reproducible sixty-second
+threshold or a safe cooldown. No arbitrary duration is labelled a bypass.
+No gameplay code was changed for this evidence update.

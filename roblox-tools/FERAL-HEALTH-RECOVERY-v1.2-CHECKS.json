@@ -56,8 +56,42 @@
     "scope_limit": "Literal reconstructed-client review; not proof against indirect writes, missing bodies or server-only paths."
   },
   "prior_health_runtime_evidence": "v1.0/v1.1 Bear captures support mobile out-of-combat rest recovery and faster bleed/venom clearance",
-  "v1_2_roblox_velocity_execution": "not_performed",
-  "new_hit_correlation_live": "not_established",
+  "v1_2_roblox_velocity_execution": "user_supplied_capture_analyzed_within_recorded_scope",
+  "new_hit_correlation_live": "incoming_feedback_and_tag_observations_demonstrated_outgoing_untested",
   "combat_disable_while_effective_combat": "not_established",
-  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.2.py"
+  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.2.py",
+  "v1_2_user_runtime_evidence": {
+    "seconds": 297.8527313999948,
+    "events": 351,
+    "errors": 0,
+    "omitted_events": 0,
+    "incoming_hit_reports": 15,
+    "incoming_safety_blocks": 4,
+    "incoming_positive_damage_reports": 11,
+    "outgoing_hit_reports": 0,
+    "local_bite_markers": 0,
+    "first_death": "followed_incoming_player_hit_reports_and_bleed",
+    "later_death": {
+      "health_before": 107,
+      "health_after": 0,
+      "maximum": 107,
+      "observed_mode": "burst",
+      "seconds_since_previous_full_health_sample": 0.67510480000054,
+      "combat_tag_observed": false,
+      "incoming_hit_reports_in_that_life": 0,
+      "cached_stamina_lease_matches": true,
+      "recovery_request_active": false,
+      "actual_stamina_pool_recorded": false,
+      "authoritative_death_cause_available": false,
+      "user_report": "stamina_continued_working_user_suspects_anti_cheat",
+      "classification": "abrupt_unexplained_death_server_enforcement_or_reset_not_identified",
+      "life_seconds": 192.0356085000094,
+      "final_observed_burst_segment_seconds": 25.000001200009137
+    }
+  },
+  "sustained_burst_with_stamina_tuning_reliability": "unresolved_after_reported_abrupt_death",
+  "stamina_tuning_code_change_between_1_1_and_1_2": false,
+  "anti_cheat_verdict": "not_recorded",
+  "safe_burst_duration_or_bypass": "not_established",
+  "documentation_update_only": true
 }

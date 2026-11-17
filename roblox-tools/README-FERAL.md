@@ -13,6 +13,11 @@ recovery, injury benefit, full-HP condition-only activation, rendered pose and
 server attack acceptance remain unverified.** The ineffective
 local combat-regen flag experiment was removed. Amber and restricted-spawn
 work is parked. See [the health findings](FERAL-HEALTH-FINDINGS-v1.1.md).
+The first v1.2 capture validates incoming hit classification, but includes an
+abrupt non-combat death while stamina tuning and Burst were active. The user
+reports the stamina effect continued working. **Sustained Burst reliability
+is unresolved; no anti-cheat verdict, safe duration or bypass is established.**
+See the [runtime investigation](FERAL-COMBAT-STATE-AUDIT-v1.2.md).
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.2.lua"))()
