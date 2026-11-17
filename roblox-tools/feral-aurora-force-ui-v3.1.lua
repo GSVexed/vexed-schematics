@@ -373,9 +373,16 @@ function UI.mount(ctx)
     feature(power,"NATIVE RECOVERY ASSIST",
         "Native Rest requests for missing HP, bleeding, injury or venom. May be visible to other players; server acceptance is unproven.",
         function()ctx.toggle("recovery")end,function()return s.flags.recovery end,"NATIVE ACTION")
+    local function toggleStandaloneNeeds()
+        if p.stamina~="OFF" then
+            ctx.notice("Low-needs penalty reduction is already included in this stamina profile. Select STOCK before using it separately.")
+            return
+        end
+        ctx.toggle("lowNeedsAssist")
+    end
     feature(power,"LOW-NEEDS STAMINA ASSIST",
-        "Client stamina regeneration factor when hunger/thirst is below 20. Does not fill real hunger or thirst.",
-        function()ctx.toggle("lowNeedsAssist")end,
+        "Client stamina recovery when hunger/thirst is under 20. Included in 3× RECOVER and APEX; standalone only in STOCK.",
+        toggleStandaloneNeeds,
         function()return s.flags.lowNeedsAssist end,"CLIENT")
     -- Player ESP, retained with local visual only.
     local esp=pages.ESP
@@ -421,8 +428,8 @@ function UI.mount(ctx)
         "Local slowdown factor tuning, not a server cure.",
         function()ctx.toggle("mobility")end,function()return s.flags.mobility end,"CLIENT")
     feature(survival,"REDUCE LOCAL LOW-NEEDS STAMINA PENALTY",
-        "Only edits the client's stamina factor, never actual feeding/water values.",
-        function()ctx.toggle("lowNeedsAssist")end,
+        "Included in active stamina power profiles. Available as a standalone client toggle only in STOCK.",
+        toggleStandaloneNeeds,
         function()return s.flags.lowNeedsAssist end,"CLIENT")
     feature(survival,"SURVIVAL WARNINGS",
         "Alerts when needs are below the known stamina penalty threshold or exhaustion appears.",
