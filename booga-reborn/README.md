@@ -1,5 +1,33 @@
 # Booga Booga Reborn — research & hub project
 
+## Phase 2 — deeper mechanics audit complete
+
+**[Read the deep source audit](BOOGA-DEEP-MECHANICS-AUDIT-v1.md)**.
+The archive is no longer just a folder of code; it has been traced
+into actual client features, what the server appears to reconcile,
+and a ranked list of worthwhile Booga-specific hub functions.
+
+Important second-pass discoveries:
+- **1,712 resource models** (53 names), **357 critter models**
+  (34 names), **46 deployable models**, **1,259 Pickup-tagged objects**
+  in the current streamed Workspace
+- **1,194 named item-data entries**, including 11 ordinary potion
+  effect types, special capes and blacklisted spell-like items
+- Native controls: Quick Pickup, Hold to Swing, Quick Place, Quick Drop,
+  Structure Snapping, hitbox visualisation, 600–2048 render distance
+- Resourceful Mojo discounts eligible deployable ingredients;
+  owned and disabled Mojo states are separately tracked
+- Movement depends on status effects and Water Walker; exact
+  complex timing code has decompiler artefacts
+- Typed network coverage: 230 packet definitions, 105 referenced
+  from client send sites, 121 from client listen sites
+- Feature-gated custom player replication may be **off** in ordinary
+  public servers; old reports must not imply it is always active
+
+**No extra full diagnostic is needed** for first Booga hub engineering.
+
+---
+
 **Game:** [Booga Booga](https://www.roblox.com/games/11729688377/Booga-Booga),
 PlaceId `11729688377`, by Gang O' Fries Entertainment.
 
