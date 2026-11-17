@@ -1,0 +1,109 @@
+{
+  "schema": "feral-recovery-hub-checks/1.1",
+  "version": "1.1",
+  "date_utc": "2026-11-17",
+  "source": "feral-recovery-hub-v1.1.lua",
+  "source_bytes": 37353,
+  "source_sha256": "f8cacfb7130fcc967a8ba319170851d7f636112d1fe9ed19b5bb9bebd922864c",
+  "test": "tests/test-feral-recovery-hub-v1.1.py",
+  "test_sha256": "432f542bc528d748a9310a1af08fe16793f61ff88f48e36cc05f90a1160a8406",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "standalone_analysis": {
+    "expected_unknown_roblox_executor_globals": 60,
+    "other_diagnostics": 0,
+    "roblox_definitions_available": false
+  },
+  "static_checks": {
+    "result": "passed",
+    "only_gameplay_request": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_write": "WolfRest",
+    "internal_client_stamina_pool_write": "selected numeric upvalue in exact own native callback after correlation",
+    "cached_config_writes": [
+      "STAMINA_REST_MULT",
+      "STAMINA_REGEN"
+    ],
+    "no_hp_hud_stamina_combat_condition_currency_or_permission_writes": true,
+    "no_collection_exports_garbage_collector_scan_or_function_hooks": true
+  },
+  "moving_regen": {
+    "default": "off",
+    "target_signal": "current own Humanoid.StateChanged",
+    "target_script": "exact local PlayerScripts.WolfController",
+    "required_functions": [
+      "getconnections",
+      "getconstants",
+      "getupvalues",
+      "setupvalue",
+      "getfenv",
+      "getloadedmodules"
+    ],
+    "api_compatibility": "presence and runtime shape/readback checked; Velocity execution unverified",
+    "required_constants": [
+      "STAMINA_JUMP_COST",
+      "Jumping"
+    ],
+    "requires_exact_config_and_current_character_reference": true,
+    "functions_required": 1,
+    "changing_native_hud_samples_before_writes": 4,
+    "minimum_sample_range": 0.25,
+    "rounding_tolerance": 0.051,
+    "maximum_connections_checked": 128,
+    "maximum_constants_per_candidate": 2048,
+    "maximum_upvalues_per_candidate": 128,
+    "maximum_numeric_candidates": 16,
+    "native_startup_wait_seconds": 10,
+    "native_startup_retry_seconds": 2,
+    "render_priority": 102,
+    "native_move_priority_in_recovered_source": 101,
+    "requires_observed_pool_drain": true,
+    "walking_double_count": false,
+    "writes_hud_stamina_attribute": false,
+    "preserves_low_needs_penalty": true,
+    "changes_native_drain_cost_or_burst_fields": false,
+    "maximum_gain_time_per_frame_seconds": 0.1,
+    "native_hud_freshness_limit_seconds": 2,
+    "maximum_added_pool_value": "rounded native StaminaMax minus 0.05",
+    "special_modes_and_venom": "extra recovery paused",
+    "rewinds_pool_on_stop": false,
+    "respawn": "new callback and four new samples required"
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 56,
+    "previous_regression_cases": 29,
+    "new_integration_fault_cases": 27,
+    "environment": "Synthetic native pool, callback metadata, frame scheduling and HUD publisher; no recovered game sources executed",
+    "coverage": [
+      "correlation before writes",
+      "native cost plus recovery net rates",
+      "Burst retains net cost at baseline rate",
+      "no walking double count",
+      "3x combination and low-needs penalty",
+      "separate cache requests and cancellation",
+      "own callback and exact config checks",
+      "ambiguous cells and callbacks rejected",
+      "missing APIs and write/readback faults",
+      "native echo mismatch and replaced controller",
+      "death and special modes pause",
+      "frame gap and maximum clamps",
+      "new native callback after respawn",
+      "all off close rerun and actual previous-version upgrades"
+    ]
+  },
+  "prior_user_feedback": {
+    "version": "1.0",
+    "rest_rate_walking": "reported working at 3x",
+    "sprint_running_recovery": "reported absent"
+  },
+  "new_build_roblox_velocity_execution": "not_performed",
+  "new_moving_regen_gameplay_effect": "unverified",
+  "server_acceptance": "unverified",
+  "combat_hp_regen": "unresolved",
+  "exact_burst_death_cause": "unresolved",
+  "anti_cheat_bypass": "not_established",
+  "reproduce": "LUAU=/path/to/luau python roblox-tools/tests/test-feral-recovery-hub-v1.1.py"
+}
