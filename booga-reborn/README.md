@@ -1,5 +1,25 @@
 # Booga Booga Reborn — research & hub project
 
+## Item spawning / money-source investigation
+
+**[Economic item-grant and Gold audit](BOOGA-ECONOMY-ITEM-GRANT-AUDIT-v1.md)**:
+The game item is **`Gold` (ID 597)**, not `Gold Bar`.
+`Raw Gold` (ID 258) smelts to Gold. The recovered
+`Pickup` request uses existing world `EntityID`, and
+inventory/coins are updated by incoming server messages.
+The Market has deposit/list/withdraw requests and
+insufficient-items/funds settlement codes, but no confirmed
+client-forgeable minting path. A `FreeCoins` RemoteEvent
+exists with no discovered client calls or known server
+handler. No working arbitrary item spawner is proven.
+
+The supported money systems include normal smelting,
+the global market, fishing sales, daily rewards,
+quests and trading; their profitability is not yet
+verified from live pricing.
+
+---
+
 ## Targeted investigation: Dave / rare Pie
 
 **[Dave 23.9M-health resource audit](BOOGA-DAVE-RESOURCE-AUDIT-v1.md)**
