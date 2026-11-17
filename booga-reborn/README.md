@@ -1,5 +1,25 @@
 # Booga Booga Reborn — research & hub project
 
+## Targeted investigation: Dave / rare Pie
+
+**[Dave 23.9M-health resource audit](BOOGA-DAVE-RESOURCE-AUDIT-v1.md)**
+traces two actual replicated Dave models and their health attributes,
+client attack request vs incoming break confirmation, God Axe DPS,
+the community-wiki **25 Pie** reward and why no server-confirmed
+instant-break technique is established.
+
+The archive directly observed Dave at approximate X/Z
+`-1314/-1876` and `1856/1330`; its HP is near 23.9M.
+Normal God Axe effective wood damage=50 and a 1/3-second
+swing interval imply ~44.3 hours solo or ~22.1 hours for two
+players at continuous ideal accepted hits. Haste speeds axes
+10% in its client descriptor; Strength's applicability to
+resource damage is unconfirmed. Client Health edits/visual
+ModelBroken do NOT establish real drops. Some much stronger
+tool config entries are banned/blacklisted, not proved available.
+
+---
+
 ## Phase 2 — deeper mechanics audit complete
 
 **[Read the deep source audit](BOOGA-DEEP-MECHANICS-AUDIT-v1.md)**.
