@@ -92,6 +92,22 @@ function Power.attach(ctx)
     if press and release then
         P.turboSupported=true
         P.turboSignal="Executor key events available; native game handling still unverified."
+    else
+        -- Some executor environments permit VirtualInputManager instead.
+        -- Its protected SendKeyEvent method may still be rejected at runtime.
+        local ok,vim=pcall(function()
+            return game:GetService("VirtualInputManager")
+        end)
+        if ok and vim then
+            press=function()
+                vim:SendKeyEvent(true,Enum.KeyCode.Space,false,game)
+            end
+            release=function()
+                vim:SendKeyEvent(false,Enum.KeyCode.Space,false,game)
+            end
+            P.turboSupported=true
+            P.turboSignal="VirtualInputManager fallback armed; input permissions unverified."
+        end
     end
     local function log(info)
         P.lastAction=tostring(info)
