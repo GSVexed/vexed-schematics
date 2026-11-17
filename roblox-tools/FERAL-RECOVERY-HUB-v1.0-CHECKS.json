@@ -1,0 +1,89 @@
+{
+  "schema": "feral-recovery-hub-checks/1.0",
+  "version": "1.0",
+  "date_utc": "2026-11-17",
+  "source": "feral-recovery-hub-v1.0.lua",
+  "source_bytes": 20985,
+  "source_sha256": "c610a15a45a1910a43d593f050edb6d8e15aa8ef621240a4ec3658e33dd95a7b",
+  "test": "tests/test-feral-recovery-hub-v1.0.py",
+  "test_sha256": "646053034e4fe43e06704b2cf227cf65dac484cd8784d8037df994c465bf49ea",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "standalone_analysis": {
+    "expected_unknown_roblox_executor_global_diagnostics": 54,
+    "other_diagnostics": 0,
+    "roblox_definitions_available": false
+  },
+  "static_checks": {
+    "result": "passed",
+    "only_gameplay_request": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_write": "WolfRest",
+    "no_resource_combat_condition_currency_or_permission_writes": true,
+    "no_report_collection_or_filesystem": true,
+    "no_readonly_bypass_or_private_controller_hook": true
+  },
+  "stamina_semantics": {
+    "method": "rest-rate recovery on already-loaded client cache",
+    "current_exported_base_regen": 1.31,
+    "current_exported_rest_multiplier": 3,
+    "current_option_regen": 3.93,
+    "active_rest_multiplier": 1,
+    "avoids_double_rest_stacking": true,
+    "untouched": [
+      "STAMINA_SPRINT_DRAIN",
+      "STAMINA_JUMP_COST",
+      "STAMINA_REGEN_DELAY",
+      "STAMINA_LOW_NEEDS",
+      "BURST"
+    ],
+    "sets_no_drain_flag": false,
+    "burst_block": false,
+    "infinite_burst_established": false,
+    "requires_server_budget_acceptance": "unverified"
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 29,
+    "environment": "Engine substitute; recovered game sources not executed",
+    "coverage": [
+      "default off and no resource writes",
+      "rest-rate fields only",
+      "rest stacking prevention",
+      "restoration and external edits",
+      "stale callbacks and one pending cache job",
+      "missing APIs and frozen config",
+      "transaction rollback on second field failure",
+      "native Rest rate limiting",
+      "mask-before-animation order",
+      "full HP and condition-only gates",
+      "menu downed and dead standby",
+      "respawn and replacement cleanup",
+      "mask and remote failures",
+      "stop close rerun and external destroy",
+      "actual Health Recovery v1.3 upgrade"
+    ]
+  },
+  "prior_runtime_evidence": {
+    "recovery": "Bear captures support about 2x HP outside combat and faster bleed/venom clearing",
+    "latest_old_tuning_capture": "v1.3, native death cause other, no reason or code",
+    "old_tuning_client_stamina_at_death": [
+      48.7,
+      50.8
+    ],
+    "old_tuning_hp_transition": [
+      101,
+      0
+    ],
+    "reported_lifetime_seconds": 60,
+    "observed_continuous_burst_seconds_approx": 48.8
+  },
+  "new_build_roblox_velocity_execution": "not_performed",
+  "new_stamina_gameplay_effect": "unverified",
+  "combat_hp_regen": "unresolved",
+  "exact_burst_death_cause": "unresolved",
+  "anti_cheat_bypass": "not_established",
+  "reproduce": "LUAU=/path/to/luau python roblox-tools/tests/test-feral-recovery-hub-v1.0.py"
+}

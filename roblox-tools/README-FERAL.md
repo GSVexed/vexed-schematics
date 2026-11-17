@@ -1,111 +1,51 @@
 # FERAL client project
 
-Current work is focused on **health, stamina and combat reliability**, one result at a time.
-[Death + Stamina Trace v1.3](README-health-recovery-v1.3.md) adds the native
-death-cause message, current death-screen heading, client stamina/oxygen,
-Burst timing and a bounded pre-death trace. The optional recovery method and
-stamina tuning values are retained. **The exact Burst-death cause, a safe
-Burst duration and a combat-off bypass remain unresolved.** See the
-[death protocol](FERAL-DEATH-PROTOCOL-v1.3.md) and
-[combat-state audit](FERAL-COMBAT-STATE-AUDIT-v1.2.md). Prior v1.0
-Bear captures support roughly 2x recovery outside combat while moving and
-faster clotting during combat. A v1.1 capture now also supports faster venom
-clearance during combat, with zero reported runtime errors. **Combat HP
-recovery, injury benefit, full-HP condition-only activation, rendered pose and
-server attack acceptance remain unverified.** The ineffective
-local combat-regen flag experiment was removed. Amber and restricted-spawn
-work is parked. See [the health findings](FERAL-HEALTH-FINDINGS-v1.1.md).
-The first v1.2 capture validates incoming hit classification, but includes an
-abrupt non-combat death while stamina tuning and Burst were active. The user
-reports the stamina effect continued working. **Sustained Burst reliability
-is unresolved; no anti-cheat verdict, safe duration or bypass is established.**
-See the [runtime investigation](FERAL-COMBAT-STATE-AUDIT-v1.2.md).
+The current usable menu is **[Recovery Hub v1.0](README-recovery-hub-v1.0.md)**.
+It keeps the recovery assist supported by the supplied captures and replaces
+the old zero-drain stamina tuning with the game's configured rest-rate client
+stamina recovery. Both controls start OFF. Normal stamina drain and Burst
+controls remain. There are no diagnostic reports to collect or upload.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.3.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-recovery-hub-v1.0.lua"))()
 ```
 
-Redemption/code menus, additional persistent effects and the survival-based
-Amber multiplier are queued for later. Current work remains on the health,
-stamina and combat reliability questions. The retained broader build is below.
+Earlier captures support roughly 2x HP recovery outside combat and faster
+bleed/venom clearance. **Combat HP regeneration and reliable unlimited Burst
+remain unresolved.** The latest old-tuning death capture returned only the
+native cause `other`, with no reason or code. No exact anti-cheat cause or
+safe Burst duration was established. The new stamina option improves client
+recovery between bursts; it does not make sustained Burst unlimited.
 
-The retained [Field Hub v1.4](README-field-hub-v1.4.md) targets three goals:
-**amber, actual restricted-animal spawns and lasting recovery**. It adds self-only
-gift/reward-replay trials, direct fresh-empty-slot spawn attempts, a normal Snow
-Leopard amber purchase and server Rest-signal comparisons. **No new server grant
-or recovery effect is established until an in-game run supplies evidence.**
+Official Luau compilation and [29 simulated checks](FERAL-RECOVERY-HUB-v1.0-CHECKS.json)
+passed. This new menu has not been run in Roblox/Velocity by the developer.
+Amber, restricted animal spawns, code menus and additional effects remain
+parked; successful server grants are not established.
 
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.4.lua"))()
-```
+## Retained research and builds
 
-v1.4 includes the earlier client controls and Bear/Tiger-supported stamina path.
-Its [133 offline checks](FERAL-FIELD-HUB-v1.4-CHECKS.json) are separate from Roblox
-acceptance. See the [focused methods and limitations](FERAL-THREE-GOAL-METHODS-v1.4.md).
-The [v1.3 guide](README-field-hub-v1.3.md) remains available for the earlier build.
-
-The [whole-client-export review](FERAL-CLIENT-CODE-REVIEW-v1.3.md),
-[per-file inventory](FERAL-CLIENT-FILES-v1.3.md) and
-[surface index](FERAL-CLIENT-SURFACE-INDEX-v1.3.json) cover all 339 logical game
-exports / 221 distinct bodies, plus the platform relevance check. No fresh full
-scan is needed for these focused trials. The old local HP regeneration writer
-failed and remains retired; server-only code was not retrieved.
-
-## Completed diagnostic investigation
-
-Read-only client collection and evidence-based analysis for PlaceId
-`108901361810209`. The full dataset, menu/Tiger comparisons and main analysis
-are complete within their recorded scope. Reconstruction defects remain
-explicit limitations, not missing-file claims.
-
-**The diagnostic phase is complete within its recorded client scope.** All
-three supplied ZIP sets verify. The final v3.2 Tiger capture collected the live
-`Character.Animate` source; its filtered reconstruction exactly matches the
-previous starter template. No additional scans or uploads are needed for this
-phase. The known decompiler/authority limitations remain documented.
-
-See the [completion record](FERAL-COMPLETION-v3.2.json) and
-[final findings](FERAL-FINAL-ANALYSIS.md). The following loader is retained for
-optional future use; the completed investigation does not require rerunning it.
-
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-final-gap-v3.2.lua"))()
-```
-
-Spawn as a Tiger, close the animal menu, and click **CAPTURE LIVE SOURCE**.
-When it ends, use **COPY FOLDER**, find `FERAL_Final_v3_2_...` in Velocity's
-workspace, and compress the **entire folder** to ZIP. Upload that small ZIP.
-There is no requirement to repeat the menu capture. The observation lasts
-five seconds; source and own-hierarchy collection follow.
-
-The final collector is published, offline-tested and now backed by an actual
-successful Roblox/Velocity in-game capture. All 60 payload files in that
-supplement passed independent integrity checks.
-
-## Project entry points
-
-| Need | File |
+| Material | Entry point |
 |---|---|
-| Current Field Hub, owner checks and focused report | [README-field-hub-v1.2.md](README-field-hub-v1.2.md) |
-| Original goals, source evidence and owner-tool review | [FERAL-GOAL-REVIEW-v1.2.md](FERAL-GOAL-REVIEW-v1.2.md) |
-| Final results, authority findings and remaining limits | [FERAL-FINAL-ANALYSIS.md](FERAL-FINAL-ANALYSIS.md) |
-| Final runtime evidence and closure status | [FERAL-COMPLETION-v3.2.json](FERAL-COMPLETION-v3.2.json) |
-| Small last-live-source collector | [README-final-v3.2.md](README-final-v3.2.md) |
-| Original complete client/platform collector | [README-v3.0.3.md](README-v3.0.3.md) |
-| Historical menu/Tiger recovery experiment | [README-recovery-v3.1.md](README-recovery-v3.1.md) |
-| All-source syntax quality counts and rejected-body index | [FERAL-source-quality-v3.2.json](FERAL-source-quality-v3.2.json) |
-| Optional offline ZIP integrity verifier | [verify-feral-export.py](verify-feral-export.py) |
-| Final validation and runtime limits | [VALIDATION-final-v3.2.md](VALIDATION-final-v3.2.md) |
+| Current menu controls, rest/stamina explanation and limits | [Recovery Hub v1.0 guide](README-recovery-hub-v1.0.md) |
+| Earlier HP/bleed/venom capture findings | [Health findings](FERAL-HEALTH-FINDINGS-v1.1.md) |
+| Earlier native death/stamina trace tool | [Health Recovery v1.3](README-health-recovery-v1.3.md) |
+| Recovered combat state and sudden-death investigation | [Combat-state audit](FERAL-COMBAT-STATE-AUDIT-v1.2.md) |
+| Death-message protocol and collection limits | [Death protocol](FERAL-DEATH-PROTOCOL-v1.3.md) |
+| Broader earlier menu with owner/reward/spawn trials | [Field Hub v1.4](README-field-hub-v1.4.md) |
+| Broader three-goal methods and limitations | [Focused methods](FERAL-THREE-GOAL-METHODS-v1.4.md) |
+| All 339 logical game exports / 221 distinct reconstructed bodies reviewed | [Whole-client-export review](FERAL-CLIENT-CODE-REVIEW-v1.3.md) |
+| Per-file coverage and game/platform surface index | [File inventory](FERAL-CLIENT-FILES-v1.3.md), [surface index](FERAL-CLIENT-SURFACE-INDEX-v1.3.json) |
+| Completed menu/Tiger diagnostic investigation | [Final analysis](FERAL-FINAL-ANALYSIS.md), [completion record](FERAL-COMPLETION-v3.2.json) |
+| Reconstruction quality and explicit defects | [Source-quality record](FERAL-source-quality-v3.2.json) |
+| Archived full read-only client/platform collector | [v3.0.3 guide](README-v3.0.3.md) |
+| Offline ZIP integrity verifier | [verify-feral-export.py](verify-feral-export.py) |
 
-For a new full baseline, the existing full collector's hosted entry point is:
+The full diagnostic investigation is complete within its recorded client
+scope. All supplied ZIP sets verified, including the final live Animate
+supplement. Existing exports preserve both game and Roblox platform content.
+Server-only code was not retrieved, and reconstruction defects remain explicit
+limitations. No fresh full scan is needed for the current recovery work.
 
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-complete-diagnostic-v3.0.3.lua"))()
-```
-
-The small v3.2 supplement deliberately does not replace that full collector.
-The previous exports preserve both game and Roblox platform content.
-
-Historical regeneration experiments in this repository are separate from
-these read-only diagnostics. The diagnostics do not modify resource values,
-invoke gameplay remotes or claim to recover server-only code.
+The historical local HP writer failed and remains retired. Read-only
+diagnostics are separate from the functional menus that intentionally use
+the ordinary Rest request or change cached client settings.
