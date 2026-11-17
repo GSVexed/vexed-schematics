@@ -28,16 +28,16 @@ local CFG = {
     maxConsecutiveTimeouts = 3,
 }
 if game.PlaceId ~= CFG.placeId then
-    warn("[BOOGA REBORN v3.0] Wrong game. Expected PlaceId " .. CFG.placeId)
+    warn("[BOOGA REBORN v1.0] Wrong game. Expected PlaceId " .. CFG.placeId)
     return
 end
 local Http = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local Collection = game:GetService("CollectionService")
 local player = Players.LocalPlayer
-if not player then warn("[BOOGA REBORN v3.0] LocalPlayer unavailable."); return end
+if not player then warn("[BOOGA REBORN v1.0] LocalPlayer unavailable."); return end
 local playerGui = player:FindFirstChildOfClass("PlayerGui")
-if not playerGui then warn("[BOOGA REBORN v3.0] Join fully, then run the loader again."); return end
+if not playerGui then warn("[BOOGA REBORN v1.0] Join fully, then run the loader again."); return end
 for _,name in ipairs({"BoogaRebornCollectorV07", "BoogaRebornCollectorV08", "BoogaRebornCollectorV09", "BoogaRebornCollectorV10"}) do
     local previous = playerGui:FindFirstChild(name)
     if previous then
