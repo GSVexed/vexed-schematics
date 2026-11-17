@@ -1,0 +1,56 @@
+name: FERAL Rest-only Luau compile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-rest-only-lab-v1.0.lua'
+      - '.github/workflows/feral-rest-luau-compile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Luau 0.747 compiler into temporary CI directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/luau-ubuntu.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/luau-ubuntu.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile new script without running game code
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-rest-only-lab-v1.0.lua
+          echo 'REST_LUAU_COMPILE_PASS'
+      - name: Static resource-write and scope checks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path('roblox-tools/feral-rest-only-lab-v1.0.lua').read_text()
+          assert 'game.PlaceId ~= 108901361810209' in code
+          assert 'remote:FireServer("Rest", value == true)' in code
+          assert 'now - state.requestAt >= 5' in code
+          assert 'on=false' in code
+          assert '#recent > 10' in code
+          assert 'if target and player.Character == target then' in code
+          for token in ('getupvalue', 'setupvalue', 'getconnections', 'debug.getupvalue',
+                        'SetAttribute("Stamina"', 'SetAttribute("Health"',
+                        'STAMINA_REGEN =', 'hum.Health =', 'FireServer("Gift"'):
+              assert token not in code, token
+          print('REST_LAB_STATIC_PASS')
+          PY
