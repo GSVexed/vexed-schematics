@@ -1,22 +1,26 @@
 # FERAL client project
 
-The current [Field Hub v1.3](README-field-hub-v1.3.md) follows a
-[whole-client-export review](FERAL-CLIENT-CODE-REVIEW-v1.3.md): all 339 logical
-game exports indexed, 221 distinct bodies read, and all 22,283 preserved Roblox
-platform source sets checked for FERAL markers. The [complete per-file inventory](FERAL-CLIENT-FILES-v1.3.md)
-and [surface index](FERAL-CLIENT-SURFACE-INDEX-v1.3.json) record the scope.
-
-v1.3 preserves the Bear/Tiger stamina path and adds reversible speed/leap
-profiles, native Rest assistance, owned-coat equips, eligible earned-reward
-claims, comfort settings, a broader travel atlas and checkpointed field reports.
-**Added HP regen failed in the user's test. Arbitrary amber, restricted spawns
-and owner grants are not implemented.** See the [goal review](FERAL-GOAL-REVIEW-v1.3.md).
-New v1.3 gameplay effects require Roblox testing; source/simulation checks are
-reported separately.
+The current focused [Field Hub v1.4](README-field-hub-v1.4.md) targets three goals:
+**amber, actual restricted-animal spawns and lasting recovery**. It adds self-only
+gift/reward-replay trials, direct fresh-empty-slot spawn attempts, a normal Snow
+Leopard amber purchase and server Rest-signal comparisons. **No new server grant
+or recovery effect is established until an in-game run supplies evidence.**
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.3.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-field-hub-v1.4.lua"))()
 ```
+
+v1.4 includes the earlier client controls and Bear/Tiger-supported stamina path.
+Its [133 offline checks](FERAL-FIELD-HUB-v1.4-CHECKS.json) are separate from Roblox
+acceptance. See the [focused methods and limitations](FERAL-THREE-GOAL-METHODS-v1.4.md).
+The [v1.3 guide](README-field-hub-v1.3.md) remains available for the earlier build.
+
+The [whole-client-export review](FERAL-CLIENT-CODE-REVIEW-v1.3.md),
+[per-file inventory](FERAL-CLIENT-FILES-v1.3.md) and
+[surface index](FERAL-CLIENT-SURFACE-INDEX-v1.3.json) cover all 339 logical game
+exports / 221 distinct bodies, plus the platform relevance check. No fresh full
+scan is needed for these focused trials. The old local HP regeneration writer
+failed and remains retired; server-only code was not retrieved.
 
 ## Completed diagnostic investigation
 

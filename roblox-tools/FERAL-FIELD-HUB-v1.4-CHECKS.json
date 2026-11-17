@@ -1,0 +1,30 @@
+{
+  "schema": "feral-field-hub-checks/1.4",
+  "date": "2026-11-17",
+  "source": "feral-field-hub-v1.4.lua",
+  "source_bytes": 191402,
+  "source_sha256": "d0b144078418cb03a0e69398f4f23f8112dca2a57be3bec3da81244cbd8f8d13",
+  "compiler": "official Luau 0.747, compile-only",
+  "compile_passed": true,
+  "offline_core_cases_passed": 31,
+  "simulated_runtime_upgrade_cases_passed": 102,
+  "total_cases_passed": 133,
+  "test_command": "python roblox-tools/tests/test-feral-field-hub-v1.4.py",
+  "actual_roblox_velocity_v1_4_tested": false,
+  "server_accepted_new_goal_results_established": false,
+  "game_export_source_execution_attempted": false,
+  "new_opt_in_protocol_trials": [
+    "self-only amber/animal gifts",
+    "one already-claimed play reward replay",
+    "fresh empty-slot restricted species spawn",
+    "normal Snow Leopard amber purchase",
+    "server Rest boolean recovery comparison/loop"
+  ],
+  "traffic_on_clean_startup": "none; observers only",
+  "limits": [
+    "Mock responses do not establish real server permission or acceptance.",
+    "The gift vararg tuple is inferred from imperfect reconstruction.",
+    "A reply, displayed balance, owned flag or portrait is not a confirmed persistent playable grant.",
+    "Rest signal does not write HP or establish invulnerability."
+  ]
+}

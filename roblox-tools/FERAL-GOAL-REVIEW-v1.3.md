@@ -26,3 +26,12 @@ GUI button, client display or unexplained reply is insufficient evidence.
 
 Implementation details and upload steps: [v1.3 README](README-field-hub-v1.3.md).
 Source evidence and review coverage: [full review](FERAL-CLIENT-CODE-REVIEW-v1.3.md).
+
+## Later focused trials
+
+[v1.4](README-field-hub-v1.4.md) adds self-gift/reward-replay trials, a direct
+restricted spawn into a fresh empty slot, a normal Snow Leopard amber buy and
+server Rest-signal comparisons. These are not established server grants.
+Through v1.3 the hub revealed restricted cards but did not send restricted
+FeralSelect requests; failed card clicks therefore did not establish rejection
+by that server handler. See the [focused investigation](FERAL-THREE-GOAL-METHODS-v1.4.md).
