@@ -1,7 +1,7 @@
 """Verify Booga Reborn client exports in ZIPs without extracting or executing content.
 
-Usage: python verify-booga-export.py complete.zip
-       python verify-booga-export.py metadata.zip data-001.zip data-002.zip
+Usage: python verify-booga-client-export.py complete.zip
+       python verify-booga-client-export.py metadata.zip data-001.zip data-002.zip
 Python standard library only. Reports integrity separately from collection scope.
 """
 import argparse
