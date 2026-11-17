@@ -1,5 +1,31 @@
 # FERAL project continuation
 
+## Latest Rest-Only v1.0 live report — 17 November 2026
+
+User ran the conservative Rest-Only Lab v1.0 again: 116.47s, 227 own
+samples, Rest switch ON at report time, 21 local Rest=true FireServer
+calls with zero local sending failures; 9 WolfRest=true echoes
+and 9 local pose-only masks. Last HP 245/245, stamina 56.10/56.10,
+hunger 55.45, thirst 82.06 and HudRest=false.
+
+Valid partial-stamina pairs: off_still +2.89/s (14), on_still +1.57/s
+(54), on_moving -1.21/s (93). off_moving had only 1 interval and
+ZERO valid stamina pairs. All health recovery groups had zero eligible
+pairs because no measured below-max HP windows; no HP outcome inferred.
+v1.0 combines different moving gaits and periods, so this is not
+an apples-to-apples controlled comparison. Still rest ON visibly
+lost stamina while moving on average; a packet echo is not a
+server-maintained Rest/regen grant.
+
+Interpretation: repeated native Rest requests did not demonstrate
+permanent full Rest stamina benefits during movement. There is still
+no evidence the client script can protect from unexplained deaths.
+Do NOT assert successful continuous full Rest benefit, safe Burst or
+server acceptance. Next steps should focus on analyzing existing
+client Rest controller separation versus server-known Rest effects,
+not another redundant huge diagnostic. Server-only Rest, health
+and enforcement handlers were never recovered.
+
 ## New live findings — v1.2 and feasibility (17 Nov 2026)
 
 Live report: 98.35s, 16 successful local Rest=true sends and 15 local
