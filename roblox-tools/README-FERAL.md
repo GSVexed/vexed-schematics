@@ -1,5 +1,27 @@
 # FERAL client project
 
+## NEWEST — Aurora v2.1 (Survival, Effects and menu-aware Player Finder)
+
+**[Upgrade guide](README-feral-aurora-v2.1.md)** · Eleven pages: adds practical
+**SURVIVAL** food/water map searches and resource compass pins, **EFFECTS**
+status/control centre, menu-aware ESP with explicit search origin and
+replication counts, optional own-status local autosave, compact HUD,
+Survival/Explorer presets, and no false "missing animal" error when copying
+a status from the animal-selection menu. It also makes clear that GitHub
+does **not** automatically receive gameplay snapshots just because the
+client launcher lives in the repository.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-hub-v2.1.lua"))()
+```
+
+Food/thirst and Thriving/Grazing/Amber are game-controlled: this build helps
+find resources and exposes actual observed effects, but does not spoof a
+full needs bar, create spendable Amber, or grant server buffs. All client
+gameplay switches remain opt-in and can be reverted.
+
+---
+
 ## NEW — Aurora Command Center v2.0
 
 **[Aurora guide](README-feral-aurora-v2.0.md)** · A visually rebuilt nine-page client
