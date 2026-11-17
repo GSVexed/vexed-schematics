@@ -1,5 +1,40 @@
 # FERAL project continuation
 
+## New live findings — v1.2 and feasibility (17 Nov 2026)
+
+Live report: 98.35s, 16 successful local Rest=true sends and 15 local
+WolfRest echoes/masks. Latest 12.02s HudRest test completed; 23/23 probe
+samples locally true, 2 writes, 1 reset. There were 3 HudRest tests this
+session; latest on_hud gait groups reset per probe; OFF/ON gait groups
+accumulate over the whole session. HP 164/164, so no health-rate evidence.
+
+Stamina net/s by gait:
+- off_Sprint -0.87 (2 valid pairs; speed 16.28), on_Sprint -0.65
+  (19 pairs; speed 16.04)
+- off_Burst -3.27 (12 pairs; speed 26.80), on_Burst -3.32
+  (18 pairs; speed 26.49); no meaningful Burst benefit visible
+- on_Moving +0.58 (7 pairs; speed 5.89); on_hud_Moving +0.27
+  (13 pairs; speed 7.22), not same speed, so no proof of HUD uplift
+- off_Moving has 0 valid stamina pairs (no meaningful moving control)
+- on_Still +2.83 (12 pairs). Last hunger 18.88, below recovered
+  LOW_NEED_AT 20, where client config may halve recovery.
+
+User requested always-on Rest benefits without character deaths. Explicit
+limit: recovered client code is not full server code. Client export lacks
+server-only Rest eligibility, health/status effect writers, stamina authority,
+kill triggers and enforcement handlers. Keeping HudRest true is only a local
+flag; it did not produce an additional demonstrated improvement. Sending
+Rest=true at intervals is an input request, not proof server accepts rest
+while Sprint/Burst. Prior abrupt 107/107-to-zero death while Burst gave a
+generic other cause, not anti-cheat proof. Cannot guarantee all Rest effects
+always or no deaths using the client-only scripts.
+
+Conservative available approach: use native Rest request only, e.g. existing
+Rest-Only Lab v1.0 with no stamina pool writes or HudRest forcing, or Recovery
+Hub v1.3 Recovery Assist alone, avoid prolonged Burst. Neither is proven
+to keep every Rest bonus or prevent all deaths. Avoid new untested bypass
+labelled safe, and do not claim server-only code was retrieved.
+
 ## Most recent live HUD result and corrected follow-up (17 November 2026)
 
 User supplied **Rest-State Lab v1.1** live output, 66.29 sec:
