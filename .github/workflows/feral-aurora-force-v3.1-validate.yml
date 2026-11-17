@@ -1,0 +1,99 @@
+name: FERAL Aurora FORCE v3.1 validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-aurora-power-v3.1.lua'
+      - 'roblox-tools/feral-aurora-force-ui-v3.1.lua'
+      - 'roblox-tools/feral-aurora-force-v3.1.lua'
+      - '.github/workflows/feral-aurora-force-v3.1-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/aurora-force-luau.zip
+          mkdir -p /tmp/aurora-force-luau
+          unzip -q /tmp/aurora-force-luau.zip -d /tmp/aurora-force-luau
+          compiler="$(find /tmp/aurora-force-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile own-client power, UI and loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-aurora-force-ui-v3.1.lua \
+            roblox-tools/feral-aurora-force-v3.1.lua; do
+            "$COMPILER" --null "$f"
+          done
+          echo AURORA_FORCE_31_LUAU_PASS
+      - name: Feature integrity and bounded-client-change checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools')
+          power=(p/'feral-aurora-power-v3.1.lua').read_text()
+          ui=(p/'feral-aurora-force-ui-v3.1.lua').read_text()
+          loader=(p/'feral-aurora-force-v3.1.lua').read_text()
+          for token in (
+              'function P.setStamina(mode)',
+              'STAMINA_SPRINT_DRAIN=0','STAMINA_JUMP_COST=0',
+              'STAMINA_REGEN=250','STAMINA_REGEN_DELAY=0',
+              'STAMINA_LOW_NEEDS=1','STAMINA_REST_MULT=1',
+              'WolfDbgNoStamina','function P.setSpeed(multiplier)',
+              'function P.setLeap(multiplier)','function P.toggleTurbo()',
+              'GetFocusedTextBox()', 'function P.status()',
+              'function P.reset()', 'function ctx.reset()', 'function ctx.close()',
+              'local priorReset=ctx.reset','local priorClose=ctx.close',
+          ):
+              assert token in power,token
+          for token in (
+              'FeralAuroraForceV31','STAMINA POWER PROFILE',
+              'APEX STAMINA','LOCAL NO-DRAIN / EXHAUSTION FLAG',
+              'ALT-HELD RAPID ESCAPE','INJURY SLOWDOWN INPUTS',
+              'SPEED PROFILE','LEAP PROFILE','PLAYER FINDER MASTER',
+              'THROUGH-WALL ESP','LOW-NEEDS STAMINA ASSIST',
+              'NATIVE RECOVERY ASSIST','COMPACT STATS HUD',
+              'RESTORE ORIGINALS','RightShift',
+              'Mini', # not required
+          ):
+              if token=='Mini':continue
+              assert token in ui,token
+          for token in (
+              'feral-aurora-power-v3.1.lua',
+              'feral-aurora-force-ui-v3.1.lua',
+              'FeralAuroraForceV31',
+              'game.PlaceId~=108901361810209',
+          ):
+              assert token in loader,token
+          for tag,source in [('Power',power),('UI',ui),('Loader',loader)]:
+              for danger in (
+                  'SetAttribute("Hunger"', 'SetAttribute("Thirst"',
+                  'SetAttribute("Amber"', 'SetAttribute("Health"',
+                  'FireServer("Gift"','FireServer("FeralSelect"',
+                  'ghp_','github_pat_', 'Authorization:',
+                  'Humanoid.Health ='
+              ):
+                  assert danger not in source,(tag,danger)
+          assert 'all power profiles OFF' in loader.lower()
+          print('AURORA_FORCE_31_SCOPE_PASS')
+          PY
