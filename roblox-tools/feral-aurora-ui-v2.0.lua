@@ -520,15 +520,20 @@ function UI.mount(ctx)
         Position=UDim2.fromOffset(16,74),Size=UDim2.new(1,-30,0,40),
         TextXAlignment=Enum.TextXAlignment.Left,TextWrapped=true
     },navCard)
-    for _,loc in ipairs(ctx.locations) do
-        action(world,loc[1],"X "..loc[2].."   /   Z "..loc[3],
-            "SET DESTINATION",function()
-                for i,p in ipairs(ctx.locations) do
-                    if p==loc then s.chosenLocation=i;break end
-                end
-                ctx.notice("Compass destination: "..loc[1])
-                ctx.onUI()
-            end,"POI")
+    local poiCard,poiDetail=card(world,"DESTINATION QUICK SELECT",
+        "18 recorded points of interest. Select one to update the compass above.",321,"18 POI")
+    poiDetail.Size=UDim2.new(1,-35,0,22)
+    for i,loc in ipairs(ctx.locations) do
+        local selected=loc
+        local b=button(poiCard,loc[1],212,32,c.panel2,function()
+            s.chosenLocation=i
+            ctx.notice("Compass destination: "..selected[1])
+            ctx.onUI()
+        end)
+        b.TextSize=10
+        b.TextTruncate=Enum.TextTruncate.AtEnd
+        b.Position=UDim2.fromOffset(15+((i-1)%3)*224,
+            73+math.floor((i-1)/3)*39)
     end
     card(world,"DROUGHTS, FLOODS & FISH",
         "The client contains drought pond ellipses, flooding zones, water-stage controls, fish paths and carcass/scavenger systems.",106,"WORLD")
