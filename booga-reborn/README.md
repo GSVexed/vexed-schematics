@@ -7,6 +7,23 @@ This is a **new standalone project**. FERAL Aurora work is preserved under
 `roblox-tools/`, and none of its client-controller assumptions should be
 carried into Booga without evidence.
 
+## First full archive received — integrity verified
+
+The first uploaded ZIP turned out to contain **all 11 parts**. The
+collector logged **97,686 objects**, **451 game-classified scripts**
+(**438 reconstructed**), **203 remotes/bindables**, and **230 named
+typed packet definitions** in the client network schema. All **23,296
+saved payloads** and **38,111 reconstructed source references** passed
+file-length and checksum verification.
+
+**[Read the full code-backed first-export findings](BOOGA-FIRST-ARCHIVE-FINDINGS.md)**
+
+The archive is saved in the ChatGPT conversation, **not** uploaded raw to
+GitHub. The project findings are saved here for continuity. No additional
+full diagnostic is necessary to begin technical analysis.
+
+---
+
 ## Phase 1 — Complete visible-client collection
 
 **[Start here: v1.0 collector instructions](README-booga-reborn-collector-v1.0.md)**
