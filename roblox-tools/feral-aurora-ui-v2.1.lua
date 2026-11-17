@@ -603,6 +603,7 @@ function UI.mount(ctx)
         local selected=loc
         local b=button(poiCard,loc[1],212,32,c.panel2,function()
             s.chosenLocation=i
+            ctx.customDestination=nil
             ctx.notice("Compass destination: "..selected[1])
             ctx.onUI()
         end)
