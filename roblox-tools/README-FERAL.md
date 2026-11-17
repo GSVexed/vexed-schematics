@@ -1,8 +1,30 @@
 # FERAL client project
 
+## NEW — Aurora Command Center v2.0
+
+**[Aurora guide](README-feral-aurora-v2.0.md)** · A visually rebuilt nine-page client
+hub with live stats, native Recovery Assist, reversible local settings,
+a 74-entry searchable mechanics atlas, Amber and Thriving/Grazing/Elder
+research views, destination compass and a **name tag + outline Player Finder**.
+Player Finder starts OFF, caps 24 nearest currently replicated characters, and
+lets you choose visible-only or opt-in through-wall displays.
+All local experiments start OFF; emergency Restore All and Right Shift
+hide/reopen are supported.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-hub-v2.0.lua"))()
+```
+
+**What this is NOT:** permission to change server-held Amber, damage,
+Thriving, elder progress or ownership, nor a fix for prolonged Burst deaths.
+The old 3× stamina engine remains separate and is NOT auto-enabled.
+The source compiles; live Roblox/Velocity compatibility is not yet verified.
+
+---
+
 For a new Chat or a local PC task, start with [the project handoff](FERAL-HANDOFF.md).
 
-The current menu is **[Recovery Hub v1.3](README-recovery-hub-v1.3.md)**.
+The earlier experimental stamina menu is **[Recovery Hub v1.3](README-recovery-hub-v1.3.md)**; it remains available separately.
 One **3X STAMINA REGEN** switch combines the rate and internal-pool recovery
 across movement modes, including Trot and climbing. Normal movement costs
 and low-needs penalties remain. The earlier health/condition assist is a
