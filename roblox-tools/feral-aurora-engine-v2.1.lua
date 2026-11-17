@@ -550,7 +550,7 @@ function Engine.new(atlas)
     function ctx.stats()
         local char,hum,root=own()
         local result={
-            sessionPhase=not char and "ANIMAL MENU" or not hum or not root
+            sessionPhase=not char and "ANIMAL MENU" or (not hum or not root)
                 and "SPAWNING" or hum.Health<=0 and "DOWNED / DEAD" or "IN GAME",
             species=char and char:GetAttribute("Species") or "Animal menu",
             stage=char and char:GetAttribute("AgeStage") or "No active animal",
@@ -565,7 +565,7 @@ function Engine.new(atlas)
                 root.AssemblyLinearVelocity.Z).Magnitude,
             pos=root and root.Position,
             exhausted=char and char:GetAttribute("StaminaOut")==true or false,
-            mode=char and char:GetAttribute("WolfBurst")==true and "Burst"
+            mode=not char and "Menu" or char:GetAttribute("WolfBurst")==true and "Burst"
                 or player:GetAttribute("HudSprint")==true and "Sprint"
                 or "Ordinary",
             serverRest=char and char:GetAttribute("WolfRest")==true,
