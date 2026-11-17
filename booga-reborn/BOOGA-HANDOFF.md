@@ -1,5 +1,42 @@
 # Booga Booga Reborn — continuation handoff
 
+## New focused finding — Dave rare Pie farming (Nov 17 2026)
+
+The user's request shifted to Dave, a destructible resource which
+reportedly drops rare valuable items. Reopened actual uploaded
+client archive, not just summary, and independently browsed
+Booga Reborn community wiki. **[Dave audit](BOOGA-DAVE-RESOURCE-AUDIT-v1.md)**
+saved with evidence, tool math and practical limits.
+
+Client object data: TWO Workspace.Resources.Dave models,
+EntityIDs 1462/1463, Health IntValues 23,899,202 and
+23,900,822, positions approx (-1314.25,0.7,-1875.7)
+and (1856.07,-29.18,1330.07). Each is Entity-tagged,
+has Stump/Leaves. Wiki full health ~23,900,792, drops
+**25 Pie**, described as rare/high-value, current trade price
+not verified. Wiki says both on void islands.
+
+ItemData reconstructed God Axe: wood damage 50, speed 1/3,
+nominal hits 478,016, ~44.26 hours solo or ~22.13
+hours for two if continuous successful attacks; wiki's
+22-hour/two player estimate matches. 10% Haste axes,
+Strength +10% tool damage description, but applicability
+to actual Dave resource damage cannot be guaranteed.
+
+Client SwingTool sends entityIDs/CFrame/timestamp;
+ModelHit and ModelBroken are received network updates
+triggering effects. Editing replicated Dave.Health locally
+will NOT server-break or yield Pie. Banned developer tools
+in itemData have larger wood stats (up to 5000/0.1),
+not proof of legitimate access. Decompiled itemData aliases
+`Dave=t27` and `Pie=t27` are unreliable because
+t27 is overwritten many times; don't claim source supports
+Dave's server drop table. Still no verified instant-break
+method, but candidate route is normal hold-to-swing,
+correct tool, Haste, cooperative play and **measured**
+server-observed per-hit HP damage. No new broad diagnostic
+needed. Need not create placebos.
+
 ## CURRENT INVESTIGATION RESULT: second-pass source audit
 
 The assistant reopened and studied the user's actual attached
