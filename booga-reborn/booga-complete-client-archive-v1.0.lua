@@ -2,7 +2,7 @@
 -- Read-only game snapshot. Only this tool's UI and local export files are written.
 -- No gameplay remote calls, hooks, arbitrary require(), hidden-property reads,
 -- authentication APIs, chat history, or server-only source extraction.
--- Source reconstruction is optional and executor-dependent. See README-v3.0.md.
+-- Source reconstruction is optional and executor-dependent. See README-booga-reborn-collector-v1.0.md.
 
 local CFG = {
     placeId = 11729688377,
@@ -95,6 +95,7 @@ local D = {
         bytecodeReused = 0,bytecodeCacheFailures = 0},
     limits = {}, otherIdentities = {}, privateRoots = {}, connections = {}, watchers = {},
     pendingDiscovered = 0, activeWorker = nil, sourceCursor = 0, memoryStart = 0,
+    boogaSystems = {},
 }
 function D.read(obj, key)
     local ok, value = pcall(function() return obj[key] end)
@@ -854,6 +855,13 @@ function D.summary()
         end
     end
     for key in pairs(D.limits) do lines[#lines + 1] = "LIMIT HIT: " .. key end
+    local groups={}
+    for key,hit in pairs(D.boogaSystems) do groups[#groups+1]={name=key,count=hit.total} end
+    table.sort(groups,function(a,b)return a.count>b.count end)
+    lines[#lines+1]="Booga-specific systems detected by name/path (heuristic):"
+    for i=1,math.min(13,#groups) do
+        lines[#lines+1]="  "..groups[i].name..": "..groups[i].count.." matching objects"
+    end
     if D.c.propertyFailures > 0 then lines[#lines + 1] = "Unavailable allowlisted property reads: " .. D.c.propertyFailures end
     local roots = {}
     for name,count in pairs(D.scriptRoots) do roots[#roots + 1] = {name = name, count = count} end
@@ -893,6 +901,8 @@ local EXPORT_README = [[
 BOOGA REBORN COMPLETE CLIENT ARCHIVE v1.0 — DATA-ONLY EXPORT
 
 Click START FULL SCAN in Roblox. Wait for a finished status, or click STOP & SAVE.
+This only captures what is replicated in the current session. Islands,
+caves, rebirth-related states and future patches can need further passes.
 All generated files are plain text. There are no executable packaging helpers.
 
 ONE ZIP (recommended):
@@ -941,6 +951,9 @@ source reconstruction. Sharing does not remove game/platform inventory entries.
 attributes, values, remotes, ui, assets, focus and logs contain cross-references,
 errors and deliberate exclusions. focus never replaces the full inventories.
 coverage.json.txt documents the complete property schema, caps and omissions.
+manifest.booga_system_index gives grouped hints for crafting, combat,
+tribes, Mojo/rebirth, resources, buildings, inventory, world and network.
+The full generic client inventory is always captured, not filtered.
 Sources over the size cap are explicitly not exported; no prefix is called full.
 
 No gameplay remotes or arbitrary game modules are invoked. No gameplay values,
@@ -995,6 +1008,8 @@ function D.manifest()
         privacy_filter_applied = true, snapshot_is_atomic = false,
         counts = D.c, script_counts_by_root = D.scriptRoots, instance_counts_by_class = D.classes,
         object_categories = D.categories, source_status_counts = D.sourceStates,
+        booga_system_index = D.boogaSystems,
+        experience = {universe_id = game.GameId, place_version = game.PlaceVersion},
         source_pending = math.max(0,D.c.eligible - (D.sourceTerminal or 0)),
         source_abort_reason = D.sourceAbortReason, limits_hit = D.limits,
         last_file_failure = D.lastWriteFailure,
@@ -1087,6 +1102,8 @@ function D.preflight()
         schema = "booga-reborn-client-coverage/1.0", configuration = CFG, properties_by_base_class = D.properties,
         file_output = "Text data only. Executable packaging helpers are neither exported nor required.",
         source_eligibility = {"LocalScript", "ModuleScript", "Script with readable RunContext.Client"},
+        booga_focus_keywords = D.boogaKeywords,
+        booga_specific_lens = "Thematic index over all game object paths; nothing removed from the generic inventory.",
         source_methods = {"read Source property if accessible", "optional decompile(instance)",
             "reuse a verified canonical reconstruction only for byte-for-byte identical supported client bytecode"},
         source_caches = "Only eligible client containers. Raw bytecode stays in bounded memory and is never exported. Unsupported/missing APIs fall back to ordinary reconstruction. All script records and categories remain included.",
@@ -1129,11 +1146,44 @@ function D.category(obj, inherited, name)
         or name == "RobloxReplicatedScriptStorage" or name == "PlayerModule" or name == "ChatScript" then return "platform" end
     return "game"
 end
+-- Heuristic classification. Does not replace or filter the full inventory.
+D.boogaKeywords = {
+    crafting={"craft","recipe","forge","smelt","anvil","blueprint","ingredient","craftable"},
+    inventory={"inventory","backpack","hotbar","equip","stack","chest","storage","slot","itemdata"},
+    harvesting={"ore","mining","mine","harvest","chop","resource","gather","lumber","wood","deposit"},
+    combat={"weapon","sword","bow","projectile","attack","damage","combat","hitbox","swing","armor","armour","shield","cooldown"},
+    tribes={"tribe","clan","ally","alliance","invite","territory","tribal","banner"},
+    progression={"rebirth","mojo","level","xp","experience","prestige","unlock","quest","research"},
+    construction={"build","structure","placeable","foundation","wall","gate","roof","door","decay","totem"},
+    survival={"hunger","thirst","food","drink","health","heal","stamina","sprint","swim","jump","regen","campfire","cook"},
+    creatures={"npc","boss","mob","monster","animal","creature","pet","mount","tame","hostile"},
+    geography={"island","cave","portal","biome","dungeon","volcano","meteor","temple","event","ship","ocean"},
+    economy={"coin","gold","shop","trade","market","merchant","purchase","currency","gem","mojo","vendor"},
+    interface={"gui","hud","interface","menu","input","controller","camera","notification","leaderboard"},
+    network={"remote","network","replica","packet","signal","rpc","serverevent","clientevent","invoke"}
+}
+function D.boogaTag(path,id,category,restricted)
+    if category~="game" or restricted then return end
+    local lower=string.lower(path)
+    for system,words in pairs(D.boogaKeywords) do
+        local match=false
+        for _,word in ipairs(words) do
+            if lower:find(word,1,true) then match=true;break end
+        end
+        if match then
+            local group=D.boogaSystems[system]
+            if not group then group={total=0,sample_ids={}};D.boogaSystems[system]=group end
+            group.total+=1
+            if #group.sample_ids<18 then group.sample_ids[#group.sample_ids+1]=id end
+        end
+    end
+end
 function D.focus(text)
-    local low = text:lower()
-    for _, word in ipairs({"stamina", "health", "regen", "bleed", "damage", "feed", "growth", "combat",
-        "sprint", "burst", "latch", "hunger", "thirst", "animal", "species", "ability", "movement", "rest", "config"}) do
-        if low:find(word,1,true) then return true end
+    local lower=string.lower(text)
+    for _,words in pairs(D.boogaKeywords) do
+        for _,word in ipairs(words) do
+            if lower:find(word,1,true) then return true end
+        end
     end
     return false
 end
@@ -1188,6 +1238,7 @@ function D.inspect(obj, frame)
     D.c.objects = D.c.objects + 1
     D.categories[category] = D.categories[category] + 1
     D.classes[class] = (D.classes[class] or 0) + 1
+    D.boogaTag(path,id,category,restricted or chatTree)
     local attrs, attrFailure, tags = {},nil,{}
     if not restricted and not chatTree then
         local ok, values = pcall(function() return obj:GetAttributes() end)
@@ -1414,7 +1465,7 @@ function D.inventory()
             D.watchers[#D.watchers + 1] = other.CharacterAdded:Connect(function(char) D.addPrivate(char) end)
         end
     end
-    for _, name in ipairs({"BoogaAlwaysRegenTrialV22", "BoogaAlwaysRegenTrialV23", "BoogaClientSnapshotV24", "BoogaClientSnapshotV25", "BoogaClientSnapshotV26"}) do
+    for _, name in ipairs({"BoogaRebornCollectorV09", "BoogaRebornCollectorV08"}) do
         if playerGui:FindFirstChild(name) then
             D.log("environment",nil,"previous_tool_panel_present",{tool = name})
             D.notice = "An earlier trial/snapshot panel is present. Close it yourself for an uncontaminated new run. This scan does not stop it."
@@ -1629,10 +1680,10 @@ function D.run()
     elseif D.c.sourceFailed > 0 or D.c.childFailures > 0 or D.c.attributeFailures > 0
         or D.c.propertyFailures > 0 or D.c.readErrors > 0 or D.c.optionalApiFailures > 0 or next(D.limits) then D.phase = "finished_with_gaps"
     else D.phase = "finished" end
-    D.current = "Export sealed. Use Windows to ZIP the entire export folder."
+    D.current = "Export sealed locally. ZIP the folder; new regions need fresh captures."
     D.checkpoint()
     D.finished = true
-    D.notice = "Saved. Right-click the displayed folder in Windows, compress to ZIP, and upload it. For smaller ZIPs, compress and upload every UPLOAD_PART_* folder."
+    D.notice = "Saved LOCALLY, not GitHub. ZIP entire folder and upload here. Re-run in other islands/caves for streamed data."
     -- Release instance references after completion. The saved dataset remains on disk.
     D.ids,D.visited,D.scripts,D.buckets,D.privateRoots,D.otherIdentities = {},{},{},{},{},{}
     D.sourceCache = {}
