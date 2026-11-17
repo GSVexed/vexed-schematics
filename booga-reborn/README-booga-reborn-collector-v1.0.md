@@ -149,10 +149,23 @@ It verifies that the manifest, payload catalogs, source chunks, sizes and
 checksums are internally consistent without executing any collected code.
 For split exports provide all part ZIP files as arguments.
 
+When you have two or more **whole-session ZIPs** taken from different
+parts of the map, the optional comparator highlights previously unseen
+client scripts and remote interfaces:
+
+```bash
+python compare-booga-snapshots.py first.zip second.zip
+```
+
+The comparison does not establish that a mechanic is live or that server
+source was available. It helps ensure distinct streamed-in client systems
+aren't overlooked in subsequent captures.
+
 The source and verifier are both in this directory:
 
 - [Complete client archive source](booga-complete-client-archive-v1.0.lua)
 - [ZIP verifier](verify-booga-client-export.py)
+- [Cross-session comparison](compare-booga-snapshots.py)
 - [Validation workflow](../.github/workflows/booga-reborn-collector-validate.yml)
 
 ## Next phase
