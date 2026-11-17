@@ -1,6 +1,19 @@
 # FERAL client project
 
-The current focused [Field Hub v1.4](README-field-hub-v1.4.md) targets three goals:
+Current work is focused on **health only**, one result at a time. The small
+[Health Recovery v1.0](README-health-recovery-v1.0.md) panel separately tests the
+local combat-regeneration flag and an optional continuous recovery request,
+including during combat. It attempts local rest-pose suppression and exports
+a small HP evidence report. **New healing remains unverified in Roblox.**
+Amber and restricted-spawn work is parked while health is investigated.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-health-recovery-v1.0.lua"))()
+```
+
+The retained broader build is below.
+
+The retained [Field Hub v1.4](README-field-hub-v1.4.md) targets three goals:
 **amber, actual restricted-animal spawns and lasting recovery**. It adds self-only
 gift/reward-replay trials, direct fresh-empty-slot spawn attempts, a normal Snow
 Leopard amber purchase and server Rest-signal comparisons. **No new server grant

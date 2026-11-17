@@ -1,0 +1,61 @@
+{
+  "schema": "feral-health-checks/1.0",
+  "date_utc": "2026-11-17",
+  "version": "1.0",
+  "source": "feral-health-recovery-v1.0.lua",
+  "source_bytes": 37105,
+  "source_sha256": "ed256bc6efdca4c51ecbc07b0c11a5e8bc2ffb023bc13bae72b38ff16b465ee7",
+  "test": "tests/test-feral-health-recovery-v1.0.py",
+  "test_sha256": "67c4654418d4be61da48039945868bd22c3d4ee5e3d5a84f91b3294b9b82c820",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "static_checks": {
+    "result": "passed",
+    "no_health_assignments": true,
+    "no_damage_calls": true,
+    "only_gameplay_remote_call": "WolfActions:FireServer(\"Rest\", boolean)",
+    "no_decompilation_or_full_scan": true,
+    "no_role_gift_purchase_spawn_or_account_requests": true
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 34,
+    "environment": "Engine substitute; reconstructed game sources not executed",
+    "coverage": [
+      "local-only health config with separate server fixture",
+      "frozen cache and absent executor API",
+      "late callback cancellation",
+      "independent health and stamina leases",
+      "continuous combat/burst recovery requests",
+      "five-second rate limit",
+      "local rest-echo suppression before native render priority",
+      "full-health standby and missing-health resumption",
+      "native rest ownership",
+      "downed/death preservation",
+      "respawn and stale-character cleanup",
+      "mask/remote failures",
+      "native bite observation without input interception",
+      "stable-max three-second gain retention",
+      "growth and reversal exclusion",
+      "combat-window expiry",
+      "self-only report and sanitized errors",
+      "write/readback failures",
+      "autosaves and queued final save",
+      "6000-event limit and explicit omissions",
+      "close/rerun/external destroy cleanup",
+      "actual v1.4 shutdown upgrade"
+    ]
+  },
+  "reproduce": {
+    "command": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.0.py",
+    "compiler_required": "luau-compile next to the supplied luau executable"
+  },
+  "roblox_velocity_execution": "not_performed",
+  "server_healing": "not_established",
+  "combat_healing": "not_established",
+  "live_pose_suppression": "not_established",
+  "server_attack_compatibility": "not_established"
+}
