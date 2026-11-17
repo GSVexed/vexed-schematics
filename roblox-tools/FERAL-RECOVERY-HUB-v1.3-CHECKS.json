@@ -1,0 +1,116 @@
+{
+  "schema": "feral-recovery-hub-checks/1.3",
+  "version": "1.3",
+  "date_utc": "2026-11-17",
+  "source": "feral-recovery-hub-v1.3.lua",
+  "source_bytes": 46556,
+  "source_sha256": "76bb9bb6cf5e4a64f3ea73d37d81a7582987629aeff456311f362a00d9d6b4c1",
+  "test": "tests/test-feral-recovery-hub-v1.3.py",
+  "test_sha256": "f549677ad066aa48dac5ffe170dd97ed6aeb420de154bd359405c94ca27cfc39",
+  "compiler": {
+    "name": "Official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "standalone_analysis": {
+    "expected_unknown_roblox_executor_globals": 67,
+    "other_diagnostics": 0,
+    "roblox_definitions_available": false
+  },
+  "matching_timing": {
+    "old_v1_2_false_stop_reproduced_in_simulation": true,
+    "reported_screenshot_message": "Native stamina no longer matches; moving recovery stopped.",
+    "actual_runtime_cause": "not established from screenshot alone",
+    "new_sampling": "after native movement at 101, before own recovery at 102",
+    "stamina_attribute_callback_used_for_validation": false,
+    "initial_changing_samples": 4,
+    "rounding_tolerance": 0.051,
+    "temporary_mismatch_phase": "VERIFYING",
+    "extra_writes_during_revalidation": false,
+    "resume_on": "two fresh matching HUD changes or three matching render samples spanning at least 0.1s",
+    "persistent_mismatch_stop_after_seconds": 1.5,
+    "persistent_failure_restores_combined_feature": true
+  },
+  "clipboard_status": {
+    "control": "COPY STATUS",
+    "write_helpers": [
+      "setclipboard",
+      "toclipboard"
+    ],
+    "missing_error_or_false_return": "selectable TextBox fallback if both helpers fail",
+    "clipboard_contents_read": false,
+    "files_written": false,
+    "retained_hud_samples": 16,
+    "older_omissions_counted": true,
+    "last_failure_frozen_and_retained_across_manual_toggle": true,
+    "included": [
+      "version",
+      "uptime",
+      "phase",
+      "own whitelisted species",
+      "own HP stamina hunger thirst",
+      "fixed status messages",
+      "matching and write counters",
+      "last available frame at failure",
+      "recent numeric HUD samples"
+    ],
+    "excluded": [
+      "usernames",
+      "positions",
+      "other players",
+      "arbitrary attributes",
+      "source bodies",
+      "raw API errors",
+      "credentials"
+    ],
+    "copy_action_gameplay_changes": false
+  },
+  "retained_behavior": {
+    "single_three_times_switch": true,
+    "all_previous_shared_pool_mode_classifications": true,
+    "costs_and_low_needs_penalty": "preserved",
+    "no_duplicate_positive_native_recovery": true,
+    "health_assist": "unchanged"
+  },
+  "static_boundaries": {
+    "result": "passed",
+    "only_gameplay_request": "WolfActions:FireServer(\"Rest\", boolean)",
+    "only_attribute_write": "WolfRest",
+    "config_writes": [
+      "STAMINA_REST_MULT",
+      "STAMINA_REGEN"
+    ],
+    "internal_resource_write": "matched own stamina upvalue only",
+    "no_getgc_scan_function_hooks_or_hud_resource_writes": true
+  },
+  "simulated_runtime": {
+    "result": "passed",
+    "cases": 63,
+    "retained_health_stamina_cases": 47,
+    "timing_and_status_cases": 16,
+    "environment": "Substitute engine with deferred signals and synthetic native HUD publisher; actual game code not executed",
+    "coverage": [
+      "actual v1.2 false-stop reproduction at 60Hz/10Hz",
+      "same timing succeeds with new validation",
+      "deferred climbing",
+      "transient mismatch pause/resume",
+      "persistent mismatch stops and freezes failure",
+      "native overwrite of transient bad HUD",
+      "stopped controller",
+      "copying without gameplay side effects",
+      "copy before enable",
+      "clipboard exception and explicit false fallback",
+      "missing helper TextBox fallback",
+      "private fields excluded",
+      "bounded history with omission counts",
+      "failure retained after toggles",
+      "actual v1.2 upgrade"
+    ]
+  },
+  "new_v1_3_roblox_velocity_execution": "not_performed",
+  "new_live_matching_behavior": "unverified",
+  "server_correction_or_enforcement_verdict": "not_established",
+  "combat_hp_regen": "unresolved",
+  "prior_burst_death_cause": "unresolved",
+  "reproduce": "LUAU=/path/to/luau python roblox-tools/tests/test-feral-recovery-hub-v1.3.py"
+}
