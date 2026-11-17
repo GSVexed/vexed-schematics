@@ -28,9 +28,17 @@ and **3 → 2 → 1 → attribute absent** after requests stopped. Both happened
 during combat. This matches the reconstructed status configuration's 4x
 rest-clotting multiplier, though the comparison is short and not randomized.
 
+A subsequent **v1.1 Bear capture** supplies direct condition observations:
+venom dropped by one point on a tick before recovery was enabled, then by
+four points on 18 subsequent ticks with recovery active, all during combat.
+Five venom-attribute removals and six bleed-attribute removals were recorded.
+Sixty selected regular, unchanged-MaxHealth recovery intervals outside combat
+had a median rate of about 2% maximum HP/s.
+
 **Combat HP regeneration remains unresolved.** Continuing the requests did not
-produce demonstrated combat healing. Injury/venom recovery effects and the
-new v1.1 condition-only activation have not been verified in Roblox.
+produce demonstrated combat healing. Injury recovery and condition-only
+activation at full HP still lack an in-game example. Faster venom clearance
+now has repeated live observational support; it is not venom immunity.
 
 See [the evidence and remaining paths](FERAL-HEALTH-FINDINGS-v1.1.md).
 
@@ -87,6 +95,16 @@ actual v1.0/v1.4 cleanup, plus the earlier recovery lifecycle checks.
 See [the check record](FERAL-HEALTH-RECOVERY-v1.1-CHECKS.json) and
 [reproducible test](tests/test-feral-health-recovery-v1.1.py).
 
-**v1.1 has not been executed inside Roblox/Velocity.** The live evidence above
-comes from v1.0 user captures; it does not establish the new condition-only
-activation, injury/venom benefit or combat HP recovery.
+**v1.1 now has a user-supplied Roblox/Velocity capture:** 471 events over about
+169.5 seconds, with zero reported errors and zero omitted events. Recovery
+requests, direct condition logging, venom clearance, full-recovery standby,
+subsequent resumption and menu cleanup operated within that recorded scope.
+No injury or full-HP-with-active-condition case occurred.
+
+Two snapshots around one incoming Rest echo briefly observed local WolfRest
+true while masking was enabled; subsequent observations returned false. A
+false attribute is not proof of a visually normal pose. Three native bite
+markers occurred while the signal was active, establishing local attempts,
+not server-accepted hits. Rendered pose, attack acceptance and combat HP
+recovery remain unverified. No additional source change is required for this
+documentation update.

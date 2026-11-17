@@ -4,8 +4,10 @@ Current work is focused on **health only**, one result at a time.
 [Health Recovery v1.1](README-health-recovery-v1.1.md) uses one recovery switch
 for missing HP or active conditions, with a small self-only report. Prior v1.0
 Bear captures support roughly 2x recovery outside combat while moving and
-faster clotting during combat. **Combat HP recovery remains unresolved; v1.1
-itself and injury/venom benefits remain unverified in Roblox.** The ineffective
+faster clotting during combat. A v1.1 capture now also supports faster venom
+clearance during combat, with zero reported runtime errors. **Combat HP
+recovery, injury benefit, full-HP condition-only activation, rendered pose and
+server attack acceptance remain unverified.** The ineffective
 local combat-regen flag experiment was removed. Amber and restricted-spawn
 work is parked. See [the health findings](FERAL-HEALTH-FINDINGS-v1.1.md).
 

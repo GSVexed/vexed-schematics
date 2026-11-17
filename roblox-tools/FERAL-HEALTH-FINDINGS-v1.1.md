@@ -59,11 +59,47 @@ no recovery need remains. It never writes HP, MaxHealth, injuries, bleed,
 venom or the combat flag. Only the optional earlier stamina method tunes its
 specific cached stamina fields and own-character debug stamina flag.
 
-Faster clotting has supplied runtime support. Injury and venom recovery effects
-remain unverified; the reconstruction's rest multipliers motivate observation,
-not a claim of an effective cure. All v1.1 condition-only activation and new
-condition logging were checked in a substitute, not inside Roblox.
+Faster clotting has supplied runtime support. The subsequent v1.1 capture below
+also supports faster venom clearance and demonstrates the new condition logging
+in Roblox. Injury benefit remains unverified. Condition-only activation at full
+HP was checked in a substitute and has no live example yet.
+
+## First v1.1 live capture
+
+A separate v1.1 Bear session adds 471 events over about 169.5 seconds, with
+zero reported errors and zero omitted events. It contains 25 true and two
+false Rest requests. Direct condition observers recorded:
+
+- Venom: one numeric decrease of 1 before the signal was enabled, followed by
+  18 numeric decreases of 4 with recovery active. All these decreases occurred
+  during combat. Five positive venom attributes were subsequently removed.
+- Bleeding: three numeric decreases of 4 and six positive-attribute removals
+  with the recovery signal active during combat.
+- Injury: no reported numeric value or change; its benefit remains untested.
+
+For example, the first venom sequence was 20 → 19 before activation, then
+19 → 15 → 11 afterward. Additional bites replenished venom, so the full
+sequence is not a single uninterrupted clearance trial. Other recorded
+sequences included 23 → 19 → 15 → 11 → 7 → 3 → absent. This is substantially
+stronger evidence of accelerated venom fade than the earlier configuration
+lead, while remaining observational rather than randomized causal proof.
+
+Sixty selected regular out-of-combat positive HP intervals with unchanged
+MaxHealth had median recovery 0.01996 of maximum HP per second. Selection
+required the same character, active requests at both endpoints, 0.75–1.3
+seconds between health events and no combat at either endpoint. This supports
+the existing roughly 2% mobile recovery observation. Combat HP recovery still
+was not established.
+
+There were no full-HP-with-positive-condition observations, so the new
+condition-only activation remains simulator-tested rather than live-verified.
+Three local bite markers occurred while the signal was active; they are not
+proof of server-accepted damage. Among 314 masked snapshots, two closely
+spaced readings around the same incoming Rest echo saw WolfRest true. The
+mask recorded two echo corrections across the run, and subsequent snapshots
+returned false. These data do not establish the rendered pose or other clients'
+view. No gameplay code change was made for this evidence update.
 
 The remaining health goal is combat HP recovery. No additional recovered
 client action currently establishes it. Visual pose suppression and attack
-acceptance are also not established by a false local attribute alone.
+acceptance are also not established by these attribute/input observations.

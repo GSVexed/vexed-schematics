@@ -53,8 +53,45 @@
     "combat_hp_healing": "not_established",
     "rendered_pose_and_server_attack_acceptance": "not_established"
   },
-  "v1_1_roblox_velocity_execution": "not_performed",
+  "v1_1_roblox_velocity_execution": "user_supplied_capture_read_and_analyzed_within_recorded_scope",
   "v1_1_condition_only_activation_live": "not_established",
-  "injury_venom_effects_live": "not_established",
-  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.1.py"
+  "reproduce": "FERAL_LUAU=/path/to/luau python roblox-tools/tests/test-feral-health-recovery-v1.1.py",
+  "injury_effect_live": "not_established",
+  "venom_effect_live": "repeated_four_point_decreases_with_signal_active_during_combat_observed",
+  "v1_1_user_supplied_runtime_evidence": {
+    "seconds": 169.49668459998793,
+    "species": "Bear",
+    "events": 471,
+    "errors": 0,
+    "omitted_events": 0,
+    "true_rest_requests": 25,
+    "false_rest_requests": 2,
+    "venom_numeric_decreases_before_signal": {
+      "count": 1,
+      "amount_per_decrease": 1,
+      "combat": true
+    },
+    "venom_numeric_decreases_during_signal": {
+      "count": 18,
+      "amount_per_decrease": 4,
+      "combat": true
+    },
+    "venom_positive_attribute_removals": 5,
+    "bleed_numeric_decreases_by_four": 3,
+    "bleed_positive_attribute_removals": 6,
+    "injury_observations": 0,
+    "full_hp_with_active_condition_observations": 0,
+    "selected_regular_out_of_combat_hp_intervals": 60,
+    "median_fraction_max_hp_per_second": 0.01996335066664414,
+    "masked_snapshots": 314,
+    "local_rest_true_snapshots": 2,
+    "transient_snapshot_scope": "two closely spaced readings around one incoming echo",
+    "rest_echo_corrections_recorded": 2,
+    "local_bite_markers_while_signal_active": 3,
+    "combat_hp_recovery": "not_established",
+    "rendered_pose": "not_established",
+    "server_attack_acceptance": "not_established",
+    "causality_limit": "Observational client capture; no randomized comparison or direct authoritative handler acknowledgement."
+  },
+  "documentation_update_only": true
 }
