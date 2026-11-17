@@ -1,5 +1,28 @@
 # FERAL client project
 
+## CURRENT — Aurora FORCE v3.1 (power-first)
+
+**[Aurora FORCE v3.1 guide](README-feral-aurora-force-v3.1.md)** · New compact
+**POWER / ESP / SURVIVAL / SETTINGS** interface, explicitly replacing the
+waypoint and target-focus approach the user rejected. Stronger, reversible
+client controller profiles based on actual prior Bear/Tiger stamina evidence:
+3× recovery, aggressive Apex no-drain/high-regeneration settings, standalone
+WolfDbgNoStamina, 1.15/1.30/1.50× speed, 1.15/1.35× leap, optional ALT-held
+Space escape assist, injury movement input tuning and local player ESP.
+All power controls OFF by default. Apex is **HIGH RISK** owing to unresolved
+sudden deaths under prolonged Burst, and *no* profile proves server acceptance.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-force-v3.1.lua"))()
+```
+
+The previous `Aurora v3.0` radar/waypoint files remain for history but are
+**not the recommended launcher**. The v2.1 core and all older hubs are
+preserved; no fake infinite HP/food/thirst/Amber or unsupported permanent
+status grant toggles.
+
+---
+
 ## NEWEST — Aurora v2.1 (Survival, Effects and menu-aware Player Finder)
 
 **[Upgrade guide](README-feral-aurora-v2.1.md)** · Eleven pages: adds practical
