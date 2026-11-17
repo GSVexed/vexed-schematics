@@ -1,5 +1,48 @@
 # Booga Booga Reborn — continuation handoff
 
+## Latest focus: money, item spawning, false Gold records
+
+The user paused Dave and asked for "lots of money",
+possibly through spawning items. User suggested giving
+the server fake but convincing Gold Bar existence data,
+asked to carry on investigation while answering the idea.
+
+Investigated the existing uploaded complete ZIP offline,
+no gameplay remote calls. Analysis saved in
+[BOOGA-ECONOMY-ITEM-GRANT-AUDIT-v1.md](BOOGA-ECONOMY-ITEM-GRANT-AUDIT-v1.md).
+Key findings:
+- Actual item name is `Gold` **ID 597**,
+  not "Gold Bar". `Raw Gold` **ID 258**,
+  smelt `cooksTo={name="Gold",steps=100}`.
+  `Pie` ID 565; `Coin` ID 70.
+- `Game/pickup` sends existing world `EntityID`,
+  not invented complete item data. Locally drawn
+  Gold model is not server-owned world entity.
+- `Game/inventory` listens to `ItemAdded`,
+  `ItemChanged`, `ItemRemoved`,
+  `UpdateInventoryFromRebirth`. It does not
+  send these server events in sampled code.
+- `Game/globalMarket` sends `MarketRequest`
+  for deposit/list/withdraw. Local UI computes
+  available quantity from `Data.inventory`/
+  `Data.coins`. Market codes include
+  insufficientItems/insufficientSpendable/
+  insufficientCoins/depositFailed/withdrawFailed.
+  These show error protocol, not proof of perfect
+  authoritative server validation.
+- `FreeCoins` is actual RemoteEvent in
+  `ReplicatedStorage/Events`, but zero
+  references to its name in 390 extracted
+  ReplicatedStorage source bodies. No server
+  handler is accessible. Name not proof of payout.
+- Normal money avenues: smelting Gold from ore,
+  selling fish, market listings, trade, quests,
+  daily rewards. No demonstrated client-authored
+  real Gold/item/coin minting.
+- No need to run another massive diagnostic.
+  Do not fabricate a Gold spawner or assume
+  forged metadata tricks private server checks.
+
 ## New focused finding — Dave rare Pie farming (Nov 17 2026)
 
 The user's request shifted to Dave, a destructible resource which
