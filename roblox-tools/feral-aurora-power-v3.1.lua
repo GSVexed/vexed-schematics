@@ -165,6 +165,11 @@ function Power.attach(ctx)
         if mode==P.stamina then return end
         P.disableStamina(true)
         if mode=="OFF" then log("Stamina config restored.");return end
+        -- The standalone low-needs switch patches the SAME cached field.
+        -- Release its lease first so both controls can be switched off cleanly.
+        if S.flags.lowNeedsAssist then
+            ctx.toggle("lowNeedsAssist",false)
+        end
         local config,err=loaded("NeedsConfig")
         if not config then
             P.lastError=err;log("Unavailable: "..err);return
