@@ -134,6 +134,55 @@ a 5000-wood-damage tool at speed 0.1 is marked `banned=true`.
 Those are **source definitions**, not accessible legitimate
 equipment or confirmation of working remote authority.
 
+## Haste and Boulder: direct source-level check after failed v2 test
+
+A user tested Dave Fast Break v2 with a **Boulder** and observed
+approximately **10 Dave HP/s in every stage**, including accelerated
+typed-packet request rates. This is a user observation, not a
+controlled server-acceptance benchmark for other equipment.
+
+The archive's reconstructed `Game/tool` module checks
+`statusEffects.playerHasEffect("Haste")` but only enters its
+speed-reduction branch for `itemData.toolType=="Axe"` or
+`itemData.toolType=="Pick"`. Its apparent adjustment is a
+**hard-coded 10% of the tool's `speed` interval**, not a lookup
+of the configurable `boosts/data.Haste.percent` value. The
+decompiler produces an uninitialised temporary variable inside
+the expression; treat the intended 10% as supported by the game
+boost descriptor and the existence of the branch, not as a
+perfectly reconstructed formula.
+
+`Modules/data/settingsData` and the tool-category data group
+`{"Rock","Boulder","Megalith","THE MOUNTAIN"}` separately from
+Axe/Pick. Additionally the gamepass item `Boulder` is described
+in the recovered `Modules/data/gamePasses` as dealing 4× rock
+damage. Thus **normal Haste is not expected to accelerate
+the user's Boulder**, and the user's 10 HP/s result is not
+surprising. The exact server damage class is not recovered.
+
+The Haste buff metadata `Game/boosts/data` sets
+`percent=10` and description "Pickaxes and axes are 10% faster",
+but `Game/boosts` uses that percentage to render its **boost UI**
+and to display incoming `SetBoost`/`UpdateBoostPercent`
+messages. Changing the display percentage to 500% does not
+change the hard-coded tool timing branch or server validation.
+
+Legitimate Haste: `Modules/data/cauldronRecipes` has
+`definePotion("Haste",{Iron=2,Lemon=8})`; the actual inventory
+item `Haste Potion` has `potionType="Haste"` and
+`useType="Drink"`. The server is responsible for granting
+a real effect; setting a player attribute only on the
+local client is not proof of a server-accepted Haste buff.
+Even if a client item `speed` field is edited, previously
+observed 10 HP/s under extra outgoing packets means
+we **cannot** claim this will accelerate Dave.
+
+**Next evidence-based priority:** establish Dave's accepted
+damage-type weakness and compare *actual* 10 HP/s Boulder
+versus confirmed axe/pick+real Haste, using replicated HP
+change. Do not build a user-facing "500% Haste" ON button
+that only updates cosmetics or client animation speed.
+
 ## Best product direction
 
 A Dave-focused module could offer:
