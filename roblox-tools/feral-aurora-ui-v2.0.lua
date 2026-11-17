@@ -33,6 +33,15 @@ local function button(parent,title,w,h,color,callback)
         Font=Enum.Font.GothamBold,TextSize=12,
         Size=UDim2.fromOffset(w or 120,h or 32),AutoButtonColor=true
     },parent),9)
+    -- Subtle interaction shimmer; changes only UI styling, never game state.
+    local glow=ui("UIStroke",{Color=Color3.fromRGB(240,249,255),
+        Transparency=1,Thickness=1},b)
+    b.MouseEnter:Connect(function()
+        Tween:Create(glow,TweenInfo.new(.14),{Transparency=.42}):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        Tween:Create(glow,TweenInfo.new(.18),{Transparency=1}):Play()
+    end)
     if callback then b.Activated:Connect(callback) end
     return b
 end
@@ -432,6 +441,16 @@ function UI.mount(ctx)
         end)
         b.Position=UDim2.fromOffset(16+(i-1)*90,88)
     end
+    local stylingCard,stylingInfo=card(esp,"OUTLINE LOOK & FEEL",
+        "Choose a subtle or bold outline. Changes the local visual only.",115,"STYLE")
+    local subtle=button(stylingCard,"SUBTLE",133,30,c.panel2,function()
+        ctx.setOutlineStyle("subtle")
+    end)
+    subtle.Position=UDim2.fromOffset(15,76)
+    local bold=button(stylingCard,"BOLD",133,30,c.panel2,function()
+        ctx.setOutlineStyle("bold")
+    end)
+    bold.Position=UDim2.fromOffset(160,76)
     local nearbyCard,nearbyText=card(esp,"NEARBY PLAYER LIST",
         "Enable Player Finder to see replicated characters here.",138,"LIVE")
     nearbyText.Size=UDim2.new(1,-30,0,91)
@@ -735,8 +754,12 @@ function UI.mount(ctx)
             or "No active Regrowth allowance currently replicated."
         local homeTurf=char and char:GetAttribute("FeralHomeTurf")
         local grazing=char and char:GetAttribute("FeralGrazing")
-        turfText.Text="Home Turf: "..tostring(homeTurf==true)
-            .."  •  Grazing: "..tostring(grazing==true)
+        local function activeFlag(x)
+            return x==true or type(x)=="number" and x>0
+                or type(x)=="string" and x~=""
+        end
+        turfText.Text="Home Turf: "..tostring(activeFlag(homeTurf))
+            .."  •  Grazing: "..tostring(activeFlag(grazing))
             .."\nBonus amounts are config leads, not verified server damage grants."
         local destination=ctx.locations[s.chosenLocation] or ctx.locations[1]
         compassText.Text=destination[1].."\n"..ctx.compass(destination)
