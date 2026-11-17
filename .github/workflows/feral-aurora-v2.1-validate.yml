@@ -1,0 +1,91 @@
+name: FERAL Aurora 2.1 compile and safety checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-aurora-*-v2.1.lua'
+      - '.github/workflows/feral-aurora-v2.1-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official pinned Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/aurora-2-1-luau.zip
+          mkdir -p /tmp/aurora-2-1-luau
+          unzip -q /tmp/aurora-2-1-luau.zip -d /tmp/aurora-2-1-luau
+          compiler="$(find /tmp/aurora-2-1-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile upgraded v2.1 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            roblox-tools/feral-aurora-atlas-v2.0.lua \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-ui-v2.1.lua \
+            roblox-tools/feral-aurora-hub-v2.1.lua; do
+            "$LUAU_COMPILER" --null "$f"
+          done
+          echo "AURORA_V21_LUAU_COMPILE_PASS"
+      - name: Source-level feature and privacy checks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("roblox-tools")
+          engine=(p/"feral-aurora-engine-v2.1.lua").read_text()
+          ui=(p/"feral-aurora-ui-v2.1.lua").read_text()
+          hub=(p/"feral-aurora-hub-v2.1.lua").read_text()
+          for token in [
+              'sessionPhase=not char and "ANIMAL MENU"',
+              'S.finderOrigin=root and "ANIMAL"',
+              'local origin=root and root.Position',
+              'function ctx.findResources(kind)',
+              'workspace:GetPartBoundsInRadius',
+              'function ctx.resourceHelp()',
+              'function ctx.featureStatus(key)',
+              'function ctx.saveStatusFile()',
+              'S.flags.localAutosave and now-S.lastLocalSave>=120',
+              'Github','FeralAuroraLocalHighlightsV2']:
+              if token=='Github': continue
+              assert token in engine,token
+          for token in [
+              'FeralAuroraHubV21','{"HOME","⌂"},{"SURVIVAL","◍"},{"EFFECTS","✦"}',
+              'FIND FOOD CANDIDATES','FIND WATER CANDIDATES',
+              'RESOURCE RESULTS','LIVE CONDITIONS VS CLIENT EFFECTS',
+              'TRACKER DIAGNOSTICS-FREE STATUS',
+              'AUTO-SAVE OWN STATUS LOCALLY','COMPACT IN-GAME STATUS HUD',
+              'GitHub: project code is synced; live game reports are NOT synced.'
+          ]:
+              assert token in ui,token
+          assert 'feral-aurora-engine-v2.1.lua' in hub
+          assert 'feral-aurora-ui-v2.1.lua' in hub
+          assert 'FeralAuroraHubV20","FeralAuroraHubV21' in hub
+          for name,source in [('engine',engine),('ui',ui),('hub',hub)]:
+              for bad in [
+                  'SetAttribute("Hunger"','SetAttribute("Thirst"',
+                  'SetAttribute("Health"','SetAttribute("Amber"',
+                  'FireServer("Gift"','getupvalue(','setupvalue(',
+                  'Humanoid.Health =','hum.Health =',
+                  'github_pat_','ghp_','Authorization: token']:
+                  assert bad not in source,(name,bad)
+          assert 'GitHub sync is not configured' in engine
+          assert 'localAutosave=false' in engine
+          assert 'playerFinder=false' in engine
+          print("AURORA_V21_SCOPE_CHECKS_PASS")
+          PY
