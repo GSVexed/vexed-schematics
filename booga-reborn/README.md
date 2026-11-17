@@ -1,5 +1,39 @@
 # Booga Booga Reborn — research & hub project
 
+## NEW: VALUE ENGINE v1.0 — ready for in-game validation
+
+**[Full Value Engine setup guide](README-booga-value-engine-v1.0.md)**
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-value-engine-v1.0.lua"))()
+```
+
+Independent FARM/FISH/MARKET systems: smart
+Pickup-tag magnet, resource-priority mining,
+PathfindingService ore navigation,
+**Gold-to-Coin-Press conversion**
+(with server-observed inventory decrement),
+auto-cast/reel via recovered Rod game module,
+actual Fisherman sale requests
+(**waits for Fisherman Coin payout**)
+and live marketplace
+**lowest-price-versus-RAP radar** with
+two-click manual purchase safeguard.
+Tracks normal Coins and separate
+Fisherman Coins, their observed
+session changes and gain rates.
+F6 stops all; no forged item grants
+or silent background transactions.
+
+**Compilation/static checks only, no live Booga
+server test yet.** This is a genuine
+feature-rich first testable version,
+not a verified money exploit.
+The server can reject requests and
+locations/conditions affect success.
+
+---
+
 ## Raw Gold smelting and gold creation — traced
 
 **[Raw Gold → Gold smelting authority audit](BOOGA-RAW-GOLD-SMELTING-AUTHORITY-AUDIT-v1.md)**.
