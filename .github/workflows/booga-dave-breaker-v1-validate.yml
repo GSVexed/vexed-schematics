@@ -1,0 +1,82 @@
+name: Booga Dave native breaker v1 validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-dave-breaker-v1.0.lua'
+      - '.github/workflows/booga-dave-breaker-v1-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau 0.747 compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/booga-dave-luau.zip
+          mkdir -p /tmp/booga-dave-luau
+          unzip -q /tmp/booga-dave-luau.zip -d /tmp/booga-dave-luau
+          compiler="$(find /tmp/booga-dave-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile Dave native attack assistant
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null booga-reborn/booga-dave-breaker-v1.0.lua
+          echo BOOGA_DAVE_LUAU_PASS
+      - name: Check actual health feedback, input cleanup and safe scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("booga-reborn/booga-dave-breaker-v1.0.lua").read_text()
+          for token in (
+              'game.PlaceId~=PLACE',
+              'BoogaDaveBreakerV1',
+              'Resources',
+              'model.Name=="Dave"',
+              'Health',
+              'MAX_DISTANCE=10',
+              'setNativeHold',
+              'holdToSwing=true',
+              'mouse1press',
+              'mouse1release',
+              'VirtualInputManager',
+              'function releaseInput()',
+              'function beginAttack()',
+              'function attackStep(now)',
+              'function stop(reason)',
+              'lastDamageAt==startedAt',
+              'InputBegan:Connect',
+              'KeyCode.F6',
+              'DaveShutdown',
+              'player.Idled:Connect',
+              'startButton=button',
+              'mode=="HOLD" and "TAP"',
+              'NO DAVE STREAMED',
+              'No server-observed HP loss'
+          ):
+              assert token in source,token
+          for forbidden in (
+              'SwingTool.send','ModelBroken.send','FireServer(',
+              'InvokeServer(','SetAttribute("Health"',
+              'Health.Value=0','Health.Value = 0',
+              'Humanoid.Health=','writefile(', 'PostAsync(',
+              'github_pat_','ghp_'
+          ):
+              assert forbidden not in source,forbidden
+          print("BOOGA_DAVE_SCOPE_PASS")
+          PY
