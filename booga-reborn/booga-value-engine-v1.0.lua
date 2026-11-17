@@ -22,6 +22,20 @@ if old then
     if x and x:IsA("BindableEvent") then pcall(function() x:Fire() end) end
     if old.Parent then old:Destroy() end
 end
+-- Prevent an earlier Dave experiment from sending attacks alongside
+-- the ore farmer. Those panels have their own cooperative stop signal.
+for _,entry in ipairs({
+    {"BoogaDaveFastBreakV20","Shutdown"},
+    {"BoogaDaveBreakerV1","DaveShutdown"}
+}) do
+    local oldDave=pg:FindFirstChild(entry[1])
+    if oldDave then
+        local signal=oldDave:FindFirstChild(entry[2])
+        if signal and signal:IsA("BindableEvent") then
+            pcall(function()signal:Fire()end)
+        else pcall(function()oldDave:Destroy()end) end
+    end
+end
 
 local M=RS:FindFirstChild("Modules")
 local U=M and M:FindFirstChild("util")
