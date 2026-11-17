@@ -812,6 +812,22 @@ function UI.mount(ctx)
         "Activity and local history are not automatically sent to GitHub.",117,"LIVE")
     card(settings,"CODE VS REAL GAME STATE",
         "The GitHub repo stores the source and research. It doesn't automatically receive live Velocity reports. Native Rest requests, local speed inputs, status flags, client resource scanning and server rewards have different authority.",139,"TRANSPARENCY")
+    -- A genuinely functional independent compact HUD (no inert setting).
+    local miniHUD=round(make("Frame",{
+        Name="AuroraV3CompactStatus",BackgroundColor3=c.bg,
+        BackgroundTransparency=.10,BorderSizePixel=0,
+        Position=UDim2.new(1,-286,0,93),
+        Size=UDim2.fromOffset(270,93),
+        Visible=false
+    },gui),12)
+    stroke(miniHUD,c.teal,.45)
+    local miniTitle=label(miniHUD,"✦  AURORA  /  MINI HUD",10,24,c.teal,true)
+    miniTitle.Position=UDim2.fromOffset(12,7)
+    miniTitle.Size=UDim2.fromOffset(250,22)
+    local miniBody=label(miniHUD,"Spawn an animal for live stats.",
+        11,58,c.text,true)
+    miniBody.Position=UDim2.fromOffset(12,30)
+    miniBody.Size=UDim2.fromOffset(248,55)
     -- Global command palette (Ctrl+K), with eight curated actions and search.
     local modal=make("Frame",{
         Name="CommandPalette",BackgroundColor3=Color3.fromRGB(4,9,16),
@@ -936,6 +952,15 @@ function UI.mount(ctx)
         local target=ops.targetInfo()
         phaseText.Text="●  "..tostring(a.sessionPhase)
         phaseText.TextColor3=a.sessionPhase=="IN GAME" and c.teal or c.amber
+        miniHUD.Visible=s.flags.miniHUD
+        miniTitle.TextColor3=accent()
+        miniBody.Text=a.sessionPhase=="IN GAME"
+            and ("HP "..fmt(a.hp,0).."/"..fmt(a.maxHp,0)
+                .."    ST "..fmt(a.stamina,1).."/"..fmt(a.maxStamina,1)
+                .."\nHUNGER "..fmt(a.hunger,0)
+                .."    THIRST "..fmt(a.thirst,0)
+                .."\n"..tostring(a.species).." / "..tostring(a.mode))
+            or "ANIMAL MENU  /  no active animal stats"
         heroLabel.Text=a.sessionPhase=="IN GAME" and
             (tostring(a.species).."  /  "..tostring(a.stage)) or
             ("ANIMAL MENU  /  FIELD TOOLS READY")
@@ -970,7 +995,12 @@ function UI.mount(ctx)
             item.entry=p
             item.button.Visible=p~=nil
             if p then
-                item.button.Position=UDim2.new(.5,p.x*0.465*2, .5,p.y*0.465*2)
+                -- Dot positions are scale coordinates, not pixel offsets.
+                -- Clamp diagonals to the circular radar boundary.
+                local length=math.sqrt(p.x*p.x+p.y*p.y)
+                local weight=length>1 and 1/length or 1
+                item.button.Position=UDim2.fromScale(
+                    .5+p.x*weight*.455,.5+p.y*weight*.455)
                 item.button.BackgroundColor3=p.focused and c.violet
                     or p.distance<140 and c.teal or p.distance<340 and c.amber
                     or c.coral
@@ -1038,7 +1068,14 @@ function UI.mount(ctx)
             or "Rest helper OFF • server bonus never assumed."
         if main.Visible then scaleToScreen() end
     end
-    ctx.onUI=function()pcall(refresh)end
+    local reportedError=false
+    ctx.onUI=function()
+        local ok,err=pcall(refresh)
+        if not ok and not reportedError then
+            reportedError=true
+            ctx.notice("Aurora view refresh error: "..string.sub(tostring(err),1,110))
+        end
+    end
     ctx.onNotice=function()if toast and toast.Parent then toast.Text=s.notice end end
     renderPins()
     renderResources=function() refresh() end
