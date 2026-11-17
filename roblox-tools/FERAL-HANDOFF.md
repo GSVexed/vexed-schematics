@@ -1,5 +1,41 @@
 # FERAL project continuation
 
+## Follow-up — HudRest cancellation test (17 November 2026)
+
+User tested Rest-Only Lab v1.0 (70.61 sec, 137 samples): eight successful
+client sends of Rest=true and eight local WolfRest echoes; no server proof.
+Their report had:
+- off_moving: net -1.45 visible stamina/s (28 eligible pairs)
+- on_moving: net -1.13 visible stamina/s (27 eligible pairs)
+- on_still: +2.76 visible stamina/s (25 eligible pairs)
+- No health-rate pairs because HP at full or otherwise ineligible.
+- Some near-final still samples HudRest=true, later moving samples HudRest=false.
+User clarified normal Rest locks movement; attempting to move cancels normal
+rest state even with the pose animation masked. They hypothesize HudRest=true
+might drive stamina rest benefits.
+
+New **Rest-State Lab v1.1** is published, separate from intact v1.0 and
+Recovery Hub v1.3:
+- [Source](feral-rest-state-lab-v1.1.lua)
+- [Guide](README-rest-state-lab-v1.1.md)
+- Loader: `loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-rest-state-lab-v1.1.lua"))()`
+- Official Luau 0.747 compile-only and static tests PASS:
+  https://github.com/GSVexed/vexed-schematics/actions/runs/44106352715
+- Keeps Rest ON native request/pose mask and adds explicit TEST HUDREST
+  mode (OFF by default), which briefly asserts the CLIENT-LOCAL player's
+  HudRest attribute true every 0.2s at most. It auto-stops within 12 sec,
+  if movement appears blocked or the game cancels the attribute 36 times.
+  Restores the original HudRest if still holding its own true. Reports
+  on_moving vs on_hud_moving, actual flag samples and reset counts.
+  **Unverified in live FERAL/Velocity; this is a hypothesis experiment,
+  NOT a proven server bypass or durable Rest fix.**
+- Next step: Test with partial stamina: Rest ON walking baseline ~10 sec,
+  then walk so HudRest is false, click TEST HUDREST while attempting to
+  keep walking ~12 sec. COPY REPORT and paste outcome. Avoid Burst, normal
+  rest key, other overlays/config switches; only own-character data.
+  If the flag is canceled, movement blocks, or no net uplift appears,
+  reject HudRest-as-causal-switch; do not blindly force it indefinitely.
+
 ## New continuation checkpoint — 17 November 2026, normal Chat
 
 After Work usage ran out, the user requested continuing this FERAL project
