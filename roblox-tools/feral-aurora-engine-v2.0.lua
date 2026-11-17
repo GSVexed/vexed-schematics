@@ -74,7 +74,8 @@ function Engine.new(atlas)
         flags={recovery=false,vision=false,calm=false,performance=false,
             mobility=false,speed=false,leap=false,playerFinder=false,
             tags=true,outlines=true,throughWalls=false,alerts=true},
-        range=300,limit=24,tagScale=1,restChar=nil,mask=nil,lastRest=-math.huge,
+        range=300,limit=24,tagScale=1,outlineStyle="subtle",
+        restChar=nil,mask=nil,lastRest=-math.huge,
         restSent=0,restFailed=0,restEchoed=0,lastTracker=-math.huge,
         leases={},attrLeases={},byPlayer={},light=nil,log={},
         notice="Aurora ready. All gameplay changes are OFF.",
@@ -155,6 +156,12 @@ function Engine.new(atlas)
         if type(title)~="string" or #title>92 then return end
         S.favourites[title]=not S.favourites[title]
         ctx.savePrefs();ctx.onUI()
+    end
+    function ctx.setOutlineStyle(name)
+        if name~="subtle" and name~="bold" then return end
+        S.outlineStyle=name
+        ctx.refreshTracker(true)
+        ctx.notice("Outline style: "..name)
     end
     function ctx.setRange(nextRange)
         if finite(nextRange) then
@@ -452,6 +459,8 @@ function Engine.new(atlas)
             r.h.DepthMode=S.flags.throughWalls and
                 Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
             r.h.FillColor=color;r.h.OutlineColor=color
+            r.h.FillTransparency=S.outlineStyle=="bold" and .60 or .86
+            r.h.OutlineTransparency=S.outlineStyle=="bold" and 0 or .12
             r.b.Adornee=x.char:FindFirstChild("Head") or x.root
             r.b.Enabled=S.flags.tags
             r.b.AlwaysOnTop=S.flags.throughWalls
@@ -602,7 +611,12 @@ function Engine.new(atlas)
         if now-S.lastPoll>=.3 then
             S.lastPoll=now
             recoveryTick(now)
-            ctx.refreshTracker(false)
+            local okTracker=pcall(ctx.refreshTracker,false)
+            if not okTracker and S.flags.playerFinder then
+                S.flags.playerFinder=false
+                for p in pairs(S.byPlayer) do clearRecord(p) end
+                ctx.notice("Player Finder stopped after an unexpected local rendering error.")
+            end
             local current=ctx.stats()
             if S.flags.alerts and now-S.lastNeedsWarning>=25 then
                 local h,t=current.hunger,current.thirst
