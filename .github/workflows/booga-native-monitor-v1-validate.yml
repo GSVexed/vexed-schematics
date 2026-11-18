@@ -1,0 +1,39 @@
+name: Booga - native Voodoo telemetry compile
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-voodoo-regen-native-monitor-v1.lua'
+      - '.github/workflows/booga-native-monitor-v1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Luau official compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 2 --max-time 90 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -name luau-compile -type f | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-voodoo-regen-native-monitor-v1.lua
+      - name: Read-only contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          t=Path('booga-reborn/booga-voodoo-regen-native-monitor-v1.lua').read_text()
+          for k in ['UpdateStatsUnreliable','SetBoost','RemoveBoost','UpdateArmor','writefile("booga_voodoo_native_v1.json"']:
+             assert k in t,k
+          assert '.send(' not in t
+          assert 'voodoo=' not in t.replace('voodoo=d and d.voodoo or nil','')
+          print('READ_ONLY_MONITOR_STATIC_PASS')
+          PY
