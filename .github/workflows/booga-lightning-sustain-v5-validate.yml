@@ -1,0 +1,61 @@
+name: Booga Lightning Sustain v5 - official Luau validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-sustain-v5.0.lua'
+      - '.github/workflows/booga-lightning-sustain-v5-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/booga-lightning-luau.zip
+          mkdir -p /tmp/booga-lightning-luau
+          unzip -q /tmp/booga-lightning-luau.zip -d /tmp/booga-lightning-luau
+          compile="$(find /tmp/booga-lightning-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compile"
+          chmod +x "$compile"
+          echo "LUAU_COMPILER=$compile" >> "$GITHUB_ENV"
+      - name: Compile Lightning Sustain v5
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null booga-reborn/booga-lightning-sustain-v5.0.lua
+          echo LIGHTNING_SUSTAIN_V5_COMPILE_PASS
+      - name: Verify request and item-use contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-lightning-sustain-v5.0.lua').read_text()
+          tests=[
+             'KeyCode.V','UIS.InputEnded:Connect','if held() and now>=nextCast then',
+             'KeyCode.F6', 'gameSignals.InputBegan', 'sig:Fire(',
+             'packets.VoodooSpell', 'pkt.send({targetPos=cursorTarget(),aimDirection=aimDirection()})',
+             'packets.UseBagItem.send(slot)', 'Void Shroud','Void Chestplate','Void Greaves',
+             'Jelly Sandwich','Spellmaster','Void Bag','Data',
+             'observed_positive_regen_per_second', 'observed_voodoo_gain',
+             'booga_lightning_v5_report.json','writefile(filename',
+             'if now-lastSaved>5','genuine_item_actions',
+          ]
+          for t in tests: assert t in s,t
+          forbidden=['Health.Value=', 'Data.voodoo=', 'aimDave', 'targetDave', 'PostAsync(', 'FireServer(']
+          for t in forbidden: assert t not in s,t
+          assert 'if held() and now>=nextCast then' in s
+          print('LIGHTNING_SUSTAIN_V5_OFFLINE_CONTRACT_PASS',len(tests))
+          PY
+      - name: State live acceptance limits
+        run: |
+          echo "Official Luau compile and offline contract checks are not live Roblox acceptance tests."
