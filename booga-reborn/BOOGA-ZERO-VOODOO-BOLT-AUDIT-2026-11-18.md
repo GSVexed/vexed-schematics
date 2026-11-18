@@ -2,6 +2,24 @@
 **Investigated:** 18 November 2026  
 **Basis:** Original uploaded `UPLOAD_PART_010_DATA(1).zip` (not server source); live Velocity/Roblox read-only audit [run 44314604101](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44314604101); public spell descriptions for background.
 
+## Live user-approved restricted spell selection trials — 18 November 2026
+
+The user explicitly accepted the possibility that these tests could replace normal Energy Bolt. The code was compiled with Luau 0.747 and launched **inside the active Roblox/Velocity session** through the existing self-hosted Windows runner. The tests made direct, ordinary `PromptSpellChoice.send(itemID)` requests and **never wrote local `Data.spell`**, intercepted packet listeners, cast a spell, or consumed items.
+
+| Candidate | item ID | Transport | Local game `Data.spell` after observation |
+|---|---:|---|---|
+| God's Bolt | 354 | One request, no local error | Energy Bolt after 19 seconds |
+| Rainbow Ray | 89 | One request, no local error | Energy Bolt after 9 seconds |
+| Equinox Bolt | 353 | One request, no local error | Energy Bolt after 9 seconds |
+| Bullet's Ray | 144 | One request, no local error | Energy Bolt after 9 seconds |
+
+- [God's Bolt live workflow 44318047221](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44318047221), status `NO_SELECTION_CHANGE_WITHIN_19_SECONDS`, `request_count=1`. `unlockedSpells["God's Bolt"]` also remained unset.
+- [Remaining three live workflow 44318511191](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44318511191), status `ALL_THREE_NO_SELECTION_CHANGE`, `request_count=3`, each `send_ok=true` but selected spell stayed Energy Bolt. The character advanced from level 39 to 40 while playing; no change attributed to this script.
+
+**Interpretation:** All four attempts reached the client send path without a local error, but none produced an observed spell-selection change. This is consistent with server-side rejection (possibly because the player already has a selected spell), and no free zero-cost damaging bolt was demonstrated. The test does **not** reveal the server's private reason for rejecting requests or prove whether a fresh character without an existing selection could ever choose these restricted IDs. Do not repeat these requests on the same account without new evidence. A rebirth/character reset is a separate, potentially destructive action and was **not** attempted.
+
+---
+
 ## Core finding
 The decompiled item data includes **four combat-sounding entries with `voodooCost = 0`**, but all four also have `blacklisted = true` and `voodooSpell = false`:
 
