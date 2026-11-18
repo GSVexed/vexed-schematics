@@ -1,5 +1,37 @@
 # Booga Booga Reborn — continuation handoff
 
+## Current scope: unowned chest spawning only — v1.1
+
+The user explicitly rejected moving to Resourceful/building methods or
+tests that use owned chests. Preserve that scope: zero-owned chests only,
+no purchases or owned-chest opening modes. They asked for the one-line
+script after a deeper review.
+
+Their v1.0.1 Resource Chest report reached one request, then observed no
+chest during 10.1 seconds. Owned count stayed zero and observed coins were
+unchanged. Both RequestData calls returned nil; the reads were from the
+live cache. No free spawn or exact server rejection reason was established.
+
+[Unowned Chest Trial v1.1](README-booga-chest-trial-v1.1.md) is the current
+bounded continuation. It records native FallingChest feedback and fixed
+Notify/Toast notice classifications. The source review found that ByteNet
+listen replaces the sole callback; v1.1 preserves the original dispatch
+instead, and restores its own temporary wrapper on teardown. It keeps
+one ChestDrop call, the zero-owned gate, legacy request-budget accounting,
+no purchases and no owned tests. A type tried by v1.0 can receive one
+instrumented recheck within the same inherited three-call total.
+
+The original archive has 24 physical Pleb Chest models, all Entity-tagged
+with numeric EntityID and positive IntValue Health. That supports the old
+observer's structural assumptions for archived Pleb Chests but does not
+validate every later Resource Chest spawn or prove why the user's test failed.
+The [lifecycle review](BOOGA-CHEST-LIFECYCLE-v1.md) records the full trace.
+
+Official Luau compilation and 45 offline checks passed. v1.1's GUI/native
+observation has not been run in Roblox/Velocity by the developer. No real
+unowned chest grant, usable loot or persistence is confirmed. Do not present
+this instrumentation as a discovered ownership bypass.
+
 ## Latest task: one controlled unowned-chest request — 18 November 2026
 
 **Current hotfix is v1.0.1 at the same v1.0 loader URL.** The user's first

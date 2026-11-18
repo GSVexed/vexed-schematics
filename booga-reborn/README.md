@@ -2,6 +2,17 @@
 
 ## Chest request trial — 18 November 2026
 
+Current chest-only continuation: [Unowned Chest Trial v1.1](README-booga-chest-trial-v1.1.md).
+It adds native falling-chest feedback and fixed server-notice classifications
+while retaining the zero-owned gate and one request. No purchases or owned
+tests are included. [The lifecycle review](BOOGA-CHEST-LIFECYCLE-v1.md)
+documents the failed v1.0.1 Resource Chest attempt and the remaining unknowns.
+**A working free spawn has not been established.**
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-chest-trial-v1.1.lua"))()
+```
+
 [Chest Trial v1.0.1](README-booga-chest-trial-v1.0.md) sends one normal
 chest-open request after a readable inventory shows zero owned. It uses
 the native live game cache when the separate server refresh is unavailable,

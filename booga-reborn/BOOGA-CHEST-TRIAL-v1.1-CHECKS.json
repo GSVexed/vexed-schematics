@@ -1,0 +1,28 @@
+{
+  "schema": "booga-chest-trial-checks/1.1",
+  "version": "1.1",
+  "date_utc": "2026-11-18",
+  "source": "booga-chest-trial-v1.1.lua",
+  "source_bytes": 26718,
+  "source_sha256": "9a3bbce6d85fc9508f202896261edd2a8e90eb8eef8a2a1ff0d973ea0b670f9f",
+  "compiler": {
+    "name": "official Luau",
+    "version": "0.747",
+    "result": "passed"
+  },
+  "offline_cases": 45,
+  "retained_workflow_cases": 30,
+  "native_observation_cases": 15,
+  "only_gameplay_packet": "ChestDrop.send(chestName)",
+  "gameplay_requests_per_panel": 1,
+  "owned_chest_attempts_allowed": false,
+  "purchase_requests": 0,
+  "inventory_or_balance_edits": 0,
+  "native_observer": "Temporary FallingChest.fireListener wrapper; native listen is not replaced; original arguments/results/errors preserved; ownership-aware restoration.",
+  "raw_server_notice_text_exported": false,
+  "raw_positions_or_entity_ids_exported": false,
+  "new_version_live_roblox_velocity_test": "not_performed",
+  "previous_user_result": "v1.0.1 Resource Chest: one submitted request, zero observed chests, cached quantity zero and coin balance unchanged; RequestData returned nil both times.",
+  "free_chest_grant": "not_established",
+  "loot_and_persistence": "not_verified"
+}
