@@ -1,0 +1,32 @@
+name: Booga v3 - compile true Voodoo authority audit
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/booga-voodoo-v3-compile.yml','booga-reborn/booga-voodoo-regen-v3.lua']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official Luau 0.747 compiler and read-only assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 75 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          x="$(find /tmp/luau -type f -name luau-compile | head -n1)"
+          chmod +x "$x"
+          "$x" --null booga-reborn/booga-voodoo-regen-v3.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-voodoo-regen-v3.lua').read_text()
+          for expected in ('UpdateStatsUnreliable','stat_not_reconciled','booga_voodoo_regen_v3.json','Voodoo Passive','SetBoost','task.delay'):
+            assert expected in s,expected
+          for forbidden in ('.send(','.FireServer(','.InvokeServer(', 'SendKeys', 'setclipboard('):
+            assert forbidden not in s,forbidden
+          print('COMPILED_NATIVE_VOODOO_V3_READ_ONLY_PASS')
+          PY
