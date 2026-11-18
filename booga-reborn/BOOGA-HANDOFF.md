@@ -1,5 +1,17 @@
 # Booga Booga Reborn — continuation handoff
 
+## 2026-11-18 real PC / genuine Voodoo evidence — critical finding
+
+**Read first:** [Live authority results](BOOGA-LIVE-VOODOO-AUTHORITY-RESULTS-2026-11-18.md). Using the Windows self-hosted runner, successfully executed Lua directly in Roblox through Velocity's Open+Execute WPF UI (not just CI compile). Actual server-origin `UpdateStatsUnreliable.voodoo` packets varied and regenerated ~**0.28–0.33/s**, with genuine 30-point cost drops, **while `gameUtil.Data.voodoo` remained fixed at 100**. This explains fake full-energy casting animations. Unknown local override/update failure; cannot call it unlimited energy.
+
+User's game snapshot: Spellmaster tier 1; God Bag; no equipped Void armour; level 39; no ordinary-inventory Jelly/Void Shards/Magnetite or Void regeneration items; crafting UI rejects Void gear level-100 requirement. One ordinary `CraftItem` request for Void Shroud was sent and inventory did **not** gain the item. Repeated casting and fake client cache are not solutions.
+
+**No actual increased regeneration has yet been demonstrated.** The user asked for genuine server-recognised regen far beyond existing effects, not more ordinary gear/AFK. Don't oversell any UI/tool as fulfilling that goal. Use inbound packet slopes, not gameUtil local cache, as success criterion.
+
+---
+
+
+
 ## Active experimental finding: same-frame double Lightning (18 Nov 2026)
 
 User reiterated goal: **actual server-accepted extra Voodoo or real damaging Lightning without 30-Voodoo cost**, already owns Spellmaster, rejects cosmetic/normal equipment hubs. The old v6 is **not** the solution. Reopened original archive scripts and ByteNet source, checked current public results; no verified server-side regen-grant or free-cast path found. Source shows `VoodooSpell` carries only `targetPos` and `aimDirection`, `UpdateStats` / `SetBoost` are incoming; spoofing client data, re-sending at regular intervals, and fake buff icon are not breakthroughs.
