@@ -1,0 +1,45 @@
+name: Voodoo Sync v6 compile and behaviour contracts
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-voodoo-sync-v6.0.lua'
+      - '.github/workflows/booga-voodoo-sync-v6-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official Luau 0.747 syntax compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-voodoo-sync-v6.0.lua
+      - name: Static sanity checks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-voodoo-sync-v6.0.lua').read_text()
+          required=['BoogaVoodooSyncV6','UseBagItem','Void Shroud','Void Chestplate','Void Greaves','Void Bag','Spellmaster','Jelly Sandwich','UpdateStats','VoodooSpell','input']
+          # Voodoo is read from gameUtil.Data; no fake UpdateStats packets.
+          required.remove('UpdateStats');required.remove('input')
+          required += ['data()','itemLocked','InputEnded:Connect','InputBegan:Connect','Humanoid','observed_voodoo_gain','booga_voodoo_sync_v6_report.json']
+          for term in required: assert term in s,term
+          assert 'packets.SetBoost.send' not in s
+          assert 'Data.voodoo=' not in s
+          assert 'd.voodoo=' not in s
+          assert 'voodoo<cost' not in s
+          assert 'autoAim' not in s
+          print("VOODOO_V6_STATIC_CHECKS_PASSED",len(required))
+          PY
