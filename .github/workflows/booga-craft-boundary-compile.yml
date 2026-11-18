@@ -1,0 +1,28 @@
+name: Booga - verify single crafting boundary test
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/booga-craft-boundary-compile.yml','booga-reborn/booga-void-craft-boundary-v1.lua']
+permissions: {contents: read}
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          curl -fsSL --max-time 75 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau && unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile|head -n1)"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-void-craft-boundary-v1.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-void-craft-boundary-v1.lua').read_text()
+          assert s.count('.send(')==1 and 'CraftItem.send(ids[want])' in s
+          assert 'ItemAdded' in s and 'CLIENT_GAIN' not in s
+          assert '.FireServer(' not in s and '.InvokeServer(' not in s
+          print('ONE_CRAFT_REQUEST_STATIC_PASS')
+          PY
+          echo 'READ_ONLY_GEAR_AUDIT_COMPILE_PASS'
