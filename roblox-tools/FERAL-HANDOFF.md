@@ -1,5 +1,21 @@
 # FERAL project continuation
 
+## Latest: TURTLE update and server-source access check — 18 November 2026
+
+User switched back from Booga and is loading FERAL. They report updates and want to know whether the server code can be obtained; prior client internals must be treated as historical until refreshed.
+
+Read the official public game metadata at https://games.roblox.com/v1/games?universeIds=10771881861 on 18 November 2026. It identifies root PlaceId `108901361810209`, universe `10771881861`, creator Elasmonian Games (group `109771238`), current title `[TURTLE🐢] FERAL 🐺 Animal Survival`, updated `2026-11-18T04:50:09.536Z`, and **`copyingAllowed: false`**. The official game page independently shows the TURTLE title. The public metadata check used no Roblox credentials and did not download a place file.
+
+Public searches for the exact game/creator, source releases and uncopylocked copies, including GitHub repository searches for Elasmonian and the exact game name, found **no verified creator-published server-source release**. This is a bounded negative search result, not proof that no private or unindexed repository exists. The community page required JavaScript and did not expose readable announcements, so its contents were not verified.
+
+Roblox's [access-control documentation](https://create.roblox.com/docs/scripting/security/access-control) states that server-only scripts/modules in ServerScriptService or ServerStorage do not replicate to clients. A client executor or decompiler therefore cannot recover their absent bytecode merely by scanning the PC or requesting normal gameplay data. Shared ModuleScripts in replicated containers can include both client and server branches; inspecting those may reveal partial shared logic but must not be described as retrieving the complete server implementation. No new FERAL shared-module exposure has been established in this turn.
+
+Documented full-project access routes are developer-granted Studio Edit access, an owner-supplied project/source copy, or an owner-enabled public place copy/source release; see [allow copying](https://create.roblox.com/docs/projects/configure-games#allow-copying). Public copying is disabled for the current game according to the metadata above. Do not claim a private-server purchase grants Studio/source access or advertise a server-code extractor.
+
+The existing full client dataset is dated **16 November 2026**. It contains 339 logical game-source exports and 37,648 platform-source exports; it does not contain private FERAL server scripts. Historical recovery captures did not fix 64 reconstruction failures. **No post-TURTLE in-game client capture has been taken yet.** A refresh should compare game-source paths/content and remote definitions against that baseline, include newly replicated/shared modules, and keep reconstruction defects explicit. No need to re-export the large Roblox platform corpus solely to establish whether FERAL changed. Existing Aurora FORCE v3.1 has not been verified against this update; do not represent the web metadata check as compatibility testing.
+
+---
+
 ## Most recent: Aurora FORCE v3.1 — power-first pivot (17 Nov 2026)
 
 The user explicitly rejected Aurora v3.0's target selection/waypoints,
