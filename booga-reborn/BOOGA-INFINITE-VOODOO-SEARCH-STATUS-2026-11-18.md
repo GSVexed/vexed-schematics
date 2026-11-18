@@ -2,6 +2,12 @@
 
 Goal: server-recognised Voodoo that permits genuinely damaging extra Lightning casts, ideally infinite. **No verified infinite Voodoo exploit found.**
 
+## Work Mode continuation: observer repair
+
+Confirmed in the recovered ByteNet source that `listen` assigns a single callback. The older native-v1 and lab-v2 monitors replaced native handlers when subscribing, which can freeze the game cache/UI. Updated both hosted scripts to passive client-cache sampling without packet subscriptions; lab v2.1 also sends no automatic air-cast request. Reports explicitly distinguish cache samples from independently observed native packets. A fresh game session is required if an old intrusive monitor has already displaced native handlers.
+
+Official Luau 0.747 compilation and mocked runtime regression checks pass. The regression fails against the prior scripts because their subscriptions stop native cache/UI updates. No new live Roblox test or infinite-Voodoo result was obtained. See the current [continuation handoff](BOOGA-HANDOFF.md) for scope and remaining historical probes.
+
 ## Verified live tests and outcomes
 - Voodoo cache/UI showed full 100 under older injected listener-based observer while incoming stat packets showed real 30-Voodoo costs; the observer may have interfered with callbacks. Later listener-free inspection showed normal cache/UI 41, 41.0. Never infer successful extra energy from UI alone.
 - Incoming stat packets previously appeared to regenerate ~0.29 per second; provisional because the observer registered handlers. Not evidence of boosted regen.

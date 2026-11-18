@@ -1,5 +1,21 @@
 # Booga Booga Reborn — continuation handoff
 
+## 2026-11-18 Work Mode recovery — observer callback bug fixed
+
+**The infinite-Voodoo goal remains unfulfilled.** Recovered the current source archive and both project repositories; read the latest full-source review and recorded live failures. No new accepted energy grant, free cast, damage result or current server source was obtained.
+
+The recovered `Modules/libraries/byteNet/packets/packet` implementation at lines 157–173 assigns one callback in `listen` and invokes that callback in `fireListener`. A new subscription replaces the old callback; it is not an additional listener. Both `booga-voodoo-regen-native-monitor-v1.lua` and `booga-voodoo-lab-v2.lua` previously called this on native stats/boost/armour packets. That can suppress native updates and explains a plausible cause of the recorded frozen-100 display. Do not assert it is the only possible cause in the old live session.
+
+Fixed those two hosted monitor paths to sample only the existing client cache, with explicit measurement provenance and no packet subscriptions. Lab revision 2.1 also removes the automatic air-cast request; it is now entirely observational. Existing report filenames and schema names remain compatible, while removed packet counters/boost fields are deliberately absent. Cache readings do not independently prove the server balance or damage.
+
+**If an old listener-based monitor already ran, use a fresh game session before taking new readings.** Stopping an old monitor does not restore the native callbacks it replaced. Historical `booga-voodoo-regen-v3.lua` and `booga-void-craft-boundary-v1.lua` also contain listener subscriptions and remain unsuitable for non-invasive measurement; they were not relaunched or changed in this continuation.
+
+Validation: official Luau 0.747 compilation passes for both patched sources. `test-voodoo-monitors.py` executes the actual sources against a mock of the game's single-callback transport: native cache/UI delivery, sampling, rerun, stop and timeout all pass, without packet registration or gameplay requests. The same regression test fails against the previous sources because the native cache/UI stops updating. **These are local mocked runtime checks, not new live Roblox verification.**
+
+Do not republish a casting/gear helper as an infinite solution or request another full archive. The outstanding requirement is a distinct reproducible server-accepted mechanism, or current server handlers/test access that allow one to be examined.
+
+---
+
 ## 2026-11-18 source transfer vs server authority comparison — latest
 
 Reviewed the actual saved legacy source (not a summary), especially `ServerScriptService/Big Mama` at ~2033–2038, 3519–3577 and 5034–5051. Its `RequestData.OnServerInvoke` returns the player's `_G.sessionData[player.UserId]`, **not** server `Script.Source` files. No direct source export code in this main handler. Legacy Voodoo regeneration and spell-cost deduction use server-side data; current Reborn client uses a different ByteNet packet interface, so no live bypass follows automatically. New complete [server source transfer comparison](BOOGA-SERVER-CODE-TRANSFER-COMPARISON-2026-11-18.md). GitHub/public search did not reveal a verified current Reborn server source release. Don't claim live private code is retrievable or that `RequestData` is a script download route.

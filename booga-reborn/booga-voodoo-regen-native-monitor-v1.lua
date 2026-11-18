@@ -1,4 +1,5 @@
--- Booga Voodoo Native Telemetry v1: observational, no client stat edits or outgoing packets.
+-- Booga Voodoo Native Telemetry v1.1: passive client-cache sampling only.
+-- The recovered ByteNet listen function replaces the native callback. Never subscribe here.
 local Players=game:GetService("Players")
 local RS=game:GetService("ReplicatedStorage")
 local Run=game:GetService("RunService")
@@ -18,19 +19,15 @@ local function req(a,b,c)
  return nil
 end
 local util=req("Modules","util","gameUtil")
-local packets=req("Modules","util","packets")
 local start=os.clock()
 local live=true
 local sampleAt=0
 local saveAt=0
 local lastV=nil
-local links={}
-local notes={}
+local notes={"If an older packet-listener monitor ran in this session, rejoin first; stopping it cannot restore the replaced native callbacks."}
 local snaps={}
 local events={}
-local boost={}
-local count={update_stats=0,unreliable_stats=0,boost_set=0,boost_removed=0,armor_updates=0,observed_increases=0,observed_decreases=0}
-local validBoost={["Voodoo Passive"]=true,["Jelly Sandwich"]=true,["Void Armor"]=true}
+local count={observed_increases=0,observed_decreases=0}
 local function number(x)return type(x)=="number" and x==x and math.abs(x)<1e9 end
 local function value()
  local d=util and util.Data
@@ -40,43 +37,7 @@ local function push(kind,x,meta)
  if #events>=250 then table.remove(events,1)end
  events[#events+1]={t=math.floor((os.clock()-start)*10)/10,k=kind,v=x,m=meta}
 end
-local function subscribe(name,callback)
- local p=packets and packets[name]
- if not p or type(p.listen)~="function"then notes[#notes+1]="Missing listener: "..name;return end
- local ok,link=pcall(function()return p.listen(callback)end)
- if not ok then notes[#notes+1]=name.." listener failed";return end
- links[#links+1]=link
-end
-for _,pair in ipairs({{"UpdateStats","update_stats"},{"UpdateStatsUnreliable","unreliable_stats"}})do
- local name,key=pair[1],pair[2]
- subscribe(name,function(payload)
-  if not live then return end
-  local v=type(payload)=="table" and payload.voodoo
-  if number(v)then count[key]+=1;push(key,v)end
- end)
-end
-subscribe("SetBoost",function(payload)
- if not live or type(payload)~="table" or not validBoost[payload.name]then return end
- local n=payload.name
- boost[n]={duration=number(payload.duration)and payload.duration or nil,percent=number(payload.percent)and payload.percent or nil,seen_t=os.clock()-start}
- count.boost_set+=1
- push("server_boost_set",n)
-end)
-subscribe("RemoveBoost",function(payload)
- if not live then return end
- local n=type(payload)=="table" and payload.name or payload
- if type(n)~="string" or not validBoost[n]then return end
- boost[n]=nil
- count.boost_removed+=1
- push("server_boost_removed",n)
-end)
-subscribe("UpdateArmor",function(payload)
- if not live then return end
- count.armor_updates+=1
- push("server_armor_update",true)
-end)
 if not util then notes[#notes+1]="Game utility module not available"end
-if not packets then notes[#notes+1]="Packet definitions not available"end
 if type(writefile)~="function"then notes[#notes+1]="Executor writefile not supported"end
 local function snapshot()
  local d=value()
@@ -87,11 +48,12 @@ local function snapshot()
   end
  end
  local tier=d and type(d.mojoItems)=="table"and d.mojoItems.Spellmaster or nil
- return {schema="booga-voodoo-native-v1",elapsed_s=math.floor((os.clock()-start)*10)/10,
+ return {schema="booga-voodoo-native-v1",revision="1.1",elapsed_s=math.floor((os.clock()-start)*10)/10,
   place_id=game.PlaceId,voodoo=d and d.voodoo or nil,spell=tostring(d and d.spell or ""),
-  spellmaster=tier,armor=armor,boosts_observed=boost,
+  spellmaster=tier,armor=armor,
   counters=count,events=events,samples=snaps,notes=notes,
-  scope="Native cache and incoming listeners only. No forged boosts or Voodoo. No outgoing game packets."}
+  measurement={source="client_cache",packet_listeners_installed=false,incoming_packets_observed=false},
+  scope="Client cache only. Native packets, actual server balance and damage are not independently verified. No outgoing game packets."}
 end
 local function persist()
  if type(writefile)~="function"then return end
@@ -108,10 +70,6 @@ local function stop()
  live=false
  persist()
  if hb then hb:Disconnect()end
- for _,link in ipairs(links)do
-  if typeof(link)=="RBXScriptConnection"then pcall(function()link:Disconnect()end)
-  elseif type(link)=="function"then pcall(link)end
- end
  if env.__booga_native_monitor_stop==stop then env.__booga_native_monitor_stop=nil end
 end
 env.__booga_native_monitor_stop=stop
@@ -134,4 +92,4 @@ hb=Run.Heartbeat:Connect(function()
  if t-start>=420 then stop()end
 end)
 persist()
-warn("[VOODOO NATIVE v1] read-only audit running; telemetry: booga_voodoo_native_v1.json")
+warn("[VOODOO NATIVE v1.1] Passive cache sampling; rejoin first if an older listener monitor ran. booga_voodoo_native_v1.json")

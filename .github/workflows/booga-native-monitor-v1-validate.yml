@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'booga-reborn/booga-voodoo-regen-native-monitor-v1.lua'
+      - 'booga-reborn/test-voodoo-monitors.py'
       - '.github/workflows/booga-native-monitor-v1-validate.yml'
   workflow_dispatch:
 permissions:
@@ -31,9 +32,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           t=Path('booga-reborn/booga-voodoo-regen-native-monitor-v1.lua').read_text()
-          for k in ['UpdateStatsUnreliable','SetBoost','RemoveBoost','UpdateArmor','writefile("booga_voodoo_native_v1.json"']:
+          for k in ['writefile("booga_voodoo_native_v1.json"','client_cache','packet_listeners_installed=false','incoming_packets_observed=false','rejoin']:
              assert k in t,k
-          assert '.send(' not in t
+          assert '.send(' not in t and '.listen(' not in t
           assert 'voodoo=' not in t.replace('voodoo=d and d.voodoo or nil','')
           print('READ_ONLY_MONITOR_STATIC_PASS')
           PY
+          chmod +x /tmp/luau/luau
+          python3 booga-reborn/test-voodoo-monitors.py --luau /tmp/luau/luau

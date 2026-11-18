@@ -1,9 +1,10 @@
-name: Booga Voodoo Lab v2 compile and contract test
+name: Booga Voodoo Lab v2 passive monitor regression
 on:
   push:
     branches: [main]
     paths:
       - 'booga-reborn/booga-voodoo-lab-v2.lua'
+      - 'booga-reborn/test-voodoo-monitors.py'
       - '.github/workflows/booga-voodoo-lab-v2-validate.yml'
   workflow_dispatch:
 permissions:
@@ -25,16 +26,16 @@ jobs:
           test -n "$compiler"
           chmod +x "$compiler"
           "$compiler" --null booga-reborn/booga-voodoo-lab-v2.lua
-      - name: Strict bound checks
+      - name: Passive monitor contract and callback regression
         run: |
           python3 - <<'PY'
           from pathlib import Path
           s=Path('booga-reborn/booga-voodoo-lab-v2.lua').read_text()
-          for needle in ['UpdateStatsUnreliable','SetBoost','RemoveBoost','UpdateArmor','booga_voodoo_lab_v2.json','another player nearby','one_air_cast_sent_awaiting_server','owned_regen_items']:
+          for needle in ['booga_voodoo_lab_v2.json','owned_regen_items','client_cache','packet_listeners_installed=false','incoming_packets_observed=false','rejoin']:
               assert needle in s,needle
-          assert s.count('packets.VoodooSpell.send(')==1
-          assert 'SetBoost.send' not in s and 'UpdateStats.send' not in s
-          assert 'UseBagItem.send' not in s
+          assert '.listen(' not in s and '.send(' not in s
           assert 'd.voodoo=' not in s and 'util.Data.voodoo=' not in s
-          print('BOUND_ONE_CAST_NATIVE_MONITOR_CONTRACT_PASS')
+          print('PASSIVE_MONITOR_CONTRACT_PASS')
           PY
+          chmod +x /tmp/luau/luau
+          python3 booga-reborn/test-voodoo-monitors.py --luau /tmp/luau/luau
