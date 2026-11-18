@@ -1,7 +1,20 @@
-# Booga Chest Trial v1.0
+# Booga Chest Trial v1.0.1
 
-A bounded test of the normal chest-open request when the player owns zero
-of the selected chest. **No free-chest method has been confirmed.**
+A bounded test of the normal chest-open request when a readable inventory
+shows zero of the selected chest. **No free-chest method has been confirmed.**
+The loader URL is unchanged by this hotfix.
+
+The first user-run v1.0 report returned BEFORE_UNAVAILABLE in 0.1 seconds,
+with no gameplay request attempted. That establishes a failed inventory
+precondition, not rejection of ChestDrop. The report did not record the
+RPC reply shape, so its exact runtime cause remains unknown.
+
+v1.0.1 falls back to the native UI's already-loaded `gameUtil.Data` when
+the separate RequestData refresh is unavailable or unreadable. The copied
+result identifies `server_reply`, `live_game_cache`, or an unavailable source,
+and includes only fixed validation reasons and field types. Numeric strings
+are accepted. Missing coins no longer erase a readable inventory; a chest
+observation without known balances receives an inconclusive verdict.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-chest-trial-v1.0.lua"))()
@@ -13,10 +26,14 @@ Magnetite and Pleb Chests are also selectable. **COPY RESULT** supplies a
 short result for the chat. **STOP** prevents further steps; an already-sent
 request cannot be recalled. **X** stops and closes. Drag the title to move.
 
-The tool obtains the player's own inventory and coin count through the same
-`Events.RequestData` RemoteFunction used by the recovered client initializer.
-It sends nothing if that response is unavailable or the player owns any of
-the selected chest. It then sends exactly one typed `ChestDrop.send(name)`.
+The tool tries the player's own inventory and coin count through the same
+`Events.RequestData` RemoteFunction used by the recovered client initializer,
+then uses the native UI's live game cache if necessary. A readable positive
+cache count also blocks a zero-owned RPC reply. It sends nothing if neither
+inventory is readable or the selected view shows any of that chest.
+The live cache is client state and may be stale; it cannot independently
+guarantee server-side ownership or a free result. The tool then sends
+exactly one typed `ChestDrop.send(name)`.
 It never calls the separate purchase packet or modifies inventory/balances.
 
 For ten seconds it observes new matching models in `Workspace.dropChests`,
@@ -50,9 +67,10 @@ client initializer S0010711 around 26; chest animation observer
 The ordinary UI checks ownership before sending the name; purchase uses a
 separate packet. This test does not invent a “check already passed” flag.
 
-Official Luau 0.747 compilation, 20 core workflow cases and static request
-boundary checks passed. **The GUI and chest request have not been tested
-inside Roblox/Velocity by the developer.**
+Official Luau 0.747 compilation, 30 core workflow cases and static request
+boundary checks passed. The old GUI ran far enough to produce the user's
+precondition-failure report. **The hotfix and actual chest request have not
+been tested inside Roblox/Velocity by the developer.**
 
 ```sh
 LUAU=/path/to/luau python booga-reborn/test-booga-chest-trial-v1.py

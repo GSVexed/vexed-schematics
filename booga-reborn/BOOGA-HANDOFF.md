@@ -2,6 +2,21 @@
 
 ## Latest task: one controlled unowned-chest request — 18 November 2026
 
+**Current hotfix is v1.0.1 at the same v1.0 loader URL.** The user's first
+Pleb Chest report returned BEFORE_UNAVAILABLE in 0.1s; both request flags
+were false. No ChestDrop request was attempted, so there is no live verdict
+on free spawning. The reply schema/error was not captured in that version;
+do not claim the server blocked repeated RequestData calls as a proven cause.
+
+The hotfix can use the native UI's `gameUtil.Data` if the refresh is unreadable,
+records before/after inventory provenance and fixed validation reasons/types,
+accepts numeric strings, and treats missing coin balances as unknown instead
+of discarding readable inventory. A positive cached chest count blocks a
+zero-owned reply. Cached inventory may be stale: authoritative ownership,
+balance integrity and free spawning remain unverified. No inventory or coin
+values are modified. Official compilation and 30 core/static checks passed;
+hotfix live behavior has not yet been tested.
+
 User paused the broader item-duplication investigation, discussed bypassing
 the chest menu's ownership check, then explicitly authorized one trial and
 asked for its hosted one-line loader. Deliverable:
@@ -15,8 +30,8 @@ recovered, and no “ownership already checked” receipt field was discovered.
 Source review alone does not establish whether opening an unowned chest
 will be accepted. No verified item dupe or free chest method exists yet.
 
-The new opt-in GUI selects Resource/Crystal/Emerald/Magnetite/Pleb Chest,
-requires a fresh own `Events.RequestData` response with zero owned, sends
+The opt-in GUI selects Resource/Crystal/Emerald/Magnetite/Pleb Chest,
+requires a readable own inventory showing zero owned, sends
 one normal typed ChestDrop request, observes new matching nearby live
 dropChests models for ten seconds, then rechecks the own chest/coin balance.
 It never purchases, edits inventory, or clones a local chest. Existing IDs
@@ -26,8 +41,9 @@ World observation is explicitly unverified for loot, causality and persistence.
 There is one request per panel, at most three different chest types per
 executor session, a 30s interval across reloads, no automatic retries,
 STOP/X cancellation, COPY RESULT and optional small workspace result file.
-Official Luau 0.747 compilation and 20 core workflow/static checks passed.
-GUI and live Roblox/Velocity behavior remain unverified. Do not claim this
+Official Luau 0.747 compilation and 30 core workflow/static checks passed.
+The old panel ran in the user's session, but the hotfix and actual chest
+request remain unverified in Roblox/Velocity. Do not claim this
 is a working free-chest spawner until actual results establish it.
 
 The existing Windows GitHub runner executed read-only readiness and Velocity

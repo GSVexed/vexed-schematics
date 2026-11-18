@@ -1,6 +1,6 @@
--- Booga Chest Trial v1.0 | PlaceId 11729688377
+-- Booga Chest Trial v1.0.1 | PlaceId 11729688377
 -- One normal ChestDrop request per panel. No PurchaseChest or inventory edits.
--- Requires a fresh own-inventory response showing zero of the selected chest.
+-- Requires a usable inventory showing zero; server-reply/cache provenance is explicit.
 -- A visible chest is a candidate result; usable loot and persistence are unverified.
 
 -- BEGIN TESTABLE CORE
@@ -9,27 +9,45 @@ function Core.finite(value)
     return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 function Core.snapshot(data, chest)
-    if type(data) ~= "table" or type(data.inventory) ~= "table" or not Core.finite(data.coins) or data.coins < 0 then return nil end
+    if type(data) ~= "table" then return nil, "payload_not_table" end
+    if type(data.inventory) ~= "table" then return nil, "inventory_not_table" end
+    local coins = (type(data.coins) == "number" or type(data.coins) == "string") and tonumber(data.coins) or nil
+    if not Core.finite(coins) or coins < 0 then coins = nil end
     local count, entries = 0, 0
     for _, item in pairs(data.inventory) do
         entries = entries + 1
-        if entries > 10000 then return nil end
+        if entries > 10000 then return nil, "inventory_too_large" end
         if type(item) == "table" and item.name == chest then
-            local quantity = item.quantity
-            if not Core.finite(quantity) or quantity < 0 or quantity % 1 ~= 0 then return nil end
+            local quantity = (type(item.quantity) == "number" or type(item.quantity) == "string") and tonumber(item.quantity) or nil
+            if not Core.finite(quantity) or quantity < 0 or quantity % 1 ~= 0 then return nil, "selected_quantity_invalid" end
             count = count + quantity
-            if count > 1000000000 then return nil end
+            if count > 1000000000 then return nil, "selected_quantity_too_large" end
         end
     end
-    return {owned = count, coins = data.coins}
+    return {owned = count, coins = coins}, "usable"
+end
+function Core.selectSnapshot(reply, cached, chest)
+    local primary, replyReason = Core.snapshot(reply, chest)
+    local fallback, cacheReason = Core.snapshot(cached, chest)
+    if primary then
+        -- A more recent positive cache entry blocks an opening even if the reply was zero.
+        if fallback and fallback.owned > primary.owned then
+            return fallback, "live_game_cache_positive_override", replyReason, cacheReason
+        end
+        return primary, "server_reply", replyReason, cacheReason
+    end
+    if fallback then return fallback, "live_game_cache", replyReason, cacheReason end
+    return nil, "unavailable", replyReason, cacheReason
 end
 function Core.verdict(before, after, matches)
     if not after then return "AFTER_UNAVAILABLE" end
-    if before.coins ~= after.coins or after.owned ~= 0 then return "BALANCE_CHANGED" end
+    local knownCoins = Core.finite(before.coins) and Core.finite(after.coins)
+    if (knownCoins and before.coins ~= after.coins) or after.owned ~= 0 then return "BALANCE_CHANGED" end
+    if matches > 0 and not knownCoins then return "CHEST_OBSERVED_BALANCE_UNKNOWN" end
     return matches > 0 and "CHEST_OBSERVED_UNVERIFIED" or "NO_CHEST_OBSERVED"
 end
 function Core.trial(api, result)
-    api.state("Checking your inventory with the server...")
+    api.state("Checking your current chest inventory...")
     local before = Core.snapshot(api.snapshot(), result.chest)
     if not before then result.verdict = "BEFORE_UNAVAILABLE"; return end
     result.before_owned, result.before_coins = before.owned, before.coins
@@ -104,7 +122,7 @@ local function label(text, y, h)
         TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
         BackgroundTransparency = 1, RichText = false}, frame)
 end
-local title = label("BOOGA / CHEST TRIAL v1.0", 14, 26)
+local title = label("BOOGA / CHEST TRIAL v1.0.1", 14, 26)
 title.TextColor3 = C.text; title.Active = true
 local function button(text, x, y, w, color)
     return new("TextButton", {Text = text, Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, 34),
@@ -113,7 +131,7 @@ local function button(text, x, y, w, color)
 end
 local close = button("X", 402, 8, 32, C.red)
 local selectButton = button("CHEST: " .. choices[choice] .. "  >", 16, 48, 418)
-label("Try opening an unowned chest once. Uses the normal open request. Free spawning is unverified; no purchase request is sent.", 92, 52)
+label("One normal open request when the current inventory shows zero owned. Uses the game's inventory if a server refresh is unavailable. Free spawning is unverified.", 92, 52)
 local startButton = button("TRY ONCE", 16, 148, 202)
 local stopButton = button("STOP", 232, 148, 202, C.red)
 local status = label("Ready. Choose a chest, then TRY ONCE.", 194, 65)
@@ -124,7 +142,7 @@ local fallback = new("TextBox", {Name = "ResultText", Text = "", Position = UDim
     TextSize = 10, Font = Enum.Font.Code, TextColor3 = C.text, BackgroundColor3 = C.bg,
     TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top}, frame)
 local messages = {
-    BEFORE_UNAVAILABLE = "No usable server inventory response. No chest request sent.",
+    BEFORE_UNAVAILABLE = "Neither inventory source was usable. No request sent. COPY RESULT includes the validation reason.",
     ALREADY_OWNED = "You already own this chest. No request sent; choose another type.",
     CANCELLED = "Stopped. No further requests will be sent.",
     WORLD_UNAVAILABLE = "The live chest folder is unavailable. No request sent.",
@@ -132,7 +150,8 @@ local messages = {
     SEND_FAILED = "The chest request API failed. No automatic retry.",
     AFTER_UNAVAILABLE = "Request sent; final balance could not be checked. Outcome unverified.",
     BALANCE_CHANGED = "Your coins or chest inventory changed. A free spawn is not established.",
-    CHEST_OBSERVED_UNVERIFIED = "A matching world chest appeared with unchanged coin/chest balances. Usable loot is still unverified.",
+    CHEST_OBSERVED_UNVERIFIED = "A matching world chest appeared with unchanged observed balances. Loot and server ownership remain unverified.",
+    CHEST_OBSERVED_BALANCE_UNKNOWN = "A matching world chest appeared; the coin balance was unavailable. A free spawn is not established.",
     NO_CHEST_OBSERVED = "No matching chest appeared during 10s of observation. This attempt did not establish free spawning.",
     API_ERROR = "The trial stopped after an API error. No automatic retry."
 }
@@ -191,13 +210,14 @@ connect(startButton.Activated, function()
     if not char or not hum or not root or not Core.finite(hum.Health) or hum.Health <= 0 then
         busy = false; status.Text = "Spawn and stay alive before trying."; return
     end
-    result = {schema = "booga-chest-trial/1.0", place_id = 11729688377, chest = chest,
+    result = {schema = "booga-chest-trial/1.0", version = "1.0.1", place_id = 11729688377, chest = chest,
         verdict = "RUNNING", request_attempted = false, request_sent = false,
         world_chests_observed = 0, purchases_sent = 0, loot_verified = false,
         persistence_verified = false, test_kind = "single_normal_unowned_chest_request"}
     task.spawn(function()
         local began = os.clock()
-        local folder, existing, origin, packets, requestData
+        local folder, existing, origin, packets, requestData, gameUtil
+        local snapshotNumber = 0
         local function guard()
             return alive and not cancel and player.Character == char and char.Parent ~= nil
                 and hum.Health > 0 and os.clock() - began < 30
@@ -207,19 +227,37 @@ connect(startButton.Activated, function()
         end
         local function snapshot()
             if not guard() then return nil end
-            local done, value = false, nil
-            task.spawn(function()
-                local ok, data = pcall(function() return requestData:InvokeServer() end)
-                -- Retain only the selected chest count and own coin balance.
-                if ok and guard() then
-                    local filtered = Core.snapshot(data, chest)
-                    if filtered then value = {inventory = {{name = chest, quantity = filtered.owned}}, coins = filtered.coins} end
-                end
-                done = true
-            end)
-            local deadline = os.clock() + 6
-            while guard() and not done and os.clock() < deadline do task.wait(.05) end
-            return done and value or nil
+            snapshotNumber = snapshotNumber + 1
+            local key = snapshotNumber == 1 and "before_inventory" or "after_inventory"
+            local done, response, rpcState, rpcValidation = false, nil, "unavailable", nil
+            if requestData then
+                rpcState = "pending"
+                task.spawn(function()
+                    local ok, data = pcall(function() return requestData:InvokeServer() end)
+                    -- Retain only the selected count/coins, never the complete response.
+                    if guard() then
+                        rpcState = ok and ("returned_" .. type(data)) or "api_error"
+                        if ok then
+                            local filtered, validation = Core.snapshot(data, chest)
+                            rpcValidation = validation
+                            if filtered then response = {inventory = {{name = chest, quantity = filtered.owned}}, coins = filtered.coins}
+                            else response = type(data) == "table" and {inventory = type(data.inventory), coins = type(data.coins)} or type(data) end
+                        end
+                    end
+                    done = true
+                end)
+                local deadline = os.clock() + 6
+                while guard() and not done and os.clock() < deadline do task.wait(.05) end
+                if not done then response = nil; rpcState = "timeout" end
+            end
+            if not guard() then return nil end
+            local cached = type(gameUtil) == "table" and gameUtil.Data or nil
+            local filtered, source, replyReason, cacheReason = Core.selectSnapshot(response, cached, chest)
+            result[key] = {source = source, rpc = rpcState, reply_validation = rpcValidation or replyReason, cache_validation = cacheReason,
+                cached_payload_type = type(cached), cached_inventory_type = type(cached) == "table" and type(cached.inventory) or "absent",
+                cached_coins_type = type(cached) == "table" and type(cached.coins) or "absent"}
+            if not filtered then return nil end
+            return {inventory = {{name = chest, quantity = filtered.owned}}, coins = filtered.coins}
         end
         local function matches(model)
             if model.Name ~= chest or not model:IsA("Model") or not model:IsDescendantOf(folder) then return nil end
@@ -271,16 +309,22 @@ connect(startButton.Activated, function()
             local modules = RS:FindFirstChild("Modules")
             local util = modules and modules:FindFirstChild("util")
             local packetModule = util and util:FindFirstChild("packets")
+            local cacheModule = util and util:FindFirstChild("gameUtil")
             local events = RS:FindFirstChild("Events")
             requestData = events and events:FindFirstChild("RequestData")
-            if not packetModule or not packetModule:IsA("ModuleScript") or not requestData or not requestData:IsA("RemoteFunction") then error("dependencies unavailable") end
+            if requestData and not requestData:IsA("RemoteFunction") then requestData = nil end
+            if not packetModule or not packetModule:IsA("ModuleScript") then error("dependencies unavailable") end
+            if cacheModule and cacheModule:IsA("ModuleScript") then
+                local cacheOK, value = pcall(require, cacheModule)
+                if cacheOK and type(value) == "table" then gameUtil = value end
+            end
             packets = require(packetModule)
             if type(packets) ~= "table" or type(packets.ChestDrop) ~= "table" or type(packets.ChestDrop.send) ~= "function" then error("typed packet unavailable") end
             Core.trial(api, result)
         end)
         if not ok then result.verdict = "API_ERROR" end
         result.elapsed_seconds = math.floor((os.clock() - began) * 10 + .5) / 10
-        result.note = "Client observations and own server inventory replies. No loot, save persistence or definite spawn attribution established."
+        result.note = "Inventory source is recorded before/after; live_game_cache is client state and may be stale. No authoritative ownership, loot, persistence or definite spawn attribution established."
         busy = false
         if alive then
             status.Text = messages[result.verdict] or "Outcome unavailable."

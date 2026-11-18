@@ -2,12 +2,15 @@
 
 ## Chest request trial — 18 November 2026
 
-[Chest Trial v1.0](README-booga-chest-trial-v1.0.md) sends one normal
-chest-open request after a fresh own-inventory response shows zero owned.
+[Chest Trial v1.0.1](README-booga-chest-trial-v1.0.md) sends one normal
+chest-open request after a readable inventory shows zero owned. It uses
+the native live game cache when the separate server refresh is unavailable,
+and records the source explicitly. The cache may be stale.
 It observes matching world chests and checks the final coin/chest balance.
 **Free chest spawning is unverified.** No purchase request or inventory edit
-is performed. Compilation and 20 core workflow checks passed; live game
-and GUI behavior have not been tested by the developer.
+is performed. Compilation and 30 core workflow checks passed. The first
+v1.0 user run stopped before any request with BEFORE_UNAVAILABLE; hotfix
+behavior and the actual chest request remain unverified in-game.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-chest-trial-v1.0.lua"))()
