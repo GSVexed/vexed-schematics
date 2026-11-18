@@ -1,0 +1,29 @@
+name: Booga - compile single God's Bolt selection test
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/booga-gods-bolt-selection-compile.yml','booga-reborn/booga-gods-bolt-selection-v1.lua']
+permissions: {contents: read}
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          curl -fsSL --max-time 75 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau && unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile|head -n1)"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-gods-bolt-selection-v1.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-gods-bolt-selection-v1.lua').read_text()
+          assert s.count('.send(')==1
+          assert "PromptSpellChoice.send(ids[name])" in s
+          assert "record.blacklisted~=true" in s
+          for x in ['.FireServer(','.InvokeServer(','.listen(', 'VoodooSpell.send', 'Rebirth.send','Data.spell =','Data.spell=']:
+            assert x not in s,x
+          print('SINGLE_SELECTION_REQUEST_COMPILE_AND_STATIC_PASS')
+          PY
