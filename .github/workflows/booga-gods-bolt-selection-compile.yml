@@ -20,7 +20,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('booga-reborn/booga-gods-bolt-selection-v1.lua').read_text()
-          assert s.count('.send(')==1
+          assert s.count('packets.PromptSpellChoice.send(ids[name])')==1
           assert "PromptSpellChoice.send(ids[name])" in s
           assert "record.blacklisted~=true" in s
           for x in ['.FireServer(','.InvokeServer(','.listen(', 'VoodooSpell.send', 'Rebirth.send','Data.spell =','Data.spell=']:
