@@ -1,0 +1,66 @@
+name: Booga Lightning Lab v2.1 verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-lab-v2.1.lua'
+      - '.github/workflows/booga-lightning-lab-v2.1-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90             https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip             -o /tmp/booga-lightning-luau.zip
+          mkdir -p /tmp/booga-lightning-luau
+          unzip -q /tmp/booga-lightning-luau.zip -d /tmp/booga-lightning-luau
+          compiler="$(find /tmp/booga-lightning-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile v2.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null booga-reborn/booga-lightning-lab-v2.1.lua
+          echo LIGHTNING_LAB_V21_LUAU_COMPILE_PASS
+      - name: Verify source-grounded hold-V and telemetry contracts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('booga-reborn/booga-lightning-lab-v2.1.lua').read_text()
+          must = [
+           'KeyCode.V', 'UIS.InputEnded', 'if armed and held then',
+           'if not live or not armed or not held then return end',
+           'VoodooSpell.send({targetPos=pos,aimDirection=direction(pos)})',
+           'signal:Fire({KeyCode=Enum.KeyCode.V,UserInputType=Enum.UserInputType.Keyboard},false)',
+           'wrappedSignals', 'cursorRay()', 'mode="direct"',
+           '"native"', '"hybrid"', '"DOUBLE PULSE"', '"TRIPLE PULSE"',
+           '"AOE OFFSET SWEEP"', '"VOODOO ENERGY GUARD"',
+           '"REGEN SMART PACE"', 'KeyCode.F6',
+           'function saveSnapshot()', 'booga_lightning_v21_latest.json',
+           'writefile(LOG_FILE,Http:JSONEncode(payload))',
+           'function monitorPacket(name,callback)',
+           'packetWrappers', 'UpdateStats', 'ServerCreateProjectile',
+          ]
+          for item in must:
+           assert item in s, f'missing: {item}'
+          for bad in ('FireServer(', 'Health.Value=', 'PostAsync(', 'game:HttpGet('):
+           assert bad not in s, f'unsafe mutation pattern: {bad}'
+          assert s.count('end)') >= 10
+          print('LIGHTNING_LAB_V21_STATIC_CONTRACTS_PASS:',len(must))
+          PY
+      - name: Limits of validation
+        run: |
+          echo 'Validated compile and source-level contracts only.'
+          echo 'Real Roblox spells, server casting and observed Dave damage require live in-game operation.'
