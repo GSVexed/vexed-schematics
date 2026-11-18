@@ -37,6 +37,22 @@ Implications:
 4. **Crossbow/ballista Bolt ammunition** is an ordinary ranged projectile (item `Bolt`, inventory/crafting/use-tool). `S0010401` processes `CreateProjectile`, `ProjectileImpact`, and server-owned `ServerCreateProjectile`; this is a *different weapon and damage pathway* with ammo/tool prerequisites, not free Energy Bolt magic.
 5. **Admin "Smite"** action is exposed in a separate moderation GUI `S0010712` and calls `ModSend:InvokeServer("smite", target)`. The UI handles an "Insufficient permissions" response. Not a normal player spell or free cast.
 
+## Exhaustive source cross-reference audit (additional verification)
+
+Reopened and scanned the **exact original uploaded ZIP** `UPLOAD_PART_010_DATA(1).zip`, SHA-256 `8327295d1eb972b9a59103a9cedd66d4d56f254116f2bcffa157cb0a9f7602fd`, across **388 archived game source files**.
+
+- Each of `God's Bolt`, `Rainbow Ray`, `Equinox Bolt`, and `Bullet's Ray` occurs **only** in `S0009390` (itemData) and `S0009392` (itemIDS), **zero references in gameplay activation scripts**.
+- `PromptSpellChoice` occurs only in `S0009504` (packet definitions) and `S0010320` (regular spell GUI client).
+- `UnlockSpell` occurs only in those same two files, and the only gameplay-side `UnlockSpell` use is `.listen` on an incoming notification.
+- `voodooSpell` occurs only in itemData; it is never consumed in an archived client activation script.
+- `voodooCost` occurs only in itemData and the spell client, where it governs **local animation gating** before sending the normal cast packet.
+- `blacklisted` occurs in itemData and an unrelated moderation blacklist UI; no player spell-access mechanism for the four items appears in client source.
+
+**Risk:** normal gameplay docs state selected spells cannot be switched until rebirth; this player has Energy Bolt already. We have **not** transmitted `PromptSpellChoice` with a special ID because, if unexpectedly accepted, it might replace their selected working spell with no verified restoration procedure. A rollback attempt via the same selection packet is not reliable proof of reversibility if the server enforces one choice per rebirth.
+
+**Practical conclusion:** The regular player UI/cast path exposes no means to activate these four entries. Server-side permission, entitlement, or event mechanisms are not present in the archive. This does not logically prove no bug exists, but sending arbitrary item IDs to the live player account would be an ungrounded, potentially destructive test—not a validated access method.
+
+
 ## Most useful next validated steps
 - Do not use or promise a four-bolt switcher or spam `EnergyBolt` notifications: zero local metadata cost alone is not server-authorized damage.
 - To establish any route, an authorised server-side diagnostic would check actual selected spell, allowed casting flags, energy deductions and damage events, ideally in a private dev environment. The recovered archive omits all server handlers.
