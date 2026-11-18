@@ -1,0 +1,59 @@
+name: Lightning Lab v3 compile and audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-lab-v3.0.lua'
+      - '.github/workflows/booga-lightning-v3-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official Luau 0.747 compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90             'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip'             -o /tmp/luau-v3.zip
+          mkdir -p /tmp/luau-v3
+          unzip -q /tmp/luau-v3.zip -d /tmp/luau-v3
+          compiler="$(find /tmp/luau-v3 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Luau syntax compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null booga-reborn/booga-lightning-lab-v3.0.lua
+          echo LIGHTNING_V3_COMPILE_PASS
+      - name: Check hold V gating, spell paths, observer restoration, and report fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-lightning-lab-v3.0.lua').read_text()
+          required=[
+            'KeyCode.V','UIS.InputEnded','if armed and held','if not alive or not armed or not held',
+            'wrappedSignals','ev:Fire(', 'VoodooSpell','p.send(',
+            'EnergyBolt','observePacket','return original(...)','entry.obj.fireListener=entry.original',
+            'writefile(fileName','booga_lightning_v3_report.json','UpdateStats','UpdateStatsUnreliable',
+            'voodooCost','energyGuard','regenPace','aimDave','cfg.pulse',
+            'holdSessions','energy_bolt_events','voodoo_spent_observed','dave_observed_hp_loss_per_second_12s',
+            'currently_holding','F6','type(writefile)'
+          ]
+          for value in required: assert value in s,value
+          banned=['FireServer(', 'Health.Value=', 'Data.voodoo=', 'PostAsync(', 'request({']
+          for value in banned: assert value not in s,value
+          assert s.count('UIS.InputEnded:Connect')==1
+          print('LIGHTNING_V3_CONTRACT_PASS',len(required),'checks')
+          PY
+      - name: Clarify what tests cannot establish
+        run: |
+          echo "Luau compile + source checks PASS when all steps are green."
+          echo "No live Roblox, Velocity, server-accepted bolt, damage, or runner file collection is proven by this job."
