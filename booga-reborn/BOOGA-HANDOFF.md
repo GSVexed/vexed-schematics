@@ -1,6 +1,42 @@
 # Booga Booga Reborn — continuation handoff
 
-## LATEST DELIVERABLE: Booga VALUE ENGINE v1.0 (Nov 17 2026)
+## Latest task: one controlled unowned-chest request — 18 November 2026
+
+User paused the broader item-duplication investigation, discussed bypassing
+the chest menu's ownership check, then explicitly authorized one trial and
+asked for its hosted one-line loader. Deliverable:
+[Chest Trial v1.0](README-booga-chest-trial-v1.0.md),
+`booga-reborn/booga-chest-trial-v1.0.lua`.
+
+The native `Game/inventory` S0010366 checks owned quantity and Open button
+state before sending `ChestDrop.send(chestName)` around line 1250. Buy uses
+the separate `PurchaseChest` packet. No authoritative server handler was
+recovered, and no “ownership already checked” receipt field was discovered.
+Source review alone does not establish whether opening an unowned chest
+will be accepted. No verified item dupe or free chest method exists yet.
+
+The new opt-in GUI selects Resource/Crystal/Emerald/Magnetite/Pleb Chest,
+requires a fresh own `Events.RequestData` response with zero owned, sends
+one normal typed ChestDrop request, observes new matching nearby live
+dropChests models for ten seconds, then rechecks the own chest/coin balance.
+It never purchases, edits inventory, or clones a local chest. Existing IDs
+are excluded; EntityID and positive Health are required for observation.
+World observation is explicitly unverified for loot, causality and persistence.
+
+There is one request per panel, at most three different chest types per
+executor session, a 30s interval across reloads, no automatic retries,
+STOP/X cancellation, COPY RESULT and optional small workspace result file.
+Official Luau 0.747 compilation and 20 core workflow/static checks passed.
+GUI and live Roblox/Velocity behavior remain unverified. Do not claim this
+is a working free-chest spawner until actual results establish it.
+
+The existing Windows GitHub runner executed read-only readiness and Velocity
+UI-capability jobs. No gameplay request was executed through the runner.
+The original full Booga ZIP was re-read and integrity-verified again, with
+438 exported game records / 388 distinct source bodies. No fresh bulk scan
+was requested or performed in Roblox. Raw captures remain private.
+
+## Previous deliverable: Booga VALUE ENGINE v1.0 (Nov 17 2026)
 
 User demanded a genuinely useful game economy/
 value advantage rather than more fake

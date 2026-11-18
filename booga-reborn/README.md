@@ -1,5 +1,18 @@
 # Booga Booga Reborn — research & hub project
 
+## Chest request trial — 18 November 2026
+
+[Chest Trial v1.0](README-booga-chest-trial-v1.0.md) sends one normal
+chest-open request after a fresh own-inventory response shows zero owned.
+It observes matching world chests and checks the final coin/chest balance.
+**Free chest spawning is unverified.** No purchase request or inventory edit
+is performed. Compilation and 20 core workflow checks passed; live game
+and GUI behavior have not been tested by the developer.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-chest-trial-v1.0.lua"))()
+```
+
 ## NEW: VALUE ENGINE v1.0 — ready for in-game validation
 
 **[Full Value Engine setup guide](README-booga-value-engine-v1.0.md)**
