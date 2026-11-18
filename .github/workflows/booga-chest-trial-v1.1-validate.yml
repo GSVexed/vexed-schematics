@@ -1,0 +1,64 @@
+name: Booga chest trial v1.1 offline validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-chest-trial-v1.0.lua'
+      - 'booga-reborn/booga-chest-trial-v1.1.lua'
+      - 'booga-reborn/test-booga-chest-trial-v1.py'
+      - 'booga-reborn/test-booga-chest-trial-v1.1.py'
+      - '.github/workflows/booga-chest-trial-v1.1-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Check out tested source
+        uses: actions/checkout@v4
+
+      - name: Install official pinned Luau binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/booga-chest-luau.zip
+          mkdir -p /tmp/booga-chest-luau
+          unzip -q /tmp/booga-chest-luau.zip -d /tmp/booga-chest-luau
+          compiler="$(find /tmp/booga-chest-luau -type f -name luau-compile | head -n 1)"
+          interpreter="$(find /tmp/booga-chest-luau -type f -name luau | head -n 1)"
+          test -n "$compiler"
+          test -n "$interpreter"
+          chmod +x "$compiler" "$interpreter"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "LUAU=$interpreter" >> "$GITHUB_ENV"
+
+      - name: Compile shipped Luau files
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null booga-reborn/booga-chest-trial-v1.0.lua
+          "$LUAU_COMPILER" --null booga-reborn/booga-chest-trial-v1.1.lua
+          echo BOOGA_CHEST_LUAU_COMPILE_PASS
+
+      - name: Execute all v1.1 offline regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 booga-reborn/test-booga-chest-trial-v1.1.py | tee /tmp/booga-chest-checks.log
+          grep -q 'BOOGA_CHEST_TRIAL_CORE_CASES=30' /tmp/booga-chest-checks.log
+          grep -q 'BOOGA_CHEST_NATIVE_TOTAL_CASES=45' /tmp/booga-chest-checks.log
+          grep -q '45 offline checks passed.' /tmp/booga-chest-checks.log
+          echo BOOGA_CHEST_OFFLINE_CHECKS_PASS
+
+      - name: State offline-only limits
+        shell: bash
+        run: |
+          echo 'Validation proves syntax, selected control-flow contracts and fixture results only.'
+          echo 'It does NOT test Roblox, Velocity, server acceptance, loot grants or persistence.'
