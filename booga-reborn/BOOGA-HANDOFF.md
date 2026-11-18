@@ -1,5 +1,14 @@
 # Booga Booga Reborn — continuation handoff
 
+## 2026-11-18 server weakness check — latest verified result
+
+Read [the server-validation report](BOOGA-VOODOO-SERVER-VALIDATION-2026-11-18.md) before further experiments. An actual level-39/no-materials Void Shroud `CraftItem` request was sent once through the real Velocity/Roblox connection; the server did not grant the item (run [44310861368](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44310861368)). No server-accepted extra Voodoo mechanism identified.
+
+**Critical instrumentation correction:** earlier observer scripts called `UpdateStatsUnreliable.listen` and saw client cache/UI frozen at 100 despite changing incoming values, so monitor interference cannot be ruled out. A later **listener-free** read found cache=41 and GUI=41.0 (run [44311921280](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44311921280)). The game ByteNet has no `getListeners` method; avoid assuming modern upstream multi-listener behaviour. Do **not** use older listener-based reports as proof of a server vulnerability. The archived client code does not include actual server regeneration handlers.
+
+---
+
+
 ## 2026-11-18 real PC / genuine Voodoo evidence — critical finding
 
 **Read first:** [Live authority results](BOOGA-LIVE-VOODOO-AUTHORITY-RESULTS-2026-11-18.md). Using the Windows self-hosted runner, successfully executed Lua directly in Roblox through Velocity's Open+Execute WPF UI (not just CI compile). Actual server-origin `UpdateStatsUnreliable.voodoo` packets varied and regenerated ~**0.28–0.33/s**, with genuine 30-point cost drops, **while `gameUtil.Data.voodoo` remained fixed at 100**. This explains fake full-energy casting animations. Unknown local override/update failure; cannot call it unlimited energy.
