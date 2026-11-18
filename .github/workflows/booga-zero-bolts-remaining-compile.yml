@@ -1,0 +1,29 @@
+name: Booga - compile three bounded special bolt selection tests
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/booga-zero-bolts-remaining-compile.yml','booga-reborn/booga-zero-bolts-remaining-selection-v1.lua']
+permissions: {contents: read}
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          curl -fsSL --max-time 75 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau && unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile|head -n1)"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-zero-bolts-remaining-selection-v1.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-zero-bolts-remaining-selection-v1.lua').read_text()
+          assert s.count('packets.PromptSpellChoice.send(candidate.id)')==1
+          assert 'if d.spell~="Energy Bolt"' in s
+          assert 'desc.blacklisted~=true' in s
+          for x in ['.FireServer(','.InvokeServer(','.listen(', 'VoodooSpell.send', 'Rebirth.send','Data.spell =','Data.spell=']:
+            assert x not in s,x
+          print('THREE_BOUNDED_SELECTION_REQUESTS_COMPILE_AND_STATIC_PASS')
+          PY
