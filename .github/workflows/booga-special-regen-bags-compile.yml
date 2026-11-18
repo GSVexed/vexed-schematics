@@ -1,0 +1,21 @@
+name: Booga - verify special regeneration bags audit
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/booga-special-regen-bags-compile.yml','booga-reborn/booga-special-regen-bags-v1.lua']
+permissions: {contents: read}
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          curl -fsSL --max-time 75 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau && unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile|head -n1)"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-special-regen-bags-v1.lua
+          if grep -E '\.send\(|\.FireServer\(|\.InvokeServer\(' booga-reborn/booga-special-regen-bags-v1.lua; then echo 'Unexpected outbound call'; exit 1; fi
+          echo 'SPECIAL_REGEN_BAGS_COMPILE_PASS'
