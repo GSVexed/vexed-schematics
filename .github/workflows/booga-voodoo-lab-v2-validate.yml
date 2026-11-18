@@ -1,0 +1,40 @@
+name: Booga Voodoo Lab v2 compile and contract test
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-voodoo-lab-v2.lua'
+      - '.github/workflows/booga-voodoo-lab-v2-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Luau source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 2 --max-time 90 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -name luau-compile -type f | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-voodoo-lab-v2.lua
+      - name: Strict bound checks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-voodoo-lab-v2.lua').read_text()
+          for needle in ['UpdateStatsUnreliable','SetBoost','RemoveBoost','UpdateArmor','booga_voodoo_lab_v2.json','another player nearby','one_air_cast_sent_awaiting_server','owned_regen_items']:
+              assert needle in s,needle
+          assert s.count('packets.VoodooSpell.send(')==1
+          assert 'SetBoost.send' not in s and 'UpdateStats.send' not in s
+          assert 'UseBagItem.send' not in s
+          assert 'd.voodoo=' not in s and 'util.Data.voodoo=' not in s
+          print('BOUND_ONE_CAST_NATIVE_MONITOR_CONTRACT_PASS')
+          PY
