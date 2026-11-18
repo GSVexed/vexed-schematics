@@ -24,7 +24,7 @@ end
 
 local function getMod(path)
  local node=RS
- for _,part in ipairs(path) do node=node and node:FindFirstChild(part) end
+ for _,part in ipairs(path) do node=node and (node:FindFirstChild(part) or node:WaitForChild(part,6)) end
  if not node or not node:IsA("ModuleScript") then return nil end
  local ok,mod=pcall(require,node)
  return ok and mod or nil
@@ -148,7 +148,7 @@ end
 local function held()
  if not canRequest() then return false end
  local ok,down=pcall(function()return UIS:IsKeyDown(Enum.KeyCode.V)end)
- if ok then return down end
+ if ok then return down or vHeld end
  return vHeld
 end
 local function aimDirection()
