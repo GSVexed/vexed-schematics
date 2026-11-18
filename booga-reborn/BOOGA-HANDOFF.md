@@ -1,5 +1,16 @@
 # Booga Booga Reborn — continuation handoff
 
+## Current pause/resume: Voodoo regeneration authority investigation (18 Nov 2026)
+
+The user rejected v5's repeated Lightning packet loop as **not what they asked for**. They want a real increase in **server-recognised Voodoo regeneration**, potentially by mimicking genuine effects, or real zero-Voodoo-cost damaging bolts. They temporarily paused for FERAL and then explicitly resumed Booga, demanding a proper investigation. **Do not produce another casting hub without a new, validated mechanism.**
+
+Completed source-wide investigation: [BOOGA-VOODOO-REGEN-AUTHORITY-AUDIT-2026-11-18.md](BOOGA-VOODOO-REGEN-AUTHORITY-AUDIT-2026-11-18.md), commit `9b7319f3a1ca67d705bfde33f3a3766642cbf19a`. Reopened exact uploaded 33-MB recovered archive and searched all game client source files. Findings: `SetBoost` is an incoming UI listener, `UpdateStats` controls client Voodoo display, `UpdateArmor` confirms equipment, `UseBagItem` operates on inventory item keys, Spellmaster is a non-toggleable passive Mojo, and `VoodooSpell` contains only targeting inputs. No client-calculated server-accepted regeneration rate or direct grant packet found. Wiki says Jelly Sandwich refreshes without stacking, Void Pouch does **not** regenerate Voodoo, Void Bag does. Historical patch notes mention 1.5× overworld vs 2× Void; do not assert current rates without live measurements.
+
+The user's v5 report was “doesnt work”; don't re-recommend v5. The live server spell handler is **not available** in recovered materials, so unowned-item spoofing and unlimited Voodoo remain unproven. Progress is a validated narrowing of viable mechanisms, not a new exploit. A one-variable-at-a-time legitimate equipment/Mojo/consumable test is designed in the audit. No new hub was published during resumption to avoid fake switches. Any later hub should distinguish attempted operations from demonstrated server-recognised Voodoo delta and must not spend owned resources without explicit action.
+
+---
+
+
 ## Current scope: unowned chest spawning only — v1.1
 
 The user explicitly rejected moving to Resourceful/building methods or
