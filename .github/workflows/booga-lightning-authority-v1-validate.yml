@@ -1,0 +1,42 @@
+name: Lightning Authority v1 Luau validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-authority-v1.lua'
+      - '.github/workflows/booga-lightning-authority-v1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile with official Luau 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-lightning-authority-v1.lua
+      - name: Check authority observation safeguards
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-lightning-authority-v1.lua').read_text()
+          for word in ['voodoo_loss','target_health_loss','DOUBLE_SAME_FRAME','math.min','Players:GetPlayerFromCharacter','selected','writefile','SetBoost']:
+              if word in ['selected','SetBoost']: continue
+              assert word in s,word
+          assert 'UpdateStats.send' not in s
+          assert 'SetBoost.send' not in s
+          assert 'Data.voodoo=' not in s
+          assert 'd.voodoo=' not in s
+          assert 'if v<30 or v>=60' in s or 'v<30 or v>=60' in s
+          print('AUTHORITY_PROBE_STATIC_PASS')
+          PY
