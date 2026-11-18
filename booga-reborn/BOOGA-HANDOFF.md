@@ -1,5 +1,12 @@
 # Booga Booga Reborn — continuation handoff
 
+## 2026-11-18 source transfer vs server authority comparison — latest
+
+Reviewed the actual saved legacy source (not a summary), especially `ServerScriptService/Big Mama` at ~2033–2038, 3519–3577 and 5034–5051. Its `RequestData.OnServerInvoke` returns the player's `_G.sessionData[player.UserId]`, **not** server `Script.Source` files. No direct source export code in this main handler. Legacy Voodoo regeneration and spell-cost deduction use server-side data; current Reborn client uses a different ByteNet packet interface, so no live bypass follows automatically. New complete [server source transfer comparison](BOOGA-SERVER-CODE-TRANSFER-COMPARISON-2026-11-18.md). GitHub/public search did not reveal a verified current Reborn server source release. Don't claim live private code is retrievable or that `RequestData` is a script download route.
+
+---
+
+
 ## 2026-11-18 four live zero-cost bolt selection requests — all unsuccessful
 
 User explicitly allowed risking replacement of Energy Bolt, so launched a bounded one-request `PromptSpellChoice.send` authority test for each special item through actual Roblox/Velocity. God's Bolt 354: request sent, selected spell still Energy Bolt after 19 seconds ([run 44318047221](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44318047221)). Rainbow Ray 89, Equinox Bolt 353, Bullet's Ray 144: one request each, 9-second confirmation window each, all no local send error and **all left `Data.spell` at Energy Bolt** ([run 44318511191](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44318511191)). No free bolt or server-recognised damage achieved. This is consistent with denied selection; actual server rejection logic unknown. User's working Energy Bolt was **not lost**. See updated [zero-bolt audit](BOOGA-ZERO-VOODOO-BOLT-AUDIT-2026-11-18.md). Do not repeatedly spam restricted IDs or try rebirth without separately obtaining informed consent about resetting character progress.
