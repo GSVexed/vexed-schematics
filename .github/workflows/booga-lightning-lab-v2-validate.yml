@@ -1,0 +1,60 @@
+name: Booga Lightning Lab v2 Luau compile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-lab-v2.0.lua'
+      - '.github/workflows/booga-lightning-lab-v2-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau 0.747 compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/lightning-luau.zip
+          mkdir -p /tmp/lightning-luau
+          unzip -q /tmp/lightning-luau.zip -d /tmp/lightning-luau
+          compiler="$(find /tmp/lightning-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile Lightning Lab v2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null booga-reborn/booga-lightning-lab-v2.0.lua
+          echo LIGHTNING_LAB_V2_LUAU_COMPILE_PASS
+      - name: Check hold-only casting, switches, safety and status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("booga-reborn/booga-lightning-lab-v2.0.lua").read_text()
+          for key in (
+              'KeyCode.V', 'UIS.InputEnded', 'if armed and held then',
+              'if not live or not armed or not held then return end',
+              'VoodooSpell.send(', 'mode="direct"', '"native"', '"hybrid"',
+              '"DOUBLE PULSE"','"TRIPLE PULSE"','"AOE OFFSET SWEEP"',
+              '"VOODOO ENERGY GUARD"','"REGEN SMART PACE"',
+              'lastAttempt>=1/24','KeyCode.F6','voodooCost',
+              '"Voodoo Passive"','"Jelly Sandwich"','"Void Armor"',
+              'function nativeCast()', 'function regenBoosts()', 'function dave()',
+          ):
+              assert key in s,key
+          for bad in ('FireServer(', 'Health.Value=', 'writefile(', 'PostAsync(', 'loadstring(', 'game:HttpGet('):
+              assert bad not in s,bad
+          print('LIGHTNING_LAB_V2_SOURCE_CHECK_PASS')
+          PY
