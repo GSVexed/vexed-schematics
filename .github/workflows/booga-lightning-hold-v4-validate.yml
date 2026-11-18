@@ -1,0 +1,60 @@
+name: Booga Lightning Hold-V v4 offline checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-hold-v4.0.lua'
+      - '.github/workflows/booga-lightning-hold-v4-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 \
+            https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip \
+            -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Luau syntax compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null booga-reborn/booga-lightning-hold-v4.0.lua
+          echo LIGHTNING_V4_COMPILE_PASS
+      - name: Offline contract checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-lightning-hold-v4.0.lua').read_text()
+          must=[
+            'KeyCode.V','UIS.InputEnded','physicalVDown()', 'IsKeyDown(Enum.KeyCode.V)',
+            'if physicalVDown() and now>=nextCast then','KeyCode.F6',
+            'wrappedSignals','ev:Fire(', 'VoodooSpell', 'packet.send(',
+            'functions.cursorRay()','getSpell()', 'name~="Energy Bolt"',
+            'info2.voodooCost','voodoo_spend_observed',
+            'booga_lightning_v4_report.json','writefile(', 'Shutdown'
+          ]
+          for x in must: assert x in s,x
+          forbidden=['FireServer(', 'Health.Value=', 'voodoo=999', 'autoAim','aimDave',
+                     'triple', 'sweep','GetPartBoundsInBox', 'sethiddenproperty(']
+          for x in forbidden: assert x not in s,x
+          assert s.count('UIS.InputEnded:Connect')==1
+          print('LIGHTNING_V4_STATIC_CHECKS_PASS',len(must))
+          PY
+      - name: Reminder
+        run: |
+          echo "Offline checks cannot establish live Roblox casting, server acceptance, or infinite Voodoo."
