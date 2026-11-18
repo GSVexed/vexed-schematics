@@ -1,5 +1,14 @@
 # Booga Booga Reborn — continuation handoff
 
+## 2026-11-18 zero-Voodoo bolt investigation — new live verification
+
+The user remembered four alternate bolt/ray attacks costing zero Voodoo. **Confirmed exact client metadata**: `God's Bolt` (90 damage, 0 cost, ID 354), `Rainbow Ray` (70, 0, ID 89), `Equinox Bolt` (70, 0, ID 353), `Bullet's Ray` (60, 0, ID 144). All are `blacklisted=true` and `voodooSpell=false`. The named descriptions are internally inconsistent and these values have **not** been verified as live damaging effects. Full [zero-cost bolt audit](BOOGA-ZERO-VOODOO-BOLT-AUDIT-2026-11-18.md).
+
+Automated **read-only in-game entitlement check** [run 44314604101](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44314604101) showed none of the four in the normal spell selection GUI, none flagged unlocked in current `Data.unlockedSpells`, and selected spell remains ordinary Energy Bolt. The regular `VoodooSpell` request sends only target position/direction, no spell ID, damage or mana cost. `EnergyBolt.listen` is a replication/visual pathway, unrelated weather/boss lightning is not a free player attack. No extra Voodoo, free damaging bolts, or server bypass was demonstrated. **Do not publish a local switcher as a working solution.** A raw spell-change request wasn't attempted because it may irreversibly replace the player's selected spell.
+
+---
+
+
 ## 2026-11-18 server weakness check — latest verified result
 
 Read [the server-validation report](BOOGA-VOODOO-SERVER-VALIDATION-2026-11-18.md) before further experiments. An actual level-39/no-materials Void Shroud `CraftItem` request was sent once through the real Velocity/Roblox connection; the server did not grant the item (run [44310861368](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44310861368)). No server-accepted extra Voodoo mechanism identified.
