@@ -18,7 +18,7 @@ if not ok or not packets or not packets.VoodooSpell or type(packets.VoodooSpell.
  warn("Lightning Lab: native spell API unavailable");return
 end
 local live=true
-local state={hold=false,auto=false,burst=false,aim=false,budget=true,rate=4}
+local state={hold=false,auto=false,burst=false,aim=false,budget=true,native=false,rate=4}
 local held=false
 local sent=0
 local errors=0
@@ -34,14 +34,14 @@ local function make(kind,props,parent)
  x.Parent=parent;return x
 end
 local colors={bg=Color3.fromRGB(13,17,32),panel=Color3.fromRGB(26,34,54),accent=Color3.fromRGB(137,117,255),white=Color3.fromRGB(240,242,255),muted=Color3.fromRGB(164,175,198),on=Color3.fromRGB(58,159,125),off=Color3.fromRGB(62,72,92)}
-local frame=make("Frame",{Name="Window",Size=UDim2.fromOffset(400,455),Position=UDim2.fromOffset(40,120),BackgroundColor3=colors.bg,BorderSizePixel=0,Active=true,Draggable=true},gui)
+local frame=make("Frame",{Name="Window",Size=UDim2.fromOffset(400,520),Position=UDim2.fromOffset(40,120),BackgroundColor3=colors.bg,BorderSizePixel=0,Active=true,Draggable=true},gui)
 make("UICorner",{CornerRadius=UDim.new(0,14)},frame)
 make("UIStroke",{Color=colors.accent,Thickness=1.4,Transparency=.18},frame)
 local function label(t,x,y,w,h,size,color,bold)
  return make("TextLabel",{Text=t,Position=UDim2.fromOffset(x,y),Size=UDim2.fromOffset(w,h),BackgroundTransparency=1,TextColor3=color or colors.white,TextSize=size or 13,Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextWrapped=true},frame)
 end
 label("⚡ LIGHTNING LAB",17,12,325,34,20,colors.accent,true)
-label("BOOGA REBORN  •  NATIVE SPELL CASTING",18,44,360,19,10,colors.muted)
+label("BOOGA REBORN  •  HOLD V / AUTO / BURST",18,44,360,19,10,colors.muted)
 local function stopAll()
  held=false;state.auto=false;state.hold=false;state.burst=false
 end
@@ -74,17 +74,18 @@ end
 local a=switch("hold","HOLD V  •  RAPID CAST","Repeated casts only while V is held",80)
 local b=switch("auto","AUTO CAST","Repeats while enabled; click to stop",136)
 local c=switch("burst","BURST MODE","One bounded 3-cast burst per V press",192)
-local d=switch("aim","AIM AT DAVE","Targets nearest streamed Dave instead of cursor",248)
+local d=switch("aim","AIM AT DAVE","Targets nearest streamed Dave (direct mode)",248)
 local e=switch("budget","ENERGY GUARD","Stops sends when local Voodoo is insufficient",304)
-local refreshAll=function()a();b();c();d();e()end
+local f=switch("native","NATIVE UI REPLAY","Uses game UI handler if supported",360)
+local refreshAll=function()a();b();c();d();e();f()end
 -- Reconcile mutually exclusive switches on every update.
-local rateText=label("RATE  4 casts/s",20,357,200,21,12,colors.white,true)
-local minus=make("TextButton",{Text="−",Position=UDim2.fromOffset(255,353),Size=UDim2.fromOffset(48,29),BackgroundColor3=colors.panel,TextColor3=colors.white,TextSize=20,BorderSizePixel=0},frame)
-local plus=make("TextButton",{Text="+",Position=UDim2.fromOffset(312,353),Size=UDim2.fromOffset(48,29),BackgroundColor3=colors.panel,TextColor3=colors.white,TextSize=20,BorderSizePixel=0},frame)
+local rateText=label("RATE  4 casts/s",20,412,200,21,12,colors.white,true)
+local minus=make("TextButton",{Text="−",Position=UDim2.fromOffset(255,409),Size=UDim2.fromOffset(48,29),BackgroundColor3=colors.panel,TextColor3=colors.white,TextSize=20,BorderSizePixel=0},frame)
+local plus=make("TextButton",{Text="+",Position=UDim2.fromOffset(312,409),Size=UDim2.fromOffset(48,29),BackgroundColor3=colors.panel,TextColor3=colors.white,TextSize=20,BorderSizePixel=0},frame)
 for _,x in ipairs({minus,plus}) do make("UICorner",{CornerRadius=UDim.new(0,7)},x) end
 minus.Activated:Connect(function()state.rate=math.max(1,state.rate-1) end)
 plus.Activated:Connect(function()state.rate=math.min(12,state.rate+1) end)
-local status=label("",19,392,360,52,11,colors.muted)
+local status=label("",19,447,360,65,11,colors.muted)
 local function getSpell()
  local data=gameUtil.Data
  local name=data and data.spell
@@ -112,6 +113,25 @@ local function aim()
  local mouse=P:GetMouse()
  return mouse.Hit.Position
 end
+local function nativeCast()
+ local get=getconnections
+ if type(get)~="function" then return false,"getconnections not supported by Velocity" end
+ local main=PG:FindFirstChild("MainGui")
+ local panels=main and main:FindFirstChild("Panels")
+ local stats=panels and panels:FindFirstChild("Stats")
+ local images=stats and stats:FindFirstChild("ImageLabels")
+ local button=images and images:FindFirstChild("SpellImage")
+ if not button or not button:IsA("GuiButton") then return false,"SpellImage button not found" end
+ local ok,items=pcall(get,button.Activated)
+ if not ok or type(items)~="table" then return false,"Cannot inspect native spell-button handlers" end
+ for _,conn in ipairs(items) do
+  local valid,fire=pcall(function()return conn.Fire end)
+  if valid and type(fire)=="function" then
+   return pcall(function()conn:Fire()end)
+  end
+ end
+ return false,"No callable native spell-button handler"
+end
 local function cast()
  local now=os.clock()
  if now-lastSend<1/state.rate then return false end
@@ -121,6 +141,7 @@ local function cast()
  if not hum or hum.Health<=0 then lastStatus="Character unavailable";return false end
  local data,name,info=getSpell()
  if not name or not info then lastStatus="Select Lightning in game first";return false end
+ if name~="Energy Bolt" and name~="Lightning Bolt" and name~="Lightning" then lastStatus="Energy Bolt must be selected";return false end
  if state.budget and type(info.voodooCost)=="number" and (not data or type(data.voodoo)~="number" or data.voodoo<info.voodooCost) then
   lastStatus="Energy guard: insufficient Voodoo";return false
  end
@@ -130,9 +151,14 @@ local function cast()
  if direction.Y<0 then direction=Vector3.new(direction.X,0,direction.Z) end
  if direction.Magnitude<.01 then direction=Vector3.new(0,0,-1) end
  lastSend=now
- local success,err=pcall(function()packets.VoodooSpell.send({targetPos=target,aimDirection=direction.Unit})end)
- if success then sent+=1;lastStatus="Request sent; server acceptance not confirmed"
- else errors+=1;lastStatus="Cast API error: "..tostring(err):sub(1,65);stopAll() end
+ local success,err
+ if state.native then success,err=nativeCast()
+ else success,err=pcall(function()packets.VoodooSpell.send({targetPos=target,aimDirection=direction.Unit})end) end
+ if success then sent+=1;lastStatus=(state.native and "Native handler invoked" or "Packet sent").."; server acceptance not confirmed"
+ else
+  errors+=1;lastStatus="Cast method error: "..tostring(err):sub(1,65)
+  if state.native then state.native=false else stopAll() end
+ end
  return success
 end
 local function onPress(input,processed)
@@ -166,4 +192,4 @@ connections[#connections+1]=UIS.InputBegan:Connect(function(input)
 end)
 shutdown.Event:Connect(close)
 refreshAll()
-warn("[Lightning Lab] Ready. Hold V, auto, or burst. Real server damage is not guaranteed.")
+warn("[Lightning Lab] v1.1 ready. Hold V, auto, burst, or native UI replay. Real server damage not guaranteed.")
