@@ -1,5 +1,16 @@
 # Booga Booga Reborn — continuation handoff
 
+## Current deliverable: Voodoo Sync v6.0 (18 Nov 2026)
+
+User confirms they **already own the Spellmaster Voodoo Mojo** and requested a dramatically improved hub. Rather than falsely promise unlimited Voodoo, published [Voodoo Sync v6.0](booga-voodoo-sync-v6.0.lua) and [guide](README-voodoo-sync-v6.0.md). One-line Velocity loader:
+
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-voodoo-sync-v6.0.lua"))()`
+
+Distinct improvements over nonworking v5: native owned inventory key discovery, user-clicked sequential Void Shroud/Chestplate/Greaves/Bag equips with normal `UseBagItem` and post-action equipment verification, double-confirm one-owned-Jelly-Sandwich use with boost/inventory verification, Spellmaster passive owned display (no purchase or toggle), idle Voodoo per second measurement, hold V Energy Bolt (no local Voodoo wait), two-page UI and F6/hide/reset; executor-local own-session JSON report. No automatic purchases or consumable use; click-to-equip may replace the current equipped armour/bag. Official Luau 0.747 syntax CI + static checks passed; no personal live gameplay test, no proven server-side regenerated free energy or damaging bolts beyond resource rules. The user called earlier v5 not working, so **do not claim v6 solves zero-cost Lightning**. Need live evidence of actually server-accepted regeneration from owned effects or a truly distinct mechanic before attempting claims of unbounded server energy.
+
+---
+
+
 ## Current pause/resume: Voodoo regeneration authority investigation (18 Nov 2026)
 
 The user rejected v5's repeated Lightning packet loop as **not what they asked for**. They want a real increase in **server-recognised Voodoo regeneration**, potentially by mimicking genuine effects, or real zero-Voodoo-cost damaging bolts. They temporarily paused for FERAL and then explicitly resumed Booga, demanding a proper investigation. **Do not produce another casting hub without a new, validated mechanism.**
