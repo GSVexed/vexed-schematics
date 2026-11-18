@@ -1,5 +1,17 @@
 # Booga Booga Reborn — continuation handoff
 
+## Active experimental finding: same-frame double Lightning (18 Nov 2026)
+
+User reiterated goal: **actual server-accepted extra Voodoo or real damaging Lightning without 30-Voodoo cost**, already owns Spellmaster, rejects cosmetic/normal equipment hubs. The old v6 is **not** the solution. Reopened original archive scripts and ByteNet source, checked current public results; no verified server-side regen-grant or free-cast path found. Source shows `VoodooSpell` carries only `targetPos` and `aimDirection`, `UpdateStats` / `SetBoost` are incoming; spoofing client data, re-sending at regular intervals, and fake buff icon are not breakthroughs.
+
+Published a **distinct, bounded experiment** at [booga-lightning-authority-v1.lua](booga-lightning-authority-v1.lua) with [guide](README-lightning-authority-v1.md), **not an unlimited-Lightning hub**. Launcher:
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/booga-reborn/booga-lightning-authority-v1.lua"))()`
+
+Aim at an isolated nonplayer NPC/boss with replicated Health, start at 30–59 Voodoo, press B for single baseline vs N for two same-frame spell requests; measure native Voodoo loss and replicated target health over 5s, copy JSON. 9s cooldown, 4-test cap, no background spam, no spoofing. It probes an **unverified request ordering / two-for-one hypothesis**. Official Luau compile and static checks passed [Actions run 44293466660](https://github.com/GSVexed/vexed-schematics/actions/runs/44293466660). No user in-game result; cannot claim server bypass. If the user tests and returns results, compare real damage (not attempts) before pursuing. No unsupervised Roblox client control through GitHub runner; runner merely reads local Velocity report files, none found yet.
+
+---
+
+
 ## Current deliverable: Voodoo Sync v6.0 (18 Nov 2026)
 
 User confirms they **already own the Spellmaster Voodoo Mojo** and requested a dramatically improved hub. Rather than falsely promise unlimited Voodoo, published [Voodoo Sync v6.0](booga-voodoo-sync-v6.0.lua) and [guide](README-voodoo-sync-v6.0.md). One-line Velocity loader:
