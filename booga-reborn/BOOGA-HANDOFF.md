@@ -1,5 +1,12 @@
 # Booga Booga Reborn — continuation handoff
 
+## 2026-11-18 four live zero-cost bolt selection requests — all unsuccessful
+
+User explicitly allowed risking replacement of Energy Bolt, so launched a bounded one-request `PromptSpellChoice.send` authority test for each special item through actual Roblox/Velocity. God's Bolt 354: request sent, selected spell still Energy Bolt after 19 seconds ([run 44318047221](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44318047221)). Rainbow Ray 89, Equinox Bolt 353, Bullet's Ray 144: one request each, 9-second confirmation window each, all no local send error and **all left `Data.spell` at Energy Bolt** ([run 44318511191](https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/44318511191)). No free bolt or server-recognised damage achieved. This is consistent with denied selection; actual server rejection logic unknown. User's working Energy Bolt was **not lost**. See updated [zero-bolt audit](BOOGA-ZERO-VOODOO-BOLT-AUDIT-2026-11-18.md). Do not repeatedly spam restricted IDs or try rebirth without separately obtaining informed consent about resetting character progress.
+
+---
+
+
 ## 2026-11-18 zero-Voodoo bolt investigation — new live verification
 
 The user remembered four alternate bolt/ray attacks costing zero Voodoo. **Confirmed exact client metadata**: `God's Bolt` (90 damage, 0 cost, ID 354), `Rainbow Ray` (70, 0, ID 89), `Equinox Bolt` (70, 0, ID 353), `Bullet's Ray` (60, 0, ID 144). All are `blacklisted=true` and `voodooSpell=false`. The named descriptions are internally inconsistent and these values have **not** been verified as live damaging effects. Full [zero-cost bolt audit](BOOGA-ZERO-VOODOO-BOLT-AUDIT-2026-11-18.md).
