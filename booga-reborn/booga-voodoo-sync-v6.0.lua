@@ -167,7 +167,8 @@ local equipStatus=label(regenPane,"",4,166,429,39,11,col.amber)
 local jellyBtn=btn(regenPane,"USE OWNED JELLY SANDWICH • CONFIRM TWICE",4,215,428,37,function()end)
 local jellyText=label(regenPane,"",4,253,429,49,11,col.muted)
 label(panel,"RIGHT SHIFT: HIDE/SHOW    •    F6: STOP    •    NO AUTOMATIC PURCHASES",18,412,430,15,10,col.muted)
-local reopen=btn(gui,"⚡ SHOW HUB",10,10,133,33,function()panel.Visible=true end)
+local reopen
+reopen=btn(gui,"⚡ SHOW HUB",10,10,133,33,function()panel.Visible=true;reopen.Visible=false end)
 reopen.Visible=false
 local function equipOwned()
  if busy then kitStatus="Already checking gear.";return end
