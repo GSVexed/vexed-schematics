@@ -1,0 +1,38 @@
+name: Lightning v5 syntax and control checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'booga-reborn/booga-lightning-hold-v5.0.lua'
+      - '.github/workflows/booga-lightning-v5-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official Luau compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          "$compiler" --null booga-reborn/booga-lightning-hold-v5.0.lua
+      - name: Hold-V and monitoring contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('booga-reborn/booga-lightning-hold-v5.0.lua').read_text()
+          for x in ['InputEnded:Connect','InputBegan:Connect','KeyCode.V','if down and now-lastAt','VoodooSpell','EnergyBolt','UpdateStats','booga_lightning_v5_report.json','observed_energy_gained','Shutdown']:
+              assert x in s,x
+          assert 'v<info.voodooCost' not in s
+          assert 'aimDave' not in s
+          print('LIGHTNING_V5_STATIC_PASS')
+          PY
