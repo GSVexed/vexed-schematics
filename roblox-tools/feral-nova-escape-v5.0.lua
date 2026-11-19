@@ -6,6 +6,7 @@ local Players=game:GetService("Players")
 local UIS=game:GetService("UserInputService")
 local RunService=game:GetService("RunService")
 local RS=game:GetService("ReplicatedStorage")
+local CAS=game:GetService("ContextActionService")
 local player=Players.LocalPlayer
 
 local keys={
@@ -138,6 +139,25 @@ local function nativeEscapeMode(char)
     end
     if type(clamp)=="number" and clamp>0 and clamp<1000 then
         return "shake","shake off attacker"
+    end
+    -- Native actions are bound only while the corresponding FERAL
+    -- escape interaction is active, even if an attribute hasn't replicated.
+    local ok,bindings=pcall(function()
+        return CAS:GetAllBoundActionInfo()
+    end)
+    if ok and type(bindings)=="table" then
+        if bindings.FeralCarryEscape then
+            return "getoff","active carry escape bind"
+        end
+        if bindings.FeralShakeMash then
+            return "shake","active shake escape bind"
+        end
+        -- FeralTugTap can also belong to a HUNTER. Require local prey
+        -- progress, never auto squeeze or shake just because a grab is held.
+        local need=char:GetAttribute("FeralShakeNeed")
+        if bindings.FeralTugTap and type(need)=="number" and need>0 then
+            return "shake","active tug escape bind"
+        end
     end
     return nil,nil
 end
