@@ -110,7 +110,7 @@ jobs:
           assert 'FireServer(' not in carry # Uses only game's G/CarryPress
           print('V12_EXACT_9_MODULE_BUNDLE_AND_CARRY_INTEGRITY_PASS')
           PY
-      - name: Luau test: predator holding prey vs captured victim and carcass
+      - name: Luau test - predator holding prey vs captured victim and carcass
         shell: bash
         run: |
           set -euo pipefail
@@ -162,7 +162,7 @@ jobs:
           Path('/tmp/v12-carry.luau').write_text(prefix+src.rsplit('return Carry',1)[0]+'\n'+cases)
           PY
           "$LUAU" /tmp/v12-carry.luau
-      - name: Luau test: G carry preserves native action and preempts Rest
+      - name: Luau test - G carry preserves native action and preempts Rest
         shell: bash
         run: |
           set -euo pipefail
@@ -229,7 +229,7 @@ jobs:
           Path('/tmp/v12-carry-life.luau').write_text(mock+src+'\n'+cases)
           PY
           "$LUAU" /tmp/v12-carry-life.luau
-      - name: Luau test: native escape actions only when captured, not holding
+      - name: Luau test - native escape actions only when captured, not holding
         shell: bash
         run: |
           set -euo pipefail
