@@ -1,0 +1,216 @@
+name: FERAL NOVA PRIME v11 integrated recovery validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-v11.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v11.0.lua'
+      - 'roblox-tools/feral-nova-mobile-v11.0.lua'
+      - '.github/workflows/feral-nova-prime-v11-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/nova-v11.zip
+          mkdir -p /tmp/nova-v11
+          unzip -q /tmp/nova-v11.zip -d /tmp/nova-v11
+          compiler="$(find /tmp/nova-v11 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+          luau="$(dirname "$compiler")/luau"
+          chmod +x "$luau"
+          echo "LUAU=$luau" >> "$GITHUB_ENV"
+      - name: Compile all v11 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-nova-escape-v9.0.lua \
+            roblox-tools/feral-nova-combat-v10.0.lua \
+            roblox-tools/feral-nova-recovery-v10.0.lua \
+            roblox-tools/feral-nova-mobile-v11.0.lua \
+            roblox-tools/feral-nova-tags-v8.0.lua \
+            roblox-tools/feral-nova-prime-ui-v11.0.lua \
+            roblox-tools/feral-nova-prime-v11.0.lua; do
+            "$COMPILER" --null "$f"
+          done
+          echo V11_LUAU_COMPILE_PASS
+      - name: Feature scope and integration invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools')
+          launcher=(p/'feral-nova-prime-v11.0.lua').read_text()
+          ui=(p/'feral-nova-prime-ui-v11.0.lua').read_text()
+          mob=(p/'feral-nova-mobile-v11.0.lua').read_text()
+          combat=(p/'feral-nova-combat-v10.0.lua').read_text()
+          rest=(p/'feral-nova-recovery-v10.0.lua').read_text()
+          assert 'game.PlaceId~=108901361810209' in launcher
+          assert 'FeralNovaPrimeV110' in launcher
+          assert 'feral-nova-mobile-v11.0.lua' in launcher
+          assert 'feral-nova-prime-ui-v11.0.lua' in launcher
+          assert 'ctx.mobile=mobile.attach(ctx)' in launcher
+          assert 'ctx.mobile.close()' in launcher
+          assert 'Name="FeralNovaPrimeV110"' in ui
+          assert ui.count('    card(')==5 and ui.count('=card(')==1
+          assert 'MOBILE RECOVERY' in ui
+          assert 'SAFE REST' in ui
+          assert 'Mobile.report()' in ui
+          assert 'Mobile.close()' in ui
+          assert 'Mobile.setEnabled(true)' in ui
+          assert 'Mobile.setEnabled(false)' in ui
+          assert 'Recovery.setEnabled(false)' in ui
+          assert 'Lab.close()' in ui
+          assert 'FeralNovaPrimeTagsV8' in (p/'feral-nova-tags-v8.0.lua').read_text()
+          assert 'physical_part_edits_by_v10=' in combat
+          assert 'ray_obstruction_category=' in combat
+          assert 'part.Size=' not in combat
+          assert 'part.Size=' not in mob
+          assert 'SetAttribute(' not in mob
+          assert 'FireServer(' not in combat
+          assert 'function Mobile.decide(' in mob
+          assert 'function Mobile.attach(ctx)' in mob
+          assert 'STOPPED: REST BLOCKS BITES' in mob
+          assert 'attack_priority_stops=' in mob
+          assert 'native_rest_on=' in mob
+          assert 'enabled=false,status="PASSIVE MONITOR"' in rest
+          for source in (launcher,ui,mob,rest,combat):
+              for bad in ('SetAttribute("Health"', 'SetAttribute("Amber"',
+                          'FireServer("Gift"', 'HttpPost(', 'github_pat_'):
+                  assert bad not in source,bad
+          print('V11_INTEGRATION_PASS')
+          PY
+      - name: Luau mobile recovery uplift classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-mobile-v11.0.lua').read_text().rsplit('return Mobile',1)[0]
+          mock='game={GetService=function(self,k) if k=="Players" then return {LocalPlayer={}} end return {} end}\n'
+          tests=r'''
+          local function window(hp,t)
+              return {hp=hp,time=t,status={
+                  FeralInjury=0,FeralBleed=0,FeralVenomAmt=0
+              },statusTime={
+                  FeralInjury=0,FeralBleed=0,FeralVenomAmt=0
+              }}
+          end
+          local ok,hp,status=Mobile.decide(window(4,4),window(12,6))
+          assert(ok==true and hp==true and status==false)
+          ok,hp,status=Mobile.decide(window(4,4),window(4,6))
+          assert(ok==false and hp==false and status==false)
+          local b,s=window(0,0),window(0,0)
+          b.status.FeralBleed=1;b.statusTime.FeralBleed=3
+          s.status.FeralBleed=5;s.statusTime.FeralBleed=4
+          local names
+          ok,hp,status,_,_,names=Mobile.decide(b,s)
+          assert(ok==true and hp==false and status==true)
+          assert(names=="FeralBleed")
+          print("V11_UPLIFT_CLASSIFICATION_PASS")
+          '''
+          Path('/tmp/v11-classifier.luau').write_text(mock+src+'\n'+tests)
+          PY
+          "$LUAU" /tmp/v11-classifier.luau
+      - name: Luau mobile state machine and attack-first safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-mobile-v11.0.lua').read_text().rsplit('return Mobile',1)[0]
+          mock=r'''
+          local stamp=0
+          os={clock=function()return stamp end}
+          local char={}
+          local hp={Health=60,MaxHealth=100}
+          local vel={Magnitude=2}
+          local root={AssemblyLinearVelocity=vel}
+          char.Parent={}
+          char.GetAttribute=function(self,key)
+              if key=="WolfRest" then return false end
+              return 0
+          end
+          char.FindFirstChildOfClass=function(self,key)
+              if key=="Humanoid" then return hp end
+          end
+          char.FindFirstChild=function(self,key)
+              if key=="HumanoidRootPart" then return root end
+          end
+          local player={Character=char,GetAttribute=function(self)return nil end}
+          local calls={}
+          local remote={
+              IsA=function(self,key)return key=="RemoteEvent"end,
+              FireServer=function(self,key,arg)
+                  assert(key=="Rest")
+                  table.insert(calls,arg)
+              end
+          }
+          local heartbeat,inputCallback
+          local services={
+              Players={LocalPlayer=player},
+              ReplicatedStorage={FindFirstChild=function(self,key)
+                  if key=="WolfActions" then return remote end
+              end},
+              UserInputService={
+                  InputBegan={Connect=function(self,fn)
+                      inputCallback=fn
+                      return {Disconnect=function(self)inputCallback=nil end}
+                  end},
+                  GetFocusedTextBox=function(self)return nil end
+              },
+              RunService={Heartbeat={Connect=function(self,fn)
+                  heartbeat=fn
+                  return {Disconnect=function(self)heartbeat=nil end}
+              end}}
+          }
+          game={GetService=function(self,key)return services[key]end}
+          Enum={
+              UserInputType={MouseButton1=1,MouseButton2=2},
+              KeyCode={W=3,A=4,S=5,D=6,Space=7}
+          }
+          '''
+          tests=r'''
+          local rec={enabled=true}
+          rec.setEnabled=function(v)rec.enabled=v end
+          local M=Mobile.attach({state={alive=true},recovery=rec})
+          assert(not M.enabled and #calls==0)
+          M.setEnabled(true)
+          assert(not rec.enabled and M.phase=="BASELINE")
+          vel.Magnitude=0
+          stamp=.4;heartbeat()
+          assert(M.enabled and M.phase=="BASELINE")
+          vel.Magnitude=2
+          for i=1,21 do
+              stamp=stamp+.28
+              hp.Health+=.12
+              heartbeat()
+          end
+          assert(#calls==1 and calls[1]==true)
+          assert(M.phase=="SIGNAL")
+          inputCallback({UserInputType=Enum.UserInputType.MouseButton1},false)
+          assert(#calls==2 and calls[2]==false)
+          assert(M.enabled==false and M.attackStops==1)
+          M.close()
+          assert(M.alive==false and heartbeat==nil)
+          print("V11_SIGNAL_ATTACK_CANCEL_PASS")
+          '''
+          Path('/tmp/v11-mobile.luau').write_text(mock+src+'\n'+tests)
+          PY
+          "$LUAU" /tmp/v11-mobile.luau
