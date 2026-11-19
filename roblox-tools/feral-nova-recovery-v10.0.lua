@@ -37,14 +37,14 @@ function Recovery.attach(ctx)
         damageInterrupts=0,unsafeBlocks=0,
         restOwned=nil,restActive=false,
         lastChar=nil,lastHP=nil,lastMax=nil,
-        lastMeasure=0,lastRest=false,lastInput=-math.huge,
+        lastMeasure=0,lastMeasureRest=nil,lastRest=false,lastInput=-math.huge,
         lastDamage=-math.huge,stillSince=0,
         nextRequest=0,nextTick=0,lastError="",
         pendingUntil=0,restAttempts=0,
         statusActive=false,
         statusValues={},
         statusSamples={},
-        prevStatusAt=0,
+        prevStatusAt=0,prevStatusRest=nil,
         restObservedSeconds=0,
         noRestObservedSeconds=0,
         reason="Enable Rest to request 2x HP / 4x status recovery when eligible"
@@ -122,11 +122,13 @@ function Recovery.attach(ctx)
         M.lastHP=nil
         M.lastMax=nil
         M.lastMeasure=0
+        M.lastMeasureRest=nil
         M.lastRest=false
         M.stillSince=0
         M.nextRequest=0
         M.lastDamage=os.clock()
         M.prevStatusAt=0
+        M.prevStatusRest=nil
         M.statusValues={}
         M.statusActive=false
     end
@@ -264,7 +266,8 @@ function Recovery.attach(ctx)
             if finite(current) then
                 if current>entry.limit then M.statusActive=true end
                 local last=M.statusValues[entry.key]
-                if finite(last) and statusInterval>.15 and statusInterval<3.5 then
+                if finite(last) and statusInterval>.15 and statusInterval<3.5
+                    and M.prevStatusRest==rest then
                     local v=M.statusSamples[entry.name]
                     local delta=last-current
                     if delta>0 then
@@ -276,10 +279,15 @@ function Recovery.attach(ctx)
                     elseif delta<-.01 then
                         v.gainedTicks+=1
                     end
-                    if rest then
-                        v.restSeconds+=statusInterval
-                    else
-                        v.normalSeconds+=statusInterval
+                    -- Rate denominator includes time without gains, only
+                    -- while the negative effect is still above its cutoff.
+                    -- Exclude fresh application and samples crossing a rest toggle.
+                    if last>entry.limit and delta>=-.01 then
+                        if rest then
+                            v.restSeconds+=statusInterval
+                        else
+                            v.normalSeconds+=statusInterval
+                        end
                     end
                 end
                 M.statusValues[entry.key]=current
@@ -288,22 +296,37 @@ function Recovery.attach(ctx)
             end
         end
         M.prevStatusAt=now
+        M.prevStatusRest=rest
         if now-M.lastMeasure>.85 then
             if finite(hum.Health) and finite(hum.MaxHealth) then
                 if finite(M.lastHP) and M.lastMax==hum.MaxHealth then
                     local delta=hum.Health-M.lastHP
+                    local interval=now-M.lastMeasure
+                    local compatible=M.lastMeasureRest==rest
+                    -- Use all eligible damaged-but-not-damaged-again
+                    -- observation time, including zero-gain intervals.
+                    if compatible and M.lastHP<hum.MaxHealth-.2
+                        and delta>=-.01 then
+                        if rest then
+                            M.healthRestSeconds+=interval
+                        else
+                            M.healthNormalSeconds+=interval
+                        end
+                    end
                     if delta>.01 then
                         M.lastRate=delta/math.max(now-M.lastMeasure,.1)
                         if rest then
                             M.restingHeals+=1
-                            M.healthRestGain+=delta
-                            M.healthRestSeconds+=math.max(.1,now-M.lastMeasure)
-                            M.healthRestTicks+=1
+                            if compatible then
+                                M.healthRestGain+=delta
+                                M.healthRestTicks+=1
+                            end
                         else
                             M.normalHeals+=1
-                            M.healthNormalGain+=delta
-                            M.healthNormalSeconds+=math.max(.1,now-M.lastMeasure)
-                            M.healthNormalTicks+=1
+                            if compatible then
+                                M.healthNormalGain+=delta
+                                M.healthNormalTicks+=1
+                            end
                         end
                     elseif delta<-.01 then
                         M.lastDamage=now
@@ -319,6 +342,7 @@ function Recovery.attach(ctx)
                 M.lastHP=hum.Health
                 M.lastMax=hum.MaxHealth
                 M.lastMeasure=now
+                M.lastMeasureRest=rest
             end
         end
         local moving=root.AssemblyLinearVelocity.Magnitude>1.5
