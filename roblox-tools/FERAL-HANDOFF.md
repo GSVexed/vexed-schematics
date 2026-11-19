@@ -1,5 +1,37 @@
 # FERAL project continuation
 
+## Latest — 19 November 2026: NOVA PRIME v13 full-system audit (single recommended release)
+
+**What the user repeatedly requested:** A FERAL hub whose features genuinely work together; reliable automatic escape from Tiger and other grabs, natural carrying and dropping without interference, all-the-time useful health/negative-effect recovery rather than simply the game’s normal Rest, beneficial attack range without physically obstructing other animals, compact outline-only ESP with names at close range, one Endurance switch, real agility, Turtle shell support, and honest server-side impact. They are frustrated by incomplete single-feature releases. **Do not repeatedly ask them to restate goals.**
+
+**Published latest:** [single-file v13](feral-nova-prime-standalone-v13.0.lua), [v13 guide and feature status matrix](README-feral-nova-prime-v13.0.md), [modular v13](feral-nova-prime-v13.0.lua), [regression workflow](../.github/workflows/feral-nova-prime-v13-validate.yml).
+
+**Recommended loader** (Velocity, after fresh join if previous v7/v8 hitboxes modified client geometry):
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v13.0.lua"))()`
+
+**Root causes fixed and code:**
+1. [Mobile v13](feral-nova-mobile-v13.0.lua) moved predator/victim carry classification ahead of `AssemblyLinearVelocity<1.6` early termination. A predator holding prey no longer disables the experiment when slowed to zero; pauses and auto-resumes after dropping, with >.85s G input grace.
+2. [Recovery v13](feral-nova-recovery-v13.0.lua) moved carrying/capture recognition before `WolfRest` and Turtle shell early returns. Cancels its owned native Rest request while carrying; preserves game G action.
+3. [Engine v13](feral-aurora-engine-v13.0.lua) disabled unsafe legacy `startRestMask` code which used `char:SetAttribute("WolfRest",false)` and refused to turn on the deprecated third recovery path. Safe Rest/Mobile are the two coordinated owners.
+4. [Carry v13](feral-nova-carry-v13.0.lua) allows game-owned `_G.FeralCarryPress` drop path even when `_G.FeralCarryCan` says a new pickup is unavailable. Exposes actual native-helper availability, tracks last G intent and throttles expensive helper polling ~8Hz. Still never sends guessed native server carry remotes.
+5. [Escape v13](feral-nova-escape-v13.0.lua) suppresses speculative predator-side escape during ~.58s own G transition, **without** blocking true pinned/carried victims. Reads bindings only while there is an own grab cue, and uses captured min-gap-compatible getoff (.405), tug (.105), shake (.153/.155). Server instant release still not proven.
+6. [Combat v13](feral-nova-combat-v13.0.lua) explicitly reports carry-related normal bite restriction from WolfController rather than pretending attacks while carrying are valid; reports active client CombatConfig inputs to investigate perceived range. Only reads other animals; collision scan throttled to ~2Hz.
+7. [UI v13](feral-nova-prime-ui-v13.0.lua) defaults close-camera screen name tags ON on first v13 use (`FERAL_NovaPrime_Display_v13.json`); clean outline ESP stays. Prior default was OFF. Mobile displays TEST, Endurance/Agility show CLIENT (not server-verified) and Copy Status includes Power.status lease matches and precise statuses. Compact six-card layout and contextual Carry/Drop G quick control remain; no scrolling.
+8. Standalone v13 bundles nine modules byte-for-byte, reducing inconsistent multi-HTTP fetch startup failures. Proper close/reset calls continue to restore reversible owned patches and key inputs.
+
+**Final CI passed:** [GitHub v13 comprehensive workflow run 44555521453](https://github.com/GSVexed/vexed-schematics/actions/runs/44555521453). Checks official Luau compile of all dependencies and standalone, bundle file equality, native carry predator/victim distinctions, helper drop when pickup Can=false, G action cooldown and Rest-off-before-carry ordering, mobile pause while stationary carrying and auto-resume, true victim escape despite G grace, and Safe Rest cancellation while the Rest attribute remains active; static source checks prevent fake HP/Amber, enemy part-size modifications, and unsafe legacy WolfRest edits. **These are offline/mock tests, not a Roblox server.**
+
+**Server-dependent unresolved goals (do not misrepresent them as fixed or cheat boosts):**
+- Permanently active server-authoritative **2× health regeneration / 4× injury, bleed, venom clearing while running, carrying and attacking**. Archived config exposes multipliers for **native Rest only**. V13 Mobile A/B moving trial remains **experimental, OFF by default**; a local Rest attribute or remote request alone never proves server-authoritative effect. User's prior report measured ~2.19 HP/s resting vs ~1.04 HP/s not resting (only ordinary Rest effect). Client source exports did not include private server handlers.
+- Instant Tiger grab escape. Prior v9 log had 47 shake native requests, 44 shake progress changes and ~5.83s grab. Input cadence and cue fixes do not bypass game/server thresholds.
+- Server-accepted extra bite range / hitboxes. V7/v8 enlarged local target HumanoidRootPart and caused physical obstruction; v9+ removed it. Bite Guide reports client range only, not server-accepted damage.
+- Unlimited stamina, invulnerability, free Amber, restricted species: local config/client remote attempts cannot simply grant server authority. Avoid fake numerical labels.
+- Native carry/drop press can be attempted through native `_G.FeralCarryPress` or G injection; successful server pickup **not yet live verified**.
+
+**PC access:** Connected GitHub code runner is available for repo changes/tests, but there is NO direct live Windows/Velocity desktop access in this chat. Do not claim a new version is fully live-tested, do not promise background completion. Future work should prioritize reliable source-backed features over making unsupported server-influence promises.
+
+---
+
 ## Latest — 19 November 2026: NOVA PRIME v12 carry-critical repair
 
 **User feedback:** "if im trying to carry something then why would i want it to not work? and tons of these features arent at the level need, please fix this." This followed v11's non-specific "stop on grabs/ability keys" logic in Mobile Recovery and prior escape misclassification. The user expects native carrying prey/carcasses not to be blocked by Auto Escape or recovery. Do not treat ordinary carrying as an incoming victim capture.
