@@ -165,6 +165,88 @@ jobs:
           assert 'FireServer(' not in carry # Uses only game's G/CarryPress
           print('V14_EXACT_12_MODULE_BUNDLE_ALL_FEATURE_INTEGRITY_PASS')
           PY
+      - name: Luau test - land Endurance reasserts locally overwritten flag
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-aurora-power-v14.0.lua').read_text().rsplit('return Power',1)[0]
+          mock=r'''
+          local stamp=1
+          os={clock=function()return stamp end}
+          local attrs={Species="Eagle",Stamina=70,StaminaMax=100}
+          local hum={Health=100,MaxHealth=100}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              SetAttribute=function(self,k,v)attrs[k]=v end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hum end
+              end
+          }
+          local player={
+              Character=char,
+              GetAttribute=function(self,k)return nil end
+          }
+          local needs={
+              STAMINA_REGEN=1.31,STAMINA_REST_MULT=3,
+              STAMINA_REGEN_DELAY=.8,STAMINA_LOW_NEEDS=.35,
+              STAMINA_SPRINT_DRAIN=.94,STAMINA_JUMP_COST=6
+          }
+          local module={IsA=function(self,k)return k=="ModuleScript"end}
+          local folder={FindFirstChild=function(self,k)
+              if k=="NeedsConfig" then return module end
+          end}
+          require=function(x)return needs end
+          local beat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,k)
+                      if k=="FeralWorld" then return folder end
+                  end
+              }end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function(self)beat=nil end}
+                  end
+              }}end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end
+              }end
+          end}
+          '''
+          test=r'''
+          local ctx={
+              state={alive=true,flags={lowNeedsAssist=false}},
+              notice=function(self,text)end,
+              toggle=function(self,k,v)end,
+              reset=function()end,
+              close=function()end
+          }
+          local P=Power.attach(ctx)
+          P.setStamina("RECOVER")
+          assert(P.stamina=="RECOVER" and attrs.WolfDbgNoStamina==true)
+          assert(needs.STAMINA_SPRINT_DRAIN==0 and needs.STAMINA_JUMP_COST==0)
+          assert(needs.STAMINA_REGEN==1.31*3)
+          attrs.WolfDbgNoStamina=false
+          stamp=1.8
+          beat()
+          assert(attrs.WolfDbgNoStamina==true)
+          assert(P.noDrainReapplyAttempts>=1)
+          local report=P.enduranceReport()
+          assert(string.find(report,"debug_flag_reapply_attempts=",1,true))
+          ctx.close()
+          assert(P.alive==false and beat==nil)
+          assert(attrs.WolfDbgNoStamina==nil)
+          assert(needs.STAMINA_SPRINT_DRAIN==.94 and needs.STAMINA_JUMP_COST==6)
+          print("V14_LAND_BIRD_ENDURANCE_FLAG_REASSERT_RESTORE_PASS")
+          '''
+          Path('/tmp/v14-endurance.luau').write_text(mock+src+'\n'+test)
+          PY
+          "$LUAU" /tmp/v14-endurance.luau
       - name: Luau test - reversible nonphysical bite reach configuration
         shell: bash
         run: |
