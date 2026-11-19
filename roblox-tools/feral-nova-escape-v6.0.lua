@@ -143,8 +143,9 @@ end
 function Escape.chooseNative(carried, clamp, shakeNeed, carryBind, shakeBind, tugBind)
     if carried == true then return "getoff", "FeralCarried" end
     if carryBind then return "getoff", "FeralCarryEscape" end
+    local corroborated = finitePositive(clamp) and finitePositive(shakeNeed)
     if (finitePositive(clamp) or finitePositive(shakeNeed))
-        and (shakeBind or tugBind) then
+        and (shakeBind or tugBind or corroborated) then
         return "shake", "active clamp escape"
     end
     return nil, nil
@@ -158,6 +159,7 @@ function Escape.attach(ctx)
         nativeNext = 0, lastNativeAction = nil, nextPulse = 0,
         expiry = 0, pressed = false, token = 0, lastChar = nil,
         scanInterval = .24, nextReport = 0, lastNativeCue = nil,
+        wasNative = false,
         nextNativeScan = 0, nativeState = nil, nativeSource = nil,
         sourceStable = 0, lastSource = nil, fallbackError = 0
     }
@@ -204,6 +206,7 @@ function Escape.attach(ctx)
         E.nativeSource = nil
         E.sourceStable = 0
         E.lastSource = nil
+        E.wasNative = false
         releaseSpace()
     end
 
@@ -291,6 +294,7 @@ function Escape.attach(ctx)
         end
 
         if E.nativeState then
+            E.wasNative = true
             E.expiry = now + .28
             E.source = E.nativeSource or "native grab state"
             releaseSpace()
@@ -321,6 +325,13 @@ function Escape.attach(ctx)
             end
             -- If native remote is unavailable, try bounded Space fallback.
         else
+            -- End of a native escape must not spill over into random Space
+            -- pulses after the grab releases.
+            if E.wasNative then
+                E.expiry = 0
+                releaseSpace()
+                E.wasNative = false
+            end
             E.lastNativeAction = nil
         end
 
@@ -360,7 +371,10 @@ function Escape.attach(ctx)
             E.fallbackError += 1
             releaseSpace()
             E.status = "SPACE BLOCKED"
-            if E.fallbackError >= 2 then E.setEnabled(false) end
+            if E.fallbackError >= 2 then
+                E.setEnabled(false)
+                E.status = "SPACE BLOCKED"
+            end
             return
         end
         E.pressed = true
