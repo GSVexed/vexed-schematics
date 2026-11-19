@@ -153,7 +153,7 @@ function Power.attach(ctx)
         end
     end
     local function maintainFlag()
-        local on=P.noDrain or P.stamina=="APEX"
+        local on=P.noDrain or P.stamina=="APEX" or P.stamina=="RECOVER"
         local char=ownCharacter()
         for c in pairs(P.charFlags) do
             if not on or c~=char then revertFlag(c)end
