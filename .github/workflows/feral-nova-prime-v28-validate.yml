@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'roblox-tools/feral-nova-prime-standalone-v28.0.lua'
+      - 'roblox-tools/FERAL_NOVA_PRIME_FEATURE_MANIFEST_v28.json'
       - 'roblox-tools/feral-nova-prime-ui-v28.0.lua'
       - 'roblox-tools/feral-nova-diagnostics-v28.0.lua'
       - '.github/workflows/feral-nova-prime-v28-validate.yml'
@@ -53,6 +54,17 @@ jobs:
           baseline=dict(re.findall(pattern,old,re.S))
           b25=dict(re.findall(pattern,v25,re.S))
           bundle=dict(re.findall(pattern,v28,re.S))
+          import json
+          manifest=json.loads((root/'FERAL_NOVA_PRIME_FEATURE_MANIFEST_v28.json').read_text())
+          assert manifest['schema']=='feral-nova-regression-manifest/28'
+          assert manifest['version']=='v28.0'
+          assert manifest['standalone']=='roblox-tools/feral-nova-prime-standalone-v28.0.lua'
+          assert len(manifest['core_features'])>=25
+          assert len(manifest['modules'])==17
+          assert {m['file'] for m in manifest['modules']}==set(bundle)
+          for f in manifest['core_features']:
+              assert f['required'] is True
+              assert f['module'] in bundle or f['module']==manifest['standalone'].split('/')[-1]
           assert len(baseline)==15 and len(b25)==16 and len(bundle)==17
           for name,src in baseline.items():
               if name not in ('feral-nova-prime-ui-v15.0.lua','feral-nova-flight-v15.0.lua'):
