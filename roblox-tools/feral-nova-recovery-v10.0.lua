@@ -199,7 +199,7 @@ function Recovery.attach(ctx)
             "client_rule_multiplier="..tostring(M.multiplier),
             "native_rest_on_requests="..tostring(M.requests),
             "owned_rest_off_requests="..tostring(M.cancels),
-            "rest_state_transitions="..tostring(M.replicatedRestTransitions),
+            "rest_attribute_transitions="..tostring(M.replicatedRestTransitions),
             "healing_intervals_while_resting="..tostring(M.restingHeals),
             "healing_intervals_when_not_resting="..tostring(M.normalHeals),
             "status_condition_present="..tostring(M.statusActive),
@@ -225,7 +225,7 @@ function Recovery.attach(ctx)
             "shell_observed_while_moving="..tostring(M.movingShellSeen),
             "last_reason="..M.reason,
             "last_error="..M.lastError,
-            "NOTE=Observed rest and healing do not prove faster server regeneration."
+            "NOTE=WolfController can set WolfRest locally; Rest attribute alone does not prove the server granted 2x/4x."
         },"\n")
     end
 
@@ -356,8 +356,8 @@ function Recovery.attach(ctx)
         end
         if rest then
             M.status=M.statusActive
-                and "REST ACTIVE / 4x STATUS RULE"
-                or "REST ACTIVE / 2x HP RULE"
+                and "REST ACTIVE / 4x STATUS RULE (UNVERIFIED)"
+                or "REST ACTIVE / 2x HP RULE (UNVERIFIED)"
             return
         end
         if not M.enabled then
