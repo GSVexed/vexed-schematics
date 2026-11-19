@@ -35,6 +35,9 @@ function Escape.choose(carry,pinned,clamp,need,bindings)
     if (clamp or need or pinned) and shakeBinding then
         return "shake","DIRECTIONAL SHAKE",.163
     end
+    if pinned and (clamp or need) then
+        return "shake","PINNED CLAMP STATE",.165
+    end
     if clamp and need then
         return "shake","CLAMP PROGRESS",.165
     end
