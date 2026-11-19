@@ -5689,9 +5689,9 @@ function UI.mount(ctx)
     show.Position=UDim2.fromOffset(16,220)
     show.Visible=false
     local minimize=btn(header,"—",toggleMenu,34,30)
-    minimize.Position=UDim2.fromOffset(734,18)
-    local exit=btn(header,"×",function()ctx.close()end,34,30)
-    exit.Position=UDim2.fromOffset(775,18)
+    minimize.Position=UDim2.fromOffset(699,18)
+    local exit=btn(header,"CLOSE",function()ctx.close()end,73,30)
+    exit.Position=UDim2.fromOffset(742,18)
     exit.BackgroundColor3=Color3.fromRGB(85,43,60)
 
     local strip=corner(make("Frame",{
@@ -5989,7 +5989,8 @@ function UI.mount(ctx)
         end
     end)
     connections[#connections+1]=UIS.InputBegan:Connect(function(input,processed)
-        if processed or UIS:GetFocusedTextBox() then return end
+        if UIS:GetFocusedTextBox() then return end
+        -- Menu and emergency shutdown shortcuts work even if the game processed input.
         if input.KeyCode==Enum.KeyCode.RightShift then toggleMenu()
         elseif input.KeyCode==Enum.KeyCode.End then ctx.close()
         end
