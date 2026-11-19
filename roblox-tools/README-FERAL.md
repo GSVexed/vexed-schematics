@@ -1,6 +1,18 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v11.0 (one-download, combat-first recovery investigation)
+## CURRENT — NOVA PRIME v12.0 (native carrying restored and protected)
+
+**[v12 release guide](README-feral-nova-prime-v12.0.md)** · Full re-audit of FERAL's `FeralCarryClient` identified separate outgoing carrying (`FeralClamp` ObjectValue with Carry and `FeralCarcassCarry`) and incoming victim capture (`FeralCarried`, `FeralPinned`, `FeralDragged`). The previous hub risked interrupting the wrong actions. **V12 preserves the game's native G carry/pickup/drop**, adds a compact contextual Carry/Drop button using the game's own `_G.FeralCarryPress` helper when available (otherwise normal G injection), and explicitly **prevents Auto Escape from firing shake/getoff while you are carrying prey**. Mobile Recovery pauses only its own Rest experiment when carrying, keeping the feature enabled to resume when carrying ends; Safe Rest releases its own Rest before deliberate carry actions. No remote fabrication and no physical part changes.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v12.0.lua"))()
+```
+
+All nine bundled modules compile in official Luau, and the source-accurate bundle and carry/escape/recovery interaction tests pass. **Actual server pickup success and permanent 2×/4× mobile recovery still require live verification.** Rejoin a fresh FERAL session before testing if v7/v8 HITBOX TEST previously changed physical parts.
+
+---
+
+## PREVIOUS — NOVA PRIME v11.0 (one-download, combat-first recovery investigation)
 
 **[Release guide](README-feral-nova-prime-v11.0.md)** · Recommended **single-file Velocity launcher**, embedding eight pinned modules so module-download drift cannot break startup. After user reports of slow Tiger escapes, ineffective local hitbox changes and normal Rest being presented as permanent recovery, v11 retains the improved native escape tracker and **removes physical hitbox editing entirely**. Passive collision reporting, close-camera names, outline ESP and one Endurance switch remain.
 
