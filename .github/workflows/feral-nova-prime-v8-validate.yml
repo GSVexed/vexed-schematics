@@ -64,7 +64,7 @@ jobs:
           recovery=(p/'feral-nova-recovery-v8.0.lua').read_text()
           tags=(p/'feral-nova-tags-v8.0.lua').read_text()
           launcher=(p/'feral-nova-prime-v8.0.lua').read_text()
-          assert ui.count('    card(')==6, 'Main UI changed unexpectedly'
+          assert ui.count('    card(')==5 and ui.count('=card(')==1, 'Expected exactly 6 feature cards'
           assert 'P.setStamina("RECOVER")' in ui
           assert 'P.setStamina("APEX")' not in ui
           assert 'Name="FeralNovaPrimeV80"' in ui
