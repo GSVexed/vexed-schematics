@@ -94,7 +94,7 @@ jobs:
           assert 'venom_rest_rate=' in recovery
           assert 'cached_health_rest_multiplier=' in recovery
           assert 'observed_rest_hp_gain_per_sec=' in recovery
-          assert 'if hum.Health>=hum.MaxHealth-.2 and not M.statusActive then' in recovery
+          assert 'and not M.statusActive and not turtle then' in recovery
           assert 'cancelOwned("Combat/movement input; released owned Rest")' in recovery
           assert 'dangerNearby(root)' in recovery
           assert 'Recovery.shellState' in recovery
@@ -484,6 +484,13 @@ jobs:
           assert(#remoteArgs==2 and remoteArgs[2]==false)
           assert(R.attackInterrupts==1)
           R.setEnabled(false)
+          -- Turtle at full HP but no status can still opt into shell Rest
+          -- while safely stationary. Never auto-enable on startup.
+          attrs.FeralInjury=nil
+          attrs.WolfRest=false
+          R.setEnabled(true)
+          stamp=40;beat()
+          assert(#remoteArgs==3 and remoteArgs[3]==true)
           R.close()
           assert(R.alive==false and beat==nil)
           local state,m=Recovery.shellState("SnappingTurtle",true,100,101.1)
