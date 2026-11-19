@@ -43,6 +43,7 @@ end
 
 function Carry.attach(ctx)
     local C={
+        classify=Carry.classify,
         alive=true,enabled=true,status="WAITING FOR ANIMAL",
         state="NO ANIMAL",holding=false,victim=false,
         canInteract=false,action="G",helper="UNAVAILABLE",
