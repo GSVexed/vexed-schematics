@@ -167,7 +167,9 @@ function Escape.attach(ctx)
         alive=true,enabled=true,status="WATCHING",source="",
         pulses=0,lastInputError="",input="UNAVAILABLE",
         lastScan=0,holdUntil=0,nextPulse=0,down=false,token=0,
-        successes=0,nativeCount=0,nextNative=0
+        successes=0,nativeCount=0,nextNative=0,
+        nextNativeCheck=0,nativeMode=nil,nativeReason=nil,
+        lastCharacter=nil
     }
     local env
     if type(getgenv)=="function" then
@@ -222,12 +224,21 @@ function Escape.attach(ctx)
         local hum=char and char:FindFirstChildOfClass("Humanoid")
         if not char or not hum or hum.Health<=0
             or player:GetAttribute("FeralMenuOpen")==true then
-            e.holdUntil=0;e.status="WAITING FOR ANIMAL";stopPress();return
+            e.holdUntil=0;e.nativeMode=nil
+            e.status="WAITING FOR ANIMAL";stopPress();return
+        end
+        if char~=e.lastCharacter then
+            e.lastCharacter=char;e.nativeMode=nil
+            e.nextNativeCheck=0;e.holdUntil=0
         end
         -- Prefer the game's actual escape action over executor-simulated
         -- Space whenever the recovered game-specific victim state is present.
         -- This also works when Velocity cannot inject keyboard events.
-        local nativeAction,nativeReason=nativeEscapeMode(char)
+        if now>=e.nextNativeCheck then
+            e.nextNativeCheck=now+.15
+            e.nativeMode,e.nativeReason=nativeEscapeMode(char)
+        end
+        local nativeAction,nativeReason=e.nativeMode,e.nativeReason
         if nativeAction then
             e.holdUntil=now+.34
             e.source=nativeReason
