@@ -1,0 +1,98 @@
+name: FERAL NOVA PRIME v5 validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-v5.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v5.0.lua'
+      - 'roblox-tools/feral-nova-escape-v5.0.lua'
+      - '.github/workflows/feral-nova-prime-v5-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau compiler 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/nova-prime-luau.zip
+          mkdir -p /tmp/nova-prime-luau
+          unzip -q /tmp/nova-prime-luau.zip -d /tmp/nova-prime-luau
+          compiler="$(find /tmp/nova-prime-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile new hub and inherited stable modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-nova-escape-v5.0.lua \
+            roblox-tools/feral-nova-prime-ui-v5.0.lua \
+            roblox-tools/feral-nova-prime-v5.0.lua; do
+            "$COMPILER" --null "$file"
+          done
+          echo NOVA_PRIME_LUAU_PASS
+      - name: Verify six meaningful controls and escape/ESP correctness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('roblox-tools')
+          ui=(r/'feral-nova-prime-ui-v5.0.lua').read_text()
+          escape=(r/'feral-nova-escape-v5.0.lua').read_text()
+          loader=(r/'feral-nova-prime-v5.0.lua').read_text()
+          for s in (
+              'function ctx.refreshTracker(force)', 'r.h.FillTransparency=1',
+              'r.h.OutlineTransparency=0', 'r.info.Visible=false',
+              'r.fill.Parent.Visible=false', 'r.b.StudsOffsetWorldSpace',
+              'P.setStamina("RECOVER")', 'P.toggleNoDrain()',
+              'P.setSpeed(1.30)', 'P.setLeap(1.35)',
+              'ctx.toggle("mobility")', 'ctx.toggle("vision",true)',
+              'fogSet(atmosphere,"Density",.015)',
+              'function UI.mount(ctx)', 'ESCAPE  ',
+              'function endurance(on)', 'function agility(on)',
+              'ONE', 'FeralNovaPrimeV50', 'ctx.cleanupUI=function()',
+              'ctx.toggle("playerFinder",true)',
+          ):
+              assert s in ui, s
+          assert ui.count('    card(')==6, 'Expected exactly six feature cards'
+          assert 'STAMINA CONTROL PROFILE' not in ui
+          for s in (
+              'function Escape.attach(ctx)', 'function e.setEnabled(on)',
+              'function e.close()', 'UIS:GetFocusedTextBox()',
+              'local function escapePrompt(gui,ourGui)',
+              'local function validConnection(char)',
+              'local function victimAttribute(obj)',
+              'item:IsA("WeldConstraint")',
+              'a:IsDescendantOf(char) and b:IsDescendantOf(other)',
+              'e.nextPulse=now+.125', 'task.delay(.05',
+              'if examined>650 then break end',
+              'if i>450 then break end','if not press then',
+          ):
+              assert s in escape, s
+          assert 'feral-nova-escape-v5.0.lua' in loader
+          assert 'feral-nova-prime-ui-v5.0.lua' in loader
+          assert 'game.PlaceId~=108901361810209' in loader
+          for s in (ui,escape,loader):
+              for invalid in (
+                  'SetAttribute("Amber"', 'SetAttribute("Health"',
+                  'SetAttribute("Hunger"', 'SetAttribute("Thirst"',
+                  'FireServer("Gift"', 'FireServer("FeralSelect"',
+                  'github_pat_', 'Authorization:'
+              ):
+                  assert invalid not in s,invalid
+          print('NOVA_PRIME_FEATURE_SCOPE_PASS')
+          PY
