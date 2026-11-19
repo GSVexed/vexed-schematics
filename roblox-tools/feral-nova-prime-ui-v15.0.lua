@@ -499,7 +499,7 @@ function UI.mount(ctx)
         local a=ctx.stats()
         local power=P.status()
         local report=Escape.report().."\n\n"..Carry.report().."\n\n"..Lab.report().."\n\n"..Reach.report().."\n\n"..Regen.report().."\n\n"..Native.report().."\n\n"..Climb.report().."\n\n"..Baby.report().."\n\n"..Mobile.report().."\n\n"..Flight.report().."\n\n"..Recovery.report().."\n\n"..P.enduranceReport().."\n"..Tags.report()..
-            "\n\nFERAL v14 | Lease verification"..
+            "\n\nFERAL v15 | Lease verification"..
             "\nendurance_cached_lease="..tostring(power.staminaMatches)..
             " stamina_profile="..tostring(power.stamina)..
             " own_no_drain_flag="..tostring(power.flag)..
