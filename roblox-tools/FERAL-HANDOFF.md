@@ -1,5 +1,23 @@
 # FERAL project continuation
 
+## Latest — 19 November 2026: NOVA PRIME v10, clean physical geometry and honest 2×/4× Rest tracking
+
+**User feedback after v9 (November 19):** User could not physically approach other animals; requested health regen boost and 4× clearance of injury/bleed/venom. Latest v9 copied report: Auto Escape observed 22 shake requests, 19 shake progress changes, one release in 3.34s; attack guide 22 own bite starts, 16 nearby HP decreases, no verified longer hitbox effect; v9 Safe Rest enabled but 0 Rest requests and 118 old danger blocks, while normal-state healing showed 80 positive intervals. This was actionable.
+
+**Root cause/limits:** V7/V8 locally resized enemy HumanoidRootPart X/Z to 1.65×. Interrupted shutdown may leave client-local geometry enlarged until rejoin. Never guess another model's original size or blindly change CanCollide: fresh FERAL session is the proper reset. V9 already stopped resizing; V10 adds read-only nearest-root X/Y/Z, CanCollide, CollisionGroup and throttled ray obstruction category diagnostics, with `physical_part_edits_by_v10=0` guaranteed by code. User must fully leave/rejoin once before loading V10, then compare collision without hub.
+
+**Archived game config evidence:** S0000033 NeedsConfig HEALTH_REGEN=.01, HEALTH_REST_MULT=2; S0000085 StatusConfig INJURY.HEAL=.45, INJURY.REST_MULT=4, BLEED.REST_MULT=4, VENOM.REST_MULT=4. These are **Rest-mode game rules**, not an always-on local multiplier. Reconstructed StatusConfig has known decompiler anomalies; live server handlers are inaccessible. Also S0003620 WolfController locally sets WolfRest and sends Rest bool; reading WolfRest alone cannot establish server acceptance.
+
+**V10 recovery:** Keeps Safe Rest explicitly OFF at startup. Opt-in REST RECOVERY can request native Rest at full health when own FeralInjury/FeralBleed/FeralVenomAmt positive; or when SnappingTurtle wants protective shell while safely stationary. Proximity block reduced from 62 to 32 studs, idle/movement/combat guards preserved. Own Rest requests end on movement/attack/damage and do not spoof server Health/Rest attributes. Measures observed HP and status rates during/resting vs normal, only within unchanged-max and stable Rest-mode intervals; explicitly reports server-acceptance limitation. Continuous 2×/4× while moving/fighting is **not demonstrated**.
+
+**Published:** [v10 launcher](feral-nova-prime-v10.0.lua), [guide](README-feral-nova-prime-v10.0.md), [collision/bite module](feral-nova-combat-v10.0.lua), [recovery module](feral-nova-recovery-v10.0.lua), [UI](feral-nova-prime-ui-v10.0.lua), [CI](../.github/workflows/feral-nova-prime-v10-validate.yml). Reuses v9 native escape module (source-guided directional shake/tug/getoff) and v8 near-camera screen names. Six main controls, one Endurance choice, Bite Guide, no fake hitbox changes.
+
+**Validation:** official Luau 0.747 compile for complete module set, native escape/carry simulation, native bite geometry + read-only collision ray classification, full-health injury Rest request / actual injury decline, auto-rest OFF + combat cancellation, opt-in full-health Turtle shell Rest. All are offline CI tests; they cannot attest that server-approved recovery increased 2×/4× or that close-approach collision is fixed in live FERAL. Linked GitHub runner has no direct Windows desktop control.
+
+**V10 launcher:** `loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v10.0.lua"))()`
+
+---
+
 ## Latest — 19 November 2026: NOVA PRIME v9 combat-first repair after user live failures
 
 **User reports:** v8 combat was ineffective; Tiger grabs remained lethal and escapes were far too slow. V8 generated 14 native escape requests and 8 key pulses while the last grab was FeralPinned, Hitbox Test peaked at 3 locally expanded enemy roots and 6 local part writes but there were **0 native bite starts recorded**, and health/rest telemetry recorded 5 transitions with no attribution to actual healing. The final copy report was from the animal menu, so live HP/Stamina were both unavailable. All claims of guaranteed hit/escape/server health should be avoided.
