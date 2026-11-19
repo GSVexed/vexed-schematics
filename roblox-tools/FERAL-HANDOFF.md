@@ -1,5 +1,27 @@
 # FERAL project continuation
 
+## Latest — 19 November 2026: FERAL NOVA PRIME v15 published (Recovery & Movement Overhaul)
+
+User agreed “ok go on” after discussing v15 priorities: preserve successful infinite stamina; restore the earlier observed native Rest-signal recovery without breaking combat; allow eligible same-species adults to pick up the user's baby; make tree climbing from a sprint much easier; investigate rather than fabricate effective bite-range server acceptance; preserve v14 water/flight/carry, ESP and Turtle. Growth should NOT be modified.
+
+**Recommended launcher:** `loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v15.0.lua"))()`
+
+**Published files:** [15-module standalone](feral-nova-prime-standalone-v15.0.lua), [modular launcher](feral-nova-prime-v15.0.lua), [Native Recovery](feral-nova-native-recovery-v15.0.lua), [Baby Friendly Carry](feral-nova-baby-v15.0.lua), [Integrated Quick Climb](feral-nova-climb-v15.0.lua), [Baby-aware Escape](feral-nova-escape-v15.0.lua), [Combat guide](feral-nova-combat-v15.0.lua), [Clean Regen observations](feral-nova-regen-v15.0.lua), [Safe Rest](feral-nova-recovery-v15.0.lua), [Mobile A/B Rest](feral-nova-mobile-v15.0.lua), [G carry handoff](feral-nova-carry-v15.0.lua), [Flight handoff](feral-nova-flight-v15.0.lua), [UI](feral-nova-prime-ui-v15.0.lua), [documentation](README-feral-nova-prime-v15.0.md), [CI](../.github/workflows/feral-nova-prime-v15-validate.yml).
+
+**Primary v15 changes:**
+- Native Recovery reuses the observed v1.3 `WolfActions:FireServer("Rest",true)` with local guarded `WolfRest=false` masking; sends bounded reassert requests only when HP deficit or injury/bleed/venom present; tracked own Rest=false cleanup on attack (including sustained held Mouse1/2), G carry, Q climb, jump/flight, active flight/dive, capture, chat, Turtle species and character change. Default ON but separate toggle; observations report masked Rest HP/status rates without falsely attributing them to v14 config-only non-Rest regen. Main goal of **server-accepted always-on 2× HP/4× condition clearing during combat remains UNPROVEN**, since activity pauses may be necessary.
+- Baby same-species pickup: `Growth<=.34`, adult same species `Growth>=.67`; suppress `getoff` with verified other adult outgoing FeralClamp.Value pointing to own infant, or bounded 12-second same-species-nearby fallback (proximity cannot prove friendliness); `FeralPinned/FeralDragged` always override. Default BABY CARRY ON; optionally OFF if hostile same-species grab concerns.
+- Integrated Quick Climb: from v1.0 standalone, Q buffered 1.3s; native `FeralClimbTap` exactly once upon `ClimbCan`; reversible client grab distance/facing/mount settings and sprintGrab levels 1/2; preserves DiveCan and G carry. Main hub Q CLIMB ON/OFF, no secondary overlay.
+- Combat guide: v14 cached nonphysical Reach remains; now records Mouse1 attack attempts in extended-only windows and native `WolfBiteAt` started afterward. User's v14 100 eligible windows and 0 bites, so no server-side bite-range success claim.
+- Identical `feral-aurora-power-v14.0.lua` Endurance, protecting user-reported Bear ~417s activity, 244s burst with 0 lost stamina; no Growth edits. v14 Water Flight, native G carry, Turtle Safe Rest, ESP etc retained with Native handoff.
+- The 15 source modules are embedded into one standalone snapshot; one paste and no per-module network dependencies.
+
+**Tests:** Official Luau and all previous v14 regressions plus new tests for masked Rest/observed HP/injury updates, carry/Mouse1/held attack release, same-species infant/outgoing clamp plus pinned/dragged override, integrated Q-buffer/native ClimbCan/Dive safety/config restoration all passed in [final run 44581329632](https://github.com/GSVexed/vexed-schematics/actions/runs/44581329632). Earlier v15 runs failed only from temporarily stale standalone embedded modules while making updates, then final exact rebuild passed.
+
+**Limits:** GitHub runner does not have live Windows/Roblox Velocity access. The 2×/4× non-rest recovery, friendly pickup acceptance, server-accepted extra bite range and tree mounting during a chase still need live FERAL evidence. Be clear about the difference between local config, native request and actual server-accepted effects. If issues appear, use v15 COPY STATUS, especially Native Recovery, Baby Carry, Quick Climb, Extended Mouse1/Bite and Endurance. If old v7/v8 root expansions persist, rejoin FERAL fresh.
+
+---
+
 ## 19 November 2026: pre-v15 discussion; v14 remains unchanged, standalone Quick Climb tested
 
 **New user concerns:** Explain what was changed for successful infinite stamina; why older health/bleed/venom recovery appeared to work and v14's non-Rest recovery does not; infant same-species pickup fails (possible Auto Escape); virtual bite reach seems useless; Q tree climbing during a sprint/chase requires getting very close or multiple presses; growth appears fine. User previously asked to **discuss before making v15**. Respect that: do not silently promote or replace v14.
