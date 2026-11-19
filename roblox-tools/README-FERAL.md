@@ -1,6 +1,18 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v7.0 (focused hitbox test and outcomes)
+## CURRENT — NOVA PRIME v8.0 (Turtle-aware recovery + repaired ESP)
+
+**[Read NOVA PRIME v8 guide](README-feral-nova-prime-v8.0.md)** · Compact six-control FERAL hub, no stamina profile maze. **Fixed close-range names** using screen-projected text instead of clipped BillboardGuis; added opt-in single-click **Smart Recovery**, default ON, that reads native WolfRest / WolfRestAt without spoofing them; recognises SnappingTurtle's archived 0.30 incoming damage multiplier after one second of rest. A bounded moving Rest probe explores whether Turtle shell can remain active during motion (server validation unknown). Agility also includes reversible injury-movement assistance. Hitbox Test remains OFF by default and now reports peak/root counts and why a zero occurred, instead of implying server-side hits. Official Luau validation includes close-camera labels, native Rest, Turtle shell condition, local hitbox restore and cleanup tests.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v8.0.lua"))()
+```
+
+v7 and older releases remain below for reference. Successful CI is not live game-server proof.
+
+---
+
+## PREVIOUS — NOVA PRIME v7.0 (focused hitbox test and outcomes)
 
 **[NOVA PRIME v7 guide](README-feral-nova-prime-v7.0.md)** · Keeps the same six useful controls and one stamina switch. Adds only **HITBOX TEST** in the quick strip: bounded, reversible local enemy RootPart X/Z enlargement + cached client bite-claim window tuning. Includes normal/boosted bite observations and passive Amber/growth/HP trend readout via COPY STATUS. **The game server may reject longer-range hit claims; v7 is an experiment, not a verified server-damage advantage.** The new option is OFF by default.
 
