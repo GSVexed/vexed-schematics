@@ -34,7 +34,8 @@ function Combat.attach(ctx)
         closeRootCanCollide="--",closeRootGroup="--",
         ownRootSize="--",physicalEdits=0,
         oldHitboxGuiVisible=false,
-        lastBlockerCheck=0,rayBlockCategory="NOT CHECKED",
+        lastBlockerCheck=0,nextCollisionAudit=0,collisionAudits=0,
+        rayBlockCategory="NOT CHECKED",
         configValues="NOT READ",carryBiteAttempts=0,
         rayBlockCollidable="--"
     }
@@ -267,7 +268,11 @@ function Combat.attach(ctx)
         C.playerCandidates=0
         C.npcCandidates=0
         if not char then C.status="NO ACTIVE ANIMAL";return end
-        collisionAudit(root)
+        if now>=C.nextCollisionAudit then
+            C.nextCollisionAudit=now+.45
+            collisionAudit(root)
+            C.collisionAudits+=1
+        end
         if char:GetAttribute("WolfRest")==true then
             C.status="REST ACTIVE / GAME DISALLOWS BITE"
             return
@@ -330,6 +335,7 @@ function Combat.attach(ctx)
             "nearest_root_can_collide="..C.closeRootCanCollide,
             "nearest_root_collision_group="..C.closeRootGroup,
             "own_root_size_xyz="..C.ownRootSize,
+            "read_only_collision_audits="..tostring(C.collisionAudits),
             "old_v7_v8_gui_present="..tostring(C.oldHitboxGuiVisible),
             "ray_obstruction_category="..C.rayBlockCategory,
             "ray_obstruction_collidable="..C.rayBlockCollidable,
