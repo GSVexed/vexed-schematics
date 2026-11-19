@@ -37,11 +37,11 @@ function Recovery.attach(ctx)
         accepted=0,wasRest=false,lastError="",
         lastChar=nil,restOwned=nil,nextTick=0,lastSent=0,
         nextRequest=0,started=0,pendingUntil=0,
-        stationaryFor=0,idleAt=0,healedTicks=0,
+        stationaryFor=0,idleAt=0,healedTicks=0,restHealingTicks=0,lastHealRate=0,lastMeasureAt=0,
         lastHP=nil,lastMax=nil,nextMeasure=0,
         lastReason="",
         movingProbeUsed=false,movingProbeAt=0,movingAccepted=false,
-        movingRejected=false,probes=0
+        movingRejected=false,movingRetries=0,probes=0
     }
     local function remote()
         local r=RS:FindFirstChild("WolfActions")
@@ -75,6 +75,7 @@ function Recovery.attach(ctx)
         M.wasRest=false;M.movingProbeUsed=false
         M.movingProbeAt=0;M.movingAccepted=false
         M.movingRejected=false
+        M.movingRetries=0
     end
     function M.setEnabled(on)
         M.enabled=on==true
@@ -103,6 +104,8 @@ function Recovery.attach(ctx)
             "native_rest_requests="..tostring(M.attempts),
             "replicated_rest_transitions="..tostring(M.accepted),
             "observed_healing_ticks="..tostring(M.healedTicks),
+            "healing_ticks_during_rest="..tostring(M.restHealingTicks),
+            "last_observed_hp_per_sec="..string.format("%.3f",M.lastHealRate),
             "moving_shell_probe="..(M.movingAccepted and "REST OBSERVED DURING MOTION"
                 or M.movingRejected and "REST NOT SUSTAINED IN MOTION"
                 or M.movingProbeUsed and "PENDING"
@@ -149,11 +152,21 @@ function Recovery.attach(ctx)
             M.nextMeasure=now+1
             if number(hum.Health) and number(hum.MaxHealth) then
                 if M.lastHP and M.lastMax==hum.MaxHealth
-                    and hum.Health>M.lastHP+.01 then
-                    M.healedTicks+=1
+                    and M.lastMeasureAt>0 then
+                    local elapsed=now-M.lastMeasureAt
+                    if hum.Health>M.lastHP+.01 then
+                        M.healedTicks+=1
+                        if rest then M.restHealingTicks+=1 end
+                        if elapsed>.05 then
+                            M.lastHealRate=(hum.Health-M.lastHP)/elapsed
+                        end
+                    else
+                        M.lastHealRate=0
+                    end
                 end
                 M.lastHP=hum.Health
                 M.lastMax=hum.MaxHealth
+                M.lastMeasureAt=now
             end
         end
         if not M.enabled then M.status="OFF";return end
@@ -170,6 +183,10 @@ function Recovery.attach(ctx)
         if moving then
             M.stationaryFor=0
             M.idleAt=0
+            if not turtle and M.restOwned then endOwned() end
+            if turtle and rest and M.multiplier==.30 then
+                M.movingAccepted=true
+            end
             -- Turtle shell is not automatically claimed while running.
             -- A one-off, time-limited probe can check if native Rest
             -- remains replicated in motion, without repeatedly spamming.
@@ -192,8 +209,8 @@ function Recovery.attach(ctx)
                 -- End test if there is no server-confirmed rest.
                 if M.movingRejected then endOwned() end
             end
-            if M.movingAccepted and rest then
-                M.status="SHELL OBSERVED WHILE MOVING"
+            if M.movingAccepted and rest and M.multiplier==.30 then
+                M.status="SHELL CONDITION MET WHILE MOVING"
             elseif turtle then
                 M.status="MOVING / SHELL NOT CONFIRMED"
             else
