@@ -1,0 +1,386 @@
+-- FERAL NOVA PRIME v26 / own-client diagnostic recorder
+-- Privacy: never includes names, IDs, chats, coordinates, player lists or external URLs.
+-- Captures own character and controller state. No background network transmission.
+-- Auto-saves to the executor workspace when writefile is available.
+local Diagnostics={}
+local Players=game:GetService("Players")
+local RunService=game:GetService("RunService")
+local UIS=game:GetService("UserInputService")
+local HttpService=game:GetService("HttpService")
+local Workspace=game:GetService("Workspace")
+local player=Players.LocalPlayer
+local function finite(v)
+    return type(v)=="number" and v==v and v<1e9 and v>-1e9
+end
+local function rounded(v)
+    if not finite(v) then return nil end
+    return math.floor(v*1000+.5)/1000
+end
+local function attribute(obj,name)
+    if not obj then return nil end
+    local ok,value=pcall(function()return obj:GetAttribute(name)end)
+    if ok then return value end
+end
+local function numericAttr(obj,name)
+    return rounded(attribute(obj,name))
+end
+local function yes(value)
+    return value==true
+end
+local function cleanText(v)
+    -- Only record the game's species label, never arbitrary object names.
+    if type(v)~="string" then return "unknown" end
+    local allow={Bear=true,Eagle=true,Falcon=true,Vulture=true,Wolf=true,Tiger=true,
+        Lion=true,Fox=true,Rabbit=true,Deer=true,Elk=true,Boar=true,Rhino=true,
+        Elephant=true,Hippo=true,Crocodile=true,SnappingTurtle=true}
+    return allow[v] and v or "other"
+end
+local function bounded(list,entry,limit)
+    list[#list+1]=entry
+    if #list>limit then table.remove(list,1) end
+end
+local function safeClock()
+    local ok,n=pcall(function()return Workspace:GetServerTimeNow()end)
+    return ok and finite(n) and n or nil
+end
+function Diagnostics.attach(ctx)
+    if not player then return nil end
+    local D={
+        alive=true,enabled=true,autoSave=(type(writefile)=="function"),
+        autoSavePeriod=25,saveFile="FERAL_NOVA_v26_session.json",
+        status="Starting own-client diagnostics",saveStatus="No file yet",
+        samples={},events={},maxSamples=720,maxEvents=180,
+        transitions=0,samplesTotal=0,deathCount=0,respawns=0,
+        attackInputs=0,climbInputs=0,carryInputs=0,spaceInputs=0,
+        lungeStarts=0,clampStarts=0,escapeStarts=0,
+        healthGained=0,healthLost=0,staminaGained=0,staminaLost=0,
+        growthGained=0,statusCleared={bleed=0,venom=0,injury=0},
+        modes={},lastSnapshot=nil,lastSaveAt=-math.huge,lastAutoAt=-math.huge,
+        lastEvent="",session=0,lastReportBytes=0
+    }
+    local start=os.clock()
+    local currentChar=nil
+    local prev=nil
+    local connectionList={}
+    local lastSample=-math.huge
+    local changedState={}
+    local function bind(signal,fn)
+        local ok,c=pcall(function()return signal:Connect(fn)end)
+        if ok and c then connectionList[#connectionList+1]=c end
+    end
+    local function mark(kind,detail)
+        if not D.alive then return end
+        bounded(D.events,{t=rounded(os.clock()-start),kind=kind,info=detail},D.maxEvents)
+        D.lastEvent=kind
+    end
+    function D.mark(kind)
+        local valid={hub_reset=true,manual_save=true,copy_report=true,
+            experimental_toggle=true,recovery_toggle=true}
+        if valid[kind] then mark(kind) end
+    end
+    local function mode()
+        local native=ctx.native and ctx.native.active==true or false
+        local regen=ctx.regen and ctx.regen.enabled==true or false
+        if native and regen then return "native_plus_config" end
+        if native then return "native_only" end
+        if regen then return "config_only" end
+        return "neither"
+    end
+    local function ownSnapshot()
+        local char=player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        local clamp=char and char:FindFirstChild("FeralClamp")
+        local holding=clamp and clamp:IsA("ObjectValue") and clamp.Value~=nil or false
+        local nowServer=safeClock()
+        local ready=numericAttr(player,"FeralLungeReadyAt")
+        local cooldown=nowServer and ready and rounded(math.max(0,ready-nowServer)) or nil
+        local mods=ctx.mechanics
+        local p=ctx.power
+        return {
+            t=rounded(os.clock()-start),session=D.session,
+            species=cleanText(attribute(char,"Species") or attribute(player,"Species")),
+            hp=hum and rounded(hum.Health) or nil,
+            hpMax=hum and rounded(hum.MaxHealth) or nil,
+            stamina=numericAttr(char,"Stamina"),
+            staminaMax=numericAttr(char,"StaminaMax"),
+            staminaOut=yes(attribute(char,"StaminaOut")),
+            growth=numericAttr(char,"Growth"),
+            bleed=numericAttr(char,"FeralBleed"),
+            venom=numericAttr(char,"FeralVenomAmt"),
+            injury=numericAttr(char,"FeralInjury"),
+            grabbed=yes(attribute(char,"FeralCarried")) or yes(attribute(char,"FeralPinned")) or yes(attribute(char,"FeralDragged")),
+            pinned=yes(attribute(char,"FeralPinned")),
+            dragged=yes(attribute(char,"FeralDragged")),
+            holding=holding,climbCan=yes(attribute(player,"ClimbCan")),
+            climbTap=yes(attribute(player,"FeralClimbTap")),
+            resting=yes(attribute(char,"WolfRest")),
+            native=ctx.native and ctx.native.active==true or false,
+            regen=ctx.regen and ctx.regen.applied==true or false,
+            regenEnabled=ctx.regen and ctx.regen.enabled==true or false,
+            endurance=p and p.stamina or "unknown",
+            noDrain=yes(attribute(char,"WolfDbgNoStamina")),
+            autoEscape=ctx.escape and ctx.escape.enabled==true or false,
+            babyCarry=ctx.baby and ctx.baby.enabled==true or false,
+            quickClimb=ctx.climb and ctx.climb.enabled==true or false,
+            esp=ctx.state and ctx.state.flags and ctx.state.flags.playerFinder==true or false,
+            expGrowth=mods and mods.enabled.growth or false,
+            expCarry=mods and mods.enabled.carry or false,
+            expCooldown=mods and mods.enabled.cooldown or false,
+            talonReadyAt=ready,talonRemaining=cooldown,
+            cdTotal=numericAttr(player,"FeralLungeCdTotal"),
+            mode=mode()
+        }
+    end
+    local watch={"growth","grabbed","pinned","dragged","holding","staminaOut",
+        "noDrain","native","regenEnabled","expGrowth","expCarry","expCooldown",
+        "talonReadyAt","climbTap","endurance","quickClimb","babyCarry"}
+    local function transition(s,previous)
+        if not previous then return end
+        for _,key in ipairs(watch) do
+            local a,b=previous[key],s[key]
+            if a~=b then
+                D.transitions+=1
+                if key=="talonReadyAt" and finite(b) and (not finite(a) or b>a+.4) then D.lungeStarts+=1 end
+                if key=="holding" and b==true then D.clampStarts+=1 end
+                if key=="grabbed" and b==true then D.escapeStarts+=1 end
+                mark(key.."_changed",key=="growth" and rounded(b) or
+                    key=="talonReadyAt" and rounded(b) or tostring(b))
+            end
+        end
+    end
+    local function addDelta(s,previous)
+        if not previous then return end
+        local dt=s.t-previous.t
+        if not finite(dt) or dt<=0 or dt>5 then return end
+        local k=s.mode
+        local bucket=D.modes[k]
+        if not bucket then
+            bucket={seconds=0,hpUp=0,hpDown=0,staminaUp=0,staminaDown=0,
+                growthUp=0,bleedClear=0,venomClear=0,injuryClear=0}
+            D.modes[k]=bucket
+        end
+        bucket.seconds+=dt
+        local function delta(key,up,down)
+            if not finite(s[key]) or not finite(previous[key]) then return end
+            local diff=s[key]-previous[key]
+            if diff>0 then
+                bucket[up]+=diff
+                return diff,0
+            elseif diff<0 and down then
+                bucket[down]+=-diff
+                return 0,-diff
+            end
+            return 0,0
+        end
+        local hpUp,hpDown=delta("hp","hpUp","hpDown")
+        local sUp,sDown=delta("stamina","staminaUp","staminaDown")
+        D.healthGained+=hpUp or 0
+        D.healthLost+=hpDown or 0
+        D.staminaGained+=sUp or 0
+        D.staminaLost+=sDown or 0
+        if finite(s.growth) and finite(previous.growth) then
+            local g=math.max(0,s.growth-previous.growth)
+            D.growthGained+=g
+            bucket.growthUp+=g
+        end
+        for _,effect in ipairs({"bleed","venom","injury"}) do
+            if finite(s[effect]) and finite(previous[effect]) then
+                local loss=math.max(0,previous[effect]-s[effect])
+                D.statusCleared[effect]+=loss
+                bucket[effect.."Clear"]+=loss
+            end
+        end
+    end
+    function D.sample()
+        if not D.alive or not D.enabled then return end
+        local c=player.Character
+        if c~=currentChar then
+            currentChar=c
+            D.session+=1
+            D.respawns+=1
+            prev=nil
+            mark("character_changed",c and "character_present" or "character_absent")
+        end
+        local s=ownSnapshot()
+        transition(s,prev)
+        addDelta(s,prev)
+        if prev and finite(prev.hp) and prev.hp>0 and s.hp==0 then
+            D.deathCount+=1
+            mark("death")
+        end
+        prev=s
+        D.lastSnapshot=s
+        D.samplesTotal+=1
+        bounded(D.samples,s,D.maxSamples)
+        D.status="Sampling "..tostring(D.samplesTotal).." snapshots / "..tostring(#D.events).." events"
+    end
+    local function totals()
+        local summary={
+            schema="FERAL_NOVA_DIAG_V26",scope="OWN_CHARACTER_ONLY",
+            transfer="LOCAL_FILE_ONLY_NO_NETWORK_UPLOAD",
+            duration=rounded(os.clock()-start),sessions=D.session,
+            samples=D.samplesTotal,events=#D.events,respawns=D.respawns,
+            deaths=D.deathCount,attacks=D.attackInputs,
+            climbKeys=D.climbInputs,carryKeys=D.carryInputs,spaceKeys=D.spaceInputs,
+            lungeDeadlines=D.lungeStarts,clampStarts=D.clampStarts,
+            captureStarts=D.escapeStarts,
+            healthUp=rounded(D.healthGained),healthDown=rounded(D.healthLost),
+            staminaUp=rounded(D.staminaGained),staminaDown=rounded(D.staminaLost),
+            growthUp=rounded(D.growthGained),
+            cleared={
+                bleed=rounded(D.statusCleared.bleed),
+                venom=rounded(D.statusCleared.venom),
+                injury=rounded(D.statusCleared.injury)
+            },modes={},enabled=D.enabled,autoSave=D.autoSave,
+            saveStatus=D.saveStatus
+        }
+        for k,b in pairs(D.modes) do
+            local entry={}
+            for name,value in pairs(b) do entry[name]=rounded(value) end
+            entry.hpGainPerSecond=b.seconds>0 and rounded(b.hpUp/b.seconds) or nil
+            entry.statusBleedPerSecond=b.seconds>0 and rounded(b.bleedClear/b.seconds) or nil
+            entry.statusVenomPerSecond=b.seconds>0 and rounded(b.venomClear/b.seconds) or nil
+            summary.modes[k]=entry
+        end
+        return summary
+    end
+    function D.payload()
+        return {
+            summary=totals(),
+            current=D.lastSnapshot,
+            recentSamples=D.samples,
+            recentEvents=D.events,
+            notice="Client observations are not proof of server acceptance. No identifying data is recorded."
+        }
+    end
+    function D.report()
+        local a=totals()
+        local s=D.lastSnapshot or {}
+        local lines={
+            "=== FERAL NOVA PRIME v26 AUTOMATIC DIAGNOSTICS ===",
+            "privacy=own_character_aggregates_only; upload=NONE",
+            "duration_s="..tostring(a.duration).." samples="..a.samples.." events="..a.events,
+            "species="..tostring(s.species).." sessions="..a.sessions,
+            "HP="..tostring(s.hp).."/"..tostring(s.hpMax)..
+                " stamina="..tostring(s.stamina).."/"..tostring(s.staminaMax)..
+                " growth="..tostring(s.growth),
+            "HP gained="..tostring(a.healthUp).." lost="..tostring(a.healthDown)..
+                " stamina gained="..tostring(a.staminaUp).." lost="..tostring(a.staminaDown),
+            "bleed cleared="..tostring(a.cleared.bleed)..
+                " venom cleared="..tostring(a.cleared.venom)..
+                " injury cleared="..tostring(a.cleared.injury),
+            "attacks="..a.attacks.." climb_keys="..a.climbKeys..
+                " carry_keys="..a.carryKeys.." captures="..a.captureStarts..
+                " outgoing_clamps="..a.clampStarts,
+            "lunge_deadlines="..a.lungeDeadlines..
+                " talon_remaining_s="..tostring(s.talonRemaining),
+            "endurance="..tostring(s.endurance).." no_drain="..tostring(s.noDrain)..
+                " native_recovery="..tostring(s.native).." regen="..tostring(s.regen),
+            "experimental_growth="..tostring(s.expGrowth)..
+                " carry="..tostring(s.expCarry).." cooldown="..tostring(s.expCooldown),
+            "ESP="..tostring(s.esp).." quick_climb="..tostring(s.quickClimb)..
+                " friendly_baby_carry="..tostring(s.babyCarry),
+            "auto_save="..tostring(D.autoSave).." status="..D.saveStatus,
+            "SERVER_ACCEPTANCE=UNVERIFIED"
+        }
+        for _,name in ipairs({"neither","config_only","native_only","native_plus_config"}) do
+            local b=a.modes[name]
+            if b then
+                lines[#lines+1]="MODE "..name..
+                    " seconds="..tostring(b.seconds)..
+                    " hp_gain_per_sec="..tostring(b.hpGainPerSecond)..
+                    " bleed_clear_per_sec="..tostring(b.statusBleedPerSecond)..
+                    " venom_clear_per_sec="..tostring(b.statusVenomPerSecond)
+            end
+        end
+        lines[#lines+1]="RECENT EVENTS (UP TO 30)"
+        for i=math.max(1,#D.events-29),#D.events do
+            local e=D.events[i]
+            lines[#lines+1]=tostring(e.t).."s "..tostring(e.kind)..
+                (e.info~=nil and " "..tostring(e.info) or "")
+        end
+        return table.concat(lines,"\n")
+    end
+    function D.save()
+        if type(writefile)~="function" then
+            D.saveStatus="Executor writefile unavailable; use COPY DIAG"
+            return false,D.saveStatus
+        end
+        local ok,encoded=pcall(function()return HttpService:JSONEncode(D.payload())end)
+        if not ok then
+            D.saveStatus="JSON encode failed"
+            return false,D.saveStatus
+        end
+        local saved,err=pcall(function()writefile(D.saveFile,encoded)end)
+        if saved then
+            D.lastSaveAt=os.clock()
+            D.lastReportBytes=#encoded
+            D.saveStatus="Saved "..D.saveFile.." ("..#encoded.." bytes)"
+            return true,D.saveStatus
+        end
+        D.saveStatus="File write failed; use COPY DIAG"
+        return false,tostring(err)
+    end
+    function D.copy()
+        local copy=(type(setclipboard)=="function" and setclipboard)
+            or (type(toclipboard)=="function" and toclipboard)
+        if not copy then return false,"Clipboard unsupported" end
+        local ok=pcall(function()copy(D.report())end)
+        if ok then return true,"Diagnostic summary copied" end
+        return false,"Clipboard operation failed"
+    end
+    function D.setAutoSave(v)
+        D.autoSave=v==true and type(writefile)=="function"
+        if D.autoSave then D.save() end
+        return D.autoSave
+    end
+    function D.shortStatus()
+        local s=D.lastSnapshot or {}
+        return "DIAG: "..D.samplesTotal.." samples  HP "..tostring(s.hp or "--")..
+            "  ST "..tostring(s.stamina or "--")..
+            "  CD "..tostring(s.talonRemaining or "--")..
+            "  "..(D.autoSave and "AUTO FILE ON" or "COPY-ONLY")
+    end
+    bind(UIS.InputBegan,function(input,processed)
+        if not D.alive or not D.enabled or processed or UIS:GetFocusedTextBox() then return end
+        if input.UserInputType==Enum.UserInputType.MouseButton1 then
+            D.attackInputs+=1
+        elseif input.KeyCode==Enum.KeyCode.Q then
+            D.climbInputs+=1
+        elseif input.KeyCode==Enum.KeyCode.G then
+            D.carryInputs+=1
+        elseif input.KeyCode==Enum.KeyCode.Space then
+            D.spaceInputs+=1
+        end
+    end)
+    local lastAutosave=0
+    bind(RunService.Heartbeat,function()
+        if not D.alive then return end
+        local now=os.clock()
+        if D.enabled and now-lastSample>=.5 then
+            lastSample=now
+            local ok,err=pcall(D.sample)
+            if not ok then
+                D.status="Sample error, skipped"
+                if now-D.lastAutoAt>10 then
+                    mark("sample_error")
+                    D.lastAutoAt=now
+                end
+            end
+        end
+        if D.autoSave and now-lastAutosave>=D.autoSavePeriod then
+            lastAutosave=now
+            D.save()
+        end
+    end)
+    function D.close()
+        if not D.alive then return end
+        if D.autoSave then pcall(D.save) end
+        D.alive=false
+        for _,cn in ipairs(connectionList) do pcall(function()cn:Disconnect()end) end
+        for i=#connectionList,1,-1 do connectionList[i]=nil end
+    end
+    ctx.diag=D
+    return D
+end
+return Diagnostics
