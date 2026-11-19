@@ -201,7 +201,7 @@ jobs:
               RunService={Heartbeat={Connect=function(self,fn)
                   beat=fn
                   return {Disconnect=function(self)beat=nil end}
-              end}
+              end}}
           }
           game={GetService=function(self,k)return services[k] end}
           Enum={KeyCode={G=1}}
