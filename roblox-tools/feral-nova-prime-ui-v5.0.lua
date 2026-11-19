@@ -439,7 +439,8 @@ function UI.mount(ctx)
                     tostring(math.floor(first.distance+.5)).." studs"
             end
             status.Text="ESCAPE  "..Escape.status..
-                (Escape.status=="ESCAPING" and "  /  "..Escape.source or "")..
+                ((Escape.status=="ESCAPING" or Escape.status=="SENDING ESCAPE")
+                    and "  /  "..Escape.source or "")..
                 "    •    "..tostring(a.species or "ANIMAL")..
                 "    •    RSHIFT hide"
             liveText.Text=(a.sessionPhase=="IN GAME") and "●  IN GAME" or "●  MENU"
