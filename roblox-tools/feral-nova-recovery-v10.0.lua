@@ -29,6 +29,11 @@ function Recovery.attach(ctx)
         requests=0,cancels=0,replicatedRestTransitions=0,
         restingHeals=0,normalHeals=0,lastRate=0,
         movingShellSeen=false,attackInterrupts=0,
+        healthRestGain=0,healthRestSeconds=0,
+        healthNormalGain=0,healthNormalSeconds=0,
+        healthRestTicks=0,healthNormalTicks=0,
+        cachedHealthRegen=nil,cachedHealthRestMult=nil,
+        cachedStatusRestMults="UNAVAILABLE",
         damageInterrupts=0,unsafeBlocks=0,
         restOwned=nil,restActive=false,
         lastChar=nil,lastHP=nil,lastMax=nil,
@@ -45,6 +50,30 @@ function Recovery.attach(ctx)
         reason="Enable Rest to request 2x HP / 4x status recovery when eligible"
     }
     local connections={}
+    local world=RS:FindFirstChild("FeralWorld")
+    local function readConfig(name)
+        local mod=world and world:FindFirstChild(name)
+        if not mod or not mod:IsA("ModuleScript") then return nil end
+        local ok,v=pcall(require,mod)
+        return ok and type(v)=="table" and v or nil
+    end
+    local needs=readConfig("NeedsConfig")
+    local statusConfig=readConfig("StatusConfig")
+    if needs then
+        if finite(needs.HEALTH_REGEN) then M.cachedHealthRegen=needs.HEALTH_REGEN end
+        if finite(needs.HEALTH_REST_MULT) then
+            M.cachedHealthRestMult=needs.HEALTH_REST_MULT
+        end
+    end
+    if statusConfig then
+        local mult={}
+        for _,key in ipairs({"INJURY","BLEED","VENOM"}) do
+            local entry=statusConfig[key]
+            mult[#mult+1]=key..":"..tostring(
+                type(entry)=="table" and entry.REST_MULT or "unknown")
+        end
+        M.cachedStatusRestMults=table.concat(mult,",")
+    end
     local statusKeys={
         {key="FeralInjury",name="injury",limit=.5},
         {key="FeralBleed",name="bleed",limit=.25},
@@ -178,6 +207,13 @@ function Recovery.attach(ctx)
             "bleed_normal_rate="..string.format("%.3f",M.statusSamples.bleed.normalDelta/math.max(.01,M.statusSamples.bleed.normalSeconds)),
             "venom_rest_rate="..string.format("%.3f",M.statusSamples.venom.restDelta/math.max(.01,M.statusSamples.venom.restSeconds)),
             "venom_normal_rate="..string.format("%.3f",M.statusSamples.venom.normalDelta/math.max(.01,M.statusSamples.venom.normalSeconds)),
+            "cached_health_regen="..tostring(M.cachedHealthRegen),
+            "cached_health_rest_multiplier="..tostring(M.cachedHealthRestMult),
+            "cached_status_rest_multipliers="..M.cachedStatusRestMults,
+            "observed_rest_hp_gain_per_sec="..string.format("%.4f",M.healthRestGain/math.max(.01,M.healthRestSeconds)),
+            "observed_normal_hp_gain_per_sec="..string.format("%.4f",M.healthNormalGain/math.max(.01,M.healthNormalSeconds)),
+            "rest_hp_increase_samples="..tostring(M.healthRestTicks),
+            "normal_hp_increase_samples="..tostring(M.healthNormalTicks),
             "archived_health_rest_multiplier=2",
             "archived_status_rest_multiplier=4",
             "last_hp_gain_per_second="..string.format("%.3f",M.lastRate),
@@ -258,7 +294,17 @@ function Recovery.attach(ctx)
                     local delta=hum.Health-M.lastHP
                     if delta>.01 then
                         M.lastRate=delta/math.max(now-M.lastMeasure,.1)
-                        if rest then M.restingHeals+=1 else M.normalHeals+=1 end
+                        if rest then
+                            M.restingHeals+=1
+                            M.healthRestGain+=delta
+                            M.healthRestSeconds+=math.max(.1,now-M.lastMeasure)
+                            M.healthRestTicks+=1
+                        else
+                            M.normalHeals+=1
+                            M.healthNormalGain+=delta
+                            M.healthNormalSeconds+=math.max(.1,now-M.lastMeasure)
+                            M.healthNormalTicks+=1
+                        end
                     elseif delta<-.01 then
                         M.lastDamage=now
                         M.lastRate=0
