@@ -41,7 +41,11 @@ function Lab.attach(ctx)
         interval=.40,nextTick=0,maxTargets=28,range=100,
         sizeScale=1.65,lastBite=0,watch=nil,selected=nil,
         lastOutcome="NO BITE RECORDED",ratio=0,
-        lastMode="OFF", lastTargetHP=nil
+        lastMode="OFF", lastTargetHP=nil,
+        nextEconomyCheck=0, amberLast=nil, amberPositive=0,
+        amberNegative=0, amberGainEvents=0, hpLast=nil,
+        hpMaxLast=nil, hpGainTicks=0, hpDamageTicks=0,
+        growthLast=nil, growthGain=0
     }
     local leased=setmetatable({}, {__mode="k"})
     local cfg
@@ -243,6 +247,13 @@ function Lab.attach(ctx)
             "hp_decreases_near_boosted_bite="..tostring(L.boostedObservations),
             "last_observation="..L.lastOutcome,
             "last_error="..L.lastError,
+            "visible_amber="..tostring(L.amberLast),
+            "observed_amber_net_positive="..tostring(L.amberPositive),
+            "observed_amber_net_spend="..tostring(L.amberNegative),
+            "observed_amber_gain_events="..tostring(L.amberGainEvents),
+            "observed_hp_increase_ticks_unchanged_max="..tostring(L.hpGainTicks),
+            "observed_hp_decrease_ticks="..tostring(L.hpDamageTicks),
+            "observed_growth_increase="..string.format("%.4f",L.growthGain),
             "IMPORTANT=Replicated HP changes are not guaranteed to be caused by your bite.",
             "IMPORTANT=Local enlargement alone does not prove the server accepts longer hits."
         },"\n")
@@ -270,6 +281,41 @@ function Lab.attach(ctx)
                 end
             end
             if now>w.untilAt or w.done then L.watch=nil end
+        end
+        if now>=L.nextEconomyCheck then
+            L.nextEconomyCheck=now+1.0
+            local ok,a=pcall(ctx.stats)
+            if ok and type(a)=="table" then
+                if finite(a.amber) then
+                    if L.amberLast~=nil then
+                        local d=a.amber-L.amberLast
+                        if d>0 then
+                            L.amberPositive+=d
+                            L.amberGainEvents+=1
+                        elseif d<0 then
+                            L.amberNegative-=d
+                        end
+                    end
+                    L.amberLast=a.amber
+                end
+                if finite(a.hp) and finite(a.maxHp) then
+                    if L.hpLast~=nil and L.hpMaxLast==a.maxHp then
+                        if a.hp>L.hpLast+.01 then
+                            L.hpGainTicks+=1
+                        elseif a.hp<L.hpLast-.01 then
+                            L.hpDamageTicks+=1
+                        end
+                    end
+                    L.hpLast=a.hp
+                    L.hpMaxLast=a.maxHp
+                end
+                if finite(a.growth) then
+                    if L.growthLast~=nil and a.growth>L.growthLast then
+                        L.growthGain+=a.growth-L.growthLast
+                    end
+                    L.growthLast=a.growth
+                end
+            end
         end
         if not L.enabled or now<L.nextTick then return end
         L.nextTick=now+L.interval
