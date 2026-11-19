@@ -1,6 +1,20 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v12.0 (native carrying restored and protected)
+## CURRENT — NOVA PRIME v13.0 (full cross-feature audit, one recommended build)
+
+**[Release guide / full feature audit](README-feral-nova-prime-v13.0.md)** · Replaces the piecemeal patches after repeated user reports that carry, recovery, combat and visibility interfered with each other. **Nine audited source modules bundled into one download**, with official Luau CI and cross-feature tests.
+
+**Concrete repairs:** Mobile Recovery now detects outgoing carry **before** its movement-speed cutoff, so carrying prey doesn't permanently kill the trial; Safe Rest checks carrying **before** WolfRest/Turtle early returns and releases only its own Rest signal; the unsafe legacy WolfRest=false recovery mask is disabled; the native carry helper can handle drop while holding prey even if picking up a new target is unavailable; Auto Escape treats native G transition frames as outgoing carry unless the user is truly captured; player nametags now default ON; the dashboard reports client lease values instead of equating a toggle with server acceptance. Carry checks, escape bindings and collision audits are throttled to reduce work. No fabricated hitbox changes or presumed server grants.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v13.0.lua"))()
+```
+
+**One-time migration:** if the old v7/v8 HITBOX TEST ever modified target root sizes in your session, fully rejoin FERAL once before loading v13. **Server-authoritative instant escapes, permanently doubled HP regeneration, 4× effect recovery while fighting and enlarged accepted bite range are still unproven.** The UI reports this accurately; client-only testing cannot establish a private server advantage.
+
+---
+
+## PREVIOUS — NOVA PRIME v12.0 (native carrying restored and protected)
 
 **[v12 release guide](README-feral-nova-prime-v12.0.md)** · Full re-audit of FERAL's `FeralCarryClient` identified separate outgoing carrying (`FeralClamp` ObjectValue with Carry and `FeralCarcassCarry`) and incoming victim capture (`FeralCarried`, `FeralPinned`, `FeralDragged`). The previous hub risked interrupting the wrong actions. **V12 preserves the game's native G carry/pickup/drop**, adds a compact contextual Carry/Drop button using the game's own `_G.FeralCarryPress` helper when available (otherwise normal G injection), and explicitly **prevents Auto Escape from firing shake/getoff while you are carrying prey**. Mobile Recovery pauses only its own Rest experiment when carrying, keeping the feature enabled to resume when carrying ends; Safe Rest releases its own Rest before deliberate carry actions. No remote fabrication and no physical part changes.
 
