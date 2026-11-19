@@ -27,6 +27,13 @@ end
 local function yes(value)
     return value==true
 end
+local function swimmingState(hum)
+    if not hum then return false end
+    local ok,value=pcall(function()
+        return hum:GetState()==Enum.HumanoidStateType.Swimming
+    end)
+    return ok and value==true
+end
 local function cleanText(v)
     -- Only record the game's species label, never arbitrary object names.
     if type(v)~="string" then return "unknown" end
@@ -128,7 +135,7 @@ function Diagnostics.attach(ctx)
             expCooldown=mods and mods.enabled.cooldown or false,
             flying=yes(attribute(char,"FeralFlyLocal")),
             swimming=yes(attribute(char,"FeralSwimLocal"))
-                or (hum and hum:GetState()==Enum.HumanoidStateType.Swimming) or false,
+                or swimmingState(hum),
             underwater=yes(attribute(char,"FeralUnderwater")) or yes(attribute(char,"FeralDiving"))
                 or (ctx.flight and ctx.flight.underwater==true) or false,
             waterSurfaceEligible=ctx.flight and ctx.flight.surfaceEligible==true or false,
