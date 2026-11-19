@@ -1,6 +1,18 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v5.0 (single-screen, one stamina switch)
+## CURRENT — NOVA PRIME v6.0 (single-screen, improved auto escape + ESP)
+
+**[NOVA PRIME v6 guide](README-feral-nova-prime-v6.0.md)** · One **ENDURANCE** toggle, native escape assistance with rate-limited Space fallback, true transparent-fill outlines and animal-size-aware names, persistent display-only ESP preferences, low-need/health warnings, and one-click diagnostic copy. Six controls; no research bloat. The native requests and key injection have not been verified in the live game.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v6.0.lua"))()
+```
+
+Previously released v5 and older v4/Force versions remain below.
+
+---
+
+## PREVIOUS — NOVA PRIME v5.0 (single-screen, one stamina switch)
 
 **[NOVA PRIME v5 guide](README-feral-nova-prime-v5.0.md)** · Six useful controls on one screen, no scrolling or stamina profile picker. A single **ENDURANCE** button combines reversible 3× client recovery and the local no-drain flag. Auto-escape and clean outline-only through-wall ESP are on by default. One-tap agility, injury slowdown and visibility tools are available. The exact latch cue and server acceptance remain unverified in live FERAL/Velocity.
 
