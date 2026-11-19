@@ -199,6 +199,255 @@ jobs:
           assert 'FireServer(' not in carry # Uses only game's G/CarryPress
           print('V15_EXACT_15_MODULE_BUNDLE_ALL_FEATURE_INTEGRITY_PASS')
           PY
+      - name: Luau test - native Rest pose masking, carry attack cleanup and recovery samples
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-native-recovery-v15.0.lua').read_text().rsplit('return Native',1)[0]
+          mock=r'''
+          local now=1
+          os={clock=function()return now end}
+          local attrs={Species="Bear",FeralInjury=5,WolfRest=false}
+          local hum={Health=60,MaxHealth=100}
+          local callbacks={}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              SetAttribute=function(self,k,v)
+                  attrs[k]=v
+                  if callbacks[k] then callbacks[k]()end
+              end,
+              GetAttributeChangedSignal=function(self,k)
+                  return {Connect=function(self,fn)
+                      callbacks[k]=fn
+                      return {Disconnect=function(self)callbacks[k]=nil end}
+                  end}
+              end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hum end
+              end
+          }
+          local player={
+              Character=char,
+              GetAttribute=function(self,k)return nil end
+          }
+          local remoteCalls={}
+          local remote={
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,k,arg)
+                  assert(k=="Rest")
+                  table.insert(remoteCalls,arg)
+              end
+          }
+          local beat,inputCb
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,k)
+                      if k=="WolfActions" then return remote end
+                  end}
+              end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end,
+                  InputBegan={Connect=function(self,fn)
+                      inputCb=fn
+                      return {Disconnect=function(self)inputCb=nil end}
+                  end}
+              }end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function(self)beat=nil end}
+                  end}}
+              end
+          end}
+          Enum={
+              KeyCode={G=1,Q=2,Space=3},
+              UserInputType={MouseButton1=4,MouseButton2=5}
+          }
+          '''
+          cases=r'''
+          local ctx={state={alive=true}}
+          local N=Native.attach(ctx)
+          assert(N.enabled==false and #remoteCalls==0)
+          assert(N.setEnabled(true)==true)
+          beat()
+          assert(N.active==true and #remoteCalls==1 and remoteCalls[1]==true)
+          char:SetAttribute("WolfRest",true)
+          assert(attrs.WolfRest==false and N.maskWrites==1)
+          hum.Health=61
+          attrs.FeralInjury=4
+          now=1.4;beat()
+          assert(N.observedHPGain>=.99 and N.effectClears.FeralInjury>=.99)
+          local was=N.beforeCarry()
+          assert(was==true and N.active==false)
+          assert(remoteCalls[#remoteCalls]==false)
+          assert(callbacks.WolfRest==nil)
+          now=1.6;beat()
+          assert(N.active==false)
+          now=3.1;beat()
+          assert(N.active==true and remoteCalls[#remoteCalls]==true)
+          inputCb({KeyCode=Enum.KeyCode.Unknown,
+              UserInputType=Enum.UserInputType.MouseButton1},false)
+          assert(N.active==false and remoteCalls[#remoteCalls]==false)
+          assert(N.combatPauses>=1)
+          N.setEnabled(false)
+          N.close()
+          assert(N.alive==false and beat==nil and inputCb==nil)
+          print("V15_NATIVE_MASK_REST_CARRY_ATTACK_AND_STATUS_PASS")
+          '''
+          Path('/tmp/v15-native-rest.luau').write_text(mock+src+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v15-native-rest.luau
+      - name: Luau test - baby friendly adult carries but hostile pins escape
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-baby-v15.0.lua').read_text().rsplit('return Baby',1)[0]
+          mock=r'''
+          local now=5
+          os={clock=function()return now end}
+          local infantAttrs={Species="Wolf",Growth=.18,FeralCarried=true}
+          local adultAttrs={Species="Wolf",Growth=.83}
+          local baby={}
+          baby.Parent={}
+          baby.GetAttribute=function(self,k)return infantAttrs[k]end
+          baby.FindFirstChild=function(self,k)return nil end
+          local clamp={
+              Value=baby,
+              IsA=function(self,k)return k=="ObjectValue"end
+          }
+          local adult={
+              Parent={},
+              GetAttribute=function(self,k)return adultAttrs[k]end,
+              FindFirstChild=function(self,k)
+                  if k=="FeralClamp" then return clamp end
+              end
+          }
+          local localPlayer={Character=baby}
+          local otherPlayer={Character=adult}
+          game={GetService=function(self,k)
+              if k=="Players" then return {
+                  LocalPlayer=localPlayer,
+                  GetPlayers=function(self)return {localPlayer,otherPlayer}end
+              }end
+              if k=="RunService" then return {} end
+          end}
+          '''
+          cases=r'''
+          assert(Baby.eligible(baby,adult)==true)
+          local accepted,reason=Baby.carrierEvidence(baby,adult)
+          assert(accepted and reason=="CONFIRMED OUTGOING CLAMP")
+          local B=Baby.attach({state={alive=true}})
+          accepted,reason=B.shouldProtect(baby,now)
+          assert(accepted and B.active and B.confirmedFrames==1)
+          infantAttrs.FeralPinned=true
+          accepted=B.shouldProtect(baby,now+.2)
+          assert(accepted==false and B.active==false)
+          assert(B.hostileFrames==1)
+          infantAttrs.FeralPinned=false
+          adultAttrs.Species="Bear"
+          accepted=B.shouldProtect(baby,now+.4)
+          assert(accepted==false and B.active==false)
+          adultAttrs.Species="Wolf"
+          infantAttrs.Growth=.41
+          accepted=B.shouldProtect(baby,now+.6)
+          assert(accepted==false)
+          B.close()
+          print("V15_BABY_FRIENDLY_VS_HOSTILE_AND_GROWTH_RULES_PASS")
+          '''
+          Path('/tmp/v15-baby.luau').write_text(mock+src+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v15-baby.luau
+      - name: Luau test - integrated Quick Climb Q queue dive exception and native mounting
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-climb-v15.0.lua').read_text().rsplit('return Climb',1)[0]
+          mock=r'''
+          local now=1
+          os={clock=function()return now end}
+          local attrs={PassiveClimber=1,Species="Bear"}
+          local hum={Health=100}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hum end
+              end,
+              FindFirstChild=function(self,k)return nil end
+          }
+          local player={Character=char,
+              SetAttribute=function(self,k,v)self[k]=v end}
+          local cfg={CLIMBER={GRAB_REACH=.9,E_REACH=1.6,
+              GRAB_FACING=.55,MOUNT_TIME=.32,HINT_RANGE=14,
+              levels={{},{}}}}
+          local mod={IsA=function(self,k)return k=="ModuleScript"end}
+          local folder={FindFirstChild=function(self,k)
+              if k=="PassiveConfig" then return mod end
+          end}
+          require=function(m)return cfg end
+          local inputCb,beat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,k)
+                      if k=="FeralWorld" then return folder end
+                  end
+              }end
+              if k=="UserInputService" then return {
+                  InputBegan={Connect=function(self,fn)
+                      inputCb=fn
+                      return {Disconnect=function(self)inputCb=nil end}
+                  end},
+                  GetFocusedTextBox=function(self)return nil end
+              }end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function(self)beat=nil end}
+                  end}}
+              end
+          end}
+          Enum={KeyCode={Q=1}}
+          '''
+          cases=r'''
+          local cancelled=0
+          local C=Climb.attach({state={alive=true},
+              native={beforeClimb=function()cancelled+=1 end}})
+          assert(C.configReady==true)
+          assert(cfg.CLIMBER.levels[1].sprintGrab==true)
+          inputCb({KeyCode=Enum.KeyCode.Q},false)
+          assert(C.queued and cancelled==1)
+          now=1.1;beat()
+          assert(C.gameTaps==0)
+          attrs.ClimbCan=true
+          now=1.2;beat()
+          assert(C.gameTaps==1 and player.FeralClimbTap==1.2)
+          assert(cancelled==2)
+          attrs.FeralClimbLocal=true
+          now=1.3;beat()
+          assert(C.observedMounts==1)
+          attrs.FeralClimbLocal=false
+          attrs.ClimbCan=false
+          attrs.DiveCan=true
+          inputCb({KeyCode=Enum.KeyCode.Q},false)
+          assert(C.suppressedDives>=1 and not C.queued)
+          C.close()
+          assert(C.alive==false and inputCb==nil and beat==nil)
+          assert(cfg.CLIMBER.GRAB_REACH==.9)
+          assert(cfg.CLIMBER.levels[1].sprintGrab==nil)
+          print("V15_INTEGRATED_QUICK_CLIMB_BUFFERS_AND_RESTORES_PASS")
+          '''
+          Path('/tmp/v15-climb.luau').write_text(mock+src+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v15-climb.luau
       - name: Luau test - land Endurance reasserts locally overwritten flag
         shell: bash
         run: |
