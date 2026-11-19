@@ -256,7 +256,8 @@ jobs:
               return {Disconnect=function(self)inputCallback=nil end}
           end}
           local services={
-              Players={LocalPlayer=player},
+              Players={LocalPlayer=player,
+                  GetPlayers=function(self) return {player} end},
               ReplicatedStorage={FindFirstChild=function(self,k)
                   if k=="WolfActions" then return remote end
               end},
