@@ -1,0 +1,141 @@
+name: FERAL NOVA PRIME v7 hitbox validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-v7.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v7.0.lua'
+      - 'roblox-tools/feral-nova-combat-v7.0.lua'
+      - '.github/workflows/feral-nova-prime-v7-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau compiler/runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/nova-v7.zip
+          mkdir -p /tmp/nova-v7
+          unzip -q /tmp/nova-v7.zip -d /tmp/nova-v7
+          compiler="$(find /tmp/nova-v7 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+          luau="$(dirname "$compiler")/luau"
+          chmod +x "$luau"
+          echo "LUAU=$luau" >> "$GITHUB_ENV"
+      - name: Compile all v7 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-nova-escape-v6.0.lua \
+            roblox-tools/feral-nova-combat-v7.0.lua \
+            roblox-tools/feral-nova-prime-ui-v7.0.lua \
+            roblox-tools/feral-nova-prime-v7.0.lua; do
+            "$COMPILER" --null "$file"
+          done
+          echo ALL_V7_MODULES_COMPILE
+      - name: Check honest scope and reversible hitbox leases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools')
+          lab=(p/'feral-nova-combat-v7.0.lua').read_text()
+          ui=(p/'feral-nova-prime-ui-v7.0.lua').read_text()
+          launcher=(p/'feral-nova-prime-v7.0.lua').read_text()
+          assert ui.count('    card(')==6, 'Main UI changed unexpectedly'
+          assert 'P.setStamina("RECOVER")' in ui
+          assert 'P.setStamina("APEX")' not in ui
+          assert 'Name="FeralNovaPrimeV70"' in ui
+          assert 'HITBOX TEST' in ui
+          assert 'Lab.setEnabled(not Lab.enabled)' in ui
+          assert 'Lab.setEnabled(false)' in ui
+          assert 'Lab.report()' in ui
+          assert 'Lab.close()' in ui
+          assert 'function Lab.attach(ctx)' in lab
+          assert 'local function restoreRoot(part)' in lab
+          assert 'part.Size==lease.wanted' in lab
+          assert 'part.Size=lease.original' in lab
+          assert 'returnConfig()' in lab
+          assert 'L.connection:Disconnect()' in lab
+          assert 'if other~=player and other.Character' in lab
+          assert 'L.enabled=false' not in lab  # enabled=false in initial state, not global setting
+          assert 'alive=true,enabled=false' in lab
+          assert 'HIT_SCALE=math.min(cfg.HIT_SCALE*1.20,1.55)' in lab
+          assert 'REACH=math.min(cfg.REACH*1.16,2.1)' in lab
+          assert 'CONE=math.min(cfg.CONE+9,85)' in lab
+          assert 'GetAttributeChangedSignal("WolfBiteAt")' in lab
+          assert 'observed_amber_gain_events=' in lab
+          assert 'observed_hp_increase_ticks_unchanged_max=' in lab
+          assert 'observed_growth_increase=' in lab
+          assert 'feral-nova-combat-v7.0.lua' in launcher
+          assert 'feral-nova-prime-ui-v7.0.lua' in launcher
+          assert 'FeralNovaPrimeV60' in launcher
+          for script in (lab,ui,launcher):
+            for no in ('SetAttribute("Amber"', 'SetAttribute("Health"',
+                       'SetAttribute("Stamina"', 'FireServer("Gift"',
+                       'FireServer("FeralSelect"', 'Humanoid.Health=',
+                       'HttpPost(', 'github_pat_'):
+                assert no not in script,no
+          assert 'FireServer(' not in lab, 'hitbox module sends unauthorized traffic'
+          print('V7_SCOPE_AND_CLEANUP_CHECKS_PASS')
+          PY
+      - name: Simulate combat module lifecycle in Luau
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-combat-v7.0.lua').read_text()
+          assert source.rstrip().endswith('return Lab')
+          base=r'''
+          local signal={Connect=function(self,cb)
+              return {Disconnect=function(self) end}
+          end}
+          local player={Character=nil,CharacterAdded=signal}
+          local services={
+              Players={LocalPlayer=player},
+              ReplicatedStorage={FindFirstChild=function(self,key) return nil end},
+              RunService={Heartbeat=signal}
+          }
+          game={GetService=function(self,service)
+              return services[service]
+          end}
+          '''
+          tests=r'''
+          local ctx={stats=function() return {
+              amber=100, hp=100, maxHp=100, growth=0.32
+          } end}
+          local lab=Lab.attach(ctx)
+          assert(not lab.enabled)
+          assert(lab.status=="OFF")
+          assert(string.find(lab.report(),"mode=OFF",1,true))
+          assert(lab.setEnabled(true)==true)
+          assert(lab.enabled==true)
+          assert(lab.patchedConfig==false)
+          assert(lab.configStatus=="COMBAT CONFIG UNAVAILABLE")
+          assert(string.find(lab.report(),"LOCAL BOOST ON",1,true))
+          assert(lab.setEnabled(false)==false)
+          assert(lab.status=="OFF")
+          lab.close()
+          assert(lab.alive==false and lab.enabled==false)
+          print("V7_LUAU_LIFECYCLE_TESTS_PASS")
+          '''
+          Path('/tmp/test-v7.luau').write_text(base+source.rsplit('return Lab',1)[0]+'\n'+tests)
+          PY
+          "$LUAU" /tmp/test-v7.luau
