@@ -72,6 +72,8 @@ local attached,reason=pcall(function()
     ctx.lab=lab.attach(ctx)
 end)
 if not attached or not ctx.escape or not ctx.lab then
+    pcall(function()if ctx.lab then ctx.lab.close()end end)
+    pcall(function()if ctx.escape then ctx.escape.close()end end)
     pcall(ctx.close)
     warn("[NOVA PRIME] Core extension error: "..tostring(reason))
     return
