@@ -231,6 +231,18 @@ function Native.attach(ctx)
             if N.active then cancel("CHAT PRIORITY",true)end
             return
         end
+        -- InputBegan fires only once when Mouse1 is held. Never restart
+        -- Rest during a held attack merely because 1.2 s has elapsed.
+        local heldOK,heldAttack=pcall(function()
+            return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+                or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+        end)
+        if heldOK and heldAttack then
+            if N.active then cancel("HELD ATTACK / NO REST",true)end
+            N.status="HELD ATTACK / RECOVERY PAUSED"
+            N.lastStatus=nil
+            return
+        end
         local hpDeficit=hum.Health<hum.MaxHealth-.35
         local statusDeficit=false
         for _,key in ipairs(EFFECTS) do
