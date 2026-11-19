@@ -1,6 +1,18 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v8.0 (Turtle-aware recovery + repaired ESP)
+## CURRENT — NOVA PRIME v9.0 (combat-first, no fake hitboxes or surprise Rest)
+
+**[NOVA PRIME v9 guide](README-feral-nova-prime-v9.0.md)** · Critical repair after live Tiger-grab failure: archived FERAL **SHAKE_MASH=false** and uses `FeralShakeTaps` (A/D) and `FeralTugTap` actions that the v6–v8 escape watcher missed. V9 uses distinct native getoff/shake/tug intervals, own grab-state signals, progress observation, and bounded fallback. Server acceptance is unproven. The older AUTO REST feature could prevent normal bites because `WolfController.doBite` returns while `WolfRest` is true. V9 changes this to **SAFE REST OFF by default**, releases its own Rest on movement/attack, and passively watches Turtle shell conditions. It **removes ineffectual enemy hitbox enlargement** and instead shows a native CombatConfig bite-range marker with Bite-ready status; no claim of extra server damage. ESP, single Endurance, agility, vision, RightShift and copyable reports remain.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v9.0.lua"))()
+```
+
+Earlier releases are preserved for reference. Offline Luau checks are **not** proof the server accepts native escapes or that client bite guidance changes hit authority.
+
+---
+
+## PREVIOUS — NOVA PRIME v8.0 (Turtle-aware recovery + repaired ESP)
 
 **[Read NOVA PRIME v8 guide](README-feral-nova-prime-v8.0.md)** · Compact six-control FERAL hub, no stamina profile maze. **Fixed close-range names** using screen-projected text instead of clipped BillboardGuis; added opt-in single-click **Smart Recovery**, default ON, that reads native WolfRest / WolfRestAt without spoofing them; recognises SnappingTurtle's archived 0.30 incoming damage multiplier after one second of rest. A bounded moving Rest probe explores whether Turtle shell can remain active during motion (server validation unknown). Agility also includes reversible injury-movement assistance. Hitbox Test remains OFF by default and now reports peak/root counts and why a zero occurred, instead of implying server-side hits. Official Luau validation includes close-camera labels, native Rest, Turtle shell condition, local hitbox restore and cleanup tests.
 
