@@ -1,0 +1,310 @@
+name: FERAL NOVA PRIME v12 carry and combat regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-v12.0.lua'
+      - 'roblox-tools/feral-nova-prime-standalone-v12.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v12.0.lua'
+      - 'roblox-tools/feral-nova-carry-v12.0.lua'
+      - 'roblox-tools/feral-nova-mobile-v12.0.lua'
+      - 'roblox-tools/feral-nova-recovery-v12.0.lua'
+      - 'roblox-tools/feral-nova-escape-v12.0.lua'
+      - '.github/workflows/feral-nova-prime-v12-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau runtime and compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/nova-v12.zip
+          mkdir -p /tmp/nova-v12
+          unzip -q /tmp/nova-v12.zip -d /tmp/nova-v12
+          compiler="$(find /tmp/nova-v12 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+          luau="$(dirname "$compiler")/luau"
+          chmod +x "$luau"
+          echo "LUAU=$luau" >> "$GITHUB_ENV"
+      - name: Compile every module and complete standalone release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-nova-escape-v12.0.lua \
+            roblox-tools/feral-nova-combat-v10.0.lua \
+            roblox-tools/feral-nova-recovery-v12.0.lua \
+            roblox-tools/feral-nova-mobile-v12.0.lua \
+            roblox-tools/feral-nova-carry-v12.0.lua \
+            roblox-tools/feral-nova-tags-v8.0.lua \
+            roblox-tools/feral-nova-prime-ui-v12.0.lua \
+            roblox-tools/feral-nova-prime-v12.0.lua \
+            roblox-tools/feral-nova-prime-standalone-v12.0.lua; do
+            "$COMPILER" --null "$f"
+          done
+          echo V12_COMPILATION_PASS
+      - name: Verify self-contained bundle and feature invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('roblox-tools')
+          blob=(p/'feral-nova-prime-standalone-v12.0.lua').read_text()
+          loader=(p/'feral-nova-prime-v12.0.lua').read_text()
+          ui=(p/'feral-nova-prime-ui-v12.0.lua').read_text()
+          carry=(p/'feral-nova-carry-v12.0.lua').read_text()
+          escape=(p/'feral-nova-escape-v12.0.lua').read_text()
+          mobile=(p/'feral-nova-mobile-v12.0.lua').read_text()
+          recovery=(p/'feral-nova-recovery-v12.0.lua').read_text()
+          assert 'local ok,body=true,BUNDLED[path]' in blob
+          assert 'game:HttpGet(ROOT..path)' not in blob
+          assert 'game.PlaceId~=108901361810209' in blob
+          sources=re.findall(
+            r'\["([^"]+)"\]=\[==========\[\n(.*?)\n\]==========\]',
+            blob,re.S
+          )
+          assert len(sources)==9,[x[0] for x in sources]
+          for name,content in sources:
+              assert content==(p/name).read_text(), ('bundle drift',name)
+          assert 'ctx.carry=carry.attach(ctx)' in loader
+          assert 'ctx.carry.close()' in loader
+          assert 'FeralNovaPrimeV120' in loader
+          assert 'FeralNovaPrimeV120' in ui
+          assert ui.count('    card(')==5 and ui.count('=card(')==1
+          assert 'Carry.press()' in ui
+          assert 'Carry.report()' in ui
+          assert 'Carry.close()' in ui
+          assert 'G' in carry and 'FeralCarryPress' in carry
+          assert 'FeralCarcassCarry' in carry
+          assert 'FeralClamp' in carry
+          assert 'FeralDragged' in carry
+          assert 'classify=Carry.classify' in carry
+          assert 'CARRYING / ESCAPE NOT NEEDED' in escape
+          assert 'ctx.carry.classify(char)' in escape
+          assert 'CARRY_PAUSED' in mobile
+          assert 'carry_pause_count=' in mobile
+          assert 'function M.beforeCarry()' in mobile
+          assert 'function M.beforeCarry()' in recovery
+          assert 'NATIVE CARRY ACTIVE / REST NOT REQUESTED' in recovery
+          for code in (blob,loader,ui,carry,escape,mobile,recovery):
+              for bad in ('FireServer("Gift"', 'FireServer("BiteHit"',
+                  'SetAttribute("Amber"', 'SetAttribute("Health"',
+                  'github_pat_', 'HttpPost('):
+                  assert bad not in code,bad
+          for code in (carry,escape,mobile,recovery):
+              assert 'part.Size=' not in code
+          assert 'FireServer(' not in carry # Uses only game's G/CarryPress
+          print('V12_EXACT_9_MODULE_BUNDLE_AND_CARRY_INTEGRITY_PASS')
+          PY
+      - name: Luau test: predator holding prey vs captured victim and carcass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-carry-v12.0.lua').read_text()
+          prefix='game={GetService=function(self,name) if name=="Players" then return {LocalPlayer={}} end return {} end}\n'
+          cases=r'''
+          local attrs={}
+          local obj=nil
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              FindFirstChild=function(self,k)
+                  if k=="FeralClamp" then return obj end
+              end
+          }
+          local classify=Carry.classify
+          local state,holding,victim=classify(char)
+          assert(state=="FREE" and not holding and not victim)
+          obj={
+              Parent={},
+              Value={Parent={}},
+              IsA=function(self,k)return k=="ObjectValue"end,
+              GetAttribute=function(self,k)
+                  if k=="Carry" then return true end
+              end
+          }
+          state,holding,victim=classify(char)
+          assert(state=="HOLDING PREY" and holding and not victim)
+          obj=nil
+          attrs.FeralCarcassCarry=true
+          state,holding,victim=classify(char)
+          assert(state=="HOLDING CARCASS" and holding and not victim)
+          attrs.FeralCarcassCarry=false
+          attrs.FeralCarried=true
+          state,holding,victim=classify(char)
+          assert(state=="BEING CARRIED" and victim and not holding)
+          attrs.FeralCarried=false
+          attrs.FeralPinned=true
+          state,holding,victim=classify(char)
+          assert(state=="PINNED BY ENEMY" and victim and not holding)
+          attrs.FeralPinned=false
+          attrs.FeralDragged=true
+          state,holding,victim=classify(char)
+          assert(state=="BEING DRAGGED" and victim and not holding)
+          print('V12_CARRY_PREDATOR_VICTIM_SEPARATION_PASS')
+          '''
+          Path('/tmp/v12-carry.luau').write_text(prefix+src.rsplit('return Carry',1)[0]+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v12-carry.luau
+      - name: Luau test: G carry preserves native action and preempts Rest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-carry-v12.0.lua').read_text().rsplit('return Carry',1)[0]
+          mock=r'''
+          local stamp=1
+          os={clock=function()return stamp end}
+          local attrs={}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              FindFirstChild=function(self,k)return nil end
+          }
+          local pg={}
+          local player={
+              Character=char,
+              GetAttribute=function(self,k)return nil end
+          }
+          local inputCb
+          local beat
+          local preempt=0
+          local action=0
+          _G.FeralCarryCan=function()return true end
+          _G.FeralCarryPress=function() action+=1 end
+          local services={
+              Players={LocalPlayer=player},
+              UserInputService={
+                  GetFocusedTextBox=function(self)return nil end,
+                  InputBegan={Connect=function(self,fn)
+                      inputCb=fn
+                      return {Disconnect=function(self)inputCb=nil end}
+                  end}
+              },
+              RunService={Heartbeat={Connect=function(self,fn)
+                  beat=fn
+                  return {Disconnect=function(self)beat=nil end}
+              end}
+          }
+          game={GetService=function(self,k)return services[k] end}
+          Enum={KeyCode={G=1}}
+          '''
+          cases=r'''
+          local ctx={
+              mobile={beforeCarry=function() preempt+=1;return false end},
+              recovery={beforeCarry=function() preempt+=1;return false end}
+          }
+          local C=Carry.attach(ctx)
+          beat()
+          assert(C.canInteract==true)
+          assert(C.action=="PICK UP / CARRY")
+          local ok=C.press()
+          assert(ok==true and action==1)
+          assert(C.helperCalls==1 and C.keyboardTaps==0)
+          inputCb({KeyCode=Enum.KeyCode.G},false)
+          assert(preempt==4) -- button calls both, then native G calls both
+          stamp=1.05
+          assert(C.press()==false) -- no repeated G spam
+          C.close()
+          assert(C.alive==false and inputCb==nil and beat==nil)
+          print('V12_NATIVE_G_NO_DUPLICATE_AND_REST_PREEMPT_PASS')
+          '''
+          Path('/tmp/v12-carry-life.luau').write_text(mock+src+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v12-carry-life.luau
+      - name: Luau test: native escape actions only when captured, not holding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-escape-v12.0.lua').read_text().rsplit('return Escape',1)[0]
+          mock=r'''
+          local stamp=1
+          os={clock=function() return stamp end}
+          local event={Connect=function(self,cb)
+              return {Disconnect=function(self)end}
+          end}
+          local attrs={FeralClampN=10,FeralShakeNeed=4}
+          local held=true
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k] end,
+              GetAttributeChangedSignal=function(self,k)return event end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return {Health=100}end
+              end
+          }
+          local pg={GetDescendants=function(self)return {}end}
+          local player={
+              Character=char,CharacterAdded=event,
+              GetAttribute=function(self,k)return nil end,
+              FindFirstChildOfClass=function(self,k)return pg end
+          }
+          local sent={}
+          local remote={
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,act) table.insert(sent,act) end
+          }
+          local heartbeat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,k)
+                      if k=="FeralLunge" then return remote end
+                  end
+              }end
+              if k=="ContextActionService" then return {
+                  GetAllBoundActionInfo=function(self)return {} end
+              }end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end
+              }end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      heartbeat=fn
+                      return {Disconnect=function(self)heartbeat=nil end}
+                  end
+              }}end
+          end}
+          '''
+          cases=r'''
+          local ctx={state={alive=true},
+              carry={classify=function(char)
+                  return held and "HOLDING PREY" or "PINNED BY ENEMY",
+                     held,not held
+              end}
+          }
+          local E=Escape.attach(ctx)
+          heartbeat()
+          assert(#sent==0)
+          assert(E.status=="CARRYING / ESCAPE NOT NEEDED")
+          held=false
+          attrs.FeralPinned=true
+          stamp=1.3
+          heartbeat()
+          assert(#sent==1 and sent[1]=="shake")
+          E.close()
+          assert(heartbeat==nil)
+          print('V12_ESCAPE_PRESERVES_HUNTER_CARRY_PASS')
+          '''
+          Path('/tmp/v12-escape.luau').write_text(mock+src+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v12-escape.luau
