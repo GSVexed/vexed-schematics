@@ -1,0 +1,139 @@
+name: FERAL NOVA PRIME v25 preservation and mechanics integration
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-standalone-v25.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v25.0.lua'
+      - 'roblox-tools/feral-nova-mechanics-v25.0.lua'
+      - '.github/workflows/feral-nova-prime-v25-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau compiler and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau-v25.zip
+          mkdir -p /tmp/luau-v25
+          unzip -q /tmp/luau-v25.zip -d /tmp/luau-v25
+          compiler="$(find /tmp/luau-v25 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+          luau="$(dirname "$compiler")/luau"
+          chmod +x "$luau"
+          echo "LUAU=$luau" >> "$GITHUB_ENV"
+      - name: Compile v25 and every recovered v15 module
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v15.0.lua             roblox-tools/feral-nova-flight-v15.0.lua             roblox-tools/feral-nova-native-recovery-v15.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-prime-ui-v25.0.lua             roblox-tools/feral-nova-mechanics-v25.0.lua             roblox-tools/feral-nova-prime-standalone-v25.0.lua; do
+            "$COMPILER" --null "$f"
+          done
+          echo V25_ALL_LUAU_SOURCES_COMPILE_PASS
+      - name: Verify exact module bundle, preserved v15 features, v25 controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('roblox-tools')
+          old=(p/'feral-nova-prime-standalone-v15.0.lua').read_text()
+          new=(p/'feral-nova-prime-standalone-v25.0.lua').read_text()
+          pattern=r'\["([^"]+)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pattern,old,re.S))
+          after=dict(re.findall(pattern,new,re.S))
+          assert len(before)==15 and len(after)==16,(len(before),len(after))
+          assert set(before)-{'feral-nova-prime-ui-v15.0.lua'} <= set(after)
+          for k,v in before.items():
+              if k!='feral-nova-prime-ui-v15.0.lua':
+                  assert after[k]==v,('v15 module regression',k)
+          for name,content in after.items():
+              assert content==(p/name).read_text(),('bundle not identical to source',name)
+          ui=after['feral-nova-prime-ui-v25.0.lua']
+          mechanics=after['feral-nova-mechanics-v25.0.lua']
+          power=after['feral-aurora-power-v14.0.lua']
+          regen=after['feral-nova-regen-v15.0.lua']
+          native=after['feral-nova-native-recovery-v15.0.lua']
+          assert 'WolfDbgNoStamina' in power
+          assert 'STAMINA_SPRINT_DRAIN=0' in power
+          assert 'STAMINA_JUMP_COST=0' in power
+          assert 'HEALTH_REGEN' in regen and 'CLOT' in regen and 'FADE' in regen and 'HEAL' in regen
+          assert 'WolfRest' in native and 'beforeCarry' in native and 'beforeClimb' in native
+          for name in ['feral-nova-escape-v15.0.lua','feral-nova-baby-v15.0.lua','feral-nova-climb-v15.0.lua','feral-nova-flight-v15.0.lua','feral-nova-tags-v8.0.lua']:
+              assert name in after
+          assert 'Enum.KeyCode.RightShift' in ui and 'Enum.KeyCode.End' in ui
+          assert 'REGEN 2x / 4x' in ui and 'Mechanics.report()' in ui
+          assert 'FeralNovaPrimeV250' in ui and 'ctx.mechanics=mechanics.attach(ctx)' in new
+          assert 'Mechanics.close()' in ui and 'ctx.mechanics.close()' in new
+          assert 'localOnly=true' in mechanics and 'SERVER_TALON_COOLDOWN_ACCEPTANCE=UNVERIFIED' in mechanics
+          assert 'original[#original+1]' in mechanics and 'if rawget(row.t,row.k)==row.wanted' in mechanics
+          assert 'FeralNovaPrimeV150' in new # old v15 shutdown support
+          assert 'FERAL_NOVA_PRIME_V24' in new # replaces incomplete previous hub
+          print('V25_EXACT_16_MODULES_AND_V15_ALL_FEATURE_PRESERVATION_PASS')
+          PY
+      - name: Luau simulation - mechanics toggles, presets, rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-mechanics-v25.0.lua').read_text()
+          assert source.rstrip().endswith('return Mechanics')
+          source=source[:source.rfind('return Mechanics')]
+          test=r'''
+          local growth={ELDER_RATE=.385,CUB_BOOST=2}
+          local species={ADULT_MINUTES={Eagle=19}}
+          local talon={CARRY_RATIO=1.45,NO_ELDER_LIFT=true,FLAT_COOLDOWN=60}
+          local abilities={Talon=talon}
+          local flight={STOOP={CD_PICK=60,CD_CANCEL=20,CD_EMPTY=10}}
+          local values={GrowthConfig=growth,Species=species,AbilityConfig=abilities,FlightConfig=flight}
+          local world={FindFirstChild=function(self,n)
+              local value=values[n]
+              if value then return {
+                  payload=value,
+                  IsA=function(self,class)return class=="ModuleScript" end
+              } end
+          end}
+          local rs={FindFirstChild=function(self,n)if n=="FeralWorld" then return world end end}
+          game={GetService=function(self,n)
+              if n=="ReplicatedStorage" then return rs end
+              if n=="Players" then return {} end
+          end}
+          require=function(node)return node.payload end
+          '''
+          cases=r'''
+          local ctx={}
+          local M=Mechanics.attach(ctx)
+          assert(ctx.mechanics==M)
+          assert(not M.enabled.growth and not M.enabled.carry and not M.enabled.cooldown)
+          assert(species.ADULT_MINUTES.Eagle==19)
+          assert(M.setEnabled("growth",true)==true)
+          assert(species.ADULT_MINUTES.Eagle==19/3 and growth.ELDER_RATE>.385)
+          M.setEnabled("carry",true)
+          assert(talon.CARRY_RATIO==3 and talon.NO_ELDER_LIFT==false)
+          M.setEnabled("cooldown",true)
+          assert(talon.FLAT_COOLDOWN==1.5 and flight.STOOP.CD_PICK==1.5)
+          assert(M.applied>=6)
+          local p=M.cyclePreset()
+          assert(p.name=="AGGRESSIVE" and talon.CARRY_RATIO==5)
+          M.setEnabled("carry",false)
+          assert(talon.CARRY_RATIO==1.45 and talon.NO_ELDER_LIFT==true)
+          M.close()
+          assert(species.ADULT_MINUTES.Eagle==19 and growth.ELDER_RATE==.385 and growth.CUB_BOOST==2)
+          assert(talon.FLAT_COOLDOWN==60 and flight.STOOP.CD_PICK==60 and flight.STOOP.CD_CANCEL==20)
+          assert(M.applied==0)
+          assert(M.setEnabled("growth",true)==false)
+          print("V25_MECHANICS_LOCAL_TOGGLE_PRESET_ROLLBACK_PASS")
+          '''
+          Path('/tmp/feral-v25-test.luau').write_text(test+source+cases)
+          PY
+          "$LUAU" /tmp/feral-v25-test.luau
