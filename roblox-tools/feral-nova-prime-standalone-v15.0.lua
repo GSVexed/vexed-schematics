@@ -29,7 +29,7 @@ for _,name in ipairs({
     end
 end
 
--- Complete pinned 15-module build, no further HTTP dependencies.
+-- Pin all fifteen feature modules to this single compiled release.
 local BUNDLED={
 ["feral-aurora-engine-v13.0.lua"]=[==========[
 -- FERAL AURORA v13 / Engine: read-only player tracking; single-owner recovery
@@ -4617,6 +4617,18 @@ function Native.attach(ctx)
             if N.active then cancel("CHAT PRIORITY",true)end
             return
         end
+        -- InputBegan fires only once when Mouse1 is held. Never restart
+        -- Rest during a held attack merely because 1.2 s has elapsed.
+        local heldOK,heldAttack=pcall(function()
+            return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+                or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+        end)
+        if heldOK and heldAttack then
+            if N.active then cancel("HELD ATTACK / NO REST",true)end
+            N.status="HELD ATTACK / RECOVERY PAUSED"
+            N.lastStatus=nil
+            return
+        end
         local hpDeficit=hum.Health<hum.MaxHealth-.35
         local statusDeficit=false
         for _,key in ipairs(EFFECTS) do
@@ -5852,7 +5864,7 @@ function UI.mount(ctx)
         local a=ctx.stats()
         local power=P.status()
         local report=Escape.report().."\n\n"..Carry.report().."\n\n"..Lab.report().."\n\n"..Reach.report().."\n\n"..Regen.report().."\n\n"..Native.report().."\n\n"..Climb.report().."\n\n"..Baby.report().."\n\n"..Mobile.report().."\n\n"..Flight.report().."\n\n"..Recovery.report().."\n\n"..P.enduranceReport().."\n"..Tags.report()..
-            "\n\nFERAL v14 | Lease verification"..
+            "\n\nFERAL v15 | Lease verification"..
             "\nendurance_cached_lease="..tostring(power.staminaMatches)..
             " stamina_profile="..tostring(power.stamina)..
             " own_no_drain_flag="..tostring(power.flag)..
