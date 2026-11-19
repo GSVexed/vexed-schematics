@@ -70,8 +70,8 @@
       "feature": "Experimental local Elder growth/Talon carry/cooldown, bounded presets and readback"
     },
     {
-      "file": "feral-nova-diagnostics-v30.0.lua",
-      "feature": "Actual LocalPlayer Talon press/pending, stage-specific growth progression, sustained local clamps and observed cooldowns"
+      "file": "feral-nova-diagnostics-v31.0.lua",
+      "feature": "Own Eagle server scratch/clamp replies, native drag retries, client gate changes and all previous health/stamina/growth metrics"
     },
     {
       "file": "feral-nova-active-recovery-v29.0.lua",
@@ -187,31 +187,31 @@
     },
     {
       "id": "regen_ab_metrics",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "server_verified": false,
       "required": true
     },
     {
       "id": "stamina_activity_metrics",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "server_verified": false,
       "required": true
     },
     {
       "id": "growth_accepted_progress_metrics",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "server_verified": false,
       "required": true
     },
     {
       "id": "talon_cooldown_distribution_metrics",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "server_verified": false,
       "required": true
     },
     {
       "id": "automatic_private_report",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "server_verified": false,
       "required": true
     },
@@ -253,31 +253,31 @@
     },
     {
       "id": "talon_press_outcome_metrics",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "required": true,
       "server_verified": false
     },
     {
       "id": "talon_player_attribute_source_corrected",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "required": true,
       "server_verified": false
     },
     {
       "id": "talon_local_sustained_clamp_evidence",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "required": true,
       "server_verified": false
     },
     {
       "id": "growth_by_species_stage_and_trial",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "required": true,
       "server_verified": false
     },
     {
       "id": "cooldown_after_talon_press_observations",
-      "module": "feral-nova-diagnostics-v30.0.lua",
+      "module": "feral-nova-diagnostics-v31.0.lua",
       "required": true,
       "server_verified": false
     },
@@ -301,6 +301,13 @@
       "required": true,
       "server_verified": false,
       "description": "Count server bit/clamp/miss responses independently of HUD CATCH label"
+    },
+    {
+      "id": "automatic_native_eagle_action_results",
+      "module": "feral-nova-diagnostics-v31.0.lua",
+      "required": true,
+      "server_verified": false,
+      "description": "Auto-save server bit/clamp and native drag requests without manual clipboard"
     }
   ],
   "verified_offline": [
