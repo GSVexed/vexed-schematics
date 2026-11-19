@@ -456,7 +456,7 @@ function UI.mount(ctx)
             "\nspeed_cached_lease="..tostring(power.speedMatches)..
             " leap_cached_lease="..tostring(power.leapMatches)..
             " anti_slow_cached_flag="..tostring(S.flags.mobility)..
-            "\nserver_stamina_and_movement_acceptance=UNVERIFIED"
+            "\nserver_stamina_and_movement_acceptance=UNVERIFIED"..
             "\nendurance="..tostring(enduranceOn())..
             " agility="..tostring(agilityOn())..
             " antislow="..tostring(S.flags.mobility)..
