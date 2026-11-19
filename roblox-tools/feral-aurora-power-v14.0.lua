@@ -87,7 +87,8 @@ function Power.attach(ctx)
         lastObservedBurst=false,priorHp=nil,
         flightBaseDrain=nil,flightEasyDrain=nil,
         latestStamina=0,latestMax=0,
-        birdEvidence="NO LIVE BIRD TRACE YET"
+        birdEvidence="NO LIVE BIRD TRACE YET",
+        noDrainReapplyAttempts=0,noDrainReapplyFailures=0
     }
     ctx.power=P
     local environment=nil
@@ -141,7 +142,20 @@ function Power.attach(ctx)
         end)
     end
     local function flagCharacter(char)
-        if not char or not char.Parent or P.charFlags[char] then return end
+        if not char or not char.Parent then return end
+        if P.charFlags[char] then
+            -- The archived WolfController may refresh this attribute.
+            -- Retry at most once per existing maintenance cycle, without
+            -- losing the originally observed attribute for later restore.
+            if char:GetAttribute("WolfDbgNoStamina")~=true then
+                P.noDrainReapplyAttempts+=1
+                local ok=pcall(function()
+                    char:SetAttribute("WolfDbgNoStamina",true)
+                end)
+                if not ok then P.noDrainReapplyFailures+=1 end
+            end
+            return
+        end
         local value=char:GetAttribute("WolfDbgNoStamina")
         local ok=pcall(function()
             if value~=true then char:SetAttribute("WolfDbgNoStamina",true)end
@@ -430,6 +444,8 @@ function Power.attach(ctx)
             "endurance_mode="..P.stamina,
             "client_debug_no_drain="..tostring(
                 ownCharacter() and ownCharacter():GetAttribute("WolfDbgNoStamina")==true),
+            "debug_flag_reapply_attempts="..P.noDrainReapplyAttempts,
+            "debug_flag_reapply_failures="..P.noDrainReapplyFailures,
             "flight_trace_seconds="..string.format("%.2f",P.flightTickSeconds),
             "land_trace_seconds="..string.format("%.2f",P.landTickSeconds),
             "flight_stamina_gained="..string.format("%.2f",P.flightStaminaGains),
@@ -456,10 +472,10 @@ function Power.attach(ctx)
         if now-P.lastRecheck>=.75 then
             P.lastRecheck=now
             local char=ownCharacter()
-            if char~=P.lastChar then
-                P.lastChar=char
-                maintainFlag()
-            end
+            if char~=P.lastChar then P.lastChar=char end
+            -- Also check the current animal: a later controller update may
+            -- have undone the flag even while this species stays the same.
+            maintainFlag()
         end
     end)
     local priorReset=ctx.reset
