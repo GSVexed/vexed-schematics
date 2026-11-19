@@ -1,0 +1,172 @@
+name: FERAL Quick Climb native buffered input validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-quick-climb-v1.0.lua'
+      - '.github/workflows/feral-quick-climb-v1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official Luau compiler and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/feral-climb-luau.zip
+          mkdir -p /tmp/feral-climb-luau
+          unzip -q /tmp/feral-climb-luau.zip -d /tmp/feral-climb-luau
+          COMPILER="$(find /tmp/feral-climb-luau -type f -name luau-compile | head -1)"
+          LUAU="$(dirname "$COMPILER")/luau"
+          chmod +x "$COMPILER" "$LUAU"
+          echo "COMPILER=$COMPILER" >> "$GITHUB_ENV"
+          echo "LUAU=$LUAU" >> "$GITHUB_ENV"
+      - name: Compile and check native safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null roblox-tools/feral-quick-climb-v1.0.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("roblox-tools/feral-quick-climb-v1.0.lua").read_text()
+          assert 'char:GetAttribute("ClimbCan")' in s
+          assert 'player:SetAttribute("FeralClimbTap",now)' in s
+          assert 'Enum.KeyCode.Q' in s
+          assert 'char:GetAttribute("DiveCan")' in s
+          assert 'FeralClimbLocal' in s
+          assert 'sprintGrab' in s
+          assert 'GRAB_REACH' in s and 'GRAB_FACING' in s
+          assert 'HINT_RANGE' in s and 'MOUNT_TIME' in s
+          assert 'FeralClimb:FireServer' not in s
+          assert 'HumanoidRootPart.Size=' not in s
+          assert 'CanCollide=' not in s
+          assert 'CFrame=' not in s
+          assert 'VectorForce' not in s
+          print("QUICK_CLIMB_SOURCE_INVARIANTS_PASS")
+          PY
+      - name: Test Q buffering, native mount, Dive safety and restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-quick-climb-v1.0.lua').read_text()
+          mock=r'''
+          local clock=1
+          os={clock=function()return clock end}
+          local env={}
+          getgenv=function()return env end
+          local attrs={PassiveClimber=1,Species="Bear"}
+          local hum={Health=100}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hum end
+              end,
+              FindFirstChild=function(self,k)return nil end
+          }
+          local pg={FindFirstChild=function(self,k)return nil end}
+          local player={
+              Character=char,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="PlayerGui" then return pg end
+              end,
+              WaitForChild=function(self,k)return pg end,
+              SetAttribute=function(self,k,v)self[k]=v end
+          }
+          local cfg={CLIMBER={
+              GRAB_REACH=.9,E_REACH=1.6,GRAB_FACING=.55,
+              MOUNT_TIME=.32,HINT_RANGE=14,
+              levels={{stamina="drain"},{stamina="trot"}}
+          }}
+          local mod={IsA=function(self,k)return k=="ModuleScript"end}
+          local folder={FindFirstChild=function(self,k)
+              if k=="PassiveConfig" then return mod end
+          end}
+          require=function(m)return cfg end
+          local inputCb,beat
+          local services={
+              Players={LocalPlayer=player},
+              ReplicatedStorage={FindFirstChild=function(self,k)
+                  if k=="FeralWorld" then return folder end
+              end},
+              UserInputService={
+                  InputBegan={Connect=function(self,fn)
+                      inputCb=fn
+                      return {Disconnect=function(self)inputCb=nil end}
+                  end},
+                  GetFocusedTextBox=function(self)return nil end
+              },
+              RunService={Heartbeat={Connect=function(self,fn)
+                  beat=fn
+                  return {Disconnect=function(self)beat=nil end}
+              end}}
+          }
+          game={
+              PlaceId=108901361810209,
+              GetService=function(self,k)return services[k]end
+          }
+          Enum={
+              KeyCode={Q=1},Font={GothamBold=2},
+              TextXAlignment={Left=3}
+          }
+          Color3={fromRGB=function()return {}end,new=function()return {}end}
+          UDim2={fromOffset=function()return {}end,new=function()return {}end}
+          UDim={new=function()return {}end}
+          local function signal()
+              return {Connect=function(self,fn)
+                  return {Disconnect=function(self)end}
+              end}
+          end
+          Instance={new=function(kind)
+              return {
+                  Name="",Parent=nil,Event=signal(),
+                  MouseButton1Click=signal(),
+                  Destroy=function(self)self.Parent=nil end
+              }
+          end}
+          '''
+          tests=r'''
+          local Q=env.FERALQuickClimbV1
+          assert(Q and Q.alive and Q.enabled)
+          assert(cfg.CLIMBER.GRAB_REACH>.9)
+          assert(cfg.CLIMBER.GRAB_FACING<.55)
+          assert(cfg.CLIMBER.levels[1].sprintGrab==true)
+          assert(cfg.CLIMBER.levels[2].sprintGrab==true)
+          inputCb({KeyCode=Enum.KeyCode.Q},false)
+          assert(Q.queued and Q.gameTaps==0)
+          clock=1.1;beat()
+          assert(Q.queued and Q.gameTaps==0)
+          attrs.ClimbCan=true
+          clock=1.2;beat()
+          assert(not Q.queued and Q.gameTaps==1)
+          assert(player.FeralClimbTap==1.2)
+          attrs.FeralClimbLocal=true
+          clock=1.3;beat()
+          assert(Q.observedMounts==1)
+          attrs.FeralClimbLocal=nil
+          attrs.ClimbCan=nil
+          attrs.DiveCan=true
+          inputCb({KeyCode=Enum.KeyCode.Q},false)
+          assert(not Q.queued and Q.suppressedDives>=1)
+          attrs.DiveCan=nil
+          Q.setEnabled(false)
+          assert(cfg.CLIMBER.GRAB_REACH==.9)
+          assert(cfg.CLIMBER.GRAB_FACING==.55)
+          assert(cfg.CLIMBER.levels[1].sprintGrab==nil)
+          assert(cfg.CLIMBER.levels[2].sprintGrab==nil)
+          Q.close()
+          assert(not Q.alive and inputCb==nil and beat==nil)
+          print("QUICK_CLIMB_Q_BUFFER_NATIVE_MOUNT_DIVE_AND_RESTORE_PASS")
+          '''
+          Path('/tmp/feral-quick-climb-test.luau').write_text(mock+source+'\n'+tests)
+          PY
+          "$LUAU" /tmp/feral-quick-climb-test.luau
