@@ -1,0 +1,103 @@
+name: FERAL NOVA PRIME v6 validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-v6.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v6.0.lua'
+      - 'roblox-tools/feral-nova-escape-v6.0.lua'
+      - '.github/workflows/feral-nova-prime-v6-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Obtain official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/nova-v6-luau.zip
+          mkdir -p /tmp/nova-v6-luau
+          unzip -q /tmp/nova-v6-luau.zip -d /tmp/nova-v6-luau
+          compiler="$(find /tmp/nova-v6-luau -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile v6, inherited core and power
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-nova-escape-v6.0.lua \
+            roblox-tools/feral-nova-prime-ui-v6.0.lua \
+            roblox-tools/feral-nova-prime-v6.0.lua; do
+            "$COMPILER" --null "$file"
+          done
+          echo NOVA_V6_LUAU_PASS
+      - name: Validate real feature wiring and cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("roblox-tools")
+          ui=(p/"feral-nova-prime-ui-v6.0.lua").read_text()
+          escape=(p/"feral-nova-escape-v6.0.lua").read_text()
+          loader=(p/"feral-nova-prime-v6.0.lua").read_text()
+          # One unambiguous stamina choice and six actual controls.
+          assert ui.count('    card(')==6
+          assert 'function endurance(on)' in ui
+          assert 'P.setStamina("RECOVER")' in ui
+          assert 'P.toggleNoDrain()' in ui
+          assert 'STOCK","3' not in ui
+          assert 'P.setStamina("APEX")' not in ui
+          assert 'P.setSpeed(1.30)' in ui and 'P.setLeap(1.35)' in ui
+          assert 'ctx.toggle("mobility")' in ui
+          # Render only outlines; small tags physically above animal mesh.
+          for x in ('r.h.FillTransparency=1','r.h.OutlineTransparency=0',
+                    'r.char:GetBoundingBox()', 'r.tagOffset',
+                    'r.name.TextStrokeTransparency=.14',
+                    'r.fill.Parent.Visible=false'):
+              assert x in ui,x
+          # Power settings cannot be silently restored from a preferences file.
+          assert 'FERAL_NovaPrime_Display_v6.json' in ui
+          assert 'tags=S.flags.tags' in ui and 'walls=S.flags.throughWalls' in ui
+          assert 'function UI.mount(ctx)' in ui
+          assert 'ctx.cleanupUI=function()' in ui
+          assert 'COPY STATUS' in ui and 'Escape.report()' in ui
+          assert 'LOW HEALTH' in ui and 'LOW NEEDS' in ui
+          # Auto escape requires a cue; chat focus suspends all firing.
+          for x in ('function Escape.chooseNative(', 'FeralCarried',
+                    'bindings.FeralCarryEscape','bindings.FeralShakeMash',
+                    'Escape.chooseNative(carried, clamp, need',
+                    'E.sourceStable >= 2','UIS:GetFocusedTextBox()',
+                    'remote:FireServer(E.nativeState)','E.nativeCount += 1',
+                    'E.pulses += 1','e.nextPulse' if False else 'E.nextPulse',
+                    'function E.setEnabled(on)','function E.close()',
+                    'function E.report()', 'E.lastChar ~= char',
+                    'if n > 650 then break end','if count > 380 then break end'):
+              assert x in escape,x
+          assert 'feral-nova-escape-v6.0.lua' in loader
+          assert 'feral-nova-prime-ui-v6.0.lua' in loader
+          assert 'FeralNovaPrimeV60' in loader
+          assert 'game.PlaceId~=108901361810209' in loader
+          # Explicitly avoid deceptive server grants/character rewrites.
+          for source in (ui, escape, loader):
+              for danger in (
+                  'SetAttribute("Amber"', 'SetAttribute("Health"',
+                  'SetAttribute("Hunger"', 'SetAttribute("Thirst"',
+                  'FireServer("Gift"', 'FireServer("FeralSelect"',
+                  'Humanoid.Health =', 'Authorization:', 'github_pat_'):
+                  assert danger not in source,danger
+          print("NOVA_V6_STATIC_CHECKS_PASS")
+          PY
