@@ -1,5 +1,27 @@
 # FERAL project continuation
 
+## Latest — 19 November 2026: NOVA PRIME v9 combat-first repair after user live failures
+
+**User reports:** v8 combat was ineffective; Tiger grabs remained lethal and escapes were far too slow. V8 generated 14 native escape requests and 8 key pulses while the last grab was FeralPinned, Hitbox Test peaked at 3 locally expanded enemy roots and 6 local part writes but there were **0 native bite starts recorded**, and health/rest telemetry recorded 5 transitions with no attribution to actual healing. The final copy report was from the animal menu, so live HP/Stamina were both unavailable. All claims of guaranteed hit/escape/server health should be avoided.
+
+**Critical recovered client causes:**
+1. **S0000056 AbilityConfig** has `SHAKE_MASH=false`, `SHAKE_MIN_GAP=.15`, `TUG_MIN_GAP=.10`; S0003647 FeralLungeUI enables `FeralShakeTaps` A/D (directional) or `FeralTugTap` while tugging, and uses `FeralCarryEscape` getoff with .4s gap. Old v6 escape checked FeralShakeMash/FeralTugTap **but omitted FeralShakeTaps** and sent shake at .23s regardless of tug state. More frequent input is still not guaranteed to escape because server validation is private.
+2. **S0003620 WolfController** `doBite` immediately refuses an attack while `WolfRest` true. V8 auto Rest (ON by default) could block bites at critical times. The exact attribution for user's loss remains unproven, but this is a real code conflict.
+3. Enemy RootPart local size changes in v7/v8 had no demonstrated server-accepted hit benefit despite peak three local resized parts, so no honest "working hitbox expander" claim.
+
+**Published v9:** [launcher](feral-nova-prime-v9.0.lua), [guide](README-feral-nova-prime-v9.0.md), [escape](feral-nova-escape-v9.0.lua), [safe recovery](feral-nova-recovery-v9.0.lua), [read-only bite guide](feral-nova-combat-v9.0.lua), [UI](feral-nova-prime-ui-v9.0.lua), [CI](../.github/workflows/feral-nova-prime-v9-validate.yml). Reuses stable v8 near-camera ScreenGui names, old v2.1 core and v3.1 reversible movement/power.
+
+- **ESCAPE:** Reads FeralPinned / FeralCarried / FeralClampN / FeralClampGame / FeralShakeNeed, monitors active directional/tug/mash/carry bindings, sends relevant native action at bounded .112/.163/.415s intervals, tracks FeralShakeHave progress and observed release. Space input is a fallthrough, not asserted working. No ALT needed. This is not proven fast escape against live Tiger yet.
+- **SAFE REST:** Defaults OFF. Purely observes native Turtle shell state until explicitly enabled, then only tries Rest after 3s idle, no close living player in 62 studs, 5s without input, 7s without damage, no combat status, and health deficit. On attack/WASD/Space, it immediately sends owned Rest=false, avoids damage-state combat conflicts. Does not write WolfRest or Health.
+- **BITE GUIDE:** replaces fake HITBOX TEST with actually computed client target eligibility using `CombatConfig.bodyGap/REACH/SLACK/HIT_SCALE/CONE/MAX_DY`; small projected dot and Bite Ready / Move Closer status. Absolutely no enemy root resize or external BiteHit emission. Counts own WolfBiteAt, observed adjacent HP losses, and attempted attacks during WolfRest. Underlying server still validates.
+- Six large controls remain: Endurance, Auto Escape, Outline ESP, Agility, Safe Rest, Clear View. One stamina switch and no scrolling. On-screen name tags and ESP unaffected. UI reports state honestly. Re-running v9 triggers v8 cleanup and restorations when possible.
+- **Offline CI** official Luau compile, static wiring, native escape decision tests, simulated multiple shake/getoff requests with progress, safe Rest OFF test and combat cancel, native bite guide geometry and Rest blockage. **No live Velocity/FERAL session test**, and no direct PC access from GitHub Actions.
+- The prior v8 Turtle shell client rule was `SnappingTurtle`, `WolfRest=true`, `WolfRestAt` elapsed >1s, returning nominal .30 for client-side shell. Server damage may differ; permanent moving protection remains unverified. Turtle resting may block bites, so do not re-enable forced auto-rest without careful reasons.
+
+**V9 launcher:** `loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v9.0.lua"))()`
+
+---
+
 ## Latest: TURTLE update and server-source access check — 18 November 2026
 
 User switched back from Booga and is loading FERAL. They report updates and want to know whether the server code can be obtained; prior client internals must be treated as historical until refreshed.
