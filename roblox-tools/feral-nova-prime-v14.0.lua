@@ -50,7 +50,7 @@ end
 
 local core=get("feral-aurora-engine-v13.0.lua")
 local power=get("feral-aurora-power-v14.0.lua")
-local escape=get("feral-nova-escape-v13.0.lua")
+local escape=get("feral-nova-escape-v14.0.lua")
 local lab=get("feral-nova-combat-v14.0.lua")
 local recovery=get("feral-nova-recovery-v13.0.lua")
 local mobile=get("feral-nova-mobile-v13.0.lua")
