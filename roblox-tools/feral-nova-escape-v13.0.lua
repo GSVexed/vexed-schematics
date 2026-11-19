@@ -57,6 +57,7 @@ function Escape.attach(ctx)
         lastShakeHave=nil,lastClamp=nil,
         noProgressWarnings=0,lastError="",
         holdingPauses=0,carryIntentPauses=0,lastCarryState="FREE",
+        bindingPolls=0,
         lastCharacter=nil,bindings={},
         nextBindings=0,nextScan=0,nextAction=0,
         nextKey=0,down=false,token=0,active=false,
@@ -136,6 +137,7 @@ function Escape.attach(ctx)
         E.nextBindings=now+.12
         forceRead=false
         local ok,value=pcall(function()return CAS:GetAllBoundActionInfo()end)
+        E.bindingPolls+=1
         if ok and type(value)=="table" then
             E.bindings={
                 FeralCarryEscape=value.FeralCarryEscape~=nil,
@@ -263,12 +265,15 @@ function Escape.attach(ctx)
                 return
             end
         end
-        updateBindings(now)
         local carried=on(char,"FeralCarried")
         local pinned=on(char,"FeralPinned")
         local clamp=positive(char,"FeralClampN") or positive(char,"FeralClampGame")
         local need=positive(char,"FeralShakeNeed")
         local hasCue=carried or pinned or clamp or need
+        -- No need to ask ContextActionService about every bound action
+        -- 8+ times a second when not grabbed. Keep fast polling only
+        -- during an actual own-character escape cue.
+        if hasCue then updateBindings(now) end
         local mode,reason,interval=Escape.choose(carried,pinned,clamp,need,E.bindings)
         if not hasCue then
             if E.active then
@@ -354,6 +359,7 @@ function Escape.attach(ctx)
             "binding_taps="..tostring(E.bindings.FeralShakeTaps),
             "binding_tug="..tostring(E.bindings.FeralTugTap),
             "binding_mash="..tostring(E.bindings.FeralShakeMash),
+            "native_binding_polls="..tostring(E.bindingPolls),
             "carrying_pauses="..tostring(E.holdingPauses),
             "carry_action_grace_frames="..tostring(E.carryIntentPauses),
             "carry_or_capture_state="..E.lastCarryState,
