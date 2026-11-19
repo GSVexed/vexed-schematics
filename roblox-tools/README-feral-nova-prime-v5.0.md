@@ -17,7 +17,7 @@ PlaceId: **108901361810209**.
 | Control | Real local action |
 |---|---|
 | **ENDURANCE** | One setting: native cached 3× stamina recovery, no recovery delay, no low-needs penalty, plus own-character WolfDbgNoStamina flag. No STOCK/3×/APEX selector |
-| **AUTO ESCAPE** | Enabled on load. Detects local grabbed-state attributes, explicit escape UI prompts, or a replicated physical joint connecting your character to another player's. Presses/releases Space automatically ~8 times/second when triggered; pauses for chat |
+| **AUTO ESCAPE** | Enabled on load. **Prioritises native FeralLunge getoff/shake escape requests** when its own active FeralCarried / FeralClampN / FeralClampGame state is replicated. Other detected escape cases use repeated Space input. No ALT; pauses in chat |
 | **OUTLINE ESP** | Enabled on load. Existing player tracker (up to 24 nearby replicated living players), true transparent fill and visible outlines. No body glow |
 | **AGILITY** | Single 1.30× speed / 1.35× leap cached-input combination with rollback if either part isn't supported |
 | **ANTI-SLOW** | Disables the two loaded client injury movement slowdown inputs when available; does not heal injury or remove server statuses |
@@ -51,12 +51,20 @@ the actual auto-escape state and one nearby player.
 
 ## Critical limits, not fake features
 
-- **Automatic escape does not have a confirmed game-specific latch signal.**
-  It is a best-effort watcher. If no recognized state, joint or prompt
-  is replicated, it stays in WATCHING and does not send Space. If Velocity
-  cannot emit usable keyboard events, it shows NO KEY INJECTION or
-  KEY INPUT BLOCKED. An executor accepting a keypress function is not
-  proof that FERAL's server counts the escape.
+- **A newer local FERAL client archive confirms relevant escape mechanisms.**
+  In its reconstructed client code, **FeralCarried** enables native
+  carry-escape requests (`FeralLunge:getoff`, once per ~0.4s), while
+  **FeralClampGame/FeralClampN** track clamp escape and the client sends
+  `FeralLunge:shake` from shake/tug controls. NOVA PRIME now sends those
+  matching legitimate action requests **only during its own observed
+  active escape state**, at bounded intervals. If state is not replicated,
+  it falls back to the prior prompt/physical-joint and simulated-Space
+  detector. The server may still reject requests or enforce escape rules;
+  local transmission is not proof of actual escape.
+- Executor keyboard injection remains experimental for the fallback path.
+  The native action route can work even when Velocity provides no
+  working Space injection. Reconstructed source may differ from actual
+  server handling or later game revisions.
 - Endurance and Agility change **local client configuration**, not a server
   inventory or stamina authority. Underlying client controls were previously
   user-observed working for some Bear/Tiger movement, but server acceptance,
