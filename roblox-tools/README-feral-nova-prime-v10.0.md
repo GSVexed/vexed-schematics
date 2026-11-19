@@ -8,7 +8,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v10.0.lua"))()
 ```
 
-**Important one-time recovery step:** Completely exit the old FERAL play session and join a fresh game before running v10. The v7/v8 experiment had physically enlarged other animals' *local* HumanoidRootPart sizes and may not have fully restored all changes after an interrupted executor/script shutdown. A new hub cannot reliably infer and reset each target's original size. A fresh session removes locally created/modified parts; if close-range movement still fails without the hub, the cause isn't simply a leftover NOVA resize.
+**Important one-time recovery step:** Completely exit the old FERAL play session and join a fresh game before running v10. The v7/v8 experiment had physically enlarged other animals' *local* HumanoidRootPart sizes and may not have fully restored all changes after an interrupted executor/script shutdown. A new hub cannot reliably infer and reset each target's original size. A fresh session clears those local script-side modifications; if close-range movement still fails without the hub, the cause isn't simply a leftover NOVA resize.
 
 ## Changes from v9
 
@@ -37,21 +37,21 @@ These are rules from an archived client configuration, **not a guaranteed effect
 
 The v9 live report had 80 positive non-resting healing intervals and **zero native Rest requests**, so it never actually demonstrated a doubled Rest healing rate. Previously, the assistant mistakenly spoke of boosted regeneration while the hub was only measuring recovery.
 
-V10 corrects the practical blocker: **when HP is full but injury, bleed or venom is present, that effect alone now makes Rest worth requesting**. The Rest control is still OFF at startup, to avoid an older dangerous conflict: WolfController refuses ordinary bites while `WolfRest=true`. You can enable REST RECOVERY when safe. When enabled, it waits for a stable idle, checks needs, recent combat/damage and players within 32 studs, requests the **normal** `WolfActions:FireServer("Rest", true)` when eligible, watches the replicated Rest flag and cancels its own request on movement/attack or significant damage. It does not send continuous requests in a fight.
+V10 corrects the practical blocker: **when HP is full but injury, bleed or venom is present, that effect alone now makes Rest worth requesting**. The Rest control is still OFF at startup, to avoid an older dangerous conflict: WolfController refuses ordinary bites while `WolfRest=true`. You can enable REST RECOVERY when safe. When enabled, it waits for a stable idle, checks needs, recent combat/damage and players within 32 studs, requests the **normal** `WolfActions:FireServer("Rest", true)` when eligible, watches the local observed Rest attribute (which WolfController can write locally and therefore does **not** prove server recognition) and cancels its own request on movement/attack or significant damage. It does not send continuous requests in a fight.
 
 The report now includes:
 - Current readable client config values, when available, plus archived 2×/4× rule labels.
-- Replicated Rest transitions (requests alone are **not** counted as activation).
+- Observed local Rest-attribute transitions (neither requests nor local attributes alone prove server recognition).
 - Positive HP gains per second when Rest is active versus absent, excluding intervals where MaxHealth changed, where the animal is already full, where damage intervened, or where Rest state changed mid-interval.
 - Measured replicated `FeralInjury`, `FeralBleed`, `FeralVenomAmt` decline rates per second while Rest is active or absent. Status re-applications are not treated as recovery.
 - Whether an eligible negative effect was actually present during the observation.
 
-An observed 4× rate would be evidence of the **game's Rest mechanic**. V10 cannot force the server to award this effect continuously while moving, attacking or being grabbed.
+An observed 4× rate across comparable full-health/stable-MaxHealth status samples would be evidence consistent with the **game's Rest mechanic**, not necessarily a server guarantee. V10 cannot force the server to award this effect continuously while moving, attacking or being grabbed.
 
 ### Turtle and combat coexistence
 
 - Turtle client shell rule still checks its own SnappingTurtle species, `WolfRest=true`, and at least one second since `WolfRestAt`, with nominal multiplier `0.30`.
-- Rest can block normal bites. V10 remains combat-first: no forced rest at startup, and releasing an owned Rest request when you attack or move.
+- Rest can block normal bites. V10 remains combat-first: no forced rest at startup, and releasing an owned Rest request when you attack or move. If you **explicitly enable REST RECOVERY while playing Turtle**, the hub can request native Rest at full HP in a safely stationary situation even without injury/bleed/venom, to try activating shell defense. It still releases its own Rest for movement or attacking; continuous protection while running remains unproven.
 - The status bar shows a shell *condition*, not a guaranteed 70% reduction in authoritative damage.
 - Automatic escape continues with the source-guided v9 directional shake/tug and carry logic; no false guarantee of instant escape.
 
