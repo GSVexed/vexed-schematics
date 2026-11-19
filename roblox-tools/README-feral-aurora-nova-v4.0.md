@@ -1,11 +1,11 @@
 # FERAL AURORA NOVA v4.0 — minimal high-impact hub
 
 The recommended current launcher for Roblox **FERAL Animal Survival**, PlaceId
-\`108901361810209\`, running in the user's existing Velocity executor.
+`108901361810209`, running in the user's existing Velocity executor.
 
-\`\`\`lua
+```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-nova-v4.0.lua"))()
-\`\`\`
+```
 
 ## What changed from Aurora FORCE v3.1
 
@@ -24,7 +24,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schemat
   is unavailable or fails.
 - **ESP fixed:** the existing replicated-player tracker is reused (including
   respawn handling, distance caps, and cleanup), but every highlight has
-  \`FillTransparency=1\` and \`OutlineTransparency=0\`: genuine outline-only,
+  `FillTransparency=1` and `OutlineTransparency=0`: genuine outline-only,
   without body-color overlays or glow. Names are optional, compact and
   unboxed above the animal, with text stroke for legibility. Track range
   200/400/800 studs, optional through-wall outlines.
@@ -41,7 +41,7 @@ start OFF. One-Tap Setup enables the practical recovery bundle explicitly.
 ## Critical verification limits
 
 Lua syntax and static source requirements are checked in GitHub Actions
-by \`.github/workflows/feral-aurora-nova-v4-validate.yml\`; live Roblox/
+by `.github/workflows/feral-aurora-nova-v4-validate.yml`; live Roblox/
 Velocity acceptance has **not** been verified by the developer.
 
 The client-side script can watch for a grab and attempt Space input.
@@ -61,8 +61,8 @@ one-line loader into Velocity while inside FERAL.
 
 ## Files
 
-- \`feral-aurora-nova-v4.0.lua\` — public launcher
-- \`feral-aurora-nova-ui-v4.0.lua\` — compact UI, auto-escape watcher and ESP styling
-- \`feral-aurora-engine-v2.1.lua\` — retained player tracker / own-status engine
-- \`feral-aurora-power-v3.1.lua\` — retained reversible client tuning
-- \`.github/workflows/feral-aurora-nova-v4-validate.yml\` — compiler + checks
+- `feral-aurora-nova-v4.0.lua` — public launcher
+- `feral-aurora-nova-ui-v4.0.lua` — compact UI, auto-escape watcher and ESP styling
+- `feral-aurora-engine-v2.1.lua` — retained player tracker / own-status engine
+- `feral-aurora-power-v3.1.lua` — retained reversible client tuning
+- `.github/workflows/feral-aurora-nova-v4-validate.yml` — compiler + checks
