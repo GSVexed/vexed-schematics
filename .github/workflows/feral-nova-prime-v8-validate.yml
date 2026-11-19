@@ -1,0 +1,299 @@
+name: FERAL NOVA PRIME v8 full integration validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-v8.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v8.0.lua'
+      - 'roblox-tools/feral-nova-combat-v8.0.lua'
+      - 'roblox-tools/feral-nova-recovery-v8.0.lua'
+      - 'roblox-tools/feral-nova-tags-v8.0.lua'
+      - '.github/workflows/feral-nova-prime-v8-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Luau compiler/runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/nova-v8.zip
+          mkdir -p /tmp/nova-v8
+          unzip -q /tmp/nova-v8.zip -d /tmp/nova-v8
+          compiler="$(find /tmp/nova-v8 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+          luau="$(dirname "$compiler")/luau"
+          chmod +x "$luau"
+          echo "LUAU=$luau" >> "$GITHUB_ENV"
+      - name: Compile all v8 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-nova-escape-v6.0.lua \
+            roblox-tools/feral-nova-combat-v8.0.lua \
+            roblox-tools/feral-nova-recovery-v8.0.lua \
+            roblox-tools/feral-nova-tags-v8.0.lua \
+            roblox-tools/feral-nova-prime-ui-v8.0.lua \
+            roblox-tools/feral-nova-prime-v8.0.lua; do
+            "$COMPILER" --null "$file"
+          done
+          echo ALL_V8_MODULES_COMPILE
+      - name: Check honest scope and reversible hitbox leases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools')
+          lab=(p/'feral-nova-combat-v8.0.lua').read_text()
+          ui=(p/'feral-nova-prime-ui-v8.0.lua').read_text()
+          recovery=(p/'feral-nova-recovery-v8.0.lua').read_text()
+          tags=(p/'feral-nova-tags-v8.0.lua').read_text()
+          launcher=(p/'feral-nova-prime-v8.0.lua').read_text()
+          assert ui.count('    card(')==6, 'Main UI changed unexpectedly'
+          assert 'P.setStamina("RECOVER")' in ui
+          assert 'P.setStamina("APEX")' not in ui
+          assert 'Name="FeralNovaPrimeV80"' in ui
+          assert 'HITBOX TEST' in ui
+          assert 'Lab.setEnabled(not Lab.enabled)' in ui
+          assert 'Lab.setEnabled(false)' in ui
+          assert 'Lab.report()' in ui
+          assert 'Recovery.report()' in ui
+          assert 'Tags.report()' in ui
+          assert 'Lab.close()' in ui
+          assert 'Recovery.close()' in ui
+          assert 'Tags.close()' in ui
+          assert 'r.b.Enabled=false' in ui
+          assert 'function Lab.attach(ctx)' in lab
+          assert 'local function restoreRoot(part)' in lab
+          assert 'part.Size==lease.wanted' in lab
+          assert 'part.Size=lease.original' in lab
+          assert 'returnConfig()' in lab
+          assert 'L.connection:Disconnect()' in lab
+          assert 'root_parts_expanded_peak=' in lab
+          assert 'NO LIVING ANIMAL; report taken in menu/death' in lab
+          assert 'if part.Size==existing.original then' in lab
+          assert 'function Recovery.shellState(' in recovery
+          assert 'M.multiplier' in recovery
+          assert 'char:GetAttribute("WolfRest")' in recovery
+          assert 'Rest",on)' in recovery
+          assert 'GetAttribute("Species")' in recovery
+          assert 'char:SetAttribute("WolfRest"' not in recovery
+          assert 'function Tags.attach(ctx)' in tags
+          assert 'camera:WorldToViewportPoint(world)' in tags
+          assert 'r.b.Enabled=false' not in tags or 'record.b.Enabled=false' in tags
+          assert 'T.closeCount=closeTags' in tags
+          assert 'T.connection:Disconnect()' in tags
+          assert 'if other~=player and other.Character' in lab
+          assert 'L.enabled=false' not in lab  # enabled=false in initial state, not global setting
+          assert 'alive=true,enabled=false' in lab
+          assert 'HIT_SCALE=math.min(cfg.HIT_SCALE*1.20,1.55)' in lab
+          assert 'REACH=math.min(cfg.REACH*1.16,2.1)' in lab
+          assert 'CONE=math.min(cfg.CONE+9,85)' in lab
+          assert 'GetAttributeChangedSignal("WolfBiteAt")' in lab
+          assert 'observed_amber_gain_events=' in lab
+          assert 'observed_hp_increase_ticks_unchanged_max=' in lab
+          assert 'observed_growth_increase=' in lab
+          assert 'feral-nova-combat-v8.0.lua' in launcher
+          assert 'feral-nova-tags-v8.0.lua' in launcher
+          assert 'feral-nova-recovery-v8.0.lua' in launcher
+          assert 'feral-nova-prime-ui-v8.0.lua' in launcher
+          assert 'FeralNovaPrimeV60' in launcher
+          for script in (lab,ui,launcher,recovery,tags):
+            for no in ('SetAttribute("Amber"', 'SetAttribute("Health"',
+                       'SetAttribute("Stamina"', 'FireServer("Gift"',
+                       'FireServer("FeralSelect"', 'Humanoid.Health=',
+                       'HttpPost(', 'github_pat_'):
+                assert no not in script,no
+          assert 'FireServer(' not in lab, 'hitbox module sends unauthorized traffic'
+          print('V8_SCOPE_AND_CLEANUP_CHECKS_PASS')
+          PY
+      - name: Test Turtle shell state logic in Luau
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-recovery-v8.0.lua').read_text()
+          mock='game={GetService=function(self,n) if n=="Players" then return {LocalPlayer={}} end return {} end}\n'
+          tests="""
+          local fn=Recovery.shellState
+          local s,m=fn("SnappingTurtle",true,100,100.5)
+          assert(s=="SHELL ARMING" and m==1)
+          s,m=fn("SnappingTurtle",true,100,101.01)
+          assert(s=="SHELL CONDITION MET" and m==0.30)
+          s,m=fn("SnappingTurtle",false,100,120)
+          assert(s=="SHELL INACTIVE" and m==1)
+          s,m=fn("Wolf",true,100,120)
+          assert(s=="NOT TURTLE" and m==1)
+          s,m=fn("SnappingTurtle",true,nil,120)
+          assert(s=="REST REPLICATED / TIMER UNKNOWN" and m==1)
+          print("V8_TURTLE_SHELL_POLICY_PASS")
+          """
+          Path('/tmp/turtle-v8.luau').write_text(mock+source.rsplit('return Recovery',1)[0]+'\n'+tests)
+          PY
+          "$LUAU" /tmp/turtle-v8.luau
+      - name: Simulate target root enlargement and exact restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-combat-v8.0.lua').read_text()
+          source=source.rsplit('return Lab',1)[0]
+          stub=r'''
+          local vmeta={}
+          function vmeta.__index(self,key)
+              if key=="Magnitude" then
+                  return math.sqrt(self.X*self.X+self.Y*self.Y+self.Z*self.Z)
+              end
+          end
+          function vmeta.__sub(a,b)
+              return Vector3.new(a.X-b.X,a.Y-b.Y,a.Z-b.Z)
+          end
+          Vector3={new=function(x,y,z)
+              return setmetatable({X=x,Y=y,Z=z},vmeta)
+          end}
+          local event={Connect=function(self,handler)
+              return {Disconnect=function(self) end}
+          end}
+          local hum={Health=100}
+          local enemyHum={Health=80}
+          local ownRoot={
+              Position=Vector3.new(0,0,0),
+              Size=Vector3.new(2,2,2)
+          }
+          local enemyRoot={
+              Position=Vector3.new(5,0,5),
+              Size=Vector3.new(2,3,2),
+              Anchored=false,
+              Parent={},
+              IsA=function(self,typ) return typ=="BasePart" end
+          }
+          local ownChar={
+              Parent={},
+              FindFirstChild=function(self,name)
+                  if name=="HumanoidRootPart" then return ownRoot end
+              end,
+              FindFirstChildOfClass=function(self,typ)
+                  if typ=="Humanoid" then return hum end
+              end,
+              GetAttribute=function(self,key) return nil end,
+              GetAttributeChangedSignal=function(self,key) return event end
+          }
+          local enemyChar={
+              Parent={},
+              FindFirstChild=function(self,name)
+                  if name=="HumanoidRootPart" then return enemyRoot end
+              end,
+              FindFirstChildOfClass=function(self,typ)
+                  if typ=="Humanoid" then return enemyHum end
+              end,
+              GetAttribute=function(self,key) return nil end
+          }
+          local other={Character=enemyChar}
+          local player={
+              Character=ownChar,
+              CharacterAdded=event,
+              GetAttribute=function(self,k) return nil end
+          }
+          local heartbeatCallback
+          local beat={Connect=function(self,callback)
+              heartbeatCallback=callback
+              return {Disconnect=function(self) heartbeatCallback=nil end}
+          end}
+          local services={
+              Players={LocalPlayer=player,GetPlayers=function(self)
+                  return {player,other} end},
+              ReplicatedStorage={FindFirstChild=function(self,n) return nil end},
+              RunService={Heartbeat=beat}
+          }
+          game={GetService=function(self,n) return services[n] end}
+          workspace={FindFirstChild=function(self,n) return nil end}
+          '''
+          tests=r'''
+          local ctx={stats=function() return {
+              amber=100,growth=0.3,hp=100,maxHp=100
+          } end}
+          local lab=Lab.attach(ctx)
+          assert(lab.enabled==false)
+          assert(enemyRoot.Size.X==2 and enemyRoot.Size.Y==3)
+          lab.setEnabled(true)
+          heartbeatCallback()
+          assert(lab.roots==1)
+          assert(math.abs(enemyRoot.Size.X-3.3)<.0001)
+          assert(math.abs(enemyRoot.Size.Z-3.3)<.0001)
+          assert(enemyRoot.Size.Y==3)
+          assert(ownRoot.Size.X==2 and ownRoot.Size.Z==2)
+          lab.setEnabled(false)
+          assert(enemyRoot.Size.X==2 and enemyRoot.Size.Z==2)
+          assert(enemyRoot.Size.Y==3)
+          lab.setEnabled(true)
+          heartbeatCallback()
+          assert(lab.roots==1)
+          lab.close()
+          assert(enemyRoot.Size.X==2 and enemyRoot.Size.Z==2)
+          assert(lab.alive==false)
+          print("V8_ROOT_GEOMETRY_AND_RESTORATION_PASS")
+          '''
+          Path('/tmp/test-v8-geometry.luau').write_text(stub+source+'\n'+tests)
+          PY
+          "$LUAU" /tmp/test-v8-geometry.luau
+      - name: Simulate combat module lifecycle in Luau
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-combat-v8.0.lua').read_text()
+          assert source.rstrip().endswith('return Lab')
+          base=r'''
+          local signal={Connect=function(self,cb)
+              return {Disconnect=function(self) end}
+          end}
+          local player={Character=nil,CharacterAdded=signal}
+          local services={
+              Players={LocalPlayer=player},
+              ReplicatedStorage={FindFirstChild=function(self,key) return nil end},
+              RunService={Heartbeat=signal}
+          }
+          game={GetService=function(self,service)
+              return services[service]
+          end}
+          '''
+          tests=r'''
+          local ctx={stats=function() return {
+              amber=100, hp=100, maxHp=100, growth=0.32
+          } end}
+          local lab=Lab.attach(ctx)
+          assert(not lab.enabled)
+          assert(lab.status=="OFF")
+          assert(string.find(lab.report(),"mode=OFF",1,true))
+          assert(lab.setEnabled(true)==true)
+          assert(lab.enabled==true)
+          assert(lab.patchedConfig==false)
+          assert(lab.configStatus=="COMBAT CONFIG UNAVAILABLE")
+          assert(string.find(lab.report(),"LOCAL BOOST ON",1,true))
+          assert(lab.setEnabled(false)==false)
+          assert(lab.status=="OFF")
+          lab.close()
+          assert(lab.alive==false and lab.enabled==false)
+          print("V8_LUAU_LIFECYCLE_TESTS_PASS")
+          '''
+          Path('/tmp/test-v8.luau').write_text(base+source.rsplit('return Lab',1)[0]+'\n'+tests)
+          PY
+          "$LUAU" /tmp/test-v8.luau
