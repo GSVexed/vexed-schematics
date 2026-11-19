@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v15.0.lua             roblox-tools/feral-nova-flight-v28.1.lua             roblox-tools/feral-nova-native-recovery-v15.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-mechanics-v28.0.lua             roblox-tools/feral-nova-diagnostics-v28.0.lua             roblox-tools/feral-nova-prime-ui-v28.0.lua             roblox-tools/feral-nova-prime-standalone-v28.0.lua; do
+          for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v15.0.lua             roblox-tools/feral-nova-flight-v28.0.lua             roblox-tools/feral-nova-native-recovery-v15.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-mechanics-v28.0.lua             roblox-tools/feral-nova-diagnostics-v28.0.lua             roblox-tools/feral-nova-prime-ui-v28.0.lua             roblox-tools/feral-nova-prime-standalone-v28.0.lua; do
             "$COMPILER" --null "$f"
           done
           echo V28_17_MODULES_COMPILE_PASS
@@ -75,7 +75,7 @@ jobs:
           assert 'WolfDbgNoStamina' in v28
           assert 'CLOT' in v28 and 'FADE' in v28 and 'HEAL' in v28
           assert 'FeralPinned' in v28 and 'FeralClimbTap' in v28
-          flight=bundle['feral-nova-flight-v28.1.lua']
+          flight=bundle['feral-nova-flight-v28.0.lua']
           assert 'FeralFlyDrop' in flight and 'FeralFlyRequest' in flight
           assert 'underwaterExitConfirmed' in flight and 'underwaterExitUnconfirmed' in flight
           assert 'FERAL_NOVA_PRIME_ACTIVE' in v28
@@ -198,7 +198,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          s=Path('roblox-tools/feral-nova-flight-v28.1.lua').read_text()
+          s=Path('roblox-tools/feral-nova-flight-v28.0.lua').read_text()
           assert s.rstrip().endswith('return Flight')
           s=s[:s.rfind('return Flight')]
           mock=r'''
