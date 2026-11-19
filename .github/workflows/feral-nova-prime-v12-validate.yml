@@ -230,6 +230,74 @@ jobs:
           Path('/tmp/v12-carry-life.luau').write_text(mock+src+'\n'+cases)
           PY
           "$LUAU" /tmp/v12-carry-life.luau
+      - name: Luau test - release Rest before executing native carry
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-carry-v12.0.lua').read_text().rsplit('return Carry',1)[0]
+          mock=r'''
+          local _G={}
+          local stamp=10
+          os={clock=function()return stamp end}
+          local calls={}
+          local scheduled={}
+          task={delay=function(seconds,fn)
+              table.insert(scheduled,{duration=seconds,fn=fn})
+          end}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return nil end,
+              FindFirstChild=function(self,k)return nil end
+          }
+          local player={Character=char,
+              GetAttribute=function(self,k)return nil end}
+          _G.FeralCarryCan=function()return true end
+          _G.FeralCarryPress=function()
+              table.insert(calls,"carry")
+          end
+          local inputCb,heartbeat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end,
+                  InputBegan={Connect=function(self,fn)
+                      inputCb=fn
+                      return {Disconnect=function(self)inputCb=nil end}
+                  end}
+              }end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      heartbeat=fn
+                      return {Disconnect=function(self)heartbeat=nil end}
+                  end}}
+              end
+          end}
+          Enum={KeyCode={G=1}}
+          '''
+          cases=r'''
+          local recovery={beforeCarry=function()
+              table.insert(calls,"rest_off")
+              return true
+          end}
+          local C=Carry.attach({recovery=recovery})
+          assert(C.press()==true)
+          assert(#calls==1 and calls[1]=="rest_off")
+          assert(#scheduled==1)
+          assert(scheduled[1].duration>=.15)
+          assert(C.helperCalls==0)
+          scheduled[1].fn()
+          assert(#calls==2 and calls[2]=="carry")
+          assert(C.helperCalls==1)
+          assert(C.preemptedRest==1)
+          C.close()
+          assert(inputCb==nil and heartbeat==nil)
+          print("V12_REST_OFF_BEFORE_NATIVE_CARRY_PASS")
+          '''
+          Path('/tmp/v12-carry-order.luau').write_text(mock+source+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v12-carry-order.luau
       - name: Luau test - carrying pauses recovery but does not disable it
         shell: bash
         run: |
