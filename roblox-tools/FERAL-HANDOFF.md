@@ -1,5 +1,33 @@
 # FERAL project continuation
 
+## Latest — 19 November 2026: NOVA PRIME v12 carry-critical repair
+
+**User feedback:** "if im trying to carry something then why would i want it to not work? and tons of these features arent at the level need, please fix this." This followed v11's non-specific "stop on grabs/ability keys" logic in Mobile Recovery and prior escape misclassification. The user expects native carrying prey/carcasses not to be blocked by Auto Escape or recovery. Do not treat ordinary carrying as an incoming victim capture.
+
+**New client-source verification** from attached archive `UPLOAD_PART_002_DATA.zip`:
+- **S0003938 FeralCarryClient**: the game natively binds `FeralCarry` on `CarryConfig.KEY` (G in relevant game code), exports `_G.FeralCarryPress` and `_G.FeralCarryCan`, checks own `FeralClamp` ObjectValue with `Carry` to choose drop, `FeralCarcassCarry` to drop carcass, and chooses target `carry` or carcass `pick`. Native remotes include `FeralWorld("carry", target)`, `FeralWorld("release")`, and `FeralCarcassCarry("pick"/"drop")`; nova does not fabricate these.
+- **S0003896 FeralLungeUI**: `FeralCarried` on own character is being carried by another animal, with separate `FeralCarryEscape` binding. Own `FeralClamp` with prey is the hunter's outgoing grapple; the UI includes a `PREY/YOU` tug distinction.
+- **S0003869 WolfController**: `tryBite` returns when own `FeralClamp` exists, a native combat restriction, not introduced by NOVA.
+- `FeralPinned`/`FeralDragged` are capture/victim states distinct from carrying. No current client evidence proves a bypass of the server's forbidden carry+attack combination.
+
+**Published v12 files**: [single-file launcher](feral-nova-prime-standalone-v12.0.lua), [modular loader](feral-nova-prime-v12.0.lua), [native Carry](feral-nova-carry-v12.0.lua), [Carry-aware Escape](feral-nova-escape-v12.0.lua), [Carry-aware Mobile Recovery](feral-nova-mobile-v12.0.lua), [Carry-aware Safe Rest](feral-nova-recovery-v12.0.lua), [UI](feral-nova-prime-ui-v12.0.lua), [guide](README-feral-nova-prime-v12.0.md), [CI](../.github/workflows/feral-nova-prime-v12-validate.yml).
+
+**Changes:**
+- A contextual `CARRY / PICK` or `DROP / RELEASE` quick-strip button invokes the game's native helper when accessible, otherwise sends normal G via executor key injection if supported; manual G always remains usable. Native capability and pickup eligibility remain game/server-dependent. .39s accidental double-action cooldown.
+- Escape ignores outgoing prey/carcass carries, but retains protection when own character is actually pinned or carried; prints `CARRYING / ESCAPE NOT NEEDED` and no escape packets while hunting.
+- Mobile Rest compatibility experiment pauses and cancels **only its own Rest signal** on G or while holding prey. It **remains enabled and resumes baseline** after release, without requesting Rest that might block carrying.
+- Safe Rest refuses to request Rest while holding prey/carcass and sends its own Rest=false before a deliberate carry. The carry button schedules native helper ~0.17s after Rest release if preemption was necessary.
+- No enemy RootPart edits, no fake rewards, no claim of always-on 2× HP/4× negative-effect recovery or guaranteed instant escapes.
+
+**CI results:** official Luau compilation all modules+standalone, nine source modules embedded byte-for-byte, pure carry predator-victim classification tests (prey, carcass, dragged/pinned/carried), native helper/keypress path and throttling, Rest-off-before-native-carry ordering, mobile G pause + resume, and escape suppression while carrying but shake when captured. Last successful run: https://github.com/GSVexed/vexed-schematics/actions/runs/44550415231 . Offline tests cannot prove server carry success.
+
+**Recommended one-line launcher:**
+`loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v12.0.lua"))()`
+
+**Caveats:** Fresh join is still advisable after old v7/v8 physical hitbox edits. Do not claim successful server carry or persistent server regeneration until measured in live session. GitHub runner is not a PC runner or access to live Roblox.
+
+---
+
 ## Latest — 19 November 2026: NOVA PRIME v10, clean physical geometry and honest 2×/4× Rest tracking
 
 **User feedback after v9 (November 19):** User could not physically approach other animals; requested health regen boost and 4× clearance of injury/bleed/venom. Latest v9 copied report: Auto Escape observed 22 shake requests, 19 shake progress changes, one release in 3.34s; attack guide 22 own bite starts, 16 nearby HP decreases, no verified longer hitbox effect; v9 Safe Rest enabled but 0 Rest requests and 118 old danger blocks, while normal-state healing showed 80 positive intervals. This was actionable.
