@@ -1,0 +1,91 @@
+name: FERAL Aurora NOVA v4 validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-aurora-nova-ui-v4.0.lua'
+      - 'roblox-tools/feral-aurora-nova-v4.0.lua'
+      - '.github/workflows/feral-aurora-nova-v4-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/luau-nova.zip
+          mkdir -p /tmp/luau-nova
+          unzip -q /tmp/luau-nova.zip -d /tmp/luau-nova
+          compiler="$(find /tmp/luau-nova -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile Aurora NOVA modules and inherited engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            roblox-tools/feral-aurora-engine-v2.1.lua \
+            roblox-tools/feral-aurora-power-v3.1.lua \
+            roblox-tools/feral-aurora-nova-ui-v4.0.lua \
+            roblox-tools/feral-aurora-nova-v4.0.lua; do
+            "$COMPILER" --null "$f"
+          done
+          echo NOVA_LUAU_COMPILE_PASS
+      - name: Check ESP, escape safety and UI scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools')
+          ui=(p/'feral-aurora-nova-ui-v4.0.lua').read_text()
+          entry=(p/'feral-aurora-nova-v4.0.lua').read_text()
+          for item in (
+              'record.h.FillTransparency = 1',
+              'record.h.OutlineTransparency = 0',
+              'record.b.StudsOffsetWorldSpace',
+              'record.name.TextStrokeTransparency',
+              'record.fill.Parent.Visible = false',
+              'function ctx.refreshTracker(force)',
+              'function Module.mount(ctx)',
+              'function capturedByPrompt(playerGui, ownGui)',
+              'function capturedByState(target)',
+              'UIS:GetFocusedTextBox()',
+              'A.nextPulse = now + .125',
+              'A.press = function() keyDown(0x20) end',
+              'stopAuto()', 'releaseSpace()',
+              'A.enabled = true',
+              'FeralAuroraNovaV40',
+              'ONE-TAP SETUP',
+              'PLAYER OUTLINES',
+              'THROUGH WALLS',
+              'RESET ALL',
+              'RightShift',
+              'ctx.cleanupUI = function()',
+          ):
+              assert item in ui,item
+          assert 'feral-aurora-nova-ui-v4.0.lua' in entry
+          assert 'feral-aurora-power-v3.1.lua' in entry
+          assert 'game.PlaceId ~= 108901361810209' in entry
+          for source in (ui,entry):
+              for danger in (
+                  'SetAttribute("Amber"', 'SetAttribute("Health"',
+                  'SetAttribute("Hunger"', 'SetAttribute("Thirst"',
+                  'FireServer("Gift"', 'FireServer("FeralSelect"',
+                  'github_pat_', 'Authorization:',
+              ):
+                  assert danger not in source,danger
+          print('NOVA_SOURCE_SCOPE_PASS')
+          PY
