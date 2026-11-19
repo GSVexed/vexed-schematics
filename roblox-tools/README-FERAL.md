@@ -1,6 +1,18 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v9.0 (combat-first, no fake hitboxes or surprise Rest)
+## CURRENT — NOVA PRIME v10.0 (clean physics / Rest recovery evidence)
+
+**[v10 guide](README-feral-nova-prime-v10.0.md)** · Critical cleanup after user report of physical obstruction approaching other animals and missing 2× HP / 4× negative-effect recovery. **No enemy hitbox or collision-property edits.** Adds a read-only target root/raycast collision audit. **Fully rejoin FERAL once before first v10 run** to discard any residual v7/v8 client root enlargement; old originals can't be inferred safely. One compact REST RECOVERY switch now requests normal Rest when *injury, bleeding or venom needs clearing even at full HP*, with live attribute-rate comparison. No automatic Rest at startup or while fighting. The server still decides Rest applicability; 2×/4× are archived Rest conditions, **not guaranteed always-on multipliers**. Preserves v9 directional/tug escape and no-glow close-range ESP, with six main controls and a single Endurance switch.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v10.0.lua"))()
+```
+
+Prior v9 and earlier releases are preserved below. Official Luau CI tests source behaviour offline, not the live FERAL server.
+
+---
+
+## PREVIOUS — NOVA PRIME v9.0 (combat-first, no fake hitboxes or surprise Rest)
 
 **[NOVA PRIME v9 guide](README-feral-nova-prime-v9.0.md)** · Critical repair after live Tiger-grab failure: archived FERAL **SHAKE_MASH=false** and uses `FeralShakeTaps` (A/D) and `FeralTugTap` actions that the v6–v8 escape watcher missed. V9 uses distinct native getoff/shake/tug intervals, own grab-state signals, progress observation, and bounded fallback. Server acceptance is unproven. The older AUTO REST feature could prevent normal bites because `WolfController.doBite` returns while `WolfRest` is true. V9 changes this to **SAFE REST OFF by default**, releases its own Rest on movement/attack, and passively watches Turtle shell conditions. It **removes ineffectual enemy hitbox enlargement** and instead shows a native CombatConfig bite-range marker with Bite-ready status; no claim of extra server damage. ESP, single Endurance, agility, vision, RightShift and copyable reports remain.
 
