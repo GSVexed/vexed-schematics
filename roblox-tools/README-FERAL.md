@@ -1,6 +1,25 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v14.0 (nonphysical reach, non-Rest regen, Bald Eagle water-flight/carry)
+## CURRENT — NOVA PRIME v15.0 (native recovery restored, friendly baby carry, Q climbing)
+
+**[Full v15 release notes](README-feral-nova-prime-v15.0.md)** · Integrated 15-module single-download hub, preserving the exact successful v14 Endurance module (no growth edits). Core fixes:
+
+- **Recovery:** Restores the older v1.3 native `WolfActions:FireServer("Rest",true)` plus guarded local `WolfRest=false` pose mask, instead of relying only on local `NeedsConfig` regen values. It temporarily releases **its own** Rest signal for Mouse1/Mouse2 attacks (including held input), Q climbing, G carrying, flight, dive, Turtle shell, capture and chat. Unlike earlier misleading versions, measured masked-Rest recovery is **excluded** from pure non-Rest config measurements. Actual server health/4× status results remain unverified; combat healing may still be restricted by the game.
+- **Baby friendly carry:** An eligible baby may be carried by an adult of the same species without v14's immediate automatic `getoff`. Verified outgoing `FeralClamp` or bounded same-species proximity is required. `FeralPinned` and `FeralDragged` always override and activate normal escape. Optional BABY CARRY toggle.
+- **Q climbing:** Integrated Quick Climb Q buffer (1.3 s) plus reversible local grip/facing/sprint-grab adjustments, native `FeralClimbTap` when `ClimbCan`, separate Q CLIMB toggle and Dive protection. The older standalone add-on automatically closes if present.
+- **Bite evidence:** Retains v14 nonphysical virtual reach but now records mouse attack inputs in extended-only windows and whether native `WolfBiteAt` started, so the report distinguishes not attempted, not initiated and HP changes; no server damage guarantee.
+- **Retains:** Existing v14 stamina, water takeoff/air carrying, native G/drop, calm native escape cadence, Turtle Safe Rest, near-camera names, outline ESP, Agility and Clear View.
+- **Validation:** Official Luau compiled the complete 15-module bundle and all v14 regressions plus new native recovery, friendly baby and Q climbing tests passed. [Successful v15 GitHub Actions](https://github.com/GSVexed/vexed-schematics/actions/runs/44581329632). **Live game-server acceptance has not been tested**.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v15.0.lua"))()
+```
+
+**Migration:** Fully rejoin FERAL if old v7/v8 hitbox experiments may still have changed local physical root sizes. V15 doesn't physically enlarge other animals. If Rest-mask recovery interferes with gameplay, use the ACTIVE RECOVERY switch OFF without losing Endurance, ESP, Carry, Climb or Reach.
+
+---
+
+## PREVIOUS — NOVA PRIME v14.0 (nonphysical reach, non-Rest regen, Bald Eagle water-flight/carry)
 
 **[Full v14 release documentation](README-feral-nova-prime-v14.0.md)** · This is the latest **single-file hub**, with twelve pinned source modules. Following user feedback that the v13 hub lacked useful attack range, permanent regeneration outside Rest and Bald Eagle recovery/takeoff ability, v14 integrates:
 
