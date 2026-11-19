@@ -502,6 +502,156 @@ jobs:
           Path('/tmp/v13-rest-carry.luau').write_text(mock+src+'\n'+cases)
           PY
           "$LUAU" /tmp/v13-rest-carry.luau
+      - name: Luau test - native drop allowed when pickup check is false
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-carry-v13.0.lua').read_text().rsplit('return Carry',1)[0]
+          mock=r'''
+          local _G={}
+          local stamp=3
+          os={clock=function()return stamp end}
+          local n=0
+          local clamp={
+              Value={Parent={}},
+              IsA=function(self,k)return k=="ObjectValue"end,
+              GetAttribute=function(self,k)
+                  if k=="Carry" then return true end
+              end
+          }
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return nil end,
+              FindFirstChild=function(self,k)
+                  if k=="FeralClamp" then return clamp end
+              end
+          }
+          local player={
+              Character=char,
+              GetAttribute=function(self,k)return nil end
+          }
+          _G.FeralCarryCan=function()return false end
+          _G.FeralCarryPress=function()n+=1 end
+          local inputFn,beat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end,
+                  InputBegan={Connect=function(self,fn)
+                      inputFn=fn
+                      return {Disconnect=function(self)inputFn=nil end}
+                  end}}
+              end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function(self)beat=nil end}
+                  end}}
+              end
+          end}
+          Enum={KeyCode={G=1}}
+          '''
+          test=r'''
+          local C=Carry.attach({})
+          beat()
+          assert(C.holding==true and C.victim==false)
+          assert(C.canInteract==true)
+          assert(C.action=="DROP / RELEASE")
+          assert(C.press()==true)
+          assert(n==1 and C.helperCalls==1)
+          assert(C.lastInputAt==stamp)
+          C.close()
+          assert(C.alive==false and beat==nil)
+          print("V13_NATIVE_DROP_CAN_FALSE_PASS")
+          '''
+          Path('/tmp/v13-native-drop.luau').write_text(mock+src+'\n'+test)
+          PY
+          "$LUAU" /tmp/v13-native-drop.luau
+      - name: Luau test - carry G transition cannot trigger speculative escape
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-escape-v13.0.lua').read_text().rsplit('return Escape',1)[0]
+          mock=r'''
+          local stamp=1
+          os={clock=function()return stamp end}
+          local bind={Connect=function(self,fn)
+              return {Disconnect=function(self)end}
+          end}
+          local attrs={FeralClampN=2,FeralShakeNeed=4}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              GetAttributeChangedSignal=function(self,k)return bind end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return {Health=100}end
+              end
+          }
+          local player={
+              Character=char,CharacterAdded=bind,
+              GetAttribute=function(self,k)return nil end,
+              FindFirstChildOfClass=function(self,k)
+                  return {GetDescendants=function(self)return {}end}
+              end
+          }
+          local sent={}
+          local remote={
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,action)table.insert(sent,action)end
+          }
+          local heartbeat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player} end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,k)
+                      if k=="FeralLunge" then return remote end
+                  end}
+              end
+              if k=="ContextActionService" then return {
+                  GetAllBoundActionInfo=function(self)return {}end
+              }end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end
+              }end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      heartbeat=fn
+                      return {Disconnect=function(self)heartbeat=nil end}
+                  end}}
+              end
+          end}
+          '''
+          test=r'''
+          local lastG=stamp
+          local ctx={state={alive=true},carry={
+              classify=function(char)
+                  return attrs.FeralPinned and "PINNED" or "FREE",
+                      false, attrs.FeralPinned==true
+              end,
+              lastInputAt=lastG,lastAt=-math.huge
+          }}
+          local E=Escape.attach(ctx)
+          heartbeat()
+          assert(#sent==0 and E.status=="CARRY ACTION / ESCAPE SUSPENDED")
+          stamp=1.7;heartbeat()
+          assert(#sent==1 and sent[1]=="shake")
+          -- A genuinely pinned victim must still be escaped immediately
+          -- even during a fresh native G timestamp.
+          attrs.FeralPinned=true
+          ctx.carry.lastInputAt=stamp
+          stamp=2.0;heartbeat()
+          assert(E.status~="CARRY ACTION / ESCAPE SUSPENDED")
+          E.close()
+          assert(heartbeat==nil)
+          print("V13_G_GRACE_AND_TRUE_VICTIM_PRIORITY_PASS")
+          '''
+          Path('/tmp/v13-g-grace.luau').write_text(mock+src+'\n'+test)
+          PY
+          "$LUAU" /tmp/v13-g-grace.luau
       - name: Luau test - native escape actions only when captured, not holding
         shell: bash
         run: |
