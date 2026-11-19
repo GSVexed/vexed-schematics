@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'roblox-tools/feral-nova-prime-v11.0.lua'
+      - 'roblox-tools/feral-nova-prime-standalone-v11.0.lua'
       - 'roblox-tools/feral-nova-prime-ui-v11.0.lua'
       - 'roblox-tools/feral-nova-mobile-v11.0.lua'
       - '.github/workflows/feral-nova-prime-v11-validate.yml'
@@ -45,7 +46,8 @@ jobs:
             roblox-tools/feral-nova-mobile-v11.0.lua \
             roblox-tools/feral-nova-tags-v8.0.lua \
             roblox-tools/feral-nova-prime-ui-v11.0.lua \
-            roblox-tools/feral-nova-prime-v11.0.lua; do
+            roblox-tools/feral-nova-prime-v11.0.lua \
+            roblox-tools/feral-nova-prime-standalone-v11.0.lua; do
             "$COMPILER" --null "$f"
           done
           echo V11_LUAU_COMPILE_PASS
@@ -95,6 +97,30 @@ jobs:
                           'FireServer("Gift"', 'HttpPost(', 'github_pat_'):
                   assert bad not in source,bad
           print('V11_INTEGRATION_PASS')
+          PY
+      - name: Verify single-file bundle matches all modules byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('roblox-tools')
+          blob=(p/'feral-nova-prime-standalone-v11.0.lua').read_text()
+          assert 'game:HttpGet(ROOT..path)' not in blob
+          assert 'local ok,body=true,BUNDLED[path]' in blob
+          assert 'game.PlaceId~=108901361810209' in blob
+          matches=re.findall(
+              r'\["([^"]+)"\]=\[==========\[\n(.*?)\n\]==========\]',
+              blob,re.S
+          )
+          assert len(matches)==8,[(n,len(b)) for n,b in matches]
+          for name,body in matches:
+              native=(p/name).read_text()
+              assert body==native,("Bundled module drift",name)
+          assert 'ctx.mobile=mobile.attach(ctx)' in blob
+          assert 'function M.setEnabled(v)' in blob
+          print('V11_BUNDLE_EXACT_8_MODULES_PASS')
           PY
       - name: Luau mobile recovery uplift classification
         shell: bash
