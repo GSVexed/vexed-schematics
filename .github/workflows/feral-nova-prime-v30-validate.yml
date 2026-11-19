@@ -87,7 +87,7 @@ jobs:
           assert 'activeRecovery.attach(ctx)' in v30
           assert 'feral-nova-active-recovery-v29.0.lua' in bundle
           assert 'Mechanics.inspect()' in ui
-          assert 'LOCAL EDITS ' in ui
+          assert 'EAGLE GOALS • PRESS ' in ui
           assert 'WolfDbgNoStamina' in v30
           assert 'CLOT' in v30 and 'FADE' in v30 and 'HEAL' in v30
           assert 'FeralPinned' in v30 and 'FeralClimbTap' in v30
