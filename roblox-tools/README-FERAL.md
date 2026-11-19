@@ -1,6 +1,26 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v13.0 (full cross-feature audit, one recommended build)
+## CURRENT — NOVA PRIME v14.0 (nonphysical reach, non-Rest regen, Bald Eagle water-flight/carry)
+
+**[Full v14 release documentation](README-feral-nova-prime-v14.0.md)** · This is the latest **single-file hub**, with twelve pinned source modules. Following user feedback that the v13 hub lacked useful attack range, permanent regeneration outside Rest and Bald Eagle recovery/takeoff ability, v14 integrates:
+
+- **Bite Reach:** virtual \`CombatConfig\` client claim-range and body-gap extension **without resizing any animal or changing collision**; Bite Guide compares normal versus extended-only windows and observed HP changes.
+- **Non-Rest recovery:** local cached \`NeedsConfig.HEALTH_REGEN\` 2×, \`HEALTH_NO_REGEN_IN_COMBAT=false\`, and injury/bleed/venom rates 4× when matching cached fields are present. Unlike normal Safe Rest, this path never requests Rest. **Actual server healing/condition improvements are not yet proven**, so the hub reports measured non-Rest HP and effect rates.
+- **Flight/land Endurance:** zero cached sprint/jump cost plus stronger cached regeneration; restores \`WolfDbgNoStamina\` when the same character's controller overwrites it. Separate Bald Eagle flight/land stamina and large-HP-loss telemetry.
+- **Bald Eagle water/air carry:** reversible cached \`FlightConfig.WATER.NO_TAKEOFF=false\` and \`GRACE=0\`, a native \`FeralFlyRequest\` on water jumping, temporary outgoing \`FeralClamp.Mode="drag"\` for carrying prey during takeoff or flight (including mid-air pickup), restored before native G/drop.
+- **Other systems retained:** controlled native escape (good, not instant), native carry/drop, Turtle Safe Rest/shell observer, no-glow outline ESP, near-camera nametags, Agility, Clear View, single-screen UI, status and RESET/CLOSE.
+
+\`\`\`lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v14.0.lua"))()
+\`\`\`
+
+**Verification:** [Official Luau v14 workflow passed](https://github.com/GSVexed/vexed-schematics/actions/runs/44565612406), including 12-module exact bundle matching, Endurance reapplication, reversible nonphysical reach, status recovery config, native water takeoff/carry cleanup and earlier carry/escape/Rest regressions. **The private game server and live Velocity session were not tested; server-authoritative damage, healing, stamina, takeoff and prey retention are unverified.**
+
+**Migration:** fully rejoin the game once if the old v7/v8 physically enlarged hitboxes in this Roblox session. v14 never touches enemy part sizes.
+
+---
+
+## PREVIOUS — NOVA PRIME v13.0 (full cross-feature audit, one recommended build)
 
 **[Release guide / full feature audit](README-feral-nova-prime-v13.0.md)** · Replaces the piecemeal patches after repeated user reports that carry, recovery, combat and visibility interfered with each other. **Nine audited source modules bundled into one download**, with official Luau CI and cross-feature tests.
 
