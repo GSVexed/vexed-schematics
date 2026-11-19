@@ -1,0 +1,289 @@
+name: FERAL NOVA PRIME v27 - full source and diagnostic regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-standalone-v27.0.lua'
+      - 'roblox-tools/feral-nova-prime-ui-v27.0.lua'
+      - 'roblox-tools/feral-nova-diagnostics-v27.0.lua'
+      - '.github/workflows/feral-nova-prime-v27-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau v0.747 tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90             'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip'             -o /tmp/feral-luau-v27.zip
+          mkdir -p /tmp/feral-luau-v27
+          unzip -q /tmp/feral-luau-v27.zip -d /tmp/feral-luau-v27
+          compiler="$(find /tmp/feral-luau-v27 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          luau="$(dirname "$compiler")/luau"
+          chmod +x "$luau"
+          echo "COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "LUAU=$luau" >> "$GITHUB_ENV"
+      - name: Compile standalone and all 17 module sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v15.0.lua             roblox-tools/feral-nova-flight-v27.1.lua             roblox-tools/feral-nova-native-recovery-v15.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-mechanics-v25.0.lua             roblox-tools/feral-nova-diagnostics-v27.0.lua             roblox-tools/feral-nova-prime-ui-v27.0.lua             roblox-tools/feral-nova-prime-standalone-v27.0.lua; do
+            "$COMPILER" --null "$f"
+          done
+          echo V27_17_MODULES_COMPILE_PASS
+      - name: Exact module preservation and privacy invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-prime-standalone-v15.0.lua').read_text()
+          v25=(root/'feral-nova-prime-standalone-v25.0.lua').read_text()
+          v27=(root/'feral-nova-prime-standalone-v27.0.lua').read_text()
+          pattern=r'\["([^"]+)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          baseline=dict(re.findall(pattern,old,re.S))
+          b25=dict(re.findall(pattern,v25,re.S))
+          bundle=dict(re.findall(pattern,v27,re.S))
+          assert len(baseline)==15 and len(b25)==16 and len(bundle)==17
+          for name,src in baseline.items():
+              if name not in ('feral-nova-prime-ui-v15.0.lua','feral-nova-flight-v15.0.lua'):
+                  assert bundle.get(name)==src,('Lost v15 system',name)
+          assert bundle['feral-nova-mechanics-v25.0.lua']==b25['feral-nova-mechanics-v25.0.lua']
+          for name,src in bundle.items():
+              assert src==(root/name).read_text(),('Standalone drift',name)
+          ui=bundle['feral-nova-prime-ui-v27.0.lua']
+          diag=bundle['feral-nova-diagnostics-v27.0.lua']
+          assert 'ctx.diag=diagnostics.attach(ctx)' in v27
+          assert 'ctx.diag.close()' in v27
+          assert 'Diag.close()' in ui
+          assert 'Diag.report()' in ui and 'Diag.save()' in ui and 'Diag.copy()' in ui
+          assert 'AUTO SAVE EVERY 25s' in ui
+          assert 'Enum.KeyCode.RightShift' in ui and 'Enum.KeyCode.End' in ui
+          assert 'REGEN 2x / 4x' in ui and 'Q CLIMB ON' in ui
+          assert 'FeralNovaPrimeV270' in ui
+          assert 'WolfDbgNoStamina' in v27
+          assert 'CLOT' in v27 and 'FADE' in v27 and 'HEAL' in v27
+          assert 'FeralPinned' in v27 and 'FeralClimbTap' in v27
+          flight=bundle['feral-nova-flight-v27.1.lua']
+          assert 'FeralFlyDrop' in flight and 'FeralFlyRequest' in flight
+          assert 'waterTop(position,body)' in flight
+          assert 'submergedTakeoffBlocks' in flight and 'underwaterFlightExits' in flight
+          assert 'setLocal(cfg.WATER,"GRACE",0' not in flight
+          assert 'SURFACE FLY' in ui
+          assert 'FERAL_NOVA_DIAG_V27' in diag
+          assert 'noDrain=yes(attribute(char,"WolfDbgNoStamina"))' in diag
+          assert 'GetServerTimeNow()' in diag
+          assert 'statusCleared' in diag and 'modes={}' in diag
+          for forbidden in ('UserId','player.Name','player.DisplayName','Chat','HttpPost','request({','syn.request','http_request','Webhook'):
+              assert forbidden not in diag,('Possible privacy problem',forbidden)
+          assert 'TRANSFER=REMOTE' not in diag
+          assert 'LOCAL_FILE_ONLY_NO_NETWORK_UPLOAD' in diag
+          assert 'SERVER_ACCEPTANCE=UNVERIFIED' in diag
+          assert 'FERAL_NOVA_v27_session.json' in diag
+          print('V27_ALL_V15_FEATURES_UNCHANGED_AND_TELEMETRY_PRIVACY_PASS')
+          PY
+      - name: Mocked Luau telemetry - own attributes, aggregation and save
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-diagnostics-v27.0.lua').read_text()
+          assert source.rstrip().endswith('return Diagnostics')
+          source=source[:source.rfind('return Diagnostics')]
+          mock=r'''
+          local clock=1
+          os={clock=function() return clock end}
+          local attrs={Species="Eagle",Stamina=50,StaminaMax=50,Growth=.73,
+             FeralBleed=4,FeralVenomAmt=3,FeralInjury=2,WolfDbgNoStamina=true}
+          local playerAttrs={FeralLungeReadyAt=110,FeralLungeCdTotal=60}
+          local h={Health=50,MaxHealth=100}
+          local clamp={IsA=function(self,typ)return typ=="ObjectValue"end,Value=nil}
+          local char={
+              GetAttribute=function(self,k)return attrs[k]end,
+              FindFirstChildOfClass=function(self,k)if k=="Humanoid" then return h end end,
+              FindFirstChild=function(self,k)if k=="FeralClamp" then return clamp end end
+          }
+          local player={
+              Character=char,
+              GetAttribute=function(self,k)return playerAttrs[k]end
+          }
+          local beat,input
+          local clipboard,file,path=nil,nil,nil
+          game={GetService=function(self,key)
+              if key=="Players" then return {LocalPlayer=player} end
+              if key=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function()beat=nil end}
+                  end
+              }} end
+              if key=="UserInputService" then return {
+                  GetFocusedTextBox=function()return nil end,
+                  InputBegan={Connect=function(self,fn)
+                      input=fn
+                      return {Disconnect=function()input=nil end}
+                  end}
+              }end
+              if key=="HttpService" then return {
+                  JSONEncode=function(self,data)
+                      assert(data.summary.scope=="OWN_CHARACTER_ONLY")
+                      assert(data.summary.samples>=1)
+                      return '{"diagnostics":true}'
+                  end
+              } end
+              if key=="Workspace" then return {GetServerTimeNow=function()return 100 end}end
+          end}
+          Enum={UserInputType={MouseButton1=1},KeyCode={Q=2,G=3,Space=4}}
+          writefile=function(p,v)path=p;file=v end
+          setclipboard=function(t)clipboard=t end
+          '''
+          cases=r'''
+          local ctx={power={stamina="ENDURANCE"},native={active=false},
+              regen={enabled=true,applied=true},
+              mechanics={enabled={growth=false,carry=false,cooldown=false}},
+              escape={enabled=true},baby={enabled=true},climb={enabled=true},
+              state={flags={playerFinder=true}}}
+          local D=Diagnostics.attach(ctx)
+          assert(D==ctx.diag and D.autoSave)
+          beat()
+          assert(D.samplesTotal==1)
+          clock=2
+          attrs.Stamina=46
+          attrs.FeralBleed=2
+          attrs.FeralVenomAmt=1
+          attrs.Growth=.74
+          h.Health=55
+          beat()
+          assert(D.samplesTotal==2)
+          assert(D.healthGained==5)
+          assert(D.staminaLost==4)
+          assert(D.statusCleared.bleed==2)
+          assert(D.statusCleared.venom==2)
+          assert(D.growthGained>.009)
+          assert(D.modes.config_only.hpUp==5)
+          input({UserInputType=Enum.UserInputType.MouseButton1,KeyCode=nil},false)
+          assert(D.attackInputs==1)
+          local ok,msg=D.save()
+          assert(ok and file=='{"diagnostics":true}' and path=="FERAL_NOVA_v27_session.json")
+          local copied=D.copy()
+          assert(copied and string.find(clipboard,"HP gained=5",1,true))
+          assert(string.find(D.report(),"SERVER_ACCEPTANCE=UNVERIFIED",1,true))
+          D.close()
+          assert(D.alive==false and beat==nil and input==nil)
+          print("V27_AUTOMATIC_DIAGNOSTICS_OWN_SCOPE_SAVE_COPY_AND_CLEANUP_PASS")
+          '''
+          Path('/tmp/feral-v27-telemetry-test.luau').write_text(mock+source+cases)
+          PY
+          "$LUAU" /tmp/feral-v27-telemetry-test.luau
+
+      - name: Mocked Luau - water surface takeoff, underwater flight drop, restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('roblox-tools/feral-nova-flight-v27.1.lua').read_text()
+          assert s.rstrip().endswith('return Flight')
+          s=s[:s.rfind('return Flight')]
+          mock=r'''
+          local now=10
+          os={clock=function()return now end}
+          local attrs={Species="Eagle",FeralSwimLocal=true}
+          local root={Position={X=0,Y=5,Z=0},Size={Y=2}}
+          local hum={Health=100,HipHeight=2,FloorMaterial=2,
+             GetState=function()return 3 end}
+          local chAdded,charAdded,jump,input,beat
+          local char={
+            Parent={},
+            GetAttribute=function(self,k)return attrs[k]end,
+            SetAttribute=function(self,k,v)attrs[k]=v end,
+            FindFirstChildOfClass=function(self,k)
+              if k=="Humanoid"then return hum end
+            end,
+            FindFirstChild=function(self,k)
+              if k=="HumanoidRootPart"then return root end
+            end,
+            ChildAdded={Connect=function(self,fn)
+              chAdded=fn;return {Disconnect=function()chAdded=nil end}
+            end}
+          }
+          local player={Character=char,CharacterAdded={Connect=function(self,fn)
+            charAdded=fn;return {Disconnect=function()charAdded=nil end}
+          end}}
+          local cfg={WATER={NO_TAKEOFF=true,GRACE=1.2},
+            canFly=function(c)return true end}
+          local fmod={IsA=function(self,c)return c=="ModuleScript"end}
+          local rs={FindFirstChild=function(self,n)
+            if n=="FeralWorld" then return {FindFirstChild=function(self,k)
+              if k=="FlightConfig"then return fmod end
+            end} end
+          end}
+          require=function(v)assert(v==fmod)return cfg end
+          Vector3={new=function(x,y,z)return {X=x,Y=y,Z=z}end}
+          RaycastParams={new=function()return {}end}
+          Enum={RaycastFilterType={Include=1},Material={Water=2,Air=4},
+             HumanoidStateType={Swimming=3},KeyCode={G=5}}
+          workspace={Terrain={},Raycast=function(self,from,dir,params)
+            return {Material=Enum.Material.Water,Position={Y=6}}
+          end}
+          local u={GetFocusedTextBox=function()return nil end,
+            JumpRequest={Connect=function(self,fn)jump=fn
+              return {Disconnect=function()jump=nil end}end},
+            InputBegan={Connect=function(self,fn)input=fn
+              return {Disconnect=function()input=nil end}end}}
+          game={GetService=function(self,n)
+            if n=="Players"then return {LocalPlayer=player}end
+            if n=="ReplicatedStorage"then return rs end
+            if n=="UserInputService"then return u end
+            if n=="RunService"then return {Heartbeat={Connect=function(self,fn)
+               beat=fn;return {Disconnect=function()beat=nil end}
+            end}}end
+          end}
+          task={defer=function(fn)fn()end}
+          '''
+          cases=r'''
+          local ctx={state={alive=true}}
+          local F=Flight.attach(ctx)
+          assert(F.enabled==false)
+          assert(F.setEnabled(true)==true)
+          assert(cfg.WATER.NO_TAKEOFF==true and cfg.WATER.GRACE==1.2)
+          assert(F.requestTakeoff()==true)
+          assert(F.surfaceRequests==1 and F.submergedTakeoffBlocks==0)
+          assert(cfg.WATER.NO_TAKEOFF==false and attrs.FeralFlyRequest==10)
+          now=10.25
+          attrs.FeralFlyLocal=true
+          beat()
+          assert(cfg.WATER.NO_TAKEOFF==true)
+          assert(F.observedTakeoffs==1)
+          now=10.5
+          attrs.FeralUnderwater=true
+          beat()
+          assert(attrs.FeralFlyDrop==true and F.underwaterFlightExits==1)
+          attrs.FeralFlyLocal=nil
+          attrs.FeralFlyDrop=nil
+          attrs.FeralFlyRequest=nil
+          now=11.5
+          assert(F.requestTakeoff()==false and F.submergedTakeoffBlocks==1)
+          assert(attrs.FeralFlyRequest==nil)
+          attrs.FeralUnderwater=nil
+          now=12
+          assert(F.requestTakeoff()==true)
+          F.setEnabled(false)
+          assert(cfg.WATER.NO_TAKEOFF==true and cfg.WATER.GRACE==1.2)
+          F.close()
+          assert(F.alive==false and beat==nil)
+          print("V27_SURFACE_TAKEOFF_NATIVE_UNDERWATER_DROP_RESTORE_PASS")
+          '''
+          Path('/tmp/feral-v27-water.luau').write_text(mock+s+cases)
+          PY
+          "$LUAU" /tmp/feral-v27-water.luau
