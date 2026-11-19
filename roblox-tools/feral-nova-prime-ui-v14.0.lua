@@ -73,9 +73,10 @@ function UI.mount(ctx)
     local Recovery=ctx.recovery
     local Regen=ctx.regen
     local Reach=ctx.reach
+    local Flight=ctx.flight
     local Carry=ctx.carry
     local Tags=ctx.tags
-    if not Escape or not P or not Lab or not Recovery or not Regen or not Reach or not Carry or not Tags then return nil end
+    if not Escape or not P or not Lab or not Recovery or not Regen or not Reach or not Flight or not Carry or not Tags then return nil end
     local pg=player:FindFirstChildOfClass("PlayerGui")
         or player:WaitForChild("PlayerGui",10)
     if not pg then return nil end
@@ -397,27 +398,32 @@ function UI.mount(ctx)
     border(esp,.79)
     local espTitle=txt(esp,"ESP DETAILS",11,C.muted,true)
     espTitle.Position=UDim2.fromOffset(14,14)
-    espTitle.Size=UDim2.fromOffset(98,22)
+    espTitle.Size=UDim2.fromOffset(75,22)
     local tags=btn(esp,"TAGS",function()
         ctx.toggle("tags")
         saveDisplay()
-    end,78,30)
-    tags.Position=UDim2.fromOffset(116,11)
+    end,65,30)
+    tags.Position=UDim2.fromOffset(91,11)
     local walls=btn(esp,"WALLS",function()
         ctx.toggle("throughWalls")
         saveDisplay()
-    end,80,30)
-    walls.Position=UDim2.fromOffset(204,11)
+    end,65,30)
+    walls.Position=UDim2.fromOffset(163,11)
     local distance=btn(esp,"RANGE",function()
         ctx.setRange(S.range<650 and 900 or 450)
         saveDisplay()
-    end,94,30)
-    distance.Position=UDim2.fromOffset(292,11)
+    end,86,30)
+    distance.Position=UDim2.fromOffset(234,11)
     local reachButton=btn(esp,"REACH",function()
         Reach.setEnabled(not Reach.enabled)
         ctx.onUI()
-    end,106,30)
-    reachButton.Position=UDim2.fromOffset(394,11)
+    end,82,30)
+    reachButton.Position=UDim2.fromOffset(326,11)
+    local waterButton=btn(esp,"WATER FLY",function()
+        Flight.setEnabled(not Flight.enabled)
+        ctx.onUI()
+    end,96,30)
+    waterButton.Position=UDim2.fromOffset(413,11)
     local safeRest=btn(esp,"SAFE REST",function()
         if Recovery.enabled then
             Recovery.setEnabled(false)
@@ -425,8 +431,8 @@ function UI.mount(ctx)
             Recovery.setEnabled(true)
         end
         ctx.onUI()
-    end,100,30)
-    safeRest.Position=UDim2.fromOffset(508,11)
+    end,94,30)
+    safeRest.Position=UDim2.fromOffset(514,11)
     local carryButton=btn(esp,"CARRY  G",function()
         Carry.press()
         ctx.onUI()
@@ -446,7 +452,7 @@ function UI.mount(ctx)
     local reportButton=btn(footer,"COPY STATUS",function()
         local a=ctx.stats()
         local power=P.status()
-        local report=Escape.report().."\n\n"..Carry.report().."\n\n"..Lab.report().."\n\n"..Reach.report().."\n\n"..Regen.report().."\n\n"..Recovery.report().."\n\n"..P.enduranceReport().."\n"..Tags.report()..
+        local report=Escape.report().."\n\n"..Carry.report().."\n\n"..Lab.report().."\n\n"..Reach.report().."\n\n"..Regen.report().."\n\n"..Flight.report().."\n\n"..Recovery.report().."\n\n"..P.enduranceReport().."\n"..Tags.report()..
             "\n\nFERAL v14 | Lease verification"..
             "\nendurance_cached_lease="..tostring(power.staminaMatches)..
             " stamina_profile="..tostring(power.stamina)..
@@ -477,7 +483,9 @@ function UI.mount(ctx)
     reportButton.Position=UDim2.fromOffset(566,5)
     local reset=btn(footer,"RESET",function()
         Lab.setEnabled(false)
-        Mobile.setEnabled(false)
+        Flight.setEnabled(false)
+        Reach.setEnabled(false)
+        Regen.setEnabled(false)
         Recovery.setEnabled(false)
         Escape.setEnabled(false)
         clearFog()
@@ -560,6 +568,8 @@ function UI.mount(ctx)
             distance.Text="RANGE "..tostring(S.range)
             styleButton(reachButton,Reach.enabled,
                 Reach.applied and "REACH ON" or Reach.enabled and "REACH ?" or "REACH OFF")
+            styleButton(waterButton,Flight.enabled,
+                Flight.applied and "WATER ON" or Flight.enabled and "WATER ?" or "WATER OFF")
             styleButton(safeRest,Recovery.enabled,"REST "..(Recovery.enabled and "ON" or "OFF"))
             regenDesc.Text=Regen.applied
                 and "Client inputs changed • measure real HP/effects" or Regen.status
@@ -576,7 +586,9 @@ function UI.mount(ctx)
                     or Carry.holding and ("CARRYING • "..Carry.state.." • G TO DROP")
                     or Escape.active and ("ESCAPING • "..Escape.status)
                     or Lab.ready and "BITE WINDOW (CLIENT)" or Lab.status
-                local secondary=Recovery.enabled and ("REST: "..Recovery.status)
+                local secondary=Flight.water and Flight.enabled
+                    and ("WATER: "..Flight.status)
+                    or Recovery.enabled and ("REST: "..Recovery.status)
                     or (Regen.enabled and Regen.applied
                         and "REGEN CONFIG ACTIVE • SERVER UNVERIFIED")
                     or (Reach.enabled and Reach.applied
@@ -614,6 +626,7 @@ function UI.mount(ctx)
     end
     ctx.onNotice=function()end
     ctx.cleanupUI=function()
+        Flight.close()
         Regen.close()
         Reach.close()
         Carry.close()
@@ -638,6 +651,7 @@ function UI.mount(ctx)
     endurance(true)
     Regen.setEnabled(true)
     Reach.setEnabled(true)
+    Flight.setEnabled(true)
     ctx.refreshTracker(true)
     ctx.onUI()
     return gui
