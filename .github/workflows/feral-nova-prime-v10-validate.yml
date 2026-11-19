@@ -102,6 +102,9 @@ jobs:
           assert 'RootPart.Size=' not in combat
           assert 'nearest_root_can_collide=' in combat
           assert 'nearest_root_collision_group=' in combat
+          assert 'ray_obstruction_category=' in combat
+          assert 'ray_obstruction_collidable=' in combat
+          assert 'RaycastParams.new()' in combat
           assert 'physical_part_edits_by_v10=' in combat
           assert 'part.Size=' not in combat
           assert 'FireServer(' not in combat
@@ -262,7 +265,9 @@ jobs:
           UDim2={fromOffset=function(x,y)return {X=x,Y=y}end}
           UDim={new=function(a,b)return {a,b}end}
           Color3={fromRGB=function()return {}end}
-          Enum={UserInputType={MouseButton1=1}}
+          Enum={UserInputType={MouseButton1=1},
+              RaycastFilterType={Exclude=1}}
+          RaycastParams={new=function()return {}end}
           local objects={}
           Instance={new=function(kind)
               local o={Kind=kind,Visible=false,Destroy=function(self)self.Parent=nil end}
@@ -277,7 +282,8 @@ jobs:
               Parent={},Position=Vector3.new(0,0,4),
               Size=Vector3.new(2,3,2),
               IsA=function(self,k)return k=="BasePart"end,
-              CanCollide=false,CollisionGroup="Default"
+              IsDescendantOf=function(self,model)return true end,
+              CanCollide=true,CollisionGroup="Default"
           }
           local enemyHum={Health=hurt,HipHeight=2}
           local enemy={
@@ -360,6 +366,9 @@ jobs:
           end}
           workspace={
               FindFirstChild=function(self,n)return nil end,
+              Raycast=function(self,o,d,params)
+                  return {Instance=enemyRoot}
+              end,
               CurrentCamera={WorldToViewportPoint=function(self,p)
                   return {X=400,Y=240,Z=2},true
               end}
@@ -371,6 +380,10 @@ jobs:
           assert(C.ready==true)
           assert(C.status=="BITE WINDOW OPEN (CLIENT)")
           assert(C.targetDistance==4)
+          assert(C.closeRootSize=="2.00/3.00/2.00")
+          assert(C.closeRootCanCollide=="true")
+          assert(C.rayBlockCategory=="TARGET")
+          assert(C.rayBlockCollidable=="true")
           for _,o in ipairs(objects) do
               if o.Kind=="Frame" then assert(o.Visible==true) end
           end
