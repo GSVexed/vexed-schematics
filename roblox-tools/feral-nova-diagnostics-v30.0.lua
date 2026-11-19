@@ -192,6 +192,11 @@ function Diagnostics.attach(ctx)
         "talonPressAt","talonPendingAt"}
     local function transition(s,previous)
         if not previous then return end
+        -- WolfController can write FeralTalonPress and create the local clamp
+        -- between recorder samples. Correlate simultaneous changes regardless
+        -- of which watch-key is visited first.
+        local pressChanged=finite(s.talonPressAt)
+            and previous.talonPressAt~=s.talonPressAt
         for _,key in ipairs(watch) do
             local a,b=previous[key],s[key]
             if a~=b then
@@ -201,8 +206,9 @@ function Diagnostics.attach(ctx)
                     D.clampStarts+=1
                     D.holdStartedAt=s.t
                     D.sustainedHoldMarked=false
-                    if D.lastTalonPressT and s.t-D.lastTalonPressT<=3
-                        and s.t>=D.lastTalonPressT then
+                    if pressChanged or (D.lastTalonPressT
+                        and s.t-D.lastTalonPressT<=3
+                        and s.t>=D.lastTalonPressT) then
                         D.talonLocalClampsAfterPress+=1
                         mark("talon_followed_by_local_clamp","local observation, not server confirmation")
                     end
