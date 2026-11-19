@@ -256,6 +256,101 @@ jobs:
           Path('/tmp/turtle-v8.luau').write_text(mock+source.rsplit('return Recovery',1)[0]+'\n'+tests)
           PY
           "$LUAU" /tmp/turtle-v8.luau
+      - name: Simulate native Rest requests and replicated Turtle shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-recovery-v8.0.lua').read_text().rsplit('return Recovery',1)[0]
+          stub=r'''
+          local tm=1
+          os={clock=function()return tm end}
+          local events={}
+          local remote={
+              IsA=function(self,k) return k=="RemoteEvent" end,
+              FireServer=function(self,action,on)
+                  assert(action=="Rest")
+                  table.insert(events,on)
+              end
+          }
+          local rs={FindFirstChild=function(self,k)
+              if k=="WolfActions" then return remote end
+          end}
+          local vel={Magnitude=0}
+          local hum={Health=90,MaxHealth=100}
+          local attrs={
+              Species="SnappingTurtle",
+              WolfRest=false,
+              WolfRestAt=100,
+              Hunger=60,Thirst=70
+          }
+          local char={
+              Parent={},
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hum end
+              end,
+              FindFirstChild=function(self,k)
+                  if k=="HumanoidRootPart" then
+                      return {AssemblyLinearVelocity=vel}
+                  end
+              end,
+              GetAttribute=function(self,k)return attrs[k]end
+          }
+          local player={
+              Character=char,
+              GetAttribute=function(self,k) return nil end
+          }
+          local callback
+          local runService={
+              Heartbeat={Connect=function(self,fn)
+                  callback=fn
+                  return {Disconnect=function(self)callback=nil end}
+              end}
+          }
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player} end
+              if k=="ReplicatedStorage" then return rs end
+              if k=="RunService" then return runService end
+          end}
+          workspace={GetServerTimeNow=function(self)return 103 end}
+          '''
+          tests=r'''
+          local ctx={state={alive=true}}
+          local rec=Recovery.attach(ctx)
+          assert(rec.enabled==true)
+          callback()
+          assert(rec.status=="SETTLING / HOLD STILL")
+          tm=2.4
+          callback()
+          assert(#events==1 and events[1]==true)
+          assert(rec.status=="REST REQUESTED / WAITING")
+          -- The remote was sent but server has not replicated Rest.
+          assert(rec.multiplier==1)
+          attrs.WolfRest=true
+          attrs.WolfRestAt=100
+          tm=2.7
+          callback()
+          assert(rec.multiplier==0.30)
+          assert(rec.status=="TURTLE SHELL READY")
+          assert(rec.accepted>=1)
+          -- Server rest remains replicated while moving.
+          vel.Magnitude=3
+          tm=3.1
+          callback()
+          assert(rec.status=="SHELL CONDITION MET WHILE MOVING")
+          assert(rec.movingAccepted==true)
+          -- OFF sends a matching native Rest=false, no attribute spoofing.
+          rec.setEnabled(false)
+          assert(events[#events]==false)
+          assert(rec.status=="OFF")
+          rec.close()
+          assert(rec.alive==false and callback==nil)
+          print("V8_NATIVE_REST_AND_MOVING_TURTLE_PASS")
+          '''
+          Path('/tmp/test-v8-rest.luau').write_text(stub+source+'\n'+tests)
+          PY
+          "$LUAU" /tmp/test-v8-rest.luau
       - name: Simulate target root enlargement and exact restoration
         shell: bash
         run: |
