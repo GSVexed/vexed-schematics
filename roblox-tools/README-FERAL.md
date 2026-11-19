@@ -1,6 +1,18 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v6.0 (single-screen, improved auto escape + ESP)
+## CURRENT — NOVA PRIME v7.0 (focused hitbox test and outcomes)
+
+**[NOVA PRIME v7 guide](README-feral-nova-prime-v7.0.md)** · Keeps the same six useful controls and one stamina switch. Adds only **HITBOX TEST** in the quick strip: bounded, reversible local enemy RootPart X/Z enlargement + cached client bite-claim window tuning. Includes normal/boosted bite observations and passive Amber/growth/HP trend readout via COPY STATUS. **The game server may reject longer-range hit claims; v7 is an experiment, not a verified server-damage advantage.** The new option is OFF by default.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-v7.0.lua"))()
+```
+
+Previously recommended v6 and older versions remain below for reference.
+
+---
+
+## PREVIOUS — NOVA PRIME v6.0 (single-screen, improved auto escape + ESP)
 
 **[NOVA PRIME v6 guide](README-feral-nova-prime-v6.0.md)** · One **ENDURANCE** toggle, native escape assistance with rate-limited Space fallback, true transparent-fill outlines and animal-size-aware names, persistent display-only ESP preferences, low-need/health warnings, and one-click diagnostic copy. Six controls; no research bloat. The native requests and key injection have not been verified in the live game.
 
