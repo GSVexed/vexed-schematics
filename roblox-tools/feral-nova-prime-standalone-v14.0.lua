@@ -1,4 +1,4 @@
--- FERAL NOVA PRIME v14.0 / SINGLE-DOWNLOAD REACH + RECOVERY + BIRD/WATER FLIGHT
+-- FERAL NOVA PRIME v14.0 / Reach + non-Rest regen + bird/land stamina + water flight
 -- Private game/server state is not impersonated; all changes local/reversible.
 local ROOT="https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/"
 if game.PlaceId~=108901361810209 then
@@ -29,7 +29,7 @@ for _,name in ipairs({
     end
 end
 
--- All 12 modules pinned to this version, no subsequent HTTP requests.
+-- Complete pinned v14 bundle: all twelve modules included.
 local BUNDLED={
 ["feral-aurora-engine-v13.0.lua"]=[==========[
 -- FERAL AURORA v13 / Engine: read-only player tracking; single-owner recovery
@@ -1408,8 +1408,8 @@ end
 return Power
 
 ]==========],
-["feral-nova-escape-v13.0.lua"]=[==========[
--- FERAL NOVA PRIME v13 / victim-only escape, preserves all own carry intents.
+["feral-nova-escape-v14.0.lua"]=[==========[
+-- FERAL NOVA PRIME v14 / Controlled native escape cadence with carry priority.
 -- Captured FeralLungeUI: TUG_MIN_GAP=.10, SHAKE_MIN_GAP=.15,
 -- SHAKE_MASH=false (directional FeralShakeTaps), getoff gap=.40.
 -- Only sends native actions while its OWN character reports a grab
@@ -1435,22 +1435,22 @@ end
 
 function Escape.choose(carry,pinned,clamp,need,bindings)
     bindings=bindings or {}
-    if carry then return "getoff","CARRIED",.405 end
+    if carry then return "getoff","CARRIED",.435 end
     -- The captured game has SHAKE_MASH=false. In that mode
     -- FeralShakeTaps is the actual A/D escape binding.
     local shakeBinding=bindings.FeralShakeTaps or bindings.FeralShakeMash
     local tugBinding=bindings.FeralTugTap
     if (clamp or need or pinned) and tugBinding then
-        return "shake","TUG PREY",.105
+        return "shake","TUG PREY",.12
     end
     if (clamp or need or pinned) and shakeBinding then
-        return "shake","DIRECTIONAL SHAKE",.153
+        return "shake","DIRECTIONAL SHAKE",.17
     end
     if pinned and (clamp or need) then
-        return "shake","PINNED CLAMP STATE",.155
+        return "shake","PINNED CLAMP STATE",.17
     end
     if clamp and need then
-        return "shake","CLAMP PROGRESS",.155
+        return "shake","CLAMP PROGRESS",.17
     end
     -- The pinned cue alone is not proof that a shake request is allowed;
     -- don't send arbitrary game traffic without a native escape binding.
@@ -1756,7 +1756,7 @@ function Escape.attach(ctx)
     end
     function E.report()
         return table.concat({
-            "FERAL NOVA PRIME v13 | Escape",
+            "FERAL NOVA PRIME v14 | Escape",
             "status="..E.status.." enabled="..tostring(E.enabled),
             "last_cue="..E.trigger,
             "last_action="..E.lastAction.." mode="..E.mode,
@@ -1771,6 +1771,7 @@ function Escape.attach(ctx)
             "binding_tug="..tostring(E.bindings.FeralTugTap),
             "binding_mash="..tostring(E.bindings.FeralShakeMash),
             "native_binding_polls="..tostring(E.bindingPolls),
+            "escape_cadence=carry_0.435s,tug_0.12s,shake_0.17s",
             "carrying_pauses="..tostring(E.holdingPauses),
             "carry_action_grace_frames="..tostring(E.carryIntentPauses),
             "carry_or_capture_state="..E.lastCarryState,
@@ -3967,9 +3968,9 @@ function Flight.attach(ctx)
         takeoffPendingUntil=0,nextAttempt=0,nextTick=0,
         blocked=0,waterTime=0,flightTime=0,
         lastRequestAt=0,lastAirborne=false,lastOwner=nil,
-        lastTakeoffCarry=false,serverCarryRetained="NOT VERIFIED"
+        lastTakeoffCarry=false,serverCarryRetained="NOT VERIFIED",
+        midairPreyProtects=0,characterConnections={}
     }
-    local charConnected={}
     local listeners={}
     local function restoreClamp()
         local l=F.clampLease
@@ -4192,6 +4193,14 @@ function Flight.attach(ctx)
         end
         F.lastAirborne=F.airborne
         if F.airborne and F.holding then
+            -- The original flight controller drops flight when an
+            -- outgoing clamp is not Mode="drag". Preserve its native
+            -- talon-drag path even for prey acquired mid-flight.
+            if not F.clampLease then
+                if prepAirCarry(char,now) then
+                    F.midairPreyProtects+=1
+                end
+            end
             F.flyWithPreySeconds+=.14
         end
         if F.water then F.waterTime+=.14 end
@@ -4238,6 +4247,7 @@ function Flight.attach(ctx)
             "water_prey_takeoffs="..F.waterCarryTakeoffs,
             "flight_with_prey_seconds_local="..string.format("%.2f",F.flyWithPreySeconds),
             "temporary_local_drag_modes="..F.airCarrySessions,
+            "midair_carry_guard_attempts="..F.midairPreyProtects,
             "local_config_restorations="..F.restores,
             "config_or_clamp_conflicts="..F.conflicts,
             "last_error="..F.lastError,
@@ -4245,13 +4255,51 @@ function Flight.attach(ctx)
             "NOTE=Server can reject water takeoff and airborne prey retention."
         },"\n")
     end
+    local function watchChar(char)
+        for _,c in ipairs(F.characterConnections) do
+            pcall(function()c:Disconnect()end)
+        end
+        table.clear(F.characterConnections)
+        if not char then return end
+        local ok,conn=pcall(function()
+            return char.ChildAdded:Connect(function(child)
+                if child.Name~="FeralClamp" then return end
+                -- Incoming clamp may be populated just after parenting.
+                task.defer(function()
+                    if not F.alive or not F.enabled or
+                        char~=player.Character then return end
+                    local hum=char:FindFirstChildOfClass("Humanoid")
+                    if hum and canFly(char,F.config)
+                        and char:GetAttribute("FeralFlyLocal")==true then
+                        if prepAirCarry(char,os.clock()) then
+                            F.midairPreyProtects+=1
+                        end
+                    end
+                end)
+            end)
+        end)
+        if ok and conn then
+            F.characterConnections[#F.characterConnections+1]=conn
+        end
+    end
     function F.close()
         if not F.alive then return end
         F.alive=false
         F.setEnabled(false)
         if F.conn then F.conn:Disconnect()end
+        for _,c in ipairs(F.characterConnections) do
+            pcall(function()c:Disconnect()end)
+        end
         for _,c in ipairs(listeners) do pcall(function()c:Disconnect()end)end
     end
+    watchChar(player.Character)
+    listeners[#listeners+1]=player.CharacterAdded:Connect(function(char)
+        restoreClamp()
+        F.lastOwner=nil
+        F.lastAirborne=false
+        F.nextTick=0
+        watchChar(char)
+    end)
     listeners[#listeners+1]=UIS.JumpRequest:Connect(function()
         if F.enabled then pcall(request)end
     end)
@@ -5162,7 +5210,7 @@ end
 
 local core=get("feral-aurora-engine-v13.0.lua")
 local power=get("feral-aurora-power-v14.0.lua")
-local escape=get("feral-nova-escape-v13.0.lua")
+local escape=get("feral-nova-escape-v14.0.lua")
 local lab=get("feral-nova-combat-v14.0.lua")
 local recovery=get("feral-nova-recovery-v13.0.lua")
 local mobile=get("feral-nova-mobile-v13.0.lua")
