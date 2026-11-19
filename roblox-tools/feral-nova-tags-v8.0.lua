@@ -22,7 +22,7 @@ function Tags.attach(ctx)
         ZIndexBehavior=Enum.ZIndexBehavior.Sibling
     },pg)
     local T={
-        alive=true,gui=gui,active=0,visible=0,close=0,
+        alive=true,gui=gui,active=0,visible=0,closeCount=0,
         lastError="",frameInterval=.065,lastFrame=0
     }
     local labels={}
@@ -149,12 +149,12 @@ function Tags.attach(ctx)
         end
         T.active=total
         T.visible=shown
-        T.close=closeTags
+        T.closeCount=closeTags
     end
     function T.report()
         return "FERAL v8 Screen Tags | tracked="..tostring(T.active)..
             " visible="..tostring(T.visible)..
-            " close="..tostring(T.close)..
+            " close="..tostring(T.closeCount)..
             " enabled="..tostring(S.flags.tags)..
             " error="..tostring(T.lastError)
     end
