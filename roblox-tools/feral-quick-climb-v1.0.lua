@@ -163,6 +163,9 @@ local function onQ(now)
         Q.status="BUSY / CARRY, REST OR GRAB PRIORITY"
         return
     end
+    -- A Q pressed before the first heartbeat must survive the
+    -- initial character sample; only an actual respawn clears it.
+    Q.lastChar=char
     Q.pendingUntil=now+1.3
     Q.queued=true
     Q.queuedPresses+=1
