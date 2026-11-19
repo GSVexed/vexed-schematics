@@ -261,6 +261,7 @@ function Lab.attach(ctx)
     function L.close()
         L.alive=false
         L.setEnabled(false)
+        if L.connection then L.connection:Disconnect();L.connection=nil end
         if biteConnection then biteConnection:Disconnect();biteConnection=nil end
         for _,c in ipairs(connections) do c:Disconnect() end
     end
