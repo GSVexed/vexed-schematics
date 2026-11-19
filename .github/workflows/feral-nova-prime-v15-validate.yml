@@ -242,6 +242,7 @@ jobs:
               end
           }
           local beat,inputCb
+          local held=false
           game={GetService=function(self,k)
               if k=="Players" then return {LocalPlayer=player}end
               if k=="ReplicatedStorage" then return {
@@ -251,6 +252,7 @@ jobs:
               end
               if k=="UserInputService" then return {
                   GetFocusedTextBox=function(self)return nil end,
+                  IsMouseButtonPressed=function(self,k)return held end,
                   InputBegan={Connect=function(self,fn)
                       inputCb=fn
                       return {Disconnect=function(self)inputCb=nil end}
@@ -288,6 +290,14 @@ jobs:
           now=1.6;beat()
           assert(N.active==false)
           now=3.1;beat()
+          assert(N.active==true and remoteCalls[#remoteCalls]==true)
+          held=true
+          now=3.4;beat()
+          assert(N.active==false and remoteCalls[#remoteCalls]==false)
+          now=5;beat()
+          assert(N.active==false)
+          held=false
+          now=5.3;beat()
           assert(N.active==true and remoteCalls[#remoteCalls]==true)
           inputCb({KeyCode=Enum.KeyCode.Unknown,
               UserInputType=Enum.UserInputType.MouseButton1},false)
