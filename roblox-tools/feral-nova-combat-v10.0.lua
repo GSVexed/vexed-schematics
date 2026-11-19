@@ -33,7 +33,9 @@ function Combat.attach(ctx)
         closeRootDistance=nil,closeRootSize="NONE",
         closeRootCanCollide="--",closeRootGroup="--",
         ownRootSize="--",physicalEdits=0,
-        oldHitboxGuiVisible=false
+        oldHitboxGuiVisible=false,
+        lastBlockerCheck=0,rayBlockCategory="NOT CHECKED",
+        rayBlockCollidable="--"
     }
     local gui=Instance.new("ScreenGui")
     gui.Name="FeralNovaBiteGuideV10"
@@ -147,6 +149,7 @@ function Combat.attach(ctx)
             (pg:FindFirstChild("FeralNovaPrimeV70")~=nil
               or pg:FindFirstChild("FeralNovaPrimeV80")~=nil)
             or false
+        local nearestRoot,nearestModel
         local function inspect(char)
             if not char or char==player.Character then return end
             local other=char:FindFirstChild("HumanoidRootPart")
@@ -158,6 +161,8 @@ function Combat.attach(ctx)
                         other.Size.X,other.Size.Y,other.Size.Z)
                     C.closeRootCanCollide=tostring(other.CanCollide)
                     C.closeRootGroup=tostring(other.CollisionGroup)
+                    nearestRoot=other
+                    nearestModel=char
                 end
             end
         end
@@ -171,6 +176,32 @@ function Combat.attach(ctx)
                 i+=1
                 if i>65 then break end
                 if obj:IsA("Model") then inspect(obj)end
+            end
+        end
+        local now=os.clock()
+        if now-C.lastBlockerCheck>=.9 then
+            C.lastBlockerCheck=now
+            C.rayBlockCategory="NO NEARBY ANIMAL"
+            C.rayBlockCollidable="--"
+            if nearestRoot then
+                -- Pure read: one ray per 0.9 seconds. Categorise the
+                -- collidable obstruction but never export player/part names.
+                local ok,category,collidable=pcall(function()
+                    local params=RaycastParams.new()
+                    params.FilterType=Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances={player.Character}
+                    local dir=nearestRoot.Position-root.Position
+                    local result=workspace:Raycast(root.Position,dir,params)
+                    if not result or not result.Instance then
+                        return "NO RAY CONTACT","--"
+                    end
+                    local part=result.Instance
+                    local kind=nearestModel and part:IsDescendantOf(nearestModel)
+                        and "TARGET" or "WORLD / OTHER"
+                    return kind,tostring(part.CanCollide)
+                end)
+                C.rayBlockCategory=ok and category or "RAYCAST UNAVAILABLE"
+                C.rayBlockCollidable=ok and collidable or "--"
             end
         end
     end
@@ -281,6 +312,8 @@ function Combat.attach(ctx)
             "nearest_root_collision_group="..C.closeRootGroup,
             "own_root_size_xyz="..C.ownRootSize,
             "old_v7_v8_gui_present="..tostring(C.oldHitboxGuiVisible),
+            "ray_obstruction_category="..C.rayBlockCategory,
+            "ray_obstruction_collidable="..C.rayBlockCollidable,
             "physical_part_edits_by_v10="..tostring(C.physicalEdits),
             "NOTE=v10 never changes root part size/collision; lingering v7/v8 changes require a fresh join.",
             "NOTE=Bite guidance and HP correlations do not prove server damage."
