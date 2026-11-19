@@ -6411,7 +6411,7 @@ function Diagnostics.attach(ctx)
         autoSavePeriod=25,saveFile="FERAL_NOVA_v26_session.json",
         status="Starting own-client diagnostics",saveStatus="No file yet",
         samples={},events={},maxSamples=720,maxEvents=180,
-        transitions=0,samplesTotal=0,deathCount=0,respawns=0,
+        transitions=0,samplesTotal=0,deathCount=0,respawns=0,climbTapStarts=0,
         attackInputs=0,climbInputs=0,carryInputs=0,spaceInputs=0,
         lungeStarts=0,clampStarts=0,escapeStarts=0,
         healthGained=0,healthLost=0,staminaGained=0,staminaLost=0,
@@ -6441,7 +6441,7 @@ function Diagnostics.attach(ctx)
     end
     local function mode()
         local native=ctx.native and ctx.native.active==true or false
-        local regen=ctx.regen and ctx.regen.enabled==true or false
+        local regen=ctx.regen and ctx.regen.applied==true or false
         if native and regen then return "native_plus_config" end
         if native then return "native_only" end
         if regen then return "config_only" end
@@ -6473,7 +6473,7 @@ function Diagnostics.attach(ctx)
             pinned=yes(attribute(char,"FeralPinned")),
             dragged=yes(attribute(char,"FeralDragged")),
             holding=holding,climbCan=yes(attribute(player,"ClimbCan")),
-            climbTap=yes(attribute(player,"FeralClimbTap")),
+            climbTapAt=numericAttr(player,"FeralClimbTap"),
             resting=yes(attribute(char,"WolfRest")),
             native=ctx.native and ctx.native.active==true or false,
             regen=ctx.regen and ctx.regen.applied==true or false,
@@ -6494,7 +6494,7 @@ function Diagnostics.attach(ctx)
     end
     local watch={"growth","grabbed","pinned","dragged","holding","staminaOut",
         "noDrain","native","regenEnabled","expGrowth","expCarry","expCooldown",
-        "talonReadyAt","climbTap","endurance","quickClimb","babyCarry"}
+        "talonReadyAt","climbTapAt","endurance","quickClimb","babyCarry"}
     local function transition(s,previous)
         if not previous then return end
         for _,key in ipairs(watch) do
@@ -6503,6 +6503,7 @@ function Diagnostics.attach(ctx)
                 D.transitions+=1
                 if key=="talonReadyAt" and finite(b) and (not finite(a) or b>a+.4) then D.lungeStarts+=1 end
                 if key=="holding" and b==true then D.clampStarts+=1 end
+                if key=="climbTapAt" and finite(b) then D.climbTapStarts=(D.climbTapStarts or 0)+1 end
                 if key=="grabbed" and b==true then D.escapeStarts+=1 end
                 mark(key.."_changed",key=="growth" and rounded(b) or
                     key=="talonReadyAt" and rounded(b) or tostring(b))
@@ -6583,7 +6584,7 @@ function Diagnostics.attach(ctx)
             samples=D.samplesTotal,events=#D.events,respawns=D.respawns,
             deaths=D.deathCount,attacks=D.attackInputs,
             climbKeys=D.climbInputs,carryKeys=D.carryInputs,spaceKeys=D.spaceInputs,
-            lungeDeadlines=D.lungeStarts,clampStarts=D.clampStarts,
+            lungeDeadlines=D.lungeStarts,climbTaps=D.climbTapStarts or 0,clampStarts=D.clampStarts,
             captureStarts=D.escapeStarts,
             healthUp=rounded(D.healthGained),healthDown=rounded(D.healthLost),
             staminaUp=rounded(D.staminaGained),staminaDown=rounded(D.staminaLost),
