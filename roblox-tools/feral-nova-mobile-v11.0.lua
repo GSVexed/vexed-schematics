@@ -30,26 +30,32 @@ local function rate(sum,den)
     if den<=.01 then return nil end
     return sum/den
 end
-function Mobile.decide(base,signal)
+function Mobile.decide(base,signal,after)
     local hpBase=rate(base.hp,base.time)
     local hpSignal=rate(signal.hp,signal.time)
+    local hpAfter=after and rate(after.hp,after.time) or nil
     local hasHp=hpBase and hpSignal
         and base.time>=2.4 and signal.time>=4
         and hpBase>.025 and hpSignal>hpBase*1.55
+        and (not after or after.time<2 or not hpAfter
+            or hpSignal>hpAfter*1.28)
     local effects={}
     local hasStatus=false
     for _,key in ipairs(keyNames) do
         local b=rate(base.status[key],base.statusTime[key])
         local s=rate(signal.status[key],signal.statusTime[key])
+        local a=after and rate(after.status[key],after.statusTime[key]) or nil
         if b and s and base.statusTime[key]>=1.5
             and signal.statusTime[key]>=2.5
-            and b>.025 and s>b*2.5 then
+            and b>.025 and s>b*2.5
+            and (not after or after.statusTime[key]<1.6 or not a
+                or s>a*1.5) then
             hasStatus=true
             effects[#effects+1]=key
         end
     end
     return hasHp==true or hasStatus,hasHp==true,hasStatus,
-        hpBase,hpSignal,table.concat(effects,",")
+        hpBase,hpSignal,table.concat(effects,","),hpAfter
 end
 function Mobile.attach(ctx)
     local M={
@@ -137,6 +143,10 @@ function Mobile.attach(ctx)
             or key==Enum.KeyCode.S or key==Enum.KeyCode.D
             or key==Enum.KeyCode.Space then
             M.lastInput=os.clock()
+        elseif key~=Enum.KeyCode.Unknown then
+            -- Other gameplay key actions may initiate abilities. An
+            -- unrecognised action must not coexist with a Rest signal.
+            input(true)
         end
     end)
     function M.setEnabled(v)
@@ -213,6 +223,11 @@ function Mobile.attach(ctx)
             M.lastSample=nil
             M.lastSampleAt=0
         end
+        if char:GetAttribute("FeralPinned")==true
+            or char:GetAttribute("FeralCarried")==true then
+            finish("STOPPED: GRABBED / ESCAPE PRIORITY","INTERRUPTED")
+            return
+        end
         if char:GetAttribute("WolfRest")==true then
             M.restConflicts+=1
             finish("STOPPED: REST BLOCKS BITES","UNSAFE")
@@ -277,7 +292,7 @@ function Mobile.attach(ctx)
         elseif M.phase=="AFTER" then
             M.status="AFTER SIGNAL: KEEP MOVING"
             if since>=3.5 then
-                local uplift,hp,status,b,s,keys=Mobile.decide(M.baseline,M.signal)
+                local uplift,hp,status,b,s,keys=Mobile.decide(M.baseline,M.signal,M.after)
                 M.measuredHp=hp
                 M.measuredStatus=status
                 M.upliftStatusTypes=keys
@@ -320,6 +335,7 @@ function Mobile.attach(ctx)
                 " native_rest_off="..tostring(M.requestsOff),
             "moving_normal_hp_rate="..tostring(base),
             "moving_signal_hp_rate="..tostring(signal),
+            "moving_after_hp_rate="..tostring(rate(M.after.hp,M.after.time)),
             "normal_valid_hp_seconds="..string.format("%.2f",b.time),
             "signal_valid_hp_seconds="..string.format("%.2f",s.time),
             "observed_hp_uplift="..tostring(M.measuredHp),
