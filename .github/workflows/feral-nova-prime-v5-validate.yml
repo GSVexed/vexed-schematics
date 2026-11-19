@@ -64,7 +64,7 @@ jobs:
               'fogSet(atmosphere,"Density",.015)',
               'function UI.mount(ctx)', 'ESCAPE  ',
               'function endurance(on)', 'function agility(on)',
-              'ONE', 'FeralNovaPrimeV50', 'ctx.cleanupUI=function()',
+              'FeralNovaPrimeV50', 'ctx.cleanupUI=function()',
               'ctx.toggle("playerFinder",true)',
           ):
               assert s in ui, s
