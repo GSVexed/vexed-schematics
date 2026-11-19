@@ -60,6 +60,7 @@ function Diagnostics.attach(ctx)
         transitions=0,samplesTotal=0,deathCount=0,respawns=0,climbTapStarts=0,
         attackInputs=0,climbInputs=0,carryInputs=0,spaceInputs=0,
         lungeStarts=0,clampStarts=0,escapeStarts=0,
+        talonPresses=0,talonPendingStarts=0,
         healthGained=0,healthLost=0,staminaGained=0,staminaLost=0,
         growthGained=0,statusCleared={bleed=0,venom=0,injury=0},
         growthTrials={},staminaModes={},cdTrials={},cooldownTotalJumps=0,
@@ -169,6 +170,8 @@ function Diagnostics.attach(ctx)
             waterFlightOverlapSamples=ctx.flight and ctx.flight.waterFlightOverlapSamples or 0,
             underwaterExitConfirmed=ctx.flight and ctx.flight.underwaterExitConfirmed or 0,
             underwaterExitUnconfirmed=ctx.flight and ctx.flight.underwaterExitUnconfirmed or 0,
+            talonPressAt=numericAttr(char,"FeralTalonPress"),
+            talonPending=yes(attribute(char,"FeralTalonPending")),
             talonReadyAt=ready,talonRemaining=cooldown,talonReadySource=readySource,
             cdTotal=cdTotal,cdTotalSource=cdPlayer and "player" or cdChar and "character" or "absent",
             mode=mode()
@@ -179,7 +182,8 @@ function Diagnostics.attach(ctx)
         "talonReadyAt","climbTapAt","endurance","quickClimb","babyCarry",
         "flying","swimming","underwater","waterSurfaceEligible",
         "recoveryMode","recoveryPosePauses","recoveryPoseBlocked",
-        "statusInputsReady","activeRecoveryEnabled"}
+        "statusInputsReady","activeRecoveryEnabled",
+        "talonPressAt","talonPending"}
     local function transition(s,previous)
         if not previous then return end
         for _,key in ipairs(watch) do
@@ -188,6 +192,8 @@ function Diagnostics.attach(ctx)
                 D.transitions+=1
                 if key=="talonReadyAt" and finite(b) and (not finite(a) or b>a+.4) then D.lungeStarts+=1 end
                 if key=="holding" and b==true then D.clampStarts+=1 end
+                if key=="talonPressAt" and finite(b) then D.talonPresses+=1 end
+                if key=="talonPending" and b==true then D.talonPendingStarts+=1 end
                 if key=="climbTapAt" and finite(b) then D.climbTapStarts=(D.climbTapStarts or 0)+1 end
                 if key=="grabbed" and b==true then D.escapeStarts+=1 end
                 mark(key.."_changed",key=="talonReadyAt" and rounded(b) or tostring(b))
@@ -322,6 +328,8 @@ function Diagnostics.attach(ctx)
             climbKeys=D.climbInputs,carryKeys=D.carryInputs,spaceKeys=D.spaceInputs,
             lungeDeadlines=D.lungeStarts,climbTaps=D.climbTapStarts or 0,clampStarts=D.clampStarts,
             captureStarts=D.escapeStarts,
+            talonPresses=D.talonPresses,talonPendingStarts=D.talonPendingStarts,
+            outcomeNote="Own-client request signals and outgoing clamps; not proof of server acceptance.",
             healthUp=rounded(D.healthGained),healthDown=rounded(D.healthLost),
             staminaUp=rounded(D.staminaGained),staminaDown=rounded(D.staminaLost),
             growthUp=rounded(D.growthGained),
@@ -414,6 +422,9 @@ function Diagnostics.attach(ctx)
                 " surface_eligible="..tostring(s.waterSurfaceEligible)..
                 " flying="..tostring(s.flying)..
                 " relative_depth="..tostring(s.relativeWaterDepth),
+            "talon_press_signals="..tostring(a.talonPresses)..
+                " talon_pending="..tostring(a.talonPendingStarts)..
+                " local_clamp_starts="..tostring(a.clampStarts),
             "lunge_deadlines="..a.lungeDeadlines..
                 " talon_remaining_s="..tostring(s.talonRemaining)..
                 " cd_total="..tostring(s.cdTotal)..
