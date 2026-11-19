@@ -53,9 +53,9 @@ function Flight.attach(ctx)
         takeoffPendingUntil=0,nextAttempt=0,nextTick=0,
         blocked=0,waterTime=0,flightTime=0,
         lastRequestAt=0,lastAirborne=false,lastOwner=nil,
-        lastTakeoffCarry=false,serverCarryRetained="NOT VERIFIED"
+        lastTakeoffCarry=false,serverCarryRetained="NOT VERIFIED",
+        midairPreyProtects=0,characterConnections={}
     }
-    local charConnected={}
     local listeners={}
     local function restoreClamp()
         local l=F.clampLease
@@ -278,6 +278,14 @@ function Flight.attach(ctx)
         end
         F.lastAirborne=F.airborne
         if F.airborne and F.holding then
+            -- The original flight controller drops flight when an
+            -- outgoing clamp is not Mode="drag". Preserve its native
+            -- talon-drag path even for prey acquired mid-flight.
+            if not F.clampLease then
+                if prepAirCarry(char,now) then
+                    F.midairPreyProtects+=1
+                end
+            end
             F.flyWithPreySeconds+=.14
         end
         if F.water then F.waterTime+=.14 end
@@ -324,6 +332,7 @@ function Flight.attach(ctx)
             "water_prey_takeoffs="..F.waterCarryTakeoffs,
             "flight_with_prey_seconds_local="..string.format("%.2f",F.flyWithPreySeconds),
             "temporary_local_drag_modes="..F.airCarrySessions,
+            "midair_carry_guard_attempts="..F.midairPreyProtects,
             "local_config_restorations="..F.restores,
             "config_or_clamp_conflicts="..F.conflicts,
             "last_error="..F.lastError,
@@ -331,13 +340,51 @@ function Flight.attach(ctx)
             "NOTE=Server can reject water takeoff and airborne prey retention."
         },"\n")
     end
+    local function watchChar(char)
+        for _,c in ipairs(F.characterConnections) do
+            pcall(function()c:Disconnect()end)
+        end
+        table.clear(F.characterConnections)
+        if not char then return end
+        local ok,conn=pcall(function()
+            return char.ChildAdded:Connect(function(child)
+                if child.Name~="FeralClamp" then return end
+                -- Incoming clamp may be populated just after parenting.
+                task.defer(function()
+                    if not F.alive or not F.enabled or
+                        char~=player.Character then return end
+                    local hum=char:FindFirstChildOfClass("Humanoid")
+                    if hum and canFly(char,F.config)
+                        and char:GetAttribute("FeralFlyLocal")==true then
+                        if prepAirCarry(char,os.clock()) then
+                            F.midairPreyProtects+=1
+                        end
+                    end
+                end)
+            end)
+        end)
+        if ok and conn then
+            F.characterConnections[#F.characterConnections+1]=conn
+        end
+    end
     function F.close()
         if not F.alive then return end
         F.alive=false
         F.setEnabled(false)
         if F.conn then F.conn:Disconnect()end
+        for _,c in ipairs(F.characterConnections) do
+            pcall(function()c:Disconnect()end)
+        end
         for _,c in ipairs(listeners) do pcall(function()c:Disconnect()end)end
     end
+    watchChar(player.Character)
+    listeners[#listeners+1]=player.CharacterAdded:Connect(function(char)
+        restoreClamp()
+        F.lastOwner=nil
+        F.lastAirborne=false
+        F.nextTick=0
+        watchChar(char)
+    end)
     listeners[#listeners+1]=UIS.JumpRequest:Connect(function()
         if F.enabled then pcall(request)end
     end)
