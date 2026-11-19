@@ -72,11 +72,12 @@ function UI.mount(ctx)
     local Lab=ctx.lab
     local Recovery=ctx.recovery
     local Regen=ctx.regen
+    local Mobile=ctx.mobile
     local Reach=ctx.reach
     local Flight=ctx.flight
     local Carry=ctx.carry
     local Tags=ctx.tags
-    if not Escape or not P or not Lab or not Recovery or not Regen or not Reach or not Flight or not Carry or not Tags then return nil end
+    if not Escape or not P or not Lab or not Recovery or not Regen or not Mobile or not Reach or not Flight or not Carry or not Tags then return nil end
     local pg=player:FindFirstChildOfClass("PlayerGui")
         or player:WaitForChild("PlayerGui",10)
     if not pg then return nil end
@@ -385,7 +386,25 @@ function UI.mount(ctx)
     local regenButton,regenDesc=card(18,318,
         "NON-REST REGEN","2× health + 4× status client inputs","✚",
         function()return Regen.enabled end,
-        function()Regen.setEnabled(not Regen.enabled)end,"regen")
+        function()
+            if Mobile.enabled then Mobile.setEnabled(false)end
+            Regen.setEnabled(not Regen.enabled)
+        end,"regen")
+    local regenPausedForTrial=false
+    local trialButton=btn(regenButton.Parent,"A/B TEST",function()
+        if Mobile.enabled then
+            Mobile.setEnabled(false)
+            if regenPausedForTrial then Regen.setEnabled(true) end
+            regenPausedForTrial=false
+        else
+            Recovery.setEnabled(false)
+            regenPausedForTrial=Regen.enabled
+            if Regen.enabled then Regen.setEnabled(false) end
+            Mobile.setEnabled(true)
+        end
+        ctx.onUI()
+    end,76,23)
+    trialButton.Position=UDim2.fromOffset(225,8)
     card(414,318,"CLEAR VIEW","Brighter visibility and less local fog","◈",
         function()return S.flags.vision end,
         function()view(not S.flags.vision)end,"vision")
@@ -452,7 +471,7 @@ function UI.mount(ctx)
     local reportButton=btn(footer,"COPY STATUS",function()
         local a=ctx.stats()
         local power=P.status()
-        local report=Escape.report().."\n\n"..Carry.report().."\n\n"..Lab.report().."\n\n"..Reach.report().."\n\n"..Regen.report().."\n\n"..Flight.report().."\n\n"..Recovery.report().."\n\n"..P.enduranceReport().."\n"..Tags.report()..
+        local report=Escape.report().."\n\n"..Carry.report().."\n\n"..Lab.report().."\n\n"..Reach.report().."\n\n"..Regen.report().."\n\n"..Mobile.report().."\n\n"..Flight.report().."\n\n"..Recovery.report().."\n\n"..P.enduranceReport().."\n"..Tags.report()..
             "\n\nFERAL v14 | Lease verification"..
             "\nendurance_cached_lease="..tostring(power.staminaMatches)..
             " stamina_profile="..tostring(power.stamina)..
@@ -484,6 +503,8 @@ function UI.mount(ctx)
     local reset=btn(footer,"RESET",function()
         Lab.setEnabled(false)
         Flight.setEnabled(false)
+        Mobile.setEnabled(false)
+        regenPausedForTrial=false
         Reach.setEnabled(false)
         Regen.setEnabled(false)
         Recovery.setEnabled(false)
@@ -549,6 +570,11 @@ function UI.mount(ctx)
                 meters[i].value.Text=nfmt(v,i==2 and 1 or 0)..
                     (i<=2 and ("/"..nfmt(max)) or "%")
             end
+            if regenPausedForTrial and not Mobile.enabled then
+                regenPausedForTrial=false
+                Regen.setEnabled(true)
+            end
+            styleButton(trialButton,Mobile.enabled,Mobile.enabled and "TESTING" or "A/B TEST")
             for _,item in ipairs(buttons) do
                 if item.id=="regen" then
                     styleButton(item.button,Regen.enabled,
@@ -571,7 +597,9 @@ function UI.mount(ctx)
             styleButton(waterButton,Flight.enabled,
                 Flight.applied and "WATER ON" or Flight.enabled and "WATER ?" or "WATER OFF")
             styleButton(safeRest,Recovery.enabled,"REST "..(Recovery.enabled and "ON" or "OFF"))
-            regenDesc.Text=Regen.applied
+            regenDesc.Text=Mobile.enabled
+                and "Moving A/B test • temporary config pause"
+                or Regen.applied
                 and "Client inputs changed • measure real HP/effects" or Regen.status
             regenDesc.TextColor3=Regen.applied and C.cyan or C.muted
             local carryLabel=Carry.victim and "ESCAPE FIRST"
@@ -627,6 +655,7 @@ function UI.mount(ctx)
     ctx.onNotice=function()end
     ctx.cleanupUI=function()
         Flight.close()
+        Mobile.close()
         Regen.close()
         Reach.close()
         Carry.close()
