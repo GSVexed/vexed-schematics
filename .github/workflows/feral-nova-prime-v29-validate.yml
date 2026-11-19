@@ -31,14 +31,14 @@ jobs:
           chmod +x "$luau"
           echo "COMPILER=$compiler" >> "$GITHUB_ENV"
           echo "LUAU=$luau" >> "$GITHUB_ENV"
-      - name: Compile standalone and all 17 module sources
+      - name: Compile standalone and all 18 module sources
         shell: bash
         run: |
           set -euo pipefail
           for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v29.0.lua             roblox-tools/feral-nova-flight-v28.0.lua             roblox-tools/feral-nova-native-recovery-v29.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-mechanics-v28.0.lua             roblox-tools/feral-nova-active-recovery-v29.0.lua             roblox-tools/feral-nova-diagnostics-v29.0.lua             roblox-tools/feral-nova-prime-ui-v29.0.lua             roblox-tools/feral-nova-prime-standalone-v29.0.lua; do
             "$COMPILER" --null "$f"
           done
-          echo V29_17_MODULES_COMPILE_PASS
+          echo V29_18_MODULES_COMPILE_PASS
       - name: Exact module preservation and privacy invariants
         shell: bash
         run: |
@@ -56,7 +56,7 @@ jobs:
           bundle=dict(re.findall(pattern,v29,re.S))
           import json
           manifest=json.loads((root/'FERAL_NOVA_PRIME_FEATURE_MANIFEST_v29.json').read_text())
-          assert manifest['schema']=='feral-nova-regression-manifest/28'
+          assert manifest['schema']=='feral-nova-regression-manifest/29'
           assert manifest['version']=='v29.0'
           assert manifest['standalone']=='roblox-tools/feral-nova-prime-standalone-v29.0.lua'
           assert len(manifest['core_features'])>=29
@@ -80,7 +80,7 @@ jobs:
           assert 'Diag.report()' in ui and 'Diag.save()' in ui and 'Diag.copy()' in ui
           assert 'AUTO SAVE EVERY 25s' in ui
           assert 'Enum.KeyCode.RightShift' in ui and 'Enum.KeyCode.End' in ui
-          assert 'REGEN 2x / 4x' in ui and 'Q CLIMB ON' in ui
+          assert 'RECOVERY STATUS' in ui and 'Q CLIMB ON' in ui
           assert 'FeralNovaPrimeV290' in ui
           assert 'Active.setEnabled(not Active.enabled)' in ui
           assert 'SAFE REST' not in ui and 'REGEN 2x / 4x' not in ui and 'A/B TEST' not in ui
