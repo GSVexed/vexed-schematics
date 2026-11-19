@@ -126,6 +126,8 @@ jobs:
           assert(a=="shake")
           a,b,g=f(false,true,false,false,{})
           assert(a==nil and b=="UNCLASSIFIED PIN")
+          a,b,g=f(false,true,true,false,{})
+          assert(a=="shake" and b=="PINNED CLAMP STATE" and g>.15)
           a,b,g=f(false,false,true,true,{})
           assert(a=="shake" and b=="CLAMP PROGRESS")
           a,b,g=f(false,false,false,false,{FeralTugTap=true})
