@@ -1368,6 +1368,7 @@ function Escape.attach(ctx)
         lastShakeHave=nil,lastClamp=nil,
         noProgressWarnings=0,lastError="",
         holdingPauses=0,carryIntentPauses=0,lastCarryState="FREE",
+        bindingPolls=0,
         lastCharacter=nil,bindings={},
         nextBindings=0,nextScan=0,nextAction=0,
         nextKey=0,down=false,token=0,active=false,
@@ -1447,6 +1448,7 @@ function Escape.attach(ctx)
         E.nextBindings=now+.12
         forceRead=false
         local ok,value=pcall(function()return CAS:GetAllBoundActionInfo()end)
+        E.bindingPolls+=1
         if ok and type(value)=="table" then
             E.bindings={
                 FeralCarryEscape=value.FeralCarryEscape~=nil,
@@ -1574,12 +1576,15 @@ function Escape.attach(ctx)
                 return
             end
         end
-        updateBindings(now)
         local carried=on(char,"FeralCarried")
         local pinned=on(char,"FeralPinned")
         local clamp=positive(char,"FeralClampN") or positive(char,"FeralClampGame")
         local need=positive(char,"FeralShakeNeed")
         local hasCue=carried or pinned or clamp or need
+        -- No need to ask ContextActionService about every bound action
+        -- 8+ times a second when not grabbed. Keep fast polling only
+        -- during an actual own-character escape cue.
+        if hasCue then updateBindings(now) end
         local mode,reason,interval=Escape.choose(carried,pinned,clamp,need,E.bindings)
         if not hasCue then
             if E.active then
@@ -1665,6 +1670,7 @@ function Escape.attach(ctx)
             "binding_taps="..tostring(E.bindings.FeralShakeTaps),
             "binding_tug="..tostring(E.bindings.FeralTugTap),
             "binding_mash="..tostring(E.bindings.FeralShakeMash),
+            "native_binding_polls="..tostring(E.bindingPolls),
             "carrying_pauses="..tostring(E.holdingPauses),
             "carry_action_grace_frames="..tostring(E.carryIntentPauses),
             "carry_or_capture_state="..E.lastCarryState,
@@ -1731,7 +1737,8 @@ function Combat.attach(ctx)
         closeRootCanCollide="--",closeRootGroup="--",
         ownRootSize="--",physicalEdits=0,
         oldHitboxGuiVisible=false,
-        lastBlockerCheck=0,rayBlockCategory="NOT CHECKED",
+        lastBlockerCheck=0,nextCollisionAudit=0,collisionAudits=0,
+        rayBlockCategory="NOT CHECKED",
         configValues="NOT READ",carryBiteAttempts=0,
         rayBlockCollidable="--"
     }
@@ -1964,7 +1971,11 @@ function Combat.attach(ctx)
         C.playerCandidates=0
         C.npcCandidates=0
         if not char then C.status="NO ACTIVE ANIMAL";return end
-        collisionAudit(root)
+        if now>=C.nextCollisionAudit then
+            C.nextCollisionAudit=now+.45
+            collisionAudit(root)
+            C.collisionAudits+=1
+        end
         if char:GetAttribute("WolfRest")==true then
             C.status="REST ACTIVE / GAME DISALLOWS BITE"
             return
@@ -2027,6 +2038,7 @@ function Combat.attach(ctx)
             "nearest_root_can_collide="..C.closeRootCanCollide,
             "nearest_root_collision_group="..C.closeRootGroup,
             "own_root_size_xyz="..C.ownRootSize,
+            "read_only_collision_audits="..tostring(C.collisionAudits),
             "old_v7_v8_gui_present="..tostring(C.oldHitboxGuiVisible),
             "ray_obstruction_category="..C.rayBlockCategory,
             "ray_obstruction_collidable="..C.rayBlockCollidable,
@@ -3016,6 +3028,7 @@ function Carry.attach(ctx)
         canInteract=false,action="G",helper="UNAVAILABLE",
         method="NONE",attempts=0,helperCalls=0,keyboardTaps=0,
         blocked=0,preemptedRest=0,lastError="",lastAt=-math.huge,
+        nextRefresh=0,refreshes=0,
         lastInputAt=-math.huge,lastState="NO ANIMAL",
         changes=0,holdingEpisodes=0,victimEpisodes=0
     }
@@ -3174,6 +3187,7 @@ function Carry.attach(ctx)
             "native_g_fallback_available="..tostring(type(press)=="function"),
             "carry_action_confirmed_by_server=UNVERIFIED",
             "button_requests="..tostring(C.attempts),
+            "carry_capability_polls="..tostring(C.refreshes),
             "rest_interference_preemptions="..tostring(C.preemptedRest),
             "carry_transitions="..tostring(C.changes),
             "holding_episodes="..tostring(C.holdingEpisodes),
@@ -3196,14 +3210,20 @@ function Carry.attach(ctx)
         if processed or UIS:GetFocusedTextBox() then return end
         if input.KeyCode==Enum.KeyCode.G then
             C.lastInputAt=os.clock()
+            C.nextRefresh=0
             -- Only withdraw an OWNED experimental Rest signal; never
             -- intercept, sink, or fire additional native carry actions.
             releaseForCarry()
         end
     end)
     C.connection=RunService.Heartbeat:Connect(function()
+        if not C.alive then return end
+        local now=os.clock()
+        if now<C.nextRefresh then return end
+        C.nextRefresh=now+.13 -- Native FeralCarryCan may perform expensive work.
         local ok,err=pcall(refresh)
-        if not ok then C.lastError=tostring(err) end
+        if ok then C.refreshes+=1
+        else C.lastError=tostring(err) end
     end)
     return C
 end
