@@ -7,7 +7,7 @@ on:
       - 'roblox-tools/FERAL_NOVA_PRIME_FEATURE_MANIFEST_v31.json'
       - 'roblox-tools/feral-nova-prime-ui-v31.0.lua'
       - 'roblox-tools/feral-nova-eagle-actions-v31.0.lua'
-      - 'roblox-tools/feral-nova-diagnostics-v30.0.lua'
+      - 'roblox-tools/feral-nova-diagnostics-v31.0.lua'
       - '.github/workflows/feral-nova-prime-v31-validate.yml'
   workflow_dispatch:
 permissions:
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v29.0.lua             roblox-tools/feral-nova-flight-v28.0.lua             roblox-tools/feral-nova-native-recovery-v29.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-mechanics-v28.0.lua             roblox-tools/feral-nova-active-recovery-v29.0.lua             roblox-tools/feral-nova-diagnostics-v30.0.lua             roblox-tools/feral-nova-prime-ui-v31.0.lua             roblox-tools/feral-nova-eagle-actions-v31.0.lua             roblox-tools/feral-nova-prime-standalone-v31.0.lua; do
+          for f in             roblox-tools/feral-aurora-engine-v13.0.lua             roblox-tools/feral-aurora-power-v14.0.lua             roblox-tools/feral-nova-escape-v15.0.lua             roblox-tools/feral-nova-combat-v15.0.lua             roblox-tools/feral-nova-recovery-v15.0.lua             roblox-tools/feral-nova-mobile-v15.0.lua             roblox-tools/feral-nova-carry-v15.0.lua             roblox-tools/feral-nova-tags-v8.0.lua             roblox-tools/feral-nova-reach-v14.0.lua             roblox-tools/feral-nova-regen-v29.0.lua             roblox-tools/feral-nova-flight-v28.0.lua             roblox-tools/feral-nova-native-recovery-v29.0.lua             roblox-tools/feral-nova-baby-v15.0.lua             roblox-tools/feral-nova-climb-v15.0.lua             roblox-tools/feral-nova-mechanics-v28.0.lua             roblox-tools/feral-nova-active-recovery-v29.0.lua             roblox-tools/feral-nova-diagnostics-v31.0.lua             roblox-tools/feral-nova-prime-ui-v31.0.lua             roblox-tools/feral-nova-eagle-actions-v31.0.lua             roblox-tools/feral-nova-prime-standalone-v31.0.lua; do
             "$COMPILER" --null "$f"
           done
           echo V31_18_MODULES_COMPILE_PASS
@@ -60,7 +60,7 @@ jobs:
           assert manifest['schema']=='feral-nova-regression-manifest/31'
           assert manifest['version']=='v31.0'
           assert manifest['standalone']=='roblox-tools/feral-nova-prime-standalone-v31.0.lua'
-          assert len(manifest['core_features'])>=36
+          assert len(manifest['core_features'])>=37
           assert len(manifest['modules'])==19
           assert {m['file'] for m in manifest['modules']}==set(bundle)
           for f in manifest['core_features']:
@@ -74,7 +74,7 @@ jobs:
           for name,src in bundle.items():
               assert src==(root/name).read_text(),('Standalone drift',name)
           ui=bundle['feral-nova-prime-ui-v31.0.lua']
-          diag=bundle['feral-nova-diagnostics-v30.0.lua']
+          diag=bundle['feral-nova-diagnostics-v31.0.lua']
           assert 'ctx.diag=diagnostics.attach(ctx)' in v31
           assert 'ctx.diag.close()' in v31
           assert 'Diag.close()' in ui
@@ -88,6 +88,7 @@ jobs:
           assert 'activeRecovery.attach(ctx)' in v31
           assert 'feral-nova-active-recovery-v29.0.lua' in bundle
           assert 'feral-nova-eagle-actions-v31.0.lua' in bundle
+          assert 'eagleNativeAction' in bundle['feral-nova-diagnostics-v31.0.lua']
           assert 'eagleActions.attach(ctx)' in v31
           assert 'Eagle.close()' in ui
           assert 'Mechanics.inspect()' in ui
@@ -105,7 +106,7 @@ jobs:
           assert 'submergedTakeoffBlocks' in flight and 'underwaterFlightExits' in flight
           assert 'setLocal(cfg.WATER,"GRACE",0' not in flight
           assert 'SURFACE FLY' in ui
-          assert 'FERAL_NOVA_DIAG_V30' in diag
+          assert 'FERAL_NOVA_DIAG_V31' in diag
           assert 'talonPresses' in diag and 'recoveryPosePauses' in diag
           assert 'talonPressAt=numericAttr(player,"FeralTalonPress")' in diag
           assert 'talonPendingAt=numericAttr(player,"FeralTalonPending")' in diag
@@ -121,7 +122,7 @@ jobs:
           assert 'TRANSFER=REMOTE' not in diag
           assert 'LOCAL_FILE_ONLY_NO_NETWORK_UPLOAD' in diag
           assert 'SERVER_ACCEPTANCE=UNVERIFIED' in diag
-          assert 'FERAL_NOVA_v30_session.json' in diag
+          assert 'FERAL_NOVA_v31_session.json' in diag
           print('V29_ALL_V15_FEATURES_UNCHANGED_AND_TELEMETRY_PRIVACY_PASS')
           PY
       - name: Mocked Luau telemetry - own attributes, aggregation and save
@@ -130,7 +131,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          source=Path('roblox-tools/feral-nova-diagnostics-v30.0.lua').read_text()
+          source=Path('roblox-tools/feral-nova-diagnostics-v31.0.lua').read_text()
           assert source.rstrip().endswith('return Diagnostics')
           source=source[:source.rfind('return Diagnostics')]
           mock=r'''
@@ -223,7 +224,7 @@ jobs:
           assert(D.growthTrials.growth_off_eagle_young.delta>.009)
           assert(D.payload().summary.eagleGoalEvidence.observedTalonPresses==1)
           local ok,msg=D.save()
-          assert(ok and file=='{"diagnostics":true}' and path=="FERAL_NOVA_v30_session.json")
+          assert(ok and file=='{"diagnostics":true}' and path=="FERAL_NOVA_v31_session.json")
           local copied=D.copy()
           assert(copied and string.find(clipboard,"HP gained=5",1,true))
           assert(string.find(D.report(),"SERVER_ACCEPTANCE=UNVERIFIED",1,true))
