@@ -98,9 +98,44 @@ local function capturedByState(target)
     return false, nil
 end
 
+
+-- A physical latch may use a replicated joint instead of a status flag.
+-- Only a real joint connecting OUR body to another player's body counts.
+local function capturedByJoint(char)
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false, nil end
+    local function connected(obj)
+        if not (obj:IsA("WeldConstraint") or obj:IsA("Weld")
+            or obj:IsA("Motor6D")) then return false end
+        local a, b = obj.Part0, obj.Part1
+        if not a or not b then return false end
+        if a:IsDescendantOf(char) and not b:IsDescendantOf(char) then return true end
+        if b:IsDescendantOf(char) and not a:IsDescendantOf(char) then return true end
+        return false
+    end
+    local function scan(container)
+        for _, item in ipairs(container:GetDescendants()) do
+            if connected(item) then return true end
+        end
+        return false
+    end
+    if scan(char) then return true, "replicated cross-character joint" end
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character then
+            local theirRoot = other.Character:FindFirstChild("HumanoidRootPart")
+            if theirRoot and (root.Position - theirRoot.Position).Magnitude < 18 then
+                if scan(other.Character) then
+                    return true, "nearby player latch joint"
+                end
+            end
+        end
+    end
+    return false, nil
+end
+
 local function visibleLabel(label)
     local node = label
-    for _ = 1, 7 do
+    for _ = 1, 14 do
         if not node then return false end
         if node:IsA("GuiObject") and not node.Visible then return false end
         if node:IsA("ScreenGui") then return node.Enabled end
@@ -125,10 +160,15 @@ local function capturedByPrompt(playerGui, ownGui)
                     or msg:find("STRUGGLE", 1, true)
                     or msg:find("GET FREE", 1, true)
                     or msg:find("RELEASE YOURSELF", 1, true)
+                local context = string.upper(tostring(node.Name).." "..
+                    (node.Parent and tostring(node.Parent.Name) or ""))
+                local marked = space and (context:find("ESCAPE",1,true)
+                    or context:find("STRUGGLE",1,true)
+                    or context:find("GRAPPLE",1,true))
                 local mash = msg:find("MASH SPACE", 1, true)
                     or msg:find("SPAM SPACE", 1, true)
                     or msg:find("TAP SPACE REPEATEDLY", 1, true)
-                if (space and escape) or mash then
+                if (space and escape) or mash or marked then
                     return true, "on-screen escape prompt"
                 end
             end
@@ -214,7 +254,12 @@ function Module.mount(ctx)
         if now >= A.nextCheck then
             A.nextCheck = now + .20
             local yes, which = capturedByState(char)
+            if not yes then yes, which = capturedByState(hum) end
             if not yes then yes, which = capturedByState(player) end
+            if not yes then
+                local ok, joint, name = pcall(capturedByJoint, char)
+                if ok then yes, which = joint, name end
+            end
             if not yes then
                 local ok, found, name = pcall(capturedByPrompt, pg, ctx.ui)
                 if ok then yes, which = found, name end
@@ -646,7 +691,7 @@ function Module.mount(ctx)
             local list = {}
             for i=1, math.min(8, #S.nearby) do
                 local x = S.nearby[i]
-                list[#list+1] = string.format("%d   %s   [%s]   %dm",
+                list[#list+1] = string.format("%d   %s   [%s]   %d studs",
                     i, tostring(x.name):sub(1,14), tostring(x.species):sub(1,12),
                     math.floor(x.distance+.5))
             end
