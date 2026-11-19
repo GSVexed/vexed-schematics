@@ -375,7 +375,12 @@ function Recovery.attach(ctx)
             M.status="WAITING FOR SAFE IDLE"
             return
         end
-        if hum.Health>=hum.MaxHealth-.2 and not M.statusActive then
+        -- A Turtle may deliberately rest for shell protection at full HP.
+        -- This is opt-in only and still subject to safety/idle checks.
+        local species=char:GetAttribute("Species")
+        local turtle=type(species)=="string" and
+            string.find(species,"SnappingTurtle",1,true)~=nil
+        if hum.Health>=hum.MaxHealth-.2 and not M.statusActive and not turtle then
             M.status="HP FULL / NO STATUS TO CLEAR"
             return
         end
