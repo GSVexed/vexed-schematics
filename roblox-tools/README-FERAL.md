@@ -1,5 +1,17 @@
 # FERAL client project
 
+## CURRENT — Aurora NOVA v4.0 (compact, automatic escape, true outline-only ESP)
+
+**[Aurora NOVA v4 guide](README-feral-aurora-nova-v4.0.md)** · New two-tab no-scroll dashboard with one-tap setup, native resource stats, an automatic grab watcher (no ALT required), true non-glowing player outlines, small optional unboxed name tags, 200/400/800-stud ranges, and retained reversible movement/stamina settings. The grabbed-state cue and executor input support are not yet live-verified; no fake server grants.
+
+\`\`\`lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-aurora-nova-v4.0.lua"))()
+\`\`\`
+
+Older Aurora FORCE v3.1 remains below for reference.
+
+---
+
 ## CURRENT — Aurora FORCE v3.1 (power-first)
 
 **[Aurora FORCE v3.1 guide](README-feral-aurora-force-v3.1.md)** · New compact
