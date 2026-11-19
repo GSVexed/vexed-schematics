@@ -1,6 +1,20 @@
 # FERAL client project
 
-## CURRENT — NOVA PRIME v10.0 (clean physics / Rest recovery evidence)
+## CURRENT — NOVA PRIME v11.0 (one-download, combat-first recovery investigation)
+
+**[Release guide](README-feral-nova-prime-v11.0.md)** · Recommended **single-file Velocity launcher**, embedding eight pinned modules so module-download drift cannot break startup. After user reports of slow Tiger escapes, ineffective local hitbox changes and normal Rest being presented as permanent recovery, v11 retains the improved native escape tracker and **removes physical hitbox editing entirely**. Passive collision reporting, close-camera names, outline ESP and one Endurance switch remain.
+
+The fifth main card is now opt-in **MOBILE RECOVERY**: measures missing-HP/bleed/venom/injury recovery while moving, sends one bounded native Rest signal, measures moving recovery under that signal, then measures after clearing it. It continues signaling **only if a rate improvement was actually observed**, and releases the signal when attacking, grabbed, changing character or if local Rest could block bites. A small independent **SAFE REST** control provides the game’s ordinary stationary 2× HP/4× status Rest effect. **Always-on server-accepted recovery while fighting remains unproven**, and the UI must not imply otherwise. Nothing runs the mobile experiment automatically.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-prime-standalone-v11.0.lua"))()
+```
+
+**One-time migration:** If v7/v8 Hitbox Test was used, rejoin FERAL in a fresh Roblox session first to discard their old local geometry modifications. Source-linked Luau tests pass; **live server gameplay is not verified**.
+
+---
+
+## PREVIOUS — NOVA PRIME v10.0 (clean physics / Rest recovery evidence)
 
 **[v10 guide](README-feral-nova-prime-v10.0.md)** · Critical cleanup after user report of physical obstruction approaching other animals and missing 2× HP / 4× negative-effect recovery. **No enemy hitbox or collision-property edits.** Adds a read-only target root/raycast collision audit. **Fully rejoin FERAL once before first v10 run** to discard any residual v7/v8 client root enlargement; old originals can't be inferred safely. One compact REST RECOVERY switch now requests normal Rest when *injury, bleeding or venom needs clearing even at full HP*, with live attribute-rate comparison. No automatic Rest at startup or while fighting. The server still decides Rest applicability; 2×/4× are archived Rest conditions, **not guaranteed always-on multipliers**. Preserves v9 directional/tug escape and no-glow close-range ESP, with six main controls and a single Endurance switch.
 
