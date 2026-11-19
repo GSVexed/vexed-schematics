@@ -414,6 +414,94 @@ jobs:
           Path('/tmp/v13-mobile-carry.luau').write_text(mock+src+'\n'+tests)
           PY
           "$LUAU" /tmp/v13-mobile-carry.luau
+      - name: Luau test - Safe Rest yields to predator carrying before rest state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-recovery-v13.0.lua').read_text().rsplit('return Recovery',1)[0]
+          mock=r'''
+          local stamp=1
+          os={clock=function()return stamp end}
+          local attrs={
+              Species="Wolf",Hunger=80,Thirst=80,WolfRest=false,
+              FeralInjury=8,FeralBleed=0,FeralVenomAmt=0
+          }
+          local hum={Health=75,MaxHealth=100}
+          local root={AssemblyLinearVelocity={Magnitude=0},Position={}}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k)return attrs[k]end,
+              FindFirstChild=function(self,k)
+                  if k=="HumanoidRootPart" then return root end
+              end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hum end
+              end
+          }
+          local holding=false
+          local own={Character=char,
+              GetAttribute=function(self,k)return nil end}
+          local calls={}
+          local remote={
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,method,value)
+                  assert(method=="Rest")
+                  table.insert(calls,value)
+              end
+          }
+          local beat
+          game={GetService=function(self,k)
+              if k=="Players" then return {
+                  LocalPlayer=own,GetPlayers=function(self)return {own}end
+              }end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,k)
+                      if k=="WolfActions" then return remote end
+                  end
+              }end
+              if k=="UserInputService" then return {
+                  InputBegan={Connect=function(self,fn)
+                      return {Disconnect=function(self)end}
+                  end}
+              }end
+              if k=="RunService" then return {
+                  Heartbeat={Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function(self)beat=nil end}
+                  end}
+              }end
+          end}
+          workspace={GetServerTimeNow=function(self)return 100+stamp end}
+          '''
+          cases=r'''
+          local ctx={state={alive=true},carry={
+              classify=function(char)
+                  return holding and "HOLDING PREY" or "FREE",holding,false
+              end
+          }}
+          local M=Recovery.attach(ctx)
+          assert(M.enabled==false)
+          M.setEnabled(true)
+          beat()
+          stamp=7.4
+          beat()
+          assert(#calls==1 and calls[1]==true)
+          attrs.WolfRest=true
+          holding=true
+          stamp=7.75
+          beat()
+          assert(#calls==2 and calls[2]==false)
+          assert(M.restOwned==nil)
+          assert(M.status=="CARRYING / REST HELD OFF")
+          M.close()
+          assert(M.alive==false and beat==nil)
+          print("V13_REST_OFF_WHILE_CARRYING_EVEN_IF_WOLFREST_TRUE_PASS")
+          '''
+          Path('/tmp/v13-rest-carry.luau').write_text(mock+src+'\n'+cases)
+          PY
+          "$LUAU" /tmp/v13-rest-carry.luau
       - name: Luau test - native escape actions only when captured, not holding
         shell: bash
         run: |
