@@ -189,6 +189,14 @@ function Flight.attach(ctx)
             return false
         end
         F.nextAttempt=now+.75
+        -- Jumping to fly has priority over a hub-owned Rest signal.
+        -- Do not reset the game's native carry or the user's prey.
+        if ctx.recovery and ctx.recovery.beforeCarry then
+            pcall(ctx.recovery.beforeCarry)
+        end
+        if ctx.mobile and ctx.mobile.beforeCarry then
+            pcall(ctx.mobile.beforeCarry)
+        end
         local clamp=outgoingClamp(char)
         F.lastTakeoffCarry=clamp~=nil
         if clamp then
