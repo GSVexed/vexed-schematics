@@ -65,7 +65,7 @@ function Mobile.attach(ctx)
         lastSample=nil,lastSampleAt=0,lastCharacter=nil,
         measuredHp=false,measuredStatus=false,
         observedUplift=false,upliftStatusTypes="",
-        sustainable=false
+        sustainable=false,baselineStarted=false
     }
     local conns={}
     local function fire(on)
@@ -115,6 +115,7 @@ function Mobile.attach(ctx)
         M.measuredStatus=false
         M.upliftStatusTypes=""
         M.sustainable=false
+        M.baselineStarted=false
     end
     local function input(action)
         M.lastInput=os.clock()
@@ -198,13 +199,19 @@ function Mobile.attach(ctx)
         end
         -- The entire experiment requires natural movement.
         if root.AssemblyLinearVelocity.Magnitude<1.6 then
-            if now-M.phaseStart>1.2 then
-                M.movementStops+=1
-                finish("STOPPED: NO CONTINUOUS MOVEMENT","INCONCLUSIVE")
-            else
-                M.status="MOVE TO START BASELINE"
+            if M.phase=="BASELINE" and not M.baselineStarted then
+                M.status="START MOVING TO BEGIN"
+                return
             end
+            M.movementStops+=1
+            finish("STOPPED: MOVEMENT INTERRUPTED","INCONCLUSIVE")
             return
+        end
+        if M.phase=="BASELINE" and not M.baselineStarted then
+            M.baselineStarted=true
+            M.phaseStart=now
+            M.lastSample=nil
+            M.lastSampleAt=0
         end
         if char:GetAttribute("WolfRest")==true then
             M.restConflicts+=1
@@ -225,6 +232,8 @@ function Mobile.attach(ctx)
         if not hasDeficit and M.phase=="BASELINE" then
             M.status="NEED HP DEFICIT OR BLEED / VENOM / INJURY"
             M.phaseStart=now
+            M.lastSample=nil
+            M.lastSampleAt=0
             return
         end
         local window=M.phase=="BASELINE" and M.baseline
