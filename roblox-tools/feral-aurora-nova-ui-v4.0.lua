@@ -109,8 +109,17 @@ local function capturedByJoint(char)
             or obj:IsA("Motor6D")) then return false end
         local a, b = obj.Part0, obj.Part1
         if not a or not b then return false end
-        if a:IsDescendantOf(char) and not b:IsDescendantOf(char) then return true end
-        if b:IsDescendantOf(char) and not a:IsDescendantOf(char) then return true end
+        local function belongsToOtherPlayer(part)
+            for _, candidate in ipairs(Players:GetPlayers()) do
+                if candidate ~= player and candidate.Character
+                    and part:IsDescendantOf(candidate.Character) then
+                    return true
+                end
+            end
+            return false
+        end
+        if a:IsDescendantOf(char) and belongsToOtherPlayer(b) then return true end
+        if b:IsDescendantOf(char) and belongsToOtherPlayer(a) then return true end
         return false
     end
     local function scan(container)
