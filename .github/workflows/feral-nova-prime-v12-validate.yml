@@ -230,6 +230,101 @@ jobs:
           Path('/tmp/v12-carry-life.luau').write_text(mock+src+'\n'+cases)
           PY
           "$LUAU" /tmp/v12-carry-life.luau
+      - name: Luau test - carrying pauses recovery but does not disable it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-mobile-v12.0.lua').read_text().rsplit('return Mobile',1)[0]
+          mock=r'''
+          local clock=1
+          os={clock=function()return clock end}
+          local hp={Health=50,MaxHealth=100}
+          local root={AssemblyLinearVelocity={Magnitude=2}}
+          local char={
+              Parent={},
+              GetAttribute=function(self,k) return false end,
+              FindFirstChildOfClass=function(self,k)
+                  if k=="Humanoid" then return hp end
+              end,
+              FindFirstChild=function(self,k)
+                  if k=="HumanoidRootPart" then return root end
+              end
+          }
+          local player={
+              Character=char,
+              GetAttribute=function(self,k)return nil end
+          }
+          local holding=false
+          local args={}
+          local remote={
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,k,value)
+                  assert(k=="Rest")
+                  table.insert(args,value)
+              end
+          }
+          local inputFn,beat
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player} end
+              if k=="ReplicatedStorage" then return {
+                  FindFirstChild=function(self,n)
+                      if n=="WolfActions" then return remote end
+                  end}
+              end
+              if k=="UserInputService" then return {
+                  GetFocusedTextBox=function(self)return nil end,
+                  InputBegan={Connect=function(self,fn)
+                      inputFn=fn
+                      return {Disconnect=function(self)inputFn=nil end}
+                  end}}
+              end
+              if k=="RunService" then return {Heartbeat={
+                  Connect=function(self,fn)
+                      beat=fn
+                      return {Disconnect=function(self)beat=nil end}
+                  end}}
+              end
+          end}
+          Enum={
+              UserInputType={MouseButton1=1,MouseButton2=2},
+              KeyCode={G=3,W=4,A=5,S=6,D=7,Space=8,Unknown=9}
+          }
+          '''
+          tests=r'''
+          local carry={
+              classify=function(char)
+                  return holding and "HOLDING PREY" or "FREE",
+                     holding,false
+              end
+          }
+          local M=Mobile.attach({state={alive=true},carry=carry})
+          M.setEnabled(true)
+          for i=1,24 do
+              clock=clock+.24
+              hp.Health+=.09
+              beat()
+          end
+          assert(M.phase=="SIGNAL" and args[#args]==true)
+          inputFn({KeyCode=Enum.KeyCode.G},false)
+          assert(M.enabled==true and M.phase=="CARRY_PAUSED")
+          assert(args[#args]==false)
+          holding=true
+          clock=clock+.27;beat()
+          assert(M.phase=="CARRY_PAUSED")
+          holding=false
+          clock=clock+.27;beat()
+          assert(M.enabled==true and M.phase=="BASELINE")
+          assert(M.carryResumes==1)
+          assert(M.carryPauses==1)
+          M.close()
+          assert(M.alive==false and beat==nil)
+          print("V12_CARRY_PAUSE_AND_AUTORESUME_PASS")
+          '''
+          Path('/tmp/v12-mobile-carry.luau').write_text(mock+src+'\n'+tests)
+          PY
+          "$LUAU" /tmp/v12-mobile-carry.luau
       - name: Luau test - native escape actions only when captured, not holding
         shell: bash
         run: |
