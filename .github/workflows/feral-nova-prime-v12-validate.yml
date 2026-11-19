@@ -170,6 +170,7 @@ jobs:
           from pathlib import Path
           src=Path('roblox-tools/feral-nova-carry-v12.0.lua').read_text().rsplit('return Carry',1)[0]
           mock=r'''
+          local _G={}
           local stamp=1
           os={clock=function()return stamp end}
           local attrs={}
