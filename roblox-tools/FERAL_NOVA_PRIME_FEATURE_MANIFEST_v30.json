@@ -1,0 +1,287 @@
+{
+  "schema": "feral-nova-regression-manifest/30",
+  "version": "v30.0",
+  "place_id": 108901361810209,
+  "standalone": "roblox-tools/feral-nova-prime-standalone-v30.0.lua",
+  "baseline": "roblox-tools/feral-nova-prime-standalone-v15.0.lua",
+  "modules": [
+    {
+      "file": "feral-aurora-engine-v13.0.lua",
+      "feature": "Core state, all-player ESP highlighting, session UI and cleanup"
+    },
+    {
+      "file": "feral-aurora-power-v14.0.lua",
+      "feature": "Original Endurance stamina/no-drain, speed/leap, power profiles"
+    },
+    {
+      "file": "feral-nova-escape-v15.0.lua",
+      "feature": "Automatic escape from hostile grabs and movement-compatible escape"
+    },
+    {
+      "file": "feral-nova-combat-v15.0.lua",
+      "feature": "Combat input validation and attack window observations"
+    },
+    {
+      "file": "feral-nova-recovery-v15.0.lua",
+      "feature": "Rest recovery and combat-aware action priority"
+    },
+    {
+      "file": "feral-nova-mobile-v15.0.lua",
+      "feature": "Mobile recovery experiments and A/B trial interactions"
+    },
+    {
+      "file": "feral-nova-carry-v15.0.lua",
+      "feature": "Native G carry/drop logic and prey-handling guards"
+    },
+    {
+      "file": "feral-nova-reach-v14.0.lua",
+      "feature": "Reversible nonphysical client bite reach settings"
+    },
+    {
+      "file": "feral-nova-regen-v29.0.lua",
+      "feature": "2x client HP and 4x status inputs while retaining original combat exclusion"
+    },
+    {
+      "file": "feral-nova-flight-v28.0.lua",
+      "feature": "Surface-eligible takeoff, underwater native drop acknowledgement, air-carry coordination"
+    },
+    {
+      "file": "feral-nova-native-recovery-v29.0.lua",
+      "feature": "Native Rest recovery with pose-recurrence safety, no periodic Rest refresh"
+    },
+    {
+      "file": "feral-nova-baby-v15.0.lua",
+      "feature": "Friendly same-species adult pickup exception"
+    },
+    {
+      "file": "feral-nova-climb-v15.0.lua",
+      "feature": "Native Q-buffered Quick Climb and priority guards"
+    },
+    {
+      "file": "feral-nova-tags-v8.0.lua",
+      "feature": "Player nametags, distance labels and visibility filters"
+    },
+    {
+      "file": "feral-nova-prime-ui-v30.0.lua",
+      "feature": "Unified Active Recovery with Eagle goal live evidence in UI"
+    },
+    {
+      "file": "feral-nova-mechanics-v28.0.lua",
+      "feature": "Experimental local Elder growth/Talon carry/cooldown, bounded presets and readback"
+    },
+    {
+      "file": "feral-nova-diagnostics-v30.0.lua",
+      "feature": "Actual LocalPlayer Talon press/pending, stage-specific growth progression, sustained local clamps and observed cooldowns"
+    },
+    {
+      "file": "feral-nova-active-recovery-v29.0.lua",
+      "feature": "Single Active Recovery coordinator for native Rest, cached HP/status, pose fallbacks"
+    }
+  ],
+  "core_features": [
+    {
+      "id": "endurance",
+      "module": "feral-aurora-power-v14.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "health_regen_2x",
+      "module": "feral-nova-regen-v29.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "status_recovery_4x",
+      "module": "feral-nova-regen-v29.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "native_rest_recovery",
+      "module": "feral-nova-native-recovery-v29.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "esp_player_outlines",
+      "module": "feral-aurora-engine-v13.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "esp_tags_distance",
+      "module": "feral-nova-tags-v8.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "auto_hostile_escape",
+      "module": "feral-nova-escape-v15.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "friendly_baby_pickup",
+      "module": "feral-nova-baby-v15.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "quick_climb_Q",
+      "module": "feral-nova-climb-v15.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "native_carry_G",
+      "module": "feral-nova-carry-v15.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "flight_surface_takeoff",
+      "module": "feral-nova-flight-v28.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "flight_underwater_exit",
+      "module": "feral-nova-flight-v28.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "air_carry",
+      "module": "feral-nova-flight-v28.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "client_bite_reach",
+      "module": "feral-nova-reach-v14.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "elder_growth_trial",
+      "module": "feral-nova-mechanics-v28.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "large_eagle_catch_trial",
+      "module": "feral-nova-mechanics-v28.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "talon_cooldown_trial",
+      "module": "feral-nova-mechanics-v28.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "regen_ab_metrics",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "stamina_activity_metrics",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "growth_accepted_progress_metrics",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "talon_cooldown_distribution_metrics",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "automatic_private_report",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "rightshift_toggle",
+      "module": "feral-nova-prime-ui-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "close_end_shutdown",
+      "module": "feral-nova-prime-ui-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "single_instance_reload",
+      "module": "feral-nova-prime-standalone-v30.0.lua",
+      "server_verified": false,
+      "required": true
+    },
+    {
+      "id": "single_active_recovery_toggle",
+      "module": "feral-nova-active-recovery-v29.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "native_pose_recurrence_guard",
+      "module": "feral-nova-native-recovery-v29.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "combat_healing_exclusion_preserved",
+      "module": "feral-nova-regen-v29.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "talon_press_outcome_metrics",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "talon_player_attribute_source_corrected",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "talon_local_sustained_clamp_evidence",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "growth_by_species_stage_and_trial",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "required": true,
+      "server_verified": false
+    },
+    {
+      "id": "cooldown_after_talon_press_observations",
+      "module": "feral-nova-diagnostics-v30.0.lua",
+      "required": true,
+      "server_verified": false
+    }
+  ],
+  "verified_offline": [
+    "pending-v30-ci"
+  ],
+  "verification_limitation": "v30 correctly observes LocalPlayer Talon signals, local clamp durations, growth stages and cooldown changes. The public game's server still independently decides growth, carry, and accepted cooldowns; none are yet verified.",
+  "private_report_repo": "GSVexed/chatgpt-minecraft-testlab",
+  "private_report": "diagnostics/feral-nova/latest.json"
+}
