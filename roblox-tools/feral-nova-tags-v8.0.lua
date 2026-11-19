@@ -23,7 +23,7 @@ function Tags.attach(ctx)
     },pg)
     local T={
         alive=true,gui=gui,active=0,visible=0,closeCount=0,
-        lastError="",frameInterval=.065,lastFrame=0
+        lastError="",frameInterval=.065,lastFrame=-math.huge
     }
     local labels={}
     local function clear(plr)
