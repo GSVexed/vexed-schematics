@@ -5,6 +5,7 @@ local Escape={}
 local Players=game:GetService("Players")
 local UIS=game:GetService("UserInputService")
 local RunService=game:GetService("RunService")
+local RS=game:GetService("ReplicatedStorage")
 local player=Players.LocalPlayer
 
 local keys={
@@ -122,12 +123,31 @@ local function validConnection(char)
     return false
 end
 
+
+-- Confirmed in a FERAL client capture from 18 Nov 2026:
+-- Character.FeralCarried -> "getoff"; own clamp/shake progress -> "shake".
+-- These are the same native FeralLunge RemoteEvent verbs used by the UI.
+-- We do NOT call them without the local animal's own active escape state.
+local function nativeEscapeMode(char)
+    if char:GetAttribute("FeralCarried")==true then
+        return "getoff","carried escape"
+    end
+    local clamp=char:GetAttribute("FeralClampGame")
+    if type(clamp)~="number" then
+        clamp=char:GetAttribute("FeralClampN")
+    end
+    if type(clamp)=="number" and clamp>0 and clamp<1000 then
+        return "shake","shake off attacker"
+    end
+    return nil,nil
+end
+
 function Escape.attach(ctx)
     local e={
         alive=true,enabled=true,status="WATCHING",source="",
         pulses=0,lastInputError="",input="UNAVAILABLE",
         lastScan=0,holdUntil=0,nextPulse=0,down=false,token=0,
-        successes=0
+        successes=0,nativeCount=0,nextNative=0
     }
     local env
     if type(getgenv)=="function" then
@@ -183,6 +203,37 @@ function Escape.attach(ctx)
         if not char or not hum or hum.Health<=0
             or player:GetAttribute("FeralMenuOpen")==true then
             e.holdUntil=0;e.status="WAITING FOR ANIMAL";stopPress();return
+        end
+        -- Prefer the game's actual escape action over executor-simulated
+        -- Space whenever the recovered game-specific victim state is present.
+        -- This also works when Velocity cannot inject keyboard events.
+        local nativeAction,nativeReason=nativeEscapeMode(char)
+        if nativeAction then
+            e.holdUntil=now+.34
+            e.source=nativeReason
+            stopPress()
+            if now>=e.nextNative then
+                local remote=RS:FindFirstChild("FeralLunge")
+                if remote and remote:IsA("RemoteEvent") then
+                    -- Match native client pacing: carry getoff >=0.4 seconds;
+                    -- shake calls >= the 0.15s game-side minimum interval.
+                    e.nextNative=now+(nativeAction=="getoff" and .43 or .23)
+                    local ok,err=pcall(function()
+                        remote:FireServer(nativeAction)
+                    end)
+                    if ok then
+                        e.nativeCount+=1
+                        e.status="SENDING ESCAPE"
+                        return
+                    else
+                        e.lastInputError=tostring(err)
+                        e.status="NATIVE INPUT ERROR"
+                    end
+                end
+            else
+                e.status="SENDING ESCAPE"
+                return
+            end
         end
         if now-e.lastScan>=.25 then
             e.lastScan=now
