@@ -99,7 +99,7 @@ function Combat.attach(ctx)
             local maxVertical=(hum.HipHeight+eHum.HipHeight)*cfg.MAX_DY
             local valid=gap<reach and angle>maxAngle and vertical<maxVertical
             local s=gap-angle*2
-            if valid and (not score or s<score) then
+            if valid and (not best or not best.valid or s<score) then
                 score=s
                 best={model=model,root=eRoot,hum=eHum,
                     dist=dist,margin=reach-gap,gap=gap,valid=true}
