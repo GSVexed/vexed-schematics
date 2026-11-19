@@ -44,6 +44,34 @@ jobs:
             "$COMPILER" --null "$file"
           done
           echo NOVA_V6_LUAU_PASS
+      - name: Run native escape policy unit tests in official Luau
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("roblox-tools/feral-nova-escape-v6.0.lua").read_text()
+          assert source.rstrip().endswith("return Escape")
+          # Stub only startup services; test pure action classification.
+          mock='game={GetService=function(self,name) if name=="Players" then return {LocalPlayer={}} end return {} end}\n'
+          tests="""
+          local a=Escape.chooseNative
+          assert(a(true,nil,nil,false,false,false)=="getoff")
+          assert(a(false,nil,nil,true,false,false)=="getoff")
+          assert(a(false,5,nil,false,true,false)=="shake")
+          assert(a(false,5,2,false,false,false)=="shake")
+          assert(a(false,5,nil,false,false,false)==nil)
+          assert(a(false,nil,nil,false,false,true)==nil)
+          assert(a(false,0,0,false,false,false)==nil)
+          assert(a(false,0,2,false,false,false)==nil)
+          print("NOVA_V6_ESCAPE_POLICY_TESTS_PASS")
+          """
+          result=mock+source.rsplit("return Escape",1)[0]+"\n"+tests
+          Path("/tmp/nova-v6-escape-policy.luau").write_text(result)
+          PY
+          luau="$(dirname "$COMPILER")/luau"
+          test -x "$luau"
+          "$luau" /tmp/nova-v6-escape-policy.luau
       - name: Validate real feature wiring and cleanup
         shell: bash
         run: |
@@ -84,7 +112,7 @@ jobs:
                     'remote:FireServer(E.nativeState)','E.nativeCount += 1',
                     'E.pulses += 1','e.nextPulse' if False else 'E.nextPulse',
                     'function E.setEnabled(on)','function E.close()',
-                    'function E.report()', 'E.lastChar ~= char',
+                    'function E.report()', 'E.lastChar ~= char', 'E.wasNative',
                     'if n > 650 then break end','if count > 380 then break end'):
               assert x in escape,x
           assert 'feral-nova-escape-v6.0.lua' in loader
