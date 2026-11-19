@@ -333,7 +333,8 @@ function Flight.attach(ctx)
             restoreWater()
             F.takeoffPendingUntil=0
             restoreClamp()
-            if F.airborne and now>=F.nextDrop then
+            if F.airborne and now>=F.nextDrop and F.awaitingDropUntil==0
+                and now-F.lastNativeDropAt>=3.5 then
                 F.nextDrop=now+.8
                 local ok=pcall(function()char:SetAttribute("FeralFlyDrop",true)end)
                 if ok then
