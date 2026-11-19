@@ -109,7 +109,7 @@ function Tags.attach(ctx)
                         if rootDist<=S.range then
                             local closeCamera=rootDist<9
                             local x,y
-                            if pos.Z>0 then
+                            if pos.Z>0 and (front or closeCamera) then
                                 x=pos.X
                                 y=pos.Y
                             elseif closeCamera then
