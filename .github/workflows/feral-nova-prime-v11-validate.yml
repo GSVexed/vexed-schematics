@@ -139,12 +139,13 @@ jobs:
           local stamp=0
           os={clock=function()return stamp end}
           local char={}
+          local restFlag=false
           local hp={Health=60,MaxHealth=100}
           local vel={Magnitude=2}
           local root={AssemblyLinearVelocity=vel}
           char.Parent={}
           char.GetAttribute=function(self,key)
-              if key=="WolfRest" then return false end
+              if key=="WolfRest" then return restFlag end
               return 0
           end
           char.FindFirstChildOfClass=function(self,key)
@@ -207,6 +208,20 @@ jobs:
           inputCallback({UserInputType=Enum.UserInputType.MouseButton1},false)
           assert(#calls==2 and calls[2]==false)
           assert(M.enabled==false and M.attackStops==1)
+          -- A new trial must also abort when FERAL reports WolfRest,
+          -- because that state blocks normal bite input.
+          M.setEnabled(true)
+          for i=1,21 do
+              stamp=stamp+.28
+              hp.Health+=.1
+              heartbeat()
+          end
+          assert(M.phase=="SIGNAL" and calls[#calls]==true)
+          restFlag=true
+          stamp=stamp+.26
+          heartbeat()
+          assert(M.enabled==false and M.restConflicts==1)
+          assert(calls[#calls]==false)
           M.close()
           assert(M.alive==false and heartbeat==nil)
           print("V11_SIGNAL_ATTACK_CANCEL_PASS")
