@@ -49,6 +49,7 @@ function Carry.attach(ctx)
         canInteract=false,action="G",helper="UNAVAILABLE",
         method="NONE",attempts=0,helperCalls=0,keyboardTaps=0,
         blocked=0,preemptedRest=0,lastError="",lastAt=-math.huge,
+        nextRefresh=0,refreshes=0,
         lastInputAt=-math.huge,lastState="NO ANIMAL",
         changes=0,holdingEpisodes=0,victimEpisodes=0
     }
@@ -207,6 +208,7 @@ function Carry.attach(ctx)
             "native_g_fallback_available="..tostring(type(press)=="function"),
             "carry_action_confirmed_by_server=UNVERIFIED",
             "button_requests="..tostring(C.attempts),
+            "carry_capability_polls="..tostring(C.refreshes),
             "rest_interference_preemptions="..tostring(C.preemptedRest),
             "carry_transitions="..tostring(C.changes),
             "holding_episodes="..tostring(C.holdingEpisodes),
@@ -229,14 +231,20 @@ function Carry.attach(ctx)
         if processed or UIS:GetFocusedTextBox() then return end
         if input.KeyCode==Enum.KeyCode.G then
             C.lastInputAt=os.clock()
+            C.nextRefresh=0
             -- Only withdraw an OWNED experimental Rest signal; never
             -- intercept, sink, or fire additional native carry actions.
             releaseForCarry()
         end
     end)
     C.connection=RunService.Heartbeat:Connect(function()
+        if not C.alive then return end
+        local now=os.clock()
+        if now<C.nextRefresh then return end
+        C.nextRefresh=now+.13 -- Native FeralCarryCan may perform expensive work.
         local ok,err=pcall(refresh)
-        if not ok then C.lastError=tostring(err) end
+        if ok then C.refreshes+=1
+        else C.lastError=tostring(err) end
     end)
     return C
 end
