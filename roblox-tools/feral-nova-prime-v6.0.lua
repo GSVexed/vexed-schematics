@@ -1,0 +1,83 @@
+-- FERAL NOVA PRIME v6.0 / Velocity one-line entry
+-- Private game/server state is not impersonated; all changes local/reversible.
+local ROOT="https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/"
+if game.PlaceId~=108901361810209 then
+    warn("[NOVA PRIME] Open FERAL Animal Survival before running.")
+    return
+end
+local Players=game:GetService("Players")
+local player=Players.LocalPlayer
+local pg=player and (player:FindFirstChildOfClass("PlayerGui")
+    or player:WaitForChild("PlayerGui",10))
+if not pg then warn("[NOVA PRIME] PlayerGui unavailable");return end
+
+for _,name in ipairs({
+    "FeralNovaPrimeV60","FeralNovaPrimeV50","FeralAuroraNovaV40","FeralAuroraForceV31",
+    "FeralAuroraHubV30","FeralAuroraHubV21","FeralAuroraHubV20",
+    "FeralRecoveryHubV10","FeralRecoveryHubV11","FeralRecoveryHubV12",
+    "FeralRecoveryHubV13","FeralFieldHubV10","FeralFieldHubV11",
+    "FeralFieldHubV12","FeralFieldHubV13","FeralFieldHubV14"
+}) do
+    local old=pg:FindFirstChild(name)
+    if old then
+        local stop=old:FindFirstChild("AuroraShutdown")
+            or old:FindFirstChild("HubShutdown")
+        if stop and stop:IsA("BindableEvent") then
+            pcall(function()stop:Fire()end)
+        end
+        if old.Parent then pcall(function()old:Destroy()end)end
+    end
+end
+
+local function get(path)
+    local ok,body=pcall(function()return game:HttpGet(ROOT..path)end)
+    if not ok or type(body)~="string" or #body<100 then
+        warn("[NOVA PRIME] Module download failed: "..path)
+        return nil
+    end
+    local compiled,err=loadstring(body)
+    if not compiled then
+        warn("[NOVA PRIME] Compilation failed: "..path.." - "..tostring(err))
+        return nil
+    end
+    local done,value=pcall(compiled)
+    if not done then
+        warn("[NOVA PRIME] Module failed: "..path.." - "..tostring(value))
+        return nil
+    end
+    return value
+end
+
+local core=get("feral-aurora-engine-v2.1.lua")
+local power=get("feral-aurora-power-v3.1.lua")
+local escape=get("feral-nova-escape-v6.0.lua")
+local ui=get("feral-nova-prime-ui-v6.0.lua")
+if not core or type(core.new)~="function"
+    or not power or type(power.attach)~="function"
+    or not escape or type(escape.attach)~="function"
+    or not ui or type(ui.mount)~="function" then
+    warn("[NOVA PRIME] Required modules unavailable. Nothing changed.")
+    return
+end
+local ok,ctx=pcall(function()return core.new({})end)
+if not ok or type(ctx)~="table" then
+    warn("[NOVA PRIME] Could not start core.")
+    return
+end
+local attached,reason=pcall(function()
+    power.attach(ctx)
+    ctx.escape=escape.attach(ctx)
+end)
+if not attached or not ctx.escape then
+    pcall(ctx.close)
+    warn("[NOVA PRIME] Core extension error: "..tostring(reason))
+    return
+end
+local ready,window=pcall(function()return ui.mount(ctx)end)
+if not ready or not window then
+    pcall(ctx.escape.close)
+    pcall(ctx.close)
+    warn("[NOVA PRIME] UI failed: "..tostring(window))
+    return
+end
+ctx.notice("NOVA PRIME v6 ready. Automatic escape + no-glow ESP armed; one endurance switch.")
