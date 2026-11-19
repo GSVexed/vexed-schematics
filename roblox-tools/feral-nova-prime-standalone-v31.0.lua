@@ -6559,8 +6559,8 @@ function Mechanics.attach(ctx)
 end
 return Mechanics
 ]==========]
-,["feral-nova-diagnostics-v30.0.lua"]=[==========[
--- FERAL NOVA PRIME v30 / Eagle growth, Talon attempt and sustained carry evidence
+,["feral-nova-diagnostics-v31.0.lua"]=[==========[
+-- FERAL NOVA PRIME v31 / native Eagle latch, server reply and local cooldown gate observations
 -- Privacy: never includes names, IDs, chats, coordinates, player lists or external URLs.
 -- Captures own character and controller state. No background network transmission.
 -- Auto-saves to the executor workspace when writefile is available.
@@ -6616,7 +6616,7 @@ function Diagnostics.attach(ctx)
     if not player then return nil end
     local D={
         alive=true,enabled=true,autoSave=(type(writefile)=="function"),
-        autoSavePeriod=25,saveFile="FERAL_NOVA_v30_session.json",
+        autoSavePeriod=25,saveFile="FERAL_NOVA_v31_session.json",
         status="Starting own-client diagnostics",saveStatus="No file yet",
         samples={},events={},maxSamples=720,maxEvents=180,
         transitions=0,samplesTotal=0,deathCount=0,respawns=0,climbTapStarts=0,
@@ -6724,6 +6724,12 @@ function Diagnostics.attach(ctx)
             expGrowth=mods and mods.enabled.growth or false,
             expCarry=mods and mods.enabled.carry or false,
             expCooldown=mods and mods.enabled.cooldown or false,
+            eagleNativeDragAttempts=ctx.eagleActions and ctx.eagleActions.directDragAttempts or 0,
+            eagleCooldownGateEdits=ctx.eagleActions and ctx.eagleActions.cooldownAttrEdits or 0,
+            eagleServerScratchReplies=ctx.eagleActions and ctx.eagleActions.serverBitReplies or 0,
+            eagleServerClampReplies=ctx.eagleActions and ctx.eagleActions.serverClampReplies or 0,
+            eagleServerClampAfterAssist=ctx.eagleActions and ctx.eagleActions.serverClampAfterAssist or 0,
+            eagleLastServerResult=ctx.eagleActions and ctx.eagleActions.lastServerResult or "NONE",
             flying=yes(attribute(char,"FeralFlyLocal")),
             swimming=yes(attribute(char,"FeralSwimLocal"))
                 or swimmingState(hum),
@@ -6936,7 +6942,7 @@ function Diagnostics.attach(ctx)
     end
     local function totals()
         local summary={
-            schema="FERAL_NOVA_DIAG_V30",scope="OWN_CHARACTER_ONLY",
+            schema="FERAL_NOVA_DIAG_V31",scope="OWN_CHARACTER_ONLY",
             transfer="LOCAL_FILE_ONLY_NO_NETWORK_UPLOAD",
             duration=rounded(os.clock()-start),sessions=D.session,
             samples=D.samplesTotal,events=#D.events,respawns=D.respawns,
@@ -6973,6 +6979,15 @@ function Diagnostics.attach(ctx)
             },
             staminaNoDrainMissingSeconds=rounded(D.noDrainMissingSeconds),
             recoveryComparison={},growthComparison={},staminaByMovement={},cooldownComparison={},
+            eagleNativeAction={
+                nativeDragRetryRequests=ctx.eagleActions and ctx.eagleActions.directDragAttempts or 0,
+                serverScratchReplies=ctx.eagleActions and ctx.eagleActions.serverBitReplies or 0,
+                serverClampReplies=ctx.eagleActions and ctx.eagleActions.serverClampReplies or 0,
+                serverClampRepliesAfterAssist=ctx.eagleActions and ctx.eagleActions.serverClampAfterAssist or 0,
+                clientDeadlineShortenings=ctx.eagleActions and ctx.eagleActions.cooldownAttrEdits or 0,
+                lastServerResult=ctx.eagleActions and ctx.eagleActions.lastServerResult or "NONE",
+                note="Clamp response is reported by native server event, but may not prove lasting larger-prey carry."
+            },
             water={
                 surfaceTakeoffs=D.lastSnapshot and D.lastSnapshot.flightRequests or 0,
                 blockedSubmergedTakeoffs=D.lastSnapshot and D.lastSnapshot.underwaterTakeoffBlocked or 0,
@@ -7028,7 +7043,7 @@ function Diagnostics.attach(ctx)
         local a=totals()
         local s=D.lastSnapshot or {}
         local lines={
-            "=== FERAL NOVA PRIME v30 AUTOMATIC DIAGNOSTICS ===",
+            "=== FERAL NOVA PRIME v31 AUTOMATIC DIAGNOSTICS ===",
             "privacy=own_character_aggregates_only; upload=NONE",
             "duration_s="..tostring(a.duration).." samples="..a.samples.." events="..a.events,
             "species="..tostring(s.species).." sessions="..a.sessions,
@@ -7051,6 +7066,11 @@ function Diagnostics.attach(ctx)
                 " surface_eligible="..tostring(s.waterSurfaceEligible)..
                 " flying="..tostring(s.flying)..
                 " relative_depth="..tostring(s.relativeWaterDepth),
+            "native_drag_retries="..tostring(a.eagleNativeAction.nativeDragRetryRequests)..
+                " server_scratch_replies="..tostring(a.eagleNativeAction.serverScratchReplies)..
+                " server_clamp_replies="..tostring(a.eagleNativeAction.serverClampReplies)..
+                " clamp_replies_after_assist="..tostring(a.eagleNativeAction.serverClampRepliesAfterAssist)..
+                " client_deadline_shortened="..tostring(a.eagleNativeAction.clientDeadlineShortenings),
             "talon_press_signals="..tostring(a.talonPresses)..
                 " talon_pending="..tostring(a.talonPendingStarts)..
                 " local_clamp_starts="..tostring(a.clampStarts),
@@ -7647,7 +7667,7 @@ local native=get("feral-nova-native-recovery-v29.0.lua")
 local baby=get("feral-nova-baby-v15.0.lua")
 local climb=get("feral-nova-climb-v15.0.lua")
 local mechanics=get("feral-nova-mechanics-v28.0.lua")
-local diagnostics=get("feral-nova-diagnostics-v30.0.lua")
+local diagnostics=get("feral-nova-diagnostics-v31.0.lua")
 local activeRecovery=get("feral-nova-active-recovery-v29.0.lua")
 local eagleActions=get("feral-nova-eagle-actions-v31.0.lua")
 local ui=get("feral-nova-prime-ui-v31.0.lua")
