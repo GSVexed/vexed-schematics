@@ -95,6 +95,112 @@ jobs:
           assert 'FireServer(' not in lab, 'hitbox module sends unauthorized traffic'
           print('V7_SCOPE_AND_CLEANUP_CHECKS_PASS')
           PY
+      - name: Simulate target root enlargement and exact restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-nova-combat-v7.0.lua').read_text()
+          source=source.rsplit('return Lab',1)[0]
+          stub=r'''
+          local vmeta={}
+          function vmeta.__index(self,key)
+              if key=="Magnitude" then
+                  return math.sqrt(self.X*self.X+self.Y*self.Y+self.Z*self.Z)
+              end
+          end
+          function vmeta.__sub(a,b)
+              return Vector3.new(a.X-b.X,a.Y-b.Y,a.Z-b.Z)
+          end
+          Vector3={new=function(x,y,z)
+              return setmetatable({X=x,Y=y,Z=z},vmeta)
+          end}
+          local event={Connect=function(self,handler)
+              return {Disconnect=function(self) end}
+          end}
+          local hum={Health=100}
+          local enemyHum={Health=80}
+          local ownRoot={
+              Position=Vector3.new(0,0,0),
+              Size=Vector3.new(2,2,2)
+          }
+          local enemyRoot={
+              Position=Vector3.new(5,0,5),
+              Size=Vector3.new(2,3,2),
+              Anchored=false,
+              Parent={},
+              IsA=function(self,typ) return typ=="BasePart" end
+          }
+          local ownChar={
+              Parent={},
+              FindFirstChild=function(self,name)
+                  if name=="HumanoidRootPart" then return ownRoot end
+              end,
+              FindFirstChildOfClass=function(self,typ)
+                  if typ=="Humanoid" then return hum end
+              end,
+              GetAttribute=function(self,key) return nil end,
+              GetAttributeChangedSignal=function(self,key) return event end
+          }
+          local enemyChar={
+              Parent={},
+              FindFirstChild=function(self,name)
+                  if name=="HumanoidRootPart" then return enemyRoot end
+              end,
+              FindFirstChildOfClass=function(self,typ)
+                  if typ=="Humanoid" then return enemyHum end
+              end,
+              GetAttribute=function(self,key) return nil end
+          }
+          local other={Character=enemyChar}
+          local player={
+              Character=ownChar,
+              CharacterAdded=event,
+              GetAttribute=function(self,k) return nil end
+          }
+          local heartbeatCallback
+          local beat={Connect=function(self,callback)
+              heartbeatCallback=callback
+              return {Disconnect=function(self) heartbeatCallback=nil end}
+          end}
+          local services={
+              Players={LocalPlayer=player,GetPlayers=function(self)
+                  return {player,other} end},
+              ReplicatedStorage={FindFirstChild=function(self,n) return nil end},
+              RunService={Heartbeat=beat}
+          }
+          game={GetService=function(self,n) return services[n] end}
+          workspace={FindFirstChild=function(self,n) return nil end}
+          '''
+          tests=r'''
+          local ctx={stats=function() return {
+              amber=100,growth=0.3,hp=100,maxHp=100
+          } end}
+          local lab=Lab.attach(ctx)
+          assert(lab.enabled==false)
+          assert(enemyRoot.Size.X==2 and enemyRoot.Size.Y==3)
+          lab.setEnabled(true)
+          heartbeatCallback()
+          assert(lab.roots==1)
+          assert(math.abs(enemyRoot.Size.X-3.3)<.0001)
+          assert(math.abs(enemyRoot.Size.Z-3.3)<.0001)
+          assert(enemyRoot.Size.Y==3)
+          assert(ownRoot.Size.X==2 and ownRoot.Size.Z==2)
+          lab.setEnabled(false)
+          assert(enemyRoot.Size.X==2 and enemyRoot.Size.Z==2)
+          assert(enemyRoot.Size.Y==3)
+          lab.setEnabled(true)
+          heartbeatCallback()
+          assert(lab.roots==1)
+          lab.close()
+          assert(enemyRoot.Size.X==2 and enemyRoot.Size.Z==2)
+          assert(lab.alive==false)
+          print("V7_ROOT_GEOMETRY_AND_RESTORATION_PASS")
+          '''
+          Path('/tmp/test-v7-geometry.luau').write_text(stub+source+'\n'+tests)
+          PY
+          "$LUAU" /tmp/test-v7-geometry.luau
       - name: Simulate combat module lifecycle in Luau
         shell: bash
         run: |
