@@ -1,0 +1,74 @@
+name: FERAL HUB v2 - Luau + Preservation + UI Regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-hub-v2.0-potassium.lua'
+      - 'roblox-tools/feral-hub-ui-v2.0.lua'
+      - 'roblox-tools/README-feral-hub-v2.0.md'
+      - '.github/workflows/feral-hub-v2-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau-feral-v2.zip
+          mkdir -p /tmp/luau-feral-v2
+          unzip -q /tmp/luau-feral-v2.zip -d /tmp/luau-feral-v2
+          c="$(find /tmp/luau-feral-v2 -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+      - name: Compile final shipped bundle, the new UI, and prior release
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-v2.0-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-ui-v2.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-v1.0-potassium.lua
+          echo FERAL_HUB_V2_ALL_LUAU_COMPILED
+      - name: Validate 18 unchanged modules, expected UI delta and startup safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          v1=(root/'feral-hub-v1.0-potassium.lua').read_text()
+          v2=(root/'feral-hub-v2.0-potassium.lua').read_text()
+          ui=(root/'feral-hub-ui-v2.0.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          original=dict(re.findall(pattern,v1,re.S))
+          updated=dict(re.findall(pattern,v2,re.S))
+          assert len(original)==len(updated)==19
+          assert set(original)==set(updated)
+          changes=[name for name in original if original[name]!=updated[name]]
+          assert changes==['feral-nova-prime-ui-v32.0.lua'],changes
+          assert updated[changes[0]]==ui
+          assert 'endurance(false)' in ui and 'agility(false)' in ui and 'view(false)' in ui
+          assert 'Enum.KeyCode.RightShift' in ui and 'Enum.KeyCode.End' in ui
+          assert 'COPY BOOT REPORT' in ui and 'COPY SESSION' in ui
+          assert 'SERVER ACCEPTANCE UNVERIFIED' in ui or 'SERVER OUTCOMES LABELED' in ui
+          assert 'ctx.hubBuild={' in v2
+          assert 'loadstring("return 6*7")' in v2
+          assert 'FERAL_HUB_STARTUP_v2.json' in v2
+          assert 'FERAL_HUB_SESSION_v2.json' in v2
+          assert 'monitorConnection:Disconnect()' in v2
+          assert 'H.closeSession()' in v2
+          assert 'H.startSession(ctx)' in v2
+          assert 'FeralNovaPrimeV320' in v2
+          assert 'FERAL_NOVA_PRIME_ACTIVE' in v2
+          assert 'game:HttpGet(' not in v2
+          assert 'HttpPost' not in v2
+          assert len(v2)>330000
+          print('FERAL_HUB_V2_FEATURE_PRESERVATION_REGRESSION_PASS')
+          PY
