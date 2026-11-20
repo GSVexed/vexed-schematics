@@ -302,6 +302,7 @@ function Eagle.attach(ctx)
         if dist>math.max(9,2.5+sizeA/2+sizeB/2) then return nil,"TOO FAR FOR LATCH" end
         return {char=char,root=root,prey=target,preyRoot=theirRoot,distance=dist},nil
     end
+    local bindLungeRemote
     local function nativeDragAfterScratch()
         -- Only act once after an actual server "bit" response for a recently
         -- user-selected target. If server-side size validation rejects it,
@@ -376,7 +377,7 @@ function Eagle.attach(ctx)
             E.lastWhy="NATIVE DRAG REQUEST FAILED"
         end
     end
-    local function bindLungeRemote(candidate)
+    bindLungeRemote=function(candidate)
         if not candidate or candidate.Name~="FeralLunge"
             or not candidate:IsA("RemoteEvent") then return end
         if remote==candidate and remoteConnection then return end
