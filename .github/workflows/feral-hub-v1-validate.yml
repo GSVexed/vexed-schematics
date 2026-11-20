@@ -1,0 +1,60 @@
+name: FERAL HUB v1.0 - Offline Release Validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-hub-v1.0-potassium.lua'
+      - 'roblox-tools/README-feral-hub-v1.0.md'
+      - '.github/workflows/feral-hub-v1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler
+        run: |
+          set -euo pipefail
+          curl -fLsS --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau.zip
+          mkdir -p /tmp/luau-bin
+          unzip -q /tmp/luau.zip -d /tmp/luau-bin
+          compiler="$(find /tmp/luau-bin -name luau-compile -type f | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile full offline script and baseline
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-v1.0-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-prime-standalone-v32.0.lua
+          echo FERAL_HUB_V1_LUAU_COMPILE_PASS
+      - name: Validate all 19 original modules and startup guards
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          src=Path('roblox-tools/feral-hub-v1.0-potassium.lua').read_text()
+          base=Path('roblox-tools/feral-nova-prime-offline-v34.0.lua').read_text()
+          def extract(s):
+              return s[s.index('local BUNDLED={'):s.index('local function get(path)')]
+          b0,b1=extract(base),extract(src)
+          assert b1==b0,'one or more original modules changed'
+          modules=re.findall(r'\["([^"]+\.lua)"\]=\[==========\[',b1)
+          assert len(modules)==19,(len(modules),modules)
+          assert len(set(modules))==19
+          assert 'FERAL HUB v1.0' in src
+          assert 'FERAL_HUB_STARTUP_v1.json' in src
+          assert 'H.brand(hub)' in src
+          assert 'Enum.KeyCode.RightShift' in src
+          assert 'FeralNovaPrimeV320' in src
+          assert 'feral-nova-active-recovery-v29.0.lua' in modules
+          assert 'feral-nova-eagle-actions-v32.0.lua' in modules
+          assert 'feral-nova-tags-v8.0.lua' in modules
+          assert 'feral-nova-climb-v15.0.lua' in modules
+          assert 'feral-aurora-power-v14.0.lua' in modules
+          assert 'game:HttpGet(' not in src
+          print('FERAL_HUB_V1_ALL_19_MODULES_IDENTICAL_AND_STARTUP_GUARDS_PASS')
+          PY
