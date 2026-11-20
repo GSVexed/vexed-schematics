@@ -1,0 +1,55 @@
+name: FERAL NOVA OFFLINE v34 - Guarded Standalone Validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-offline-v34.0.lua'
+      - '.github/workflows/feral-nova-offline-v34-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau-v34.zip
+          mkdir -p /tmp/luau-v34
+          unzip -q /tmp/luau-v34.zip -d /tmp/luau-v34
+          c="$(find /tmp/luau-v34 -name luau-compile -type f | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+      - name: Compile exactly the offline file users run
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-prime-offline-v34.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-prime-standalone-v32.0.lua
+          echo FERAL_OFFLINE_V34_COMPILE_PASS
+      - name: Check exact v32 module preservation and error overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-prime-offline-v34.0.lua').read_text()
+          original=Path('roblox-tools/feral-nova-prime-standalone-v32.0.lua').read_text()
+          assert original in src
+          assert 'FeralNovaPrimeV320' in src
+          assert 'FERAL_NOVA_OFFLINE_BOOT' in src
+          assert 'FERAL_NOVA_STARTUP_OFFLINE_v34.txt' in src
+          assert 'setStatus("RUNTIME ERROR"' in src
+          assert 'setStatus("NO HUB CREATED"' in src
+          assert 'get("feral-nova-eagle-actions-v32.0.lua")' in src
+          assert 'get("feral-nova-active-recovery-v29.0.lua")' in src
+          assert 'get("feral-nova-flight-v28.0.lua")' in src
+          assert src.count('local BUNDLED=')==1
+          assert len(src)>300000
+          print('FERAL_OFFLINE_V34_100_PERCENT_MODULE_PRESERVATION_PASS')
+          PY
