@@ -53,6 +53,7 @@ function Eagle.attach(ctx)
         clientOversizeClampObservations=0,ratioUnavailable=0,
         nearServerClampObservations=0,lastServerClampAt=-math.huge,
         activeHoldRatio=nil,deadlineSource="NONE",
+        nearServerCorrelatedHold=nil,
     }
     local connections={}
     local charConnections={}
@@ -89,6 +90,7 @@ function Eagle.attach(ctx)
         E.anyHoldingTarget=nil
         E.anyHoldingSince=0
         E.activeHoldRatio=nil
+        E.nearServerCorrelatedHold=nil
     end
     local function addSelected(v)
         if not E.alive or not v or v.Name~="FeralTalonTarget"
@@ -142,6 +144,7 @@ function Eagle.attach(ctx)
                 end
                 if now-E.lastServerClampAt<=3 then
                     E.nearServerClampObservations+=1
+                    E.nearServerCorrelatedHold=held
                 end
                 if E.pendingClampTarget~=held then
                     E.unmatchedClampObservations+=1
@@ -230,6 +233,15 @@ function Eagle.attach(ctx)
         if writingReady or not sameKindFlag("cooldown") then return end
         if not getChar() then return end
         local ready=localPlayer:GetAttribute("FeralLungeReadyAt")
+        local char=localPlayer.Character
+        local characterReady=char and char:GetAttribute("FeralLungeReadyAt")
+        if numeric(ready) then
+            E.deadlineSource="PLAYER"
+        elseif numeric(characterReady) then
+            E.deadlineSource="CHARACTER_ONLY / NO PLAYER WRITE"
+        else
+            E.deadlineSource="NO_REPLICATED_DEADLINE"
+        end
         if not numeric(ready) then return end
         local now=Workspace:GetServerTimeNow()
         if not numeric(now) then return end
@@ -370,6 +382,11 @@ function Eagle.attach(ctx)
                 end
             elseif kind=="clamp" then
                 E.lastServerClampAt=os.clock()
+                if E.anyHoldingTarget and E.anyHoldingTarget~=E.nearServerCorrelatedHold
+                    and os.clock()-E.anyHoldingSince<=3 then
+                    E.nearServerClampObservations+=1
+                    E.nearServerCorrelatedHold=E.anyHoldingTarget
+                end
                 E.serverClampReplies+=1
                 E.lastServerResult="CLAMP"
                 if E.lastDragAt>0 and os.clock()-E.lastDragAt<3 then
@@ -415,7 +432,7 @@ function Eagle.attach(ctx)
     end)
     function E.report()
         return table.concat({
-            "FERAL v32 / NATIVE EAGLE ASSIST",
+            "FERAL HUB v5 / OBSERVED EAGLE OUTCOMES",
             "carry_assist_enabled="..tostring(E.carryOn),
             "cooldown_gate_enabled="..tostring(E.cooldownOn),
             "client_lunge_deadline_shortened="..E.cooldownAttrEdits,
@@ -423,6 +440,15 @@ function Eagle.attach(ctx)
             "server_scratch_replies="..E.serverBitReplies,
             "server_clamp_replies="..E.serverClampReplies,
             "replicated_clamps_matching_retry="..E.actualClampObservations,
+            "all_observed_physical_clamps="..E.anyClampObservations,
+            "holds_not_matching_assist_target="..E.unmatchedClampObservations,
+            "holds_near_server_clamp_response="..E.nearServerClampObservations,
+            "held_preys_client_ratio_above_1_45="..E.clientOversizeClampObservations,
+            "held_preys_size_unknown="..E.ratioUnavailable,
+            "currently_holding_any_prey="..tostring(E.anyHoldingTarget~=nil),
+            "current_hold_local_size_ratio="..tostring(E.activeHoldRatio),
+            "all_observed_hold_seconds_finished="..string.format("%.2f",E.anyClampHoldSeconds),
+            "longest_observed_hold_seconds_finished="..string.format("%.2f",E.longestAnyClampSeconds),
             "replicated_clamp_hold_seconds="..string.format("%.2f",E.actualClampHoldSeconds),
             "longest_replicated_clamp_seconds="..string.format("%.2f",E.longestActualClampSeconds),
             "clamp_reply_without_matching_hold="..E.serverClampWithoutObservedCarry,
@@ -433,12 +459,14 @@ function Eagle.attach(ctx)
             "already_holding_guard_skips="..E.skippedAlreadyHolding,
             "local_cooldown_original_updates="..E.localCooldownOriginalUpdates,
             "client_deadline_reverts_observed="..E.serverDeadlineOverwrites,
+            "current_deadline_attribute_source="..E.deadlineSource,
             "clamp_replies_after_assist="..E.serverClampAfterAssist,
             "server_miss_replies="..E.serverMissReplies,
             "last_server_result="..E.lastServerResult,
             "last_issue="..E.lastWhy,
             "NOTE=Client gate edits and drag requests cannot force game-server pickup.",
-            "NOTE=Only a replicated FeralClamp matched to the selected prey counts as a held target.",
+            "NOTE=Observed physical holds are distinguished from matching assisted-target holds.",
+            "NOTE=Client size ratio is not server validated and may reflect locally patched config.",
             "NOTE=One extra drag request maximum per five seconds, only after an observed scratch."
         },"\n")
     end
