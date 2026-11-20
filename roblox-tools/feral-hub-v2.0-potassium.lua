@@ -8175,7 +8175,7 @@ if not ready or not window then
 end
 -- Close a previous v28 instance before starting any new hooks. The v15
 -- engine and all module shutdowns run before new recurring connections exist.
-ctx.notice("NOVA PRIME v32: Eagle native drag attempts now measure actual matching FeralClamp holds; client Talon gate adjustable. Growth remains local only; recovery, stamina and surface flight preserved.")
+ctx.notice("FERAL HUB v2: 18 gameplay modules preserved. Matching replicated Eagle holds are observed; local Talon gate and growth settings do not prove server acceptance. Recovery, stamina and flight retained.")
 -- The UI invokes ctx.close() dynamically. This wrapper is the sole active-hub
 -- registry; shutting down from Close, End, RESET+Close or rerunning v28 clears it.
 local activeRecord={}
@@ -8224,7 +8224,7 @@ else
         log.preservedGameplayModules=18
         log.updatedUIModule="feral-hub-ui-v2.0.lua"
         save()
-        show("READY","Right Shift toggles FERAL HUB. Client/server gameplay still needs live verification.",false)
+        show("READY","Right Shift toggles FERAL HUB; open HELP for reports and feature limits.",false)
         if type(task)=="table" and type(task.delay)=="function" then
             task.delay(7,function()
                 if overlay and overlay.Parent then overlay:Destroy()end
