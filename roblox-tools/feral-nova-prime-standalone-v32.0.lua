@@ -7664,7 +7664,7 @@ function Eagle.attach(ctx)
             E.pendingClampResponse=false
             E.pendingClampEverHeld=false
         end
-    end
+    end)
     function E.report()
         return table.concat({
             "FERAL v32 / NATIVE EAGLE ASSIST",
