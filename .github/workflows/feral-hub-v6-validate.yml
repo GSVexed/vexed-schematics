@@ -102,8 +102,8 @@ jobs:
           assert 'maskedNoHealSeconds=12' in active
           assert 'safeRest.setEnabled(true)' in active
           assert 'bindLungeRemote' in eagle
-          assert 'FERAL_HUB_STARTUP_v5.json' in new
-          assert 'FERAL_HUB_SESSION_v5.json' in new
+          assert 'FERAL_HUB_STARTUP_v6.json' in new
+          assert 'FERAL_HUB_SESSION_v6.json' in new
           assert 'game:HttpGet(' not in new
           assert 'H.precompiledCount+=1' in new
           assert 'H.closeSession()' in new
