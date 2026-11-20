@@ -2,6 +2,12 @@
 
 **Status: officially Luau-compiled; not confirmed in a live server. Not an infinite-Voodoo hub.**
 
+## Critical limitation identified on 20 Nov 2026 — target validity
+
+This v1 probe is **not a valid stand-alone proof of infinite Voodoo**. It selects a **non-player creature** and treats the creature's replicated Health loss as a proxy for an accepted Energy Bolt. The only publicly available *historical* Booga server handler that we can inspect applies Energy Bolt AOE damage to **players**, not necessarily critters or resources. Therefore, even a perfectly accepted cast could leave the tested NPC's Health unchanged. The captured current Reborn **client** does not prove that it damages non-player targets.
+
+**Do not interpret zero NPC damage as a server rejection, or positive damage as a free cast** without a current-game authorised target and independent damage and balance evidence. The experiment remains a bounded client request/cached-resource test only. We cannot certify server-recognised infinite energy from this script; no credible current-version exploit has been validated. See [20 Nov Voodoo server-authority checkpoint](https://github.com/GSVexed/chatgpt-minecraft-testlab/blob/main/pc-lab/BOOGA_VOODOO_CURRENT_SERVER_AUTHORITY_CHECKPOINT_2026-11-20.md).
+
 ## What is different from v4–v6?
 
 Previous hubs periodically sent `VoodooSpell.send({targetPos,aimDirection})`. More outgoing requests were wrongly confused with actual strikes. This experiment tests one *distinct and falsifiable* hypothesis: **can two back-to-back, same-client-execution-slice spell requests result in two damaging strikes while the player has only enough Voodoo to afford one?**
