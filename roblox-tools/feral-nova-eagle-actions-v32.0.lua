@@ -42,7 +42,7 @@ function Eagle.attach(ctx)
         lastMode="NONE",lastWhy="",
         targetSelections=0,guardedRejects=0,serverDeadlineOverwrites=0,
         pendingClampUntil=0,pendingClampTarget=nil,
-        pendingClampResponse=false,
+        pendingClampResponse=false,pendingClampEverHeld=false,
         actualClampObservations=0,actualClampHoldSeconds=0,
         longestActualClampSeconds=0,holdingSince=0,observedHoldingTarget=nil,
         serverClampWithoutObservedCarry=0,
@@ -83,6 +83,7 @@ function Eagle.attach(ctx)
         E.pendingClampTarget=nil
         E.pendingClampUntil=0
         E.pendingClampResponse=false
+        E.pendingClampEverHeld=false
         E.observedHoldingTarget=nil
         E.holdingSince=0
         if not char then return end
@@ -221,6 +222,7 @@ function Eagle.attach(ctx)
             E.directDragAttempts+=1
             E.pendingClampTarget=row.prey
             E.pendingClampResponse=false
+            E.pendingClampEverHeld=false
             E.pendingClampUntil=os.clock()+4
             E.status="ONE NATIVE DRAG REQUEST SENT / WAITING FOR SERVER"
         else
@@ -277,6 +279,7 @@ function Eagle.attach(ctx)
         if held and held==E.pendingClampTarget and now<=E.pendingClampUntil then
             if E.observedHoldingTarget~=held then
                 E.actualClampObservations+=1
+                E.pendingClampEverHeld=true
                 E.observedHoldingTarget=held
                 E.holdingSince=now
                 E.status="REPLICATED FERALCLAMP OBSERVED / REAL HOLD"
@@ -292,15 +295,15 @@ function Eagle.attach(ctx)
             end
         end
         if E.pendingClampUntil>0 and now>E.pendingClampUntil then
-            if E.pendingClampResponse and E.observedHoldingTarget==nil
-                and (not held or held~=E.pendingClampTarget) then
+            if E.pendingClampResponse and not E.pendingClampEverHeld then
                 E.serverClampWithoutObservedCarry+=1
             end
             E.pendingClampUntil=0
             E.pendingClampTarget=nil
             E.pendingClampResponse=false
+            E.pendingClampEverHeld=false
         end
-    end)
+    end
     function E.report()
         return table.concat({
             "FERAL v32 / NATIVE EAGLE ASSIST",
