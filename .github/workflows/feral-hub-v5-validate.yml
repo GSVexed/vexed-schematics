@@ -273,7 +273,7 @@ jobs:
           assert(E.longestActualClampSeconds>=.4)
           onRemote:Fire("bit")
           assert(E.directDragAttempts==1)
-          clock=24.5
+          clock=28.5
           heartbeat:Fire()
           assert(E.serverClampWithoutObservedCarry==0)
           -- An unrelated later physical hold must be visible, but cannot
@@ -284,7 +284,7 @@ jobs:
           assert(E.anyClampObservations==2)
           assert(E.actualClampObservations==1)
           cfg.enabled.cooldown=false
-          clock=25.1
+          clock=29.1
           heartbeat:Fire()
           assert(playerAttrs.FeralLungeReadyAt==160)
           E.close()
