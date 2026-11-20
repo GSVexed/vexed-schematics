@@ -69,8 +69,11 @@ function Mechanics.attach(ctx)
         lastAt=now
         lastMode=enabled
     end
+    local lastPoll=0
     growthConnection=RunService.Heartbeat:Connect(function()
-        if not lastAt or os.clock()-lastAt>=1 then
+        local now=os.clock()
+        if now-lastPoll>=1 then
+            lastPoll=now
             pcall(sampleGrowth)
         end
     end)
