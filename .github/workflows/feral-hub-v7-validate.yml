@@ -532,3 +532,95 @@ jobs:
           Path('/tmp/feral-v7-mobile-native.luau').write_text(prelude+source+tests)
           PY
           "$LUAU" /tmp/feral-v7-mobile-native.luau
+
+      - name: Mocked mobile recovery - native Rest on, combat off, movement preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-hub-mobile-recovery-v7.0.lua').read_text()
+          assert code.rstrip().endswith('return Native')
+          code=code[:code.rfind('return Native')]
+          setup=r'''
+          local now=1
+          local serverNow=100
+          os={clock=function()return now end}
+          local function event()
+              local obj={}
+              function obj:Connect(fn)
+                  self.fn=fn
+                  return {Disconnect=function()end}
+              end
+              return obj
+          end
+          local heartbeat=event()
+          local input=event()
+          local attrs={WolfRest=false,Species="Eagle"}
+          local char={Parent=true}
+          function char:GetAttribute(k)return attrs[k]end
+          function char:SetAttribute(k,v)attrs[k]=v end
+          function char:GetAttributeChangedSignal(k)return event()end
+          local hum={Health=50,MaxHealth=100}
+          function char:FindFirstChildOfClass(k)
+              if k=="Humanoid"then return hum end
+          end
+          local pattrs={}
+          local player={Character=char}
+          function player:GetAttribute(k)return pattrs[k]end
+          local sent={}
+          local remote={}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          function remote:FireServer(k,v)
+              table.insert(sent,{k,v})
+          end
+          workspace={GetServerTimeNow=function()return serverNow end}
+          local services={}
+          services.Players={LocalPlayer=player}
+          services.ReplicatedStorage={FindFirstChild=function(self,k)
+              if k=="WolfActions"then return remote end
+          end}
+          services.UserInputService={
+              InputBegan=input,
+              GetFocusedTextBox=function()return nil end,
+              IsMouseButtonPressed=function()return false end
+          }
+          services.RunService={Heartbeat=heartbeat}
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2}}
+          '''
+          cases=r'''
+          local N=Native.attach({state={alive=true}})
+          assert(N.setEnabled(true)==true)
+          heartbeat.fn()
+          assert(N.active and N.nativeOn==1 and sent[1][1]=="Rest" and sent[1][2]==true)
+          -- Full health should not cancel the out-of-combat signal.
+          hum.Health=100
+          now=1.3
+          heartbeat.fn()
+          assert(N.active and N.nativeOff==0)
+          -- Flying/climbing do not interrupt it.
+          attrs.FeralFlyLocal=true
+          attrs.FeralClimbLocal=true
+          assert(N.beforeFlight()==false and N.beforeClimb()==false)
+          now=1.6
+          heartbeat.fn()
+          assert(N.active and N.nativeOff==0)
+          -- Combat tag must suspend it even when no attack is currently held.
+          pattrs.FeralCombatUntil=110
+          now=1.9
+          heartbeat.fn()
+          assert(N.active==false and N.nativeOff==1)
+          assert(N.status=="COMBAT TAG ACTIVE / REST OFF")
+          -- After combat the signal returns with the character still moving.
+          serverNow=111
+          now=2.2
+          heartbeat.fn()
+          assert(N.active and N.nativeOn==2)
+          N.close()
+          assert(N.nativeOff==2)
+          print("FERAL_HUB_V7_NATIVE_REST_LIFECYCLE_COMBAT_PAUSE_PASS")
+          '''
+          Path('/tmp/feral-v7-rest-lifecycle.luau').write_text(setup+code+cases)
+          PY
+          "$LUAU" /tmp/feral-v7-rest-lifecycle.luau
