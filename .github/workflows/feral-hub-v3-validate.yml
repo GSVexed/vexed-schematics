@@ -1,0 +1,126 @@
+name: FERAL HUB v3 - Full Pre-Potassium Gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-hub-v3.0-potassium.lua'
+      - 'roblox-tools/feral-hub-ui-v3.0.lua'
+      - 'roblox-tools/README-feral-hub-v3.0.md'
+      - '.github/workflows/feral-hub-v3-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler and interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          luau="$(dirname "$compiler")/luau"
+          test -f "$luau"
+          chmod +x "$luau"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "LUAU_RUNNER=$luau" >> "$GITHUB_ENV"
+      - name: Compile the exact shipped source and all embedded module sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-v3.0-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-ui-v3.0.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          src=Path('roblox-tools/feral-hub-v3.0-potassium.lua').read_text()
+          pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          modules=dict(re.findall(pat,src,re.S))
+          assert len(modules)==19
+          folder=Path('/tmp/feral-v3-modules')
+          folder.mkdir(exist_ok=True)
+          for name,body in modules.items():
+              (folder/name).write_text(body)
+          print('EXTRACTED_ALL_19_MODULES')
+          PY
+          for file in /tmp/feral-v3-modules/*.lua; do "$LUAU_COMPILER" --null "$file"; done
+          echo FERAL_HUB_V3_LUAU_ALL_SOURCE_COMPILE_PASS
+      - name: Compare exact 18-module preservation and validate boot architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-hub-v2.0-potassium.lua').read_text()
+          new=(root/'feral-hub-v3.0-potassium.lua').read_text()
+          ui=(root/'feral-hub-ui-v3.0.lua').read_text()
+          pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          a,b=dict(re.findall(pat,old,re.S)),dict(re.findall(pat,new,re.S))
+          assert len(a)==len(b)==19
+          assert a.keys()==b.keys()
+          diff=[key for key in a if a[key]!=b[key]]
+          assert diff==['feral-nova-prime-ui-v32.0.lua'],diff
+          assert b[diff[0]]==ui,'Embedded UI differs from external UI source'
+          assert 'endurance(false)' in ui and 'agility(false)' in ui and 'view(false)' in ui
+          assert 'RUN SELF-CHECK' in ui and 'COPY BOOT REPORT' in ui and 'COPY SESSION' in ui
+          assert 'b.Activated:Connect(callback)' not in ui
+          assert 'or not shell.Visible then return end' in ui
+          assert 'Enum.KeyCode.RightShift' in ui and 'Enum.KeyCode.End' in ui
+          assert 'FERAL_HUB_STARTUP_v3.json' in new
+          assert 'FERAL_HUB_SESSION_v3.json' in new
+          assert 'log.result=(verified and verified.failed==0)' in new
+          assert 'monitorConnection:Disconnect()' in new and 'H.closeSession()' in new
+          assert 'FERAL_NOVA_PRIME_ACTIVE' in new and 'FeralNovaPrimeV320' in new
+          assert 'game:HttpGet(' not in new,'Standalone depends on HTTP'
+          assert 'HttpPost(' not in new and 'syn.request(' not in new
+          precompile=new.index('H.precompiledCount+=1')
+          cleanup=new.index('-- Retire broken v21-v24 rebuilds before launching preserved v15 modules.')
+          modules=new.index('local core=get("feral-aurora-engine-v13.0.lua")')
+          assert precompile<cleanup<modules,'Old hub is retired before preflight'
+          assert len(new)>330000
+          print('FERAL_HUB_V3_EXACT_PRESERVATION_AND_BOOT_GATE_PASS')
+          PY
+      - name: Execute mocked Luau self-check success and missing-controller cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-hub-v3.0-potassium.lua').read_text()
+          start=source.index('function H.selfCheck(ctx)')
+          end=source.index('function H.closeSession()',start)
+          extracted=source[start:end]
+          harness=r'''
+          local H={precompiledCount=19}
+          local log={moduleCount=19,preflight={loadstringSmoke=true}}
+          local monitoring=true
+          local monitorConnection={}
+          local function save() end
+          '''
+          cases=r'''
+          local ctx={ui={Parent={}},close=function()end,onUI=function()end}
+          local features={"power","escape","carry","reach","regen","flight","native",
+              "baby","climb","mechanics","eagleActions","lab","recovery",
+              "mobile","activeRecovery","tags","diag"}
+          for _,name in ipairs(features) do ctx[name]={} end
+          local success=H.selfCheck(ctx)
+          assert(success=="SELF-CHECK PASS 24/24",success)
+          assert(log.selfCheck.failed==0)
+          ctx.eagleActions=nil
+          local failure=H.selfCheck(ctx)
+          assert(failure=="SELF-CHECK INCOMPLETE 23/24",failure)
+          assert(log.selfCheck.failed==1)
+          print("FERAL_HUB_V3_MOCKED_SELF_CHECK_PASS")
+          '''
+          Path('/tmp/feral-v3-selftest.luau').write_text(harness+extracted+cases)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v3-selftest.luau
