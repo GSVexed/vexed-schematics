@@ -112,13 +112,11 @@ if not core or type(core.new)~="function"
     or not diagnostics or type(diagnostics.attach)~="function"
     or not activeRecovery or type(activeRecovery.attach)~="function"
     or not ui or type(ui.mount)~="function" then
-    warn("[NOVA PRIME] Required modules unavailable. Nothing changed.")
-    return
+    error("[NOVA MODULAR] Required modules unavailable.",0)
 end
 local ok,ctx=pcall(function()return core.new({})end)
 if not ok or type(ctx)~="table" then
-    warn("[NOVA PRIME] Could not start core.")
-    return
+    error("[NOVA MODULAR] Core engine.new failed.",0)
 end
 local attached,reason=pcall(function()
     power.attach(ctx)
@@ -157,8 +155,7 @@ if not attached or not ctx.escape or not ctx.lab or not ctx.recovery or not ctx.
     pcall(function()if ctx.lab then ctx.lab.close()end end)
     pcall(function()if ctx.escape then ctx.escape.close()end end)
     pcall(ctx.close)
-    warn("[NOVA PRIME] Core extension error: "..tostring(reason))
-    return
+    error("[NOVA MODULAR] Core extension error: "..tostring(reason),0)
 end
 local ready,window=pcall(function()return ui.mount(ctx)end)
 if not ready or not window then
@@ -179,8 +176,7 @@ if not ready or not window then
     pcall(function()ctx.lab.close()end)
     pcall(ctx.escape.close)
     pcall(ctx.close)
-    warn("[NOVA PRIME] UI failed: "..tostring(window))
-    return
+    error("[NOVA MODULAR] UI failed: "..tostring(window),0)
 end
 -- Close a previous v28 instance before starting any new hooks. The v15
 -- engine and all module shutdowns run before new recurring connections exist.
