@@ -63,7 +63,7 @@ jobs:
           import re
           root=Path('roblox-tools')
           old=(root/'feral-hub-v6.0-potassium.lua').read_text()
-          new=(root/'feral-hub-v7.0-potassium.lua').read_text()
+          new=(root/'feral-hub-v7.2-potassium.lua').read_text()
           pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
           previous=dict(re.findall(pat,old,re.S))
           latest=dict(re.findall(pat,new,re.S))
