@@ -57,7 +57,7 @@ jobs:
           bundle=dict(re.findall(pattern,v32,re.S))
           import json
           manifest=json.loads((root/'FERAL_NOVA_PRIME_FEATURE_MANIFEST_v32.json').read_text())
-          assert manifest['schema']=='feral-nova-regression-manifest/31'
+          assert manifest['schema']=='feral-nova-regression-manifest/32'
           assert manifest['version']=='v32.0'
           assert manifest['standalone']=='roblox-tools/feral-nova-prime-standalone-v32.0.lua'
           assert len(manifest['core_features'])>=41
