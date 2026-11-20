@@ -322,7 +322,8 @@ jobs:
           onPickAt:Fire()
           playerAttrs.FeralTalonPress=100001
           heartbeat:Fire()
-          assert(E.pressFallbackScheduled==1)
+          -- The previous press was observed during the older mocked case.
+          assert(E.pressFallbackScheduled==2)
           assert(E.pressFallbackRequests==0)
           clock=41
           heartbeat:Fire()
