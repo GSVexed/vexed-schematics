@@ -1,0 +1,712 @@
+name: FERAL HUB v7.2 - Eagle Native Press and Cooldown Regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-hub-v7.2-potassium.lua'
+      - 'roblox-tools/feral-hub-eagle-v7.2.lua'
+      - 'roblox-tools/feral-hub-mechanics-v5.0.lua'
+      - 'roblox-tools/feral-hub-ui-v7.0.lua'
+      - 'roblox-tools/feral-hub-active-recovery-v7.0.lua'
+      - 'roblox-tools/feral-hub-mobile-recovery-v7.0.lua'
+      - 'roblox-tools/feral-hub-diagnostics-v7.0.lua'
+      - '.github/workflows/feral-hub-v7.2-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler and runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-v7-luau.zip
+          mkdir -p /tmp/feral-v7-luau
+          unzip -q /tmp/feral-v7-luau.zip -d /tmp/feral-v7-luau
+          c="$(find /tmp/feral-v7-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          runner="$(dirname "$c")/luau"
+          test -f "$runner"
+          chmod +x "$runner"
+          echo "COMPILER=$c" >> "$GITHUB_ENV"
+          echo "LUAU=$runner" >> "$GITHUB_ENV"
+      - name: Compile shipped main and all 19 bundled Lua sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null roblox-tools/feral-hub-v7.2-potassium.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          src=Path('roblox-tools/feral-hub-v7.2-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          modules=dict(re.findall(pattern,src,re.S))
+          assert len(modules)==19
+          folder=Path('/tmp/feral-v7-modules')
+          folder.mkdir(exist_ok=True)
+          for name,code in modules.items():
+              (folder/name).write_text(code)
+          PY
+          for file in /tmp/feral-v7-modules/*.lua; do "$COMPILER" --null "$file"; done
+          echo FERAL_HUB_V7_ALL_MODULES_LUAU_COMPILE_PASS
+      - name: Exactly five modules changed; fourteen legacy modules retained
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-hub-v6.0-potassium.lua').read_text()
+          new=(root/'feral-hub-v7.0-potassium.lua').read_text()
+          pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          previous=dict(re.findall(pat,old,re.S))
+          latest=dict(re.findall(pat,new,re.S))
+          expected={
+              'feral-nova-eagle-actions-v32.0.lua':'feral-hub-eagle-v7.2.lua',
+              'feral-nova-native-recovery-v29.0.lua':'feral-hub-mobile-recovery-v7.0.lua',
+              'feral-nova-active-recovery-v29.0.lua':'feral-hub-active-recovery-v7.0.lua',
+              'feral-nova-diagnostics-v32.0.lua':'feral-hub-diagnostics-v7.0.lua',
+              'feral-nova-prime-ui-v32.0.lua':'feral-hub-ui-v7.0.lua'
+          }
+          assert len(latest)==len(previous)==19
+          assert set(latest)==set(previous)
+          diffs={name for name in latest if latest[name]!=previous[name]}
+          assert diffs==set(expected),diffs
+          for original,updated in expected.items():
+              assert latest[original]==(root/updated).read_text()
+          eagle=latest['feral-nova-eagle-actions-v32.0.lua']
+          mech=latest['feral-nova-mechanics-v28.0.lua']
+          ui=latest['feral-nova-prime-ui-v32.0.lua']
+          assert 'GetPropertyChangedSignal("Value")' in eagle
+          assert 'GetAttributeChangedSignal("At")' in eagle
+          assert 'lastOriginalDeadline=prev' in eagle
+          assert 'growth_on_per_minute=' in mech
+          assert 'growth_off_per_minute=' in mech
+          assert 'RunService.Heartbeat:Connect(' in mech
+          assert 'growthTrialMinimumSeconds=120' in mech
+          assert 'growthByStage' in mech
+          assert 'anyClampObservations' in eagle
+          assert 'nearServerClampObservations' in eagle
+          assert 'COPY HEALTH + CARRY' in ui and 'RUN SELF-CHECK' in ui
+          assert 'MOBILE REST SIGNAL' in ui and 'COMBAT PAUSE' in ui
+          native=latest['feral-nova-native-recovery-v29.0.lua']
+          assert 'COMBAT TAG ACTIVE / REST OFF' in native
+          assert 'mobileSignalSeconds' in native
+          assert 'refreshAfterSeconds=18' in native
+          active=latest['feral-nova-active-recovery-v29.0.lua']
+          assert 'autoRealRestFallback=false' in active
+          assert 'safeRest.setEnabled(true)' not in active
+          assert 'incomparableTargetPressClocks' in eagle
+          assert 'FERAL_HUB_STARTUP_v7.json' in new
+          assert 'FERAL_HUB_SESSION_v7.json' in new
+          assert 'game:HttpGet(' not in new
+          assert 'H.precompiledCount+=1' in new
+          assert 'H.closeSession()' in new
+          print('FERAL_HUB_V7_PRESERVATION_AND_FOCUS_REGRESSION_PASS')
+          PY
+      - name: Mocked Eagle - late target, immediate hold and cooldown restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-hub-eagle-v7.2.lua').read_text()
+          assert source.rstrip().endswith('return Eagle')
+          source=source[:source.rfind('return Eagle')]
+          mock=r'''
+          local clock=20
+          os={clock=function()return clock end}
+          local funcs={}
+          local function signal()
+              local obj={listeners={}}
+              function obj:Connect(fn)
+                  table.insert(self.listeners,fn)
+                  return {Disconnect=function()end}
+              end
+              function obj:Fire(...)
+                  for _,fn in ipairs(self.listeners) do fn(...) end
+              end
+              return obj
+          end
+          local heartbeat=signal()
+          local onCharacter=signal()
+          local childAdded=signal()
+          local onDeadline=signal()
+          local onRemote=signal()
+          local onRemoteAdded=signal()
+          local onPickValue=signal()
+          local onPickAt=signal()
+          local onClampValue=signal()
+          local ownAttrs={Species="Eagle"}
+          local playerAttrs={FeralLungeReadyAt=160}
+          local pos1=setmetatable({X=0,Y=0,Z=0},{__sub=function(a,b)
+              return {Magnitude=math.abs(a.X-b.X)}
+          end})
+          local pos2=setmetatable({X=3,Y=0,Z=0},{__sub=function(a,b)
+              return {Magnitude=math.abs(a.X-b.X)}
+          end})
+          local ourRoot={Position=pos1,Size={X=2,Y=2,Z=2}}
+          local theirRoot={Position=pos2,Size={X=2,Y=2,Z=2}}
+          local humanoid={Health=50}
+          local theirHumanoid={Health=50}
+          local target={
+              Parent=true,
+              IsA=function(self,t)return t=="Model"end,
+              GetAttribute=function(self,k)return nil end,
+              FindFirstChild=function(self,k)if k=="HumanoidRootPart"then return theirRoot end end,
+              FindFirstChildOfClass=function(self,k)
+                if k=="Humanoid"then return theirHumanoid end
+              end
+          }
+          local holding=false
+          local heldClamp={
+              Name="FeralClamp",
+              IsA=function(self,k)return k=="ObjectValue"end,
+              GetPropertyChangedSignal=function(self,key)
+                  assert(key=="Value")
+                  return onClampValue
+              end,
+              Value=target
+          }
+          local char={
+              ChildAdded=childAdded,
+              GetAttribute=function(self,k)return ownAttrs[k]end,
+              FindFirstChildOfClass=function(self,k)
+                if k=="Humanoid"then return humanoid end
+              end,
+              FindFirstChild=function(self,k)
+                if k=="HumanoidRootPart"then return ourRoot end
+                if k=="FeralClamp" and holding then return heldClamp end
+              end,
+          }
+          local player={
+              Character=char,CharacterAdded=onCharacter,
+              GetAttributeChangedSignal=function(self,k)
+                assert(k=="FeralLungeReadyAt")
+                return onDeadline
+              end,
+              GetAttribute=function(self,k)return playerAttrs[k]end,
+              SetAttribute=function(self,k,v)
+                playerAttrs[k]=v
+                onDeadline:Fire()
+              end
+          }
+          local players={LocalPlayer=player,
+              GetPlayerFromCharacter=function(self,c)return nil end}
+          local sent={}
+          local remote={
+              Name="FeralLunge",
+              OnClientEvent=onRemote,
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,...)
+                 table.insert(sent,{...})
+              end
+          }
+          local config={
+              Talon={CARRY_RATIO=3},
+              size=function(model)if model==target then return 2 else return 1 end end,
+              grabMode=function(kind,attacker,prey)return "drag"end,
+              attach=function(kind,attacker,prey,position)
+                 assert(kind=="drag" and prey==target)
+                 return {kind="CFrame"}
+              end
+          }
+          local configModule={
+              IsA=function(self,k)return k=="ModuleScript"end,
+          }
+          local world={FindFirstChild=function(self,k)
+              if k=="AbilityConfig"then return configModule end
+          end}
+          local rs={ChildAdded=onRemoteAdded,FindFirstChild=function(self,k)
+             if k=="FeralLunge"then return remote end
+             if k=="FeralWorld"then return world end
+          end}
+          game={GetService=function(self,k)
+              if k=="Players"then return players end
+              if k=="ReplicatedStorage"then return rs end
+              if k=="RunService"then return {Heartbeat=heartbeat} end
+              if k=="Workspace"then return {GetServerTimeNow=function()return 100 end}end
+          end}
+          require=function(m)assert(m==configModule)return config end
+          typeof=function(v)return type(v)=="table" and v.kind or type(v) end
+          '''
+          cases=r'''
+          local cfg={enabled={carry=true,cooldown=true},
+            preset=function()return {seconds=1.5}end}
+          local ctx={mechanics=cfg}
+          local E=Eagle.attach(ctx)
+          heartbeat:Fire()
+          assert(E.cooldownAttrEdits==1)
+          assert(math.abs(playerAttrs.FeralLungeReadyAt-101.5)<.001)
+          cfg.preset=function()return {seconds=.5}end
+          clock=20.28
+          heartbeat:Fire()
+          assert(E.cooldownAttrEdits==2)
+          assert(math.abs(playerAttrs.FeralLungeReadyAt-100.5)<.001)
+          assert(E.lastOriginalDeadline==160)
+          local pick={Name="FeralTalonTarget",Value=nil,
+              GetAttribute=function(self,k)if k=="At"then return clock end end,
+              GetPropertyChangedSignal=function(self,k)
+                  assert(k=="Value")
+                  return onPickValue
+              end,
+              GetAttributeChangedSignal=function(self,k)
+                  assert(k=="At")
+                  return onPickAt
+              end,
+              IsA=function(self,t)return t=="ObjectValue"end}
+          childAdded:Fire(pick)
+          assert(E.lastTarget==nil)
+          pick.Value=target
+          onPickValue:Fire()
+          assert(E.lastTarget==target and E.targetValueUpdates==1)
+          -- User's talon press stamp may use a different clock epoch.
+          -- A fresh selected target must not be discarded for this reason.
+          playerAttrs.FeralTalonPress=100000
+          onRemote:Fire("bit")
+          assert(E.incomparableTargetPressClocks>=1)
+          assert(E.serverBitReplies==1 and E.directDragAttempts==1)
+          assert(#sent==1 and sent[1][1]=="latch" and sent[1][2]==target and sent[1][4]=="drag")
+          onRemote:Fire("clamp")
+          assert(E.serverClampReplies==1 and E.serverClampAfterAssist==1)
+          holding=true
+          clock=20.3
+          childAdded:Fire(heldClamp)
+          assert(E.actualClampObservations==1)
+          assert(E.anyClampObservations==1)
+          assert(E.clientOversizeClampObservations==1)
+          heldClamp.Value=nil
+          holding=false
+          clock=20.8
+          onClampValue:Fire()
+          assert(E.longestActualClampSeconds>=.4)
+          onRemote:Fire("bit")
+          assert(E.directDragAttempts==1)
+          clock=28.5
+          heartbeat:Fire()
+          assert(E.serverClampWithoutObservedCarry==0)
+          -- An unrelated later physical hold must be visible, but cannot
+          -- be described as a match to an assisted target.
+          holding=true
+          heldClamp.Value=target
+          onClampValue:Fire()
+          assert(E.anyClampObservations==2)
+          assert(E.actualClampObservations==1)
+          cfg.enabled.cooldown=false
+          clock=29.1
+          heartbeat:Fire()
+          assert(playerAttrs.FeralLungeReadyAt==160)
+          local lateEvent=signal()
+          local replacementRemote={
+              Name="FeralLunge",
+              OnClientEvent=lateEvent,
+              IsA=function(self,k)return k=="RemoteEvent"end,
+              FireServer=function(self,...)table.insert(sent,{...})end
+          }
+          onRemoteAdded:Fire(replacementRemote)
+          assert(E.remoteBinds==2)
+          lateEvent:Fire("miss")
+          assert(E.serverMissReplies==1)
+          -- A real user Talon press with a recently selected target,
+          -- but no bit/clamp/miss reply, permits ONE delayed native attempt.
+          heldClamp.Value=nil
+          holding=false
+          onClampValue:Fire()
+          clock=40
+          onPickAt:Fire()
+          playerAttrs.FeralTalonPress=100001
+          heartbeat:Fire()
+          assert(E.pressFallbackScheduled==1)
+          assert(E.pressFallbackRequests==0)
+          clock=41
+          heartbeat:Fire()
+          assert(E.pressFallbackTriggered==1)
+          assert(E.pressFallbackRequests==1)
+          assert(E.directDragAttempts==2)
+          assert(#sent==2 and sent[2][1]=="latch")
+          -- Rapid server restoration of a 60s deadline disables
+          -- repeated cosmetic rewrites, rather than fake an early ready.
+          cfg.enabled.cooldown=true
+          playerAttrs.FeralLungeReadyAt=160
+          clock=42
+          heartbeat:Fire()
+          assert(math.abs(playerAttrs.FeralLungeReadyAt-100.5)<.001)
+          playerAttrs.FeralLungeReadyAt=160
+          clock=42.1
+          onDeadline:Fire()
+          assert(E.deadlineServerReassertions==1)
+          playerAttrs.FeralLungeReadyAt=160
+          clock=42.2
+          onDeadline:Fire()
+          assert(E.deadlineServerReassertions==2)
+          assert(E.cooldownGateServerLimited==true)
+          assert(playerAttrs.FeralLungeReadyAt==160)
+          E.close()
+          assert(E.alive==false)
+          print("FERAL_HUB_V7_EAGLE_TARGET_CLAMP_AND_RESTORE_TEST_PASS")
+          '''
+          Path('/tmp/feral-v32-eagle.luau').write_text(mock+source+cases)
+          PY
+          "$LUAU" /tmp/feral-v32-eagle.luau
+
+      - name: Mocked Growth - own Eagle attribute sampling on and off, safe restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('roblox-tools/feral-hub-mechanics-v5.0.lua')
+          source=path.read_text()
+          assert source.rstrip().endswith('return Mechanics')
+          source=source[:source.rfind('return Mechanics')]
+          mock=r'''
+          local clock=10
+          os={clock=function()return clock end}
+          local cb
+          local beat={Connect=function(self,fn)
+              cb=fn
+              return {Disconnect=function()cb=nil end}
+          end}
+          local attrs={Species="Eagle",Growth=.2}
+          local char={GetAttribute=function(self,k)return attrs[k]end}
+          local player={Character=char}
+          local species={ADULT_MINUTES={Eagle=10}}
+          local growth={ELDER_RATE=1,CUB_BOOST=1}
+          local world={
+              FindFirstChild=function(self,k)
+                  if k=="Species" or k=="GrowthConfig" then
+                      return {name=k,IsA=function(self,t)return t=="ModuleScript"end}
+                  end
+              end
+          }
+          local rs={FindFirstChild=function(self,k)
+              if k=="FeralWorld" then return world end
+          end}
+          game={GetService=function(self,k)
+              if k=="Players" then return {LocalPlayer=player}end
+              if k=="RunService" then return {Heartbeat=beat}end
+              if k=="ReplicatedStorage" then return rs end
+          end}
+          require=function(module)
+              if module.name=="Species" then return species end
+              if module.name=="GrowthConfig" then return growth end
+          end
+          '''
+          cases=r'''
+          local M=Mechanics.attach({})
+          cb()
+          clock=11
+          attrs.Growth=.21
+          cb()
+          assert(M.growthEvidence.off.delta>.009)
+          assert(M.growthEvidence.off.seconds>=1)
+          assert(M.setEnabled("growth",true))
+          assert(species.ADULT_MINUTES.Eagle<10)
+          clock=12
+          attrs.Growth=.23
+          cb()
+          clock=13
+          attrs.Growth=.25
+          cb()
+          assert(M.growthEvidence.on.delta>.019)
+          assert(M.growthEvidence.on.seconds>=1)
+          assert(string.find(M.report(),"growth_on_per_minute=",1,true))
+          assert(M.growthOnOffComparable==false)
+          -- Build balanced, same-stage A/B observations with 120 seconds
+          -- per mode. Attribute only; not an assertion of server causality.
+          for i=1,130 do
+              clock+=1
+              attrs.Growth+=.001
+              cb()
+          end
+          assert(M.growthByStage.young.on.seconds>=120)
+          assert(M.setEnabled("growth",false))
+          for i=1,130 do
+              clock+=1
+              attrs.Growth+=.001
+              cb()
+          end
+          assert(M.growthByStage.young.off.seconds>=120)
+          assert(M.growthOnOffComparable==true)
+          assert(M.growthQuality=="BALANCED_YOUNG_EAGLE_OBSERVATIONS_ONLY")
+          M.close()
+          assert(cb==nil)
+          assert(species.ADULT_MINUTES.Eagle==10)
+          assert(growth.ELDER_RATE==1)
+          print("FERAL_HUB_V7_GROWTH_OBSERVATION_AND_RESTORE_TEST_PASS")
+          '''
+          Path('/tmp/feral-v7-growth.luau').write_text(mock+source+cases)
+          PY
+          "$LUAU" /tmp/feral-v7-growth.luau
+
+      - name: Mocked active recovery - strict combat pause and no forced visible Rest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-hub-active-recovery-v7.0.lua').read_text()
+          assert source.rstrip().endswith('return Active')
+          source=source[:source.rfind('return Active')]
+          mock=r'''
+          local tick
+          local clock=0
+          os={clock=function()return clock end}
+          local player={Character={FindFirstChildOfClass=function(self,kind)
+              if kind=="Humanoid" then return {Health=50,MaxHealth=100} end
+          end}}
+          game={GetService=function(self,service)
+              if service=="RunService" then
+                  return {Heartbeat={Connect=function(self,fn)
+                      tick=fn
+                      return {Disconnect=function()tick=nil end}
+                  end}}
+              end
+              if service=="Players" then return {LocalPlayer=player}end
+          end}
+          local N={enabled=false,active=false,status="FULL HP / NO STATUS TO CLEAR",
+              eligibleHPSeconds=0,observedHPGain=0}
+          N.setEnabled=function(v)N.enabled=v end
+          local R={enabled=false,needsApplied=true,statusApplied=true,restMultipliersReady=false}
+          R.setEnabled=function(v)R.enabled=v end
+          '''
+          cases=r'''
+          local S={enabled=false,restOwned=nil,status="SAFE REST ARMED",reason="OFF"}
+          S.setEnabled=function(v)S.enabled=v end
+          local ctx={native=N,regen=R,recovery=S,mobile={enabled=false}}
+          local A=Active.attach(ctx)
+          assert(A.setEnabled(true)==true)
+          A.refresh()
+          assert(A.mode=="NO_RECOVERY_NEEDED")
+          N.status="FLIGHT / DIVE HAS PRIORITY"
+          A.refresh()
+          assert(A.mode=="PAUSED_FOR_ACTION")
+          clock=1
+          tick()
+          assert(A.woundedBlockedSeconds>0)
+          N.active=true
+          A.refresh()
+          assert(A.mode=="NATIVE_RECOVERY")
+          N.active=false
+          N.status="COMBAT TAG ACTIVE / REST OFF"
+          A.refresh()
+          assert(A.mode=="COMBAT_BLOCKED")
+          N.active=true
+          N.eligibleHPSeconds=25
+          N.observedHPGain=0
+          clock=2
+          tick()
+          assert(A.autoRealRestFallback==false)
+          assert(A.realRestFallback==false)
+          assert(S.enabled==false)
+          assert(string.find(A.report(),"auto_visible_rest_disabled=true",1,true))
+          A.close()
+          assert(S.enabled==false)
+          assert(tick==nil)
+          print("FERAL_HUB_V7_RECOVERY_REASON_CLASSIFICATION_PASS")
+          '''
+          Path('/tmp/feral-v7-recovery.luau').write_text(mock+source+cases)
+          PY
+          "$LUAU" /tmp/feral-v7-recovery.luau
+
+      - name: Mocked native recovery - authoritative combat tag and mobile action allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('roblox-tools/feral-hub-mobile-recovery-v7.0.lua').read_text()
+          assert source.rstrip().endswith('return Native')
+          source=source[:source.rfind('return Native')]
+          prelude=r'''
+          local clock=100
+          local attrs={FeralCombatUntil=105}
+          local player={
+            GetAttribute=function(self,k)return attrs[k]end
+          }
+          workspace={GetServerTimeNow=function()return clock end}
+          game={GetService=function(self,k)
+            if k=="Players" then return {LocalPlayer=player}end
+            return {}
+          end}
+          '''
+          tests=r'''
+          local worldAttrs={}
+          local char={
+            Parent=true,
+            GetAttribute=function(self,k)return worldAttrs[k]end
+          }
+          local ctx={carry={classify=function()
+            return "FREE",false,false
+          end}}
+          assert(Native.blockedByActivity(char,ctx)=="COMBAT TAG ACTIVE / REST OFF")
+          clock=110
+          assert(Native.blockedByActivity(char,ctx)==nil)
+          worldAttrs.FeralFlyLocal=true
+          worldAttrs.FeralClimbLocal=true
+          worldAttrs.WolfFeed=true
+          assert(Native.blockedByActivity(char,ctx)==nil)
+          worldAttrs.FeralPinned=true
+          assert(Native.blockedByActivity(char,ctx)=="ESCAPE HAS PRIORITY")
+          worldAttrs.FeralPinned=nil
+          attrs.FeralCombatUntil=114
+          assert(Native.blockedByActivity(char,ctx)=="COMBAT TAG ACTIVE / REST OFF")
+          worldAttrs.FeralCombatUntil=118
+          assert(Native.blockedByActivity(char,ctx)=="COMBAT TAG ACTIVE / REST OFF")
+          clock=120
+          assert(Native.blockedByActivity(char,ctx)==nil)
+          print("FERAL_HUB_V7_COMBAT_GATE_AND_MOBILE_ALLOWLIST_PASS")
+          '''
+          Path('/tmp/feral-v7-mobile-native.luau').write_text(prelude+source+tests)
+          PY
+          "$LUAU" /tmp/feral-v7-mobile-native.luau
+
+      - name: Mocked mobile recovery - native Rest on, combat off, movement preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-hub-mobile-recovery-v7.0.lua').read_text()
+          assert code.rstrip().endswith('return Native')
+          code=code[:code.rfind('return Native')]
+          setup=r'''
+          local now=1
+          local serverNow=100
+          os={clock=function()return now end}
+          local function event()
+              local obj={}
+              function obj:Connect(fn)
+                  self.fn=fn
+                  return {Disconnect=function()end}
+              end
+              return obj
+          end
+          local heartbeat=event()
+          local input=event()
+          local attrs={WolfRest=false,Species="Eagle"}
+          local char={Parent=true}
+          function char:GetAttribute(k)return attrs[k]end
+          function char:SetAttribute(k,v)attrs[k]=v end
+          function char:GetAttributeChangedSignal(k)return event()end
+          local hum={Health=50,MaxHealth=100}
+          function char:FindFirstChildOfClass(k)
+              if k=="Humanoid"then return hum end
+          end
+          local pattrs={}
+          local player={Character=char}
+          function player:GetAttribute(k)return pattrs[k]end
+          local sent={}
+          local remote={}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          function remote:FireServer(k,v)
+              table.insert(sent,{k,v})
+          end
+          workspace={GetServerTimeNow=function()return serverNow end}
+          local services={}
+          services.Players={LocalPlayer=player}
+          services.ReplicatedStorage={FindFirstChild=function(self,k)
+              if k=="WolfActions"then return remote end
+          end}
+          services.UserInputService={
+              InputBegan=input,
+              GetFocusedTextBox=function()return nil end,
+              IsMouseButtonPressed=function()return false end
+          }
+          services.RunService={Heartbeat=heartbeat}
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2}}
+          '''
+          cases=r'''
+          local N=Native.attach({state={alive=true}})
+          assert(N.setEnabled(true)==true)
+          heartbeat.fn()
+          assert(N.active and N.nativeOn==1 and sent[1][1]=="Rest" and sent[1][2]==true)
+          -- Full health should not cancel the out-of-combat signal.
+          hum.Health=100
+          now=1.3
+          heartbeat.fn()
+          assert(N.active and N.nativeOff==0)
+          -- Flying/climbing do not interrupt it.
+          attrs.FeralFlyLocal=true
+          attrs.FeralClimbLocal=true
+          assert(N.beforeFlight()==false and N.beforeClimb()==false)
+          now=1.6
+          heartbeat.fn()
+          assert(N.active and N.nativeOff==0)
+          -- Combat tag must suspend it even when no attack is currently held.
+          pattrs.FeralCombatUntil=110
+          now=1.9
+          heartbeat.fn()
+          assert(N.active==false and N.nativeOff==1)
+          assert(N.status=="COMBAT TAG ACTIVE / REST OFF")
+          -- After combat the signal returns with the character still moving.
+          serverNow=111
+          now=2.2
+          heartbeat.fn()
+          assert(N.active and N.nativeOn==2)
+          N.close()
+          assert(N.nativeOff==2)
+          print("FERAL_HUB_V7_NATIVE_REST_LIFECYCLE_COMBAT_PAUSE_PASS")
+          '''
+          Path('/tmp/feral-v7-rest-lifecycle.luau').write_text(setup+code+cases)
+          PY
+          "$LUAU" /tmp/feral-v7-rest-lifecycle.luau
+
+      - name: Mocked complete hub cleanup and idempotent reload barrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-hub-v7.2-potassium.lua').read_text()
+          marker='local activeRecord={}'
+          endmark='activeEnv.FERAL_NOVA_PRIME_ACTIVE=activeRecord'
+          a=src.index(marker)
+          b=src.index(endmark,a)+len(endmark)
+          shutdown=src[a:b]
+          assert shutdown.count('local controllerShutdownOrder=')==1
+          assert shutdown.count('pcall(function() mod.close() end)')==1
+          assert 'activeRecord.shutdownMode="FULL_CONTROLLER_SHUTDOWN"' in shutdown
+          for name in ('activeRecovery','native','eagleActions','diag','tags',
+                       'climb','baby','flight','reach','regen','mechanics',
+                       'mobile','recovery','lab','escape','carry'):
+              assert '"'+name+'"' in shutdown
+          prelude=r'''
+          local counts={}
+          local function mark(key) counts[key]=(counts[key] or 0)+1 end
+          local H={closeSession=function() mark('session') end}
+          local ctx={close=function() mark('engine') end}
+          local activeEnv={}
+          local names={
+            'activeRecovery','native','eagleActions','diag','tags',
+            'climb','baby','flight','reach','regen','mechanics',
+            'mobile','recovery','lab','escape','carry'
+          }
+          for _,name in ipairs(names) do
+            local key=name
+            ctx[key]={close=function() mark(key) end}
+          end
+          '''
+          cases=r'''
+          assert(activeEnv.FERAL_NOVA_PRIME_ACTIVE.shutdownMode=='FULL_CONTROLLER_SHUTDOWN')
+          local handle=activeEnv.FERAL_NOVA_PRIME_ACTIVE
+          handle.close()
+          handle.close()
+          assert(counts.session==1)
+          assert(counts.engine==1)
+          assert(activeEnv.FERAL_NOVA_PRIME_ACTIVE==nil)
+          for _,name in ipairs(names) do
+            assert(counts[name]==1, name..' not fully shut down')
+          end
+          print('FERAL_HUB_V71_FULL_CONTROLLER_SHUTDOWN_IDEMPOTENT_PASS')
+          '''
+          Path('/tmp/feral-v71-lifecycle.luau').write_text(prelude+shutdown+cases)
+          PY
+          "$LUAU" /tmp/feral-v71-lifecycle.luau
