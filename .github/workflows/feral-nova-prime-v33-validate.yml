@@ -1,0 +1,77 @@
+name: FERAL NOVA PRIME v33 - Guarded Launcher Compile and Fallback Checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-prime-loader-v33.0.lua'
+      - 'roblox-tools/feral-nova-prime-modular-v33.0.lua'
+      - '.github/workflows/feral-nova-prime-v33-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-v33-luau.zip
+          mkdir -p /tmp/feral-v33-luau
+          unzip -q /tmp/feral-v33-luau.zip -d /tmp/feral-v33-luau
+          c="$(find /tmp/feral-v33-luau -name luau-compile -type f | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          echo "COMPILER=$c" >> "$GITHUB_ENV"
+      - name: Compile guarded entrypoints and preserved bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$COMPILER" --null roblox-tools/feral-nova-prime-loader-v33.0.lua
+          "$COMPILER" --null roblox-tools/feral-nova-prime-modular-v33.0.lua
+          "$COMPILER" --null roblox-tools/feral-nova-prime-standalone-v32.0.lua
+          "$COMPILER" --null roblox-tools/feral-nova-prime-standalone-v26.0.lua
+          echo V33_ALL_ENTRYPOINTS_COMPILE_PASS
+      - name: Validate launch order, references, visible failure and rollback source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('roblox-tools')
+          boot=(root/'feral-nova-prime-loader-v33.0.lua').read_text()
+          modular=(root/'feral-nova-prime-modular-v33.0.lua').read_text()
+          v32=(root/'feral-nova-prime-standalone-v32.0.lua').read_text()
+          assert len(boot)<12000 and len(modular)<16000
+          asserts=[
+            'feral-nova-prime-standalone-v32.0.lua',
+            'feral-nova-prime-modular-v33.0.lua',
+            'feral-nova-prime-standalone-v26.0.lua',
+          ]
+          order=[boot.index(x) for x in asserts]
+          assert order==sorted(order)
+          assert 'FERAL_NOVA_STARTUP_v33.json' in boot
+          assert 'FERAL_NOVA_V33_LOADER' in boot
+          assert 'Runtime: ' in boot
+          assert 'FALLBACK_V26' in boot
+          assert 'PlayerGui' in boot
+          assert 'local BUNDLED=' not in modular
+          assert 'game:HttpGet(url)' in modular
+          for name in [
+            'feral-aurora-engine-v13.0.lua',
+            'feral-nova-prime-ui-v32.0.lua',
+            'feral-nova-active-recovery-v29.0.lua',
+            'feral-nova-eagle-actions-v32.0.lua',
+            'feral-nova-diagnostics-v32.0.lua']:
+              assert f'get("{name}")' in modular,(name,'missing')
+              assert f'["{name}"]=' in v32,(name,'missing from preserved standalone')
+              assert (root/name).exists(),(name,'missing from repo')
+          assert 'Core extension error: ' in modular
+          assert 'UI failed: ' in modular
+          assert 'ctx.eagleActions=eagleActions.attach(ctx)' in modular
+          assert 'activeRecord.version="v33"' in modular
+          print("V33_STARTUP_ROUTE_AND_FEATURE_PRESERVATION_PASS")
+          PY
