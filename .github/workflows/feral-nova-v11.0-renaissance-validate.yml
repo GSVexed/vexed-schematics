@@ -206,6 +206,13 @@ jobs:
           char:SetAttribute("WolfFeed",false)
           heartbeat:Fire()
           assert(not N.active and N.feedFinishes==1)
+          -- Delayed owned Rest echo must not strand the character in
+          -- physical Rest or be mistaken for an intentional manual Rest.
+          char:SetAttribute("WolfRest",true)
+          heartbeat:Fire()
+          assert(attrs.WolfRest==false)
+          assert(N.feedEchoesSuppressed>=1)
+          assert(not N.manualRest)
           now=2.5
           heartbeat:Fire()
           assert(not N.active and N.nativeOn==1)
