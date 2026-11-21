@@ -4949,8 +4949,8 @@ end
 return Flight
 
 ]==========],
-["feral-nova-native-recovery-v9.0.lua"]=[==========[
--- FERAL NOVA CORE v9.0 / coordinated motion-rest, native bite and strict action priority
+["feral-nova-native-recovery-v10.2.lua"]=[==========[
+-- FERAL NOVA v10.2 / manual Rest sovereignty + proximity-independent recovery
 -- Previously observed mobile Rest signal sometimes doubled real HP recovery.
 -- Keep one native Rest signal active outside combat even during movement.
 -- Never force physical Rest; mask local WolfRest with recurrence safeguards.
@@ -5053,6 +5053,13 @@ function Native.attach(ctx)
         lastRefreshAt=-math.huge,maxRefreshesPerLife=2,
         mobileSignalSeconds=0,fullHealthSignalSeconds=0,
         noNeedSignalSeconds=0,
+        -- Manual Rest is game-owned: never mask its pose or send Rest(false)
+        -- on behalf of a controller that no longer owns the Rest session.
+        manualRest=false,manualRestChar=nil,manualRestEntries=0,
+        manualRestExits=0,manualRestSeconds=0,
+        manualIntentUntil=0,lastOnRequestAt=-math.huge,
+        ownEchoGraceSeconds=1.0,
+        nearbyTargetBlocksRemoved=true,
     }
     local conns={}
     local masking=false
@@ -5064,6 +5071,7 @@ function Native.attach(ctx)
             N.lastError="WolfActions missing";return false
         end
         if player.Character~=char then return false end
+        if on then N.lastOnRequestAt=os.clock() end
         local ok,err=pcall(function()remote:FireServer("Rest",on)end)
         if not ok then N.lastError=tostring(err);return false end
         if on then N.nativeOn+=1 else N.nativeOff+=1 end
@@ -5084,17 +5092,63 @@ function Native.attach(ctx)
         N.owned=nil;N.active=false
         if char then
             if preempt then N.forcedOffBeforeActions+=1 end
-            if char.Parent and player.Character==char then
+            if char.Parent and player.Character==char
+                and not (N.manualRest and N.manualRestChar==char) then
                 fire(false,char)
             end
         end
         if reason then N.reason=reason;N.status=reason end
+    end
+    local function enterManualRest(char,reason)
+        if N.manualRest and N.manualRestChar==char then return end
+        N.manualRest=true
+        N.manualRestChar=char
+        N.manualRestEntries+=1
+        -- Yield ownership BEFORE stopping the mask. A Rest(false) from us
+        -- would immediately cancel the player's real Rest action.
+        N.owned=nil
+        N.active=false
+        unmask()
+        N.lastStatus=nil
+        N.status=reason or "MANUAL REST / PLAYER CONTROL HAS PRIORITY"
+    end
+    local function syncManualRest(char,now)
+        if N.manualRest then
+            if N.manualRestChar~=char
+                or not char or not char.Parent
+                or char:GetAttribute("WolfRest")~=true then
+                N.manualRest=false
+                N.manualRestChar=nil
+                N.manualRestExits+=1
+                N.nextTick=0
+                N.lastStatus=nil
+            else
+                N.manualRestSeconds+=.2
+                N.status="MANUAL REST / AUTO SIGNAL YIELDED"
+                return true
+            end
+        end
+        if char and char.Parent
+            and char:GetAttribute("WolfRest")==true then
+            enterManualRest(char,"EXISTING MANUAL REST / AUTO SIGNAL YIELDED")
+            return true
+        end
+        return false
     end
     local function writeMask(m)
         if not N.enabled or not N.alive or N.mask~=m
             or player.Character~=m.char or masking then return end
         if m.char:GetAttribute("WolfRest")==true then
             local now=os.clock()
+            -- The native WolfController writes WolfRest for real player
+            -- Rest actions. A later true transition, or one following a
+            -- recent real Rest/UI input, must be left alone.
+            if now<=N.manualIntentUntil
+                or now-N.lastOnRequestAt>N.ownEchoGraceSeconds then
+                enterManualRest(m.char,
+                    "PLAYER REST DETECTED / POSE LEFT UNTOUCHED")
+                return
+            end
             if now-(m.echoWindowAt or 0)>2 then
                 m.echoWindowAt=now
                 m.trueEchoes=0
@@ -5197,6 +5251,8 @@ function Native.attach(ctx)
     function N.setEnabled(v)
         N.enabled=v==true
         if not N.enabled then
+            N.manualRest=false
+            N.manualRestChar=nil
             N.poseBlockedChar=nil
             N.poseSafetyFailures=0
             N.poseRetryAt=0
@@ -5218,9 +5274,17 @@ function Native.attach(ctx)
         return N.enabled
     end
     conns[#conns+1]=UIS.InputBegan:Connect(function(input,processed)
-        if not N.enabled or not N.alive or processed
-            or UIS:GetFocusedTextBox() then return end
+        if not N.enabled or not N.alive then return end
         local key=input.KeyCode
+        local typ=input.UserInputType
+        -- Capture possible Rest controls even for game-processed GUI
+        -- clicks. A key alone never proves Rest; WolfRest=true must follow.
+        if key==Enum.KeyCode.R or key==Enum.KeyCode.Z
+            or key==Enum.KeyCode.X or typ==Enum.UserInputType.Touch
+            or (processed and typ==Enum.UserInputType.MouseButton1) then
+            N.manualIntentUntil=os.clock()+1.4
+        end
+        if N.manualRest or processed or UIS:GetFocusedTextBox() then return end
         if input.UserInputType==Enum.UserInputType.MouseButton1
             or input.UserInputType==Enum.UserInputType.MouseButton2 then
             N.attackInputsObserved+=1
@@ -5305,10 +5369,16 @@ function Native.attach(ctx)
         end
         if N.lastAnimal~=char then
             N.lastAnimal=char
+            N.manualRest=false
+            N.manualRestChar=nil
+            N.manualIntentUntil=0
             N.poseSafetyFailures=0
             N.poseRetryAt=0
             N.poseBackoffSeconds=0
         end
+        -- Never overwrite the game's deliberate Rest pose; physical Rest
+        -- is entirely user/game-controlled until the game clears WolfRest.
+        if syncManualRest(char,now) then return end
         if now<N.poseRetryAt then
             N.status="POSE SAFETY / BACKOFF (NO VISIBLE REST)"
             if N.active then cancel(N.status,true)end
@@ -5344,22 +5414,10 @@ function Native.attach(ctx)
             N.lastStatus=nil
             return
         end
-        -- Only true *native* bite reach preempts Rest. The broader local
-        -- reach/hint can read "ready" while a moving animal is still too
-        -- far away to land a real bite, causing needless recovery pauses.
-        -- Native Mouse1 still releases Rest immediately in InputBegan.
-        local guide=ctx.lab
-        if guide and guide.enabled and guide.alive
-            and guide.nativeReady==true then
-            N.pausedUntil=math.max(N.pausedUntil,now+.5)
-            if N.active then
-                N.aimedTargetRestReleases+=1
-                cancel("BITE WINDOW / NATIVE REST RELEASED",true)
-            end
-            N.status="BITE WINDOW / RECOVERY SUSPENDED"
-            N.lastStatus=nil
-            return
-        end
+        -- Merely standing next to a biteable animal is NOT combat:
+        -- teammates and peaceful animals must not interrupt recovery.
+        -- Actual mouse attacks, active combat tags and Grab V2 still
+        -- preempt Rest via input handling and the shared action policy.
         local moving=movingNow(char,hum)
         if N.lastMoving~=nil and moving~=N.lastMoving then
             N.movementTransitions+=1
@@ -5499,7 +5557,12 @@ function Native.attach(ctx)
             "afk_travel_exclusion_available=true",
             "attack_inputs_observed="..N.attackInputsObserved,
             "native_rest_releases_for_attack="..N.attackRestReleases,
-            "native_rest_releases_for_aimed_bite="..N.aimedTargetRestReleases,
+            "native_rest_releases_for_aimed_bite_legacy="..N.aimedTargetRestReleases,
+            "nearby_target_pauses_disabled="..tostring(N.nearbyTargetBlocksRemoved),
+            "manual_rest_active="..tostring(N.manualRest),
+            "manual_rest_entries="..N.manualRestEntries,
+            "manual_rest_exits="..N.manualRestExits,
+            "manual_rest_seconds_estimate="..string.format("%.1f",N.manualRestSeconds),
             "held_attack_guard_samples="..N.heldAttackBlocks,
             "pose_mask_errors="..N.maskErrors,
             "pose_rest_true_recurrences="..N.poseRecurrences,
@@ -5516,7 +5579,8 @@ function Native.attach(ctx)
             "NOTE=Pose mask attaches before the native request and ahead of WolfAnim.",
             "NOTE=While wounded/affected, refresh Rest no more often than every five seconds.",
             "NOTE=Repeated native pose echoes trigger 15/30/60/120s backoff, not permanent exclusion.",
-            "NOTE=Mouse attack, held attack, and active bite target preempt native Rest.",
+            "NOTE=Nearby animals never preempt Rest by proximity alone; real attack input still does.",
+            "NOTE=Game-owned manual Rest is never masked or cancelled by native auto recovery.",
             "NOTE=Combat tag continues to block native Rest until expiry.",
             "NOTE=Optional survival activity pauses native Rest before actual safe walking.",
             "NOTE=Grab V2 timing minigame has combat priority over native Rest.",
@@ -8433,8 +8497,8 @@ function Diagnostics.attach(ctx)
 end
 return Diagnostics
 ]==========]
-,["feral-nova-active-recovery-v29.0.lua"]=[==========[
--- FERAL HUB v7.3 / coordinated guarded native recovery outside combat
+,["feral-nova-active-recovery-v10.2.lua"]=[==========[
+-- FERAL NOVA v10.2 / unified active recovery + player-owned Rest passthrough
 -- Coordinates existing native Rest-signal HP recovery and local HP/status
 -- config. Never starts Safe Rest or Mobile A/B, never writes HP/effect values.
 local Active={}
@@ -8494,7 +8558,11 @@ function Active.attach(ctx)
         A.poseSafetyEvents=native and native.poseSafetyPauses or 0
         A.nativeEligible=native and native.enabled==true
             and native.poseBlockedChar~=game:GetService("Players").LocalPlayer.Character or false
-        if native and native.active then
+        if native and native.manualRest then
+            A.mode="MANUAL_REST"
+            A.lastReason="PLAYER-OWNED REST"
+            A.status="MANUAL REST ACTIVE / GAME CONTROLS POSE / AUTO PAUSED"
+        elseif native and native.active then
             A.mode="NATIVE_RECOVERY"
             A.status="MOBILE REST SIGNAL / MASKED POSE / SERVER EFFECT UNVERIFIED"
         elseif native and type(native.poseRetryAt)=="number"
@@ -8547,6 +8615,7 @@ function Active.attach(ctx)
             "mode_transition_count="..A.modeTransitions,
             "wounded_wait_seconds="..string.format("%.2f",A.woundedBlockedSeconds),
             "native_signal_active="..tostring(native and native.active),
+            "manual_rest_preserved="..tostring(native and native.manualRest),
             "health_client_config_applied="..tostring(A.healthInputsApplied),
             "status_client_config_applied="..tostring(A.statusInputsApplied),
             "native_rest_status_multiplier_ready="..tostring(A.restMultiplierReady),
@@ -8561,7 +8630,8 @@ function Active.attach(ctx)
             "mobile_trial_legacy_enabled="..tostring(mobile and mobile.enabled),
             "NOTE=Client statuses alone do not establish 4x server clearance.",
             "NOTE=No automatic visible Rest, no posture-forcing, no Humanoid.Health writes.",
-            "NOTE=Masked mobile Rest signal suspends for server-observed combat state and attacks.",
+            "NOTE=Manual Rest bypasses all automatic Rest masking and cancellation.",
+            "NOTE=Nearby animals alone never stop recovery; actual attacks and combat do.",
             "NOTE=Actual game-server healing cannot be guaranteed by client-side configuration."
         },"\n")
     end
@@ -8589,7 +8659,7 @@ function Active.attach(ctx)
                 local c=p and p.Character
                 local h=c and c:FindFirstChildOfClass("Humanoid")
                 if h and h.Health>0 and h.Health<h.MaxHealth-.35
-                    and A.mode~="NATIVE_RECOVERY" then
+                    and A.mode~="NATIVE_RECOVERY" and A.mode~="MANUAL_REST" then
                     A.woundedBlockedSeconds+=dt
                 end
                 if A.mode=="NATIVE_RECOVERY" then
@@ -9225,8 +9295,8 @@ end
 return Eagle
 ]==========]
 ,
-["feral-nova-action-core-v9.0.lua"]=[==========[
--- FERAL NOVA CORE v9.0 / central, side-effect-free action arbiter
+["feral-nova-action-core-v10.2.lua"]=[==========[
+-- FERAL NOVA v10.2 / manual Rest and noncombat teammates preserved
 -- All gameplay-effecting modules retain ownership of their original game
 -- interactions. This module only grants/rejects safe windows.
 -- No remote traffic, movement, attribute writes, player identifiers or HTTP.
@@ -9411,7 +9481,8 @@ function Coordinator.attach(ctx)
             elseif S.combat then reason="COMBAT TAG"
             elseif S.combatTimeUnknown then reason="COMBAT CLOCK UNKNOWN"
             elseif S.attackHeld then reason="ATTACK HELD"
-            elseif S.nativeBite then reason="NATIVE BITE RANGE"
+            -- Mere native bite readiness (including a teammate in front
+            -- of the camera) is not an attack and cannot stop recovery.
             -- Merely holding already-captured prey is NOT a new carry
             -- action. Preserve v8.1 mobile recovery uptime outside combat;
             -- the G input still invokes Native.beforeCarry() immediately.
@@ -9479,7 +9550,7 @@ function Coordinator.attach(ctx)
             "leases_granted="..A.reserveCalls,
             "leases_expired="..A.expiredLeases,
             "active_lease="..tostring(leaseOwner()),
-            "native_bite_preempts_rest=true",
+            "native_bite_proximity_does_not_preempt_rest=true",
             "extended_local_hint_does_not_preempt_rest=true",
         }
         for i=1,math.min(8,#denials) do
@@ -10723,14 +10794,14 @@ local tags=get("feral-nova-tags-v8.0.lua")
 local reach=get("feral-nova-reach-v14.0.lua")
 local regen=get("feral-nova-regen-v29.0.lua")
 local flight=get("feral-nova-flight-v28.0.lua")
-local native=get("feral-nova-native-recovery-v9.0.lua")
+local native=get("feral-nova-native-recovery-v10.2.lua")
 local baby=get("feral-nova-baby-v15.0.lua")
 local climb=get("feral-nova-climb-v9.0.lua")
 local mechanics=get("feral-nova-mechanics-v28.0.lua")
 local diagnostics=get("feral-nova-diagnostics-v32.0.lua")
-local activeRecovery=get("feral-nova-active-recovery-v29.0.lua")
+local activeRecovery=get("feral-nova-active-recovery-v10.2.lua")
 local eagleActions=get("feral-nova-eagle-actions-v32.0.lua")
-local action=get("feral-nova-action-core-v9.0.lua")
+local action=get("feral-nova-action-core-v10.2.lua")
 local afk=get("feral-nova-afk-v10.1.lua")
 local grab=get("feral-nova-grab-v10.1.lua")
 local evidence=get("feral-nova-evidence-v10.0.lua")
@@ -10910,8 +10981,8 @@ else
         local verified=log.selfCheck
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
-        log.preservedGameplayModules=19
-        log.updatedGameplayModules={"feral-nova-evidence-v10.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua"}
+        log.preservedGameplayModules=16
+        log.updatedGameplayModules={"feral-nova-evidence-v10.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-native-recovery-v10.2.lua","feral-nova-action-core-v10.2.lua","feral-nova-active-recovery-v10.2.lua"}
         log.updatedUIModule="feral-nova-ui-v10.0.lua"
         save()
         if log.result=="READY" then
