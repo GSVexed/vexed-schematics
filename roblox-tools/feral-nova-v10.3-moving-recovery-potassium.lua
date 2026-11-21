@@ -5062,7 +5062,7 @@ function Native.attach(ctx)
         ownEchoGraceSeconds=1.0,
         nearbyTargetBlocksRemoved=true,
         delayedAutoRestEchoesMasked=0,preAnimationMaskPasses=0,
-        manualRestIntentHits=0,
+        manualRestIntentHits=0,manualRestMotionHandoffs=0,
     }
     local conns={}
     local masking=false
@@ -5116,11 +5116,34 @@ function Native.attach(ctx)
         N.lastStatus=nil
         N.status=reason or "MANUAL REST / PLAYER CONTROL HAS PRIORITY"
     end
+    local function movingNow(char,hum)
+        -- Input intent is sufficient even when streamed root is temporarily
+        -- missing. Physical sliding/translation also counts as motion.
+        local dir=hum and hum.MoveDirection
+        if typeof(dir)=="Vector3" and dir.Magnitude>.13 then return true end
+        local root=char and type(char.FindFirstChild)=="function"
+            and char:FindFirstChild("HumanoidRootPart") or nil
+        if not root then return false end
+        local ok,v=pcall(function()return root.AssemblyLinearVelocity end)
+        if ok and typeof(v)=="Vector3" then
+            return Vector3.new(v.X,0,v.Z).Magnitude>=2
+        end
+        return false
+    end
     local function syncManualRest(char,now)
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        local moving=char and hum and movingNow(char,hum) or false
         if N.manualRest then
             if N.manualRestChar~=char
                 or not char or not char.Parent
-                or char:GetAttribute("WolfRest")~=true then
+                or char:GetAttribute("WolfRest")~=true
+                or moving then
+                if moving and N.manualRestChar==char then
+                    N.manualRestMotionHandoffs+=1
+                end
+                -- On real movement, the user's stationary Rest is yielded
+                -- to the SAME automatic recovery controller; no Rest(false)
+                -- remote is sent and no movement recovery gate is introduced.
                 N.manualRest=false
                 N.manualRestChar=nil
                 -- Never reuse a prior manual-activation hint after the
@@ -5138,6 +5161,9 @@ function Native.attach(ctx)
         end
         if char and char.Parent
             and char:GetAttribute("WolfRest")==true then
+            -- A moving visible Rest pose is never a manual Rest to preserve.
+            -- Keep auto recovery owned and let its mask remove the pose.
+            if moving then return false end
             -- If we currently own automatic Rest, a true attribute can be
             -- a delayed native response, NOT proof of player Rest.
             -- Only a real Rest key / game Rest button may transfer ownership
@@ -5164,7 +5190,9 @@ function Native.attach(ctx)
             -- request. Time elapsed is NOT evidence of physical user Rest:
             -- that old rule yielded ownership and exposed a moving Rest pose.
             -- A manual Rest key/visible game Rest button is stronger evidence.
-            if now<=N.manualIntentUntil then
+            local hum=m.char:FindFirstChildOfClass("Humanoid")
+            if now<=N.manualIntentUntil
+                and not (hum and movingNow(m.char,hum)) then
                 N.manualRestIntentHits+=1
                 enterManualRest(m.char,
                     "PLAYER REST INPUT DETECTED / POSE LEFT UNTOUCHED")
@@ -5380,18 +5408,6 @@ function Native.attach(ctx)
             N.beforeCarry()
         end
     end)
-    local function movingNow(char,hum)
-        local root=type(char.FindFirstChild)=="function"
-            and char:FindFirstChild("HumanoidRootPart") or nil
-        if not root then return false end
-        local speed=0
-        local ok,v=pcall(function()return root.AssemblyLinearVelocity end)
-        if ok and typeof(v)=="Vector3" then
-            speed=Vector3.new(v.X,0,v.Z).Magnitude
-        end
-        local dir=hum.MoveDirection
-        return speed>=2 or (typeof(dir)=="Vector3" and dir.Magnitude>.13)
-    end
     local function sample(char,hum,now,moving)
         local state={hp=hum.Health,max=hum.MaxHealth,moving=moving,effects={}}
         for _,key in ipairs(EFFECTS) do
@@ -5629,6 +5645,7 @@ function Native.attach(ctx)
             "pre_animation_event_mask_checks="..N.preAnimationMaskPasses,
             "late_auto_rest_echoes_masked="..N.delayedAutoRestEchoesMasked,
             "verified_manual_rest_input_handoffs="..N.manualRestIntentHits,
+            "manual_to_auto_handoffs_on_movement="..N.manualRestMotionHandoffs,
             "bounded_no_heal_refresh_attempts="..N.restRefreshAttempts,
             "bounded_no_heal_refresh_successes="..N.restRefreshSuccess,
             "local_WolfRest_false_mask_writes="..N.maskWrites,
@@ -5666,6 +5683,7 @@ function Native.attach(ctx)
             "NOTE=While wounded/affected, refresh Rest no more often than every five seconds.",
             "NOTE=Repeated native pose echoes trigger 15/30/60/120s backoff, not permanent exclusion.",
             "NOTE=Nearby animals never preempt Rest by proximity alone; real attack input still does.",
+            "NOTE=Stationary manual Rest is preserved; actual movement hands off to masked automatic Rest.",
             "NOTE=Manual Rest input yields ownership; delayed auto Rest echoes stay masked.",
             "NOTE=PreAnimation and early render mask are local visuals, not guaranteed other-player appearance.",
             "NOTE=Combat tag continues to block native Rest until expiry.",
