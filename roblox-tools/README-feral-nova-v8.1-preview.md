@@ -60,7 +60,7 @@ The code consists of **22 embedded modules**. The new version changes only nativ
 - [Official Luau compile and exact module parity, attack/Rest regression, AFK regression and Grab V2 timing mock — v8.1](https://github.com/GSVexed/vexed-schematics/actions/runs/44926938009)
 - The mocked minigame successfully triggered a single native press at an actual server-time crossing, ignored invalid practice ID, gave manual input priority and sent no requests after shutdown.
 - All 22 modules passed independent compile tests and the original v7.5 bite-safety flow retained its regression suite.
-- Startup self-checks now include four additional v8.1 checks for the Grab listener, motion-gain measurements and motion-refresh counters. **42 checks total** if all runtime module attachment succeeds.
+- Startup self-checks now include four additional v8.1 checks for the Grab listener, motion-gain measurements and motion-refresh counters. **45 checks total** if all runtime module attachment succeeds.
 - The private Potassium report collector supports the `8.1.0` startup/session schema and whitelists only own-character moving healing and auto-minigame counters; it never exports player identities or credentials.
 
 **Still unverified:** real mobile Rest bonus while running, server-assigned Perfect frequency, survival bonus retention while AFK, oversized Eagle carrying, genuine Talon cooldown reduction, and server-authoritative infinite needs.
