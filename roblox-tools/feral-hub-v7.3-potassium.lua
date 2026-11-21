@@ -4855,7 +4855,7 @@ return Flight
 
 ]==========],
 ["feral-nova-native-recovery-v29.0.lua"]=[==========[
--- FERAL HUB v7.3 / guarded native Rest-signal recovery out of combat
+-- FERAL HUB v7.3 / restored v1.1 Rest signaling with bounded pose safety
 -- Previously observed mobile Rest signal sometimes doubled real HP recovery.
 -- Keep one native Rest signal active outside combat even during movement.
 -- Never force physical Rest; mask local WolfRest with recurrence safeguards.
@@ -4924,6 +4924,7 @@ function Native.attach(ctx)
         poseRetryAt=0,poseBackoffSeconds=0,lastAnimal=nil,signalStartedAt=0,
         poseSafetyFailures=0,nativeRefreshRequestsSuppressed=0,
         combatTagBlocks=0,restRefreshAttempts=0,restRefreshSuccess=0,
+        legacyRestCadenceSeconds=5,preMaskStarts=0,renderMaskPasses=0,
         lastProgressAt=0,lastGainValue=0,refreshAfterSeconds=18,
         lastRefreshAt=-math.huge,maxRefreshesPerLife=2,
         mobileSignalSeconds=0,fullHealthSignalSeconds=0,
@@ -4931,6 +4932,8 @@ function Native.attach(ctx)
     }
     local conns={}
     local masking=false
+    -- v1.1 Bear prototype used mask priority 199, before native WolfAnim.
+    local renderName="FERAL_HUB_V73_REST_MASK"
     local function fire(on,char)
         local remote=RS:FindFirstChild("WolfActions")
         if not remote or not remote:IsA("RemoteEvent") then
@@ -4947,6 +4950,7 @@ function Native.attach(ctx)
         N.mask=nil
         if not m then return end
         if m.conn then pcall(function()m.conn:Disconnect()end)end
+        pcall(function()RunService:UnbindFromRenderStep(renderName)end)
         -- Never "repair" WolfRest by writing true: that would itself
         -- activate a local Rest pose even when the server is not resting.
     end
@@ -5016,8 +5020,22 @@ function Native.attach(ctx)
             return false
         end
         m.conn=conn
+        local bound=pcall(function()
+            RunService:BindToRenderStep(renderName,199,function()
+                if N.mask==m then
+                    N.renderMaskPasses+=1
+                    writeMask(m)
+                end
+            end)
+        end)
+        if not bound then
+            N.maskErrors+=1
+            unmask()
+            return false
+        end
+        N.preMaskStarts+=1
         writeMask(m)
-        return true
+        return N.mask==m
     end
     local function delayInput(reason,cooldown)
         N.inputAt=os.clock()
@@ -5166,18 +5184,20 @@ function Native.attach(ctx)
             cancel("ANIMAL CHANGED")
         end
         if not N.active then
-            if not fire(true,char) then
-                N.status="NATIVE REST REQUEST FAILED"
-                return
-            end
+            -- v1.1 order: mask before the first native Rest request.
             N.owned=char;N.active=true
-            N.activations+=1
             N.signalStartedAt=now
             if not beginMask(char) then
-                cancel("POSE MASK UNAVAILABLE",true)
+                N.owned=nil;N.active=false
+                N.status="POSE MASK UNAVAILABLE / REST NOT REQUESTED"
                 return
             end
-            N.nextRefresh=now+5.0
+            if not fire(true,char) then
+                cancel("NATIVE REST REQUEST FAILED",true)
+                return
+            end
+            N.activations+=1
+            N.nextRefresh=now+N.legacyRestCadenceSeconds
             N.lastProgressAt=now
             N.lastGainValue=N.observedHPGain
             N.restRefreshAttempts=0
@@ -5193,19 +5213,18 @@ function Native.attach(ctx)
             N.lastGainValue=N.observedHPGain
             N.lastProgressAt=now
         end
-        -- One bounded reassertion only if we are actually wounded and
-        -- have not observed healing for a sustained period. Avoid the old
-        -- every-5s loop that repeatedly triggered visible Rest animations.
-        if hpDeficit and N.owned==char
-            and now-N.lastProgressAt>=N.refreshAfterSeconds
-            and now-N.lastRefreshAt>=25
-            and N.restRefreshAttempts<N.maxRefreshesPerLife then
-            N.restRefreshAttempts+=1
-            N.lastRefreshAt=now
-            if fire(true,char) then N.restRefreshSuccess+=1 end
-            N.lastProgressAt=now
-        else
-            N.nativeRefreshRequestsSuppressed+=1
+        -- Recover v1.1's five-second cadence while missing HP or affected.
+        -- Never refresh while combat-blocked, unsafe, or in pose backoff.
+        if now>=N.nextRefresh then
+            N.nextRefresh=now+N.legacyRestCadenceSeconds
+            if (hpDeficit or statusDeficit) and N.owned==char
+                and N.mask and N.active then
+                N.restRefreshAttempts+=1
+                N.lastRefreshAt=now
+                if fire(true,char) then N.restRefreshSuccess+=1 end
+            else
+                N.nativeRefreshRequestsSuppressed+=1
+            end
         end
         if not hpDeficit and not statusDeficit then
             N.fullHealthSignalSeconds+=.2
@@ -5226,6 +5245,11 @@ function Native.attach(ctx)
             "strict_combat_tag_blocks="..N.combatTagBlocks,
             "mobile_rest_signal_seconds_estimate="..string.format("%.1f",N.mobileSignalSeconds),
             "full_health_rest_signal_seconds_estimate="..string.format("%.1f",N.fullHealthSignalSeconds),
+            "native_rest_compatibility_refresh_attempts="..N.restRefreshAttempts,
+            "native_rest_compatibility_refresh_successes="..N.restRefreshSuccess,
+            "native_rest_compatibility_refresh_interval_s="..N.legacyRestCadenceSeconds,
+            "pre_request_pose_mask_starts="..N.preMaskStarts,
+            "pre_animation_mask_checks="..N.renderMaskPasses,
             "bounded_no_heal_refresh_attempts="..N.restRefreshAttempts,
             "bounded_no_heal_refresh_successes="..N.restRefreshSuccess,
             "local_WolfRest_false_mask_writes="..N.maskWrites,
@@ -5248,7 +5272,9 @@ function Native.attach(ctx)
             "last_activity_block="..tostring(N.lastBlock),
             "last_error="..N.lastError,
             "NOTE=Native Rest signal stays active outside combat while moving, flying and climbing.",
-            "NOTE=At most two reassertions per active signal after no observed HP progress for 18s.",
+            "NOTE=Provenance: v1.1 Bear observed mobile healing under five-second Rest signaling.",
+            "NOTE=Pose mask attaches before the native request and ahead of WolfAnim.",
+            "NOTE=While wounded/affected, refresh Rest no more often than every five seconds.",
             "NOTE=Repeated native pose echoes trigger 15/30/60/120s backoff, not permanent exclusion.",
             "NOTE=FeralCombatUntil and attack input suspend Rest; repeated pose signals also suspend it.",
             "NOTE=Local WolfRest masking can affect game animations and interactions.",
@@ -5466,7 +5492,7 @@ return Baby
 
 ]==========],
 ["feral-nova-climb-v15.0.lua"]=[==========[
--- FERAL NOVA PRIME v15 / Integrated buffered native Q climb.
+-- FERAL HUB v7.3 / More forgiving native Q buffer with single guarded re-tap.
 -- Adapted from the separately validated Quick Climb v1.0.
 -- No injected tree geometry, no fabricated climbing server remotes.
 local Climb={}
@@ -5491,6 +5517,7 @@ function Climb.attach(ctx)
         configReady=false,sprintGrabPatch=false,
         queuedPresses=0,expiredPresses=0,gameTaps=0,
         observedMounts=0,suppressedDives=0,suppressedConflicts=0,
+        retries=0,retrySuppressed=0,retapsForPress=0,
         next=0,lastTap=-math.huge,pendingUntil=0,
         lastChar=nil,awaitingMount=false,awaitUntil=0,
         firstReadyAt=0,configLease=nil
@@ -5626,7 +5653,8 @@ function Climb.attach(ctx)
         if ctx.native and ctx.native.beforeClimb then
             pcall(ctx.native.beforeClimb)
         end
-        Q.pendingUntil=now+1.3
+        Q.pendingUntil=now+2.25
+        Q.retapsForPress=0
         Q.queued=true
         Q.queuedPresses+=1
         Q.status="Q BUFFERED • RUN TOWARD TREE"
@@ -5640,7 +5668,7 @@ function Climb.attach(ctx)
         local char=player.Character
         if char~=Q.lastChar then
             Q.lastChar=char;Q.queued=false
-            Q.awaitingMount=false;Q.ready=false
+            Q.awaitingMount=false;Q.ready=false;Q.retapsForPress=0
         end
         if not Q.enabled then return end
         if not validChar(char) then
@@ -5649,16 +5677,30 @@ function Climb.attach(ctx)
         end
         if char:GetAttribute("FeralClimbLocal")==true then
             if Q.awaitingMount then Q.observedMounts+=1 end
-            Q.queued=false;Q.awaitingMount=false
+            Q.queued=false;Q.awaitingMount=false;Q.retapsForPress=0
             Q.status="CLIMBING • NATIVE Q TO LET GO"
             Q.ready=false
             return
         end
+        Q.ready=char:GetAttribute("ClimbCan")==true
         if Q.awaitingMount and now>=Q.awaitUntil then
             Q.awaitingMount=false
-            Q.status="CLIMB TAP SENT • NO MOUNT CONFIRMED"
+            -- One guarded retry after a dropped native tap, only when the
+            -- same own climber is still on a valid tree and not diving.
+            if Q.retapsForPress<1 and Q.ready
+                and not UIS:GetFocusedTextBox()
+                and not unsafe(char)
+                and char:GetAttribute("DiveCan")~=true then
+                Q.retapsForPress+=1
+                Q.retries+=1
+                Q.queued=true
+                Q.pendingUntil=now+.65
+                Q.status="NATIVE CLIMB TAP RETRY QUEUED"
+            else
+                Q.retrySuppressed+=1
+                Q.status="CLIMB TAP SENT • NO MOUNT CONFIRMED"
+            end
         end
-        Q.ready=char:GetAttribute("ClimbCan")==true
         if not Q.queued then return end
         if now>Q.pendingUntil then
             Q.queued=false
@@ -5694,6 +5736,8 @@ function Climb.attach(ctx)
     function Q.setEnabled(on)
         Q.enabled=on==true
         Q.queued=false
+        Q.awaitingMount=false
+        Q.retapsForPress=0
         if not Q.enabled then
             release()
             Q.status="OFF / CLIMB SETTINGS RESTORED"
@@ -5713,11 +5757,15 @@ function Climb.attach(ctx)
             "Q_press_buffers="..Q.queuedPresses,
             "buffer_expired="..Q.expiredPresses,
             "native_climb_taps="..Q.gameTaps,
+            "retry_taps_queued="..Q.retries,
+            "retry_taps_suppressed="..Q.retrySuppressed,
+            "buffer_window_seconds=2.25",
             "observed_climb_mounts="..Q.observedMounts,
             "dive_priority_holds="..Q.suppressedDives,
             "carry_and_capture_priority_holds="..Q.suppressedConflicts,
             "status="..Q.status,
             "last_error="..Q.lastError,
+            "NOTE=Climb input buffers for 2.25s and may retry one missed native tap.",
             "NOTE=Game controls actual mount and server acceptance."
         },"\n")
     end
@@ -5745,7 +5793,6 @@ function Climb.attach(ctx)
     return Q
 end
 return Climb
-
 ]==========],
 ["feral-nova-tags-v8.0.lua"]=[==========[
 -- FERAL NOVA PRIME v8: camera-projected tag overlay.
@@ -6558,11 +6605,12 @@ function UI.mount(ctx)
         "A locally permitted CATCH indicator cannot override game-server carry limits.\n"..
         "Growth configuration does not establish faster server-recognised Elder growth.\n"..
         "Health: mobile Rest signal outside combat; never forces visible Rest.\n"..
+        "Original v1.1-style Rest requests use a five-second healing cadence.\n"..
         "Repeated pose echoes trigger timed retry, not a lifetime shutdown.\n"..
         "Hunger/Thirst: read-only session samples; NOT infinite needs.\n\n"..
         "COORDINATION: Auto Escape protects against hostile grabs. Friendly baby\n"..
         "carrying is handled separately. Active Recovery pauses for unsafe actions.\n"..
-        "Quick Climb uses native Q buffering, not a forced hold key.\n\n"..
+        "Quick Climb buffers Q for 2.25s and retries one missed native mount tap.\n\n"..
         "KEYS: RIGHT SHIFT hide/show  |  END shutdown  |  Q climb  |  G carry\n"..
         "DIAGNOSTICS: The original v32 session report saves locally when supported.\n"..
         "A v7 session report records own HP, Hunger, Thirst and recovery status.\n"..
@@ -8858,7 +8906,7 @@ if not ready or not window then
 end
 -- Close a previous v28 instance before starting any new hooks. The v15
 -- engine and all module shutdowns run before new recurring connections exist.
-ctx.notice("FERAL HUB v7.3: Recovery safely retries after temporary pose echoes (no forced Rest); own hunger/thirst sampled passively. Stamina and Eagle safety controls preserved. Server-side healing, infinite needs, oversized carries and shortened Talon cooldown remain unverified.")
+ctx.notice("FERAL HUB v7.3: Recovery restored from the earlier v1.1 five-second native Rest signal and pre-render mask, with combat/pose guards and no forced visible Rest. Climb Q buffer and one safe retry improved. Stamina and Eagle controls preserved. Server-side outcomes remain unverified.")
 -- The UI invokes ctx.close() dynamically. This wrapper is the sole active-hub
 -- registry; shutting down from Close, End, RESET+Close or rerunning v28 clears it.
 local activeRecord={}
@@ -8925,12 +8973,12 @@ else
         local verified=log.selfCheck
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
-        log.preservedGameplayModules=16
-        log.updatedGameplayModules={"feral-hub-mobile-recovery-v7.3.lua","feral-hub-active-recovery-v7.3.lua"}
+        log.preservedGameplayModules=15
+        log.updatedGameplayModules={"feral-hub-mobile-recovery-v7.3.lua","feral-hub-active-recovery-v7.3.lua","feral-hub-climb-v7.3.lua"}
         log.updatedUIModule="feral-hub-ui-v7.3.lua"
         save()
         if log.result=="READY" then
-            show("READY","v7.3 recovery guard / 35 startup checks passed.",false)
+            show("READY","v7.3 legacy-style recovery + improved climb / 35 checks.",false)
         else
             show("INCOMPLETE","Open HELP and copy the startup report.",true)
         end
