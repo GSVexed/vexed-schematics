@@ -1,4 +1,4 @@
--- FERAL HUB v7.3 / guarded native Rest-signal recovery out of combat
+-- FERAL HUB v7.3 / restored v1.1 Rest signaling with bounded pose safety
 -- Previously observed mobile Rest signal sometimes doubled real HP recovery.
 -- Keep one native Rest signal active outside combat even during movement.
 -- Never force physical Rest; mask local WolfRest with recurrence safeguards.
@@ -67,6 +67,7 @@ function Native.attach(ctx)
         poseRetryAt=0,poseBackoffSeconds=0,lastAnimal=nil,signalStartedAt=0,
         poseSafetyFailures=0,nativeRefreshRequestsSuppressed=0,
         combatTagBlocks=0,restRefreshAttempts=0,restRefreshSuccess=0,
+        legacyRestCadenceSeconds=5,preMaskStarts=0,renderMaskPasses=0,
         lastProgressAt=0,lastGainValue=0,refreshAfterSeconds=18,
         lastRefreshAt=-math.huge,maxRefreshesPerLife=2,
         mobileSignalSeconds=0,fullHealthSignalSeconds=0,
@@ -74,6 +75,8 @@ function Native.attach(ctx)
     }
     local conns={}
     local masking=false
+    -- v1.1 Bear prototype used mask priority 199, before native WolfAnim.
+    local renderName="FERAL_HUB_V73_REST_MASK"
     local function fire(on,char)
         local remote=RS:FindFirstChild("WolfActions")
         if not remote or not remote:IsA("RemoteEvent") then
@@ -90,6 +93,7 @@ function Native.attach(ctx)
         N.mask=nil
         if not m then return end
         if m.conn then pcall(function()m.conn:Disconnect()end)end
+        pcall(function()RunService:UnbindFromRenderStep(renderName)end)
         -- Never "repair" WolfRest by writing true: that would itself
         -- activate a local Rest pose even when the server is not resting.
     end
@@ -159,8 +163,22 @@ function Native.attach(ctx)
             return false
         end
         m.conn=conn
+        local bound=pcall(function()
+            RunService:BindToRenderStep(renderName,199,function()
+                if N.mask==m then
+                    N.renderMaskPasses+=1
+                    writeMask(m)
+                end
+            end)
+        end)
+        if not bound then
+            N.maskErrors+=1
+            unmask()
+            return false
+        end
+        N.preMaskStarts+=1
         writeMask(m)
-        return true
+        return N.mask==m
     end
     local function delayInput(reason,cooldown)
         N.inputAt=os.clock()
@@ -309,18 +327,20 @@ function Native.attach(ctx)
             cancel("ANIMAL CHANGED")
         end
         if not N.active then
-            if not fire(true,char) then
-                N.status="NATIVE REST REQUEST FAILED"
-                return
-            end
+            -- v1.1 order: mask before the first native Rest request.
             N.owned=char;N.active=true
-            N.activations+=1
             N.signalStartedAt=now
             if not beginMask(char) then
-                cancel("POSE MASK UNAVAILABLE",true)
+                N.owned=nil;N.active=false
+                N.status="POSE MASK UNAVAILABLE / REST NOT REQUESTED"
                 return
             end
-            N.nextRefresh=now+5.0
+            if not fire(true,char) then
+                cancel("NATIVE REST REQUEST FAILED",true)
+                return
+            end
+            N.activations+=1
+            N.nextRefresh=now+N.legacyRestCadenceSeconds
             N.lastProgressAt=now
             N.lastGainValue=N.observedHPGain
             N.restRefreshAttempts=0
@@ -336,19 +356,18 @@ function Native.attach(ctx)
             N.lastGainValue=N.observedHPGain
             N.lastProgressAt=now
         end
-        -- One bounded reassertion only if we are actually wounded and
-        -- have not observed healing for a sustained period. Avoid the old
-        -- every-5s loop that repeatedly triggered visible Rest animations.
-        if hpDeficit and N.owned==char
-            and now-N.lastProgressAt>=N.refreshAfterSeconds
-            and now-N.lastRefreshAt>=25
-            and N.restRefreshAttempts<N.maxRefreshesPerLife then
-            N.restRefreshAttempts+=1
-            N.lastRefreshAt=now
-            if fire(true,char) then N.restRefreshSuccess+=1 end
-            N.lastProgressAt=now
-        else
-            N.nativeRefreshRequestsSuppressed+=1
+        -- Recover v1.1's five-second cadence while missing HP or affected.
+        -- Never refresh while combat-blocked, unsafe, or in pose backoff.
+        if now>=N.nextRefresh then
+            N.nextRefresh=now+N.legacyRestCadenceSeconds
+            if (hpDeficit or statusDeficit) and N.owned==char
+                and N.mask and N.active then
+                N.restRefreshAttempts+=1
+                N.lastRefreshAt=now
+                if fire(true,char) then N.restRefreshSuccess+=1 end
+            else
+                N.nativeRefreshRequestsSuppressed+=1
+            end
         end
         if not hpDeficit and not statusDeficit then
             N.fullHealthSignalSeconds+=.2
@@ -369,6 +388,11 @@ function Native.attach(ctx)
             "strict_combat_tag_blocks="..N.combatTagBlocks,
             "mobile_rest_signal_seconds_estimate="..string.format("%.1f",N.mobileSignalSeconds),
             "full_health_rest_signal_seconds_estimate="..string.format("%.1f",N.fullHealthSignalSeconds),
+            "native_rest_compatibility_refresh_attempts="..N.restRefreshAttempts,
+            "native_rest_compatibility_refresh_successes="..N.restRefreshSuccess,
+            "native_rest_compatibility_refresh_interval_s="..N.legacyRestCadenceSeconds,
+            "pre_request_pose_mask_starts="..N.preMaskStarts,
+            "pre_animation_mask_checks="..N.renderMaskPasses,
             "bounded_no_heal_refresh_attempts="..N.restRefreshAttempts,
             "bounded_no_heal_refresh_successes="..N.restRefreshSuccess,
             "local_WolfRest_false_mask_writes="..N.maskWrites,
@@ -391,7 +415,9 @@ function Native.attach(ctx)
             "last_activity_block="..tostring(N.lastBlock),
             "last_error="..N.lastError,
             "NOTE=Native Rest signal stays active outside combat while moving, flying and climbing.",
-            "NOTE=At most two reassertions per active signal after no observed HP progress for 18s.",
+            "NOTE=Provenance: v1.1 Bear observed mobile healing under five-second Rest signaling.",
+            "NOTE=Pose mask attaches before the native request and ahead of WolfAnim.",
+            "NOTE=While wounded/affected, refresh Rest no more often than every five seconds.",
             "NOTE=Repeated native pose echoes trigger 15/30/60/120s backoff, not permanent exclusion.",
             "NOTE=FeralCombatUntil and attack input suspend Rest; repeated pose signals also suspend it.",
             "NOTE=Local WolfRest masking can affect game animations and interactions.",
