@@ -96,6 +96,9 @@ jobs:
           # One failed controller close must not prevent remaining cleanup.
           assert 'pcall(function()Active.close()end)' in ui
           assert 'pcall(function()Tags.close()end)' in ui
+          assert 'pcall(function()Escape.close()end)' in ui
+          assert 'MANUAL REST / PRESERVED' in ui
+          assert 'Manual Rest protected:' in ui
           assert 'pcall(clearFog)' in ui
           assert 'COPY EVIDENCE' in ui
           assert 'SURVIVAL","COMBAT","ABILITIES","SYSTEM' in ui
@@ -302,11 +305,79 @@ jobs:
           assert(not N.manualRest and N.active and N.nativeOn==7)
           N.close()
           assert(not N.active and N.nativeOff==5)
+          -- The user was already resting when enabling/reloading the hub.
+          -- No synthetic Rest(false) may be sent when that instance closes.
+          char:SetAttribute("WolfRest",true)
+          now=40
+          local N2=Native.attach(context)
+          assert(N2.setEnabled(true)==true)
+          heartbeat:Fire()
+          assert(N2.manualRest and not N2.active and N2.nativeOn==0)
+          assert(attrs.WolfRest==true)
+          N2.close()
+          assert(N2.nativeOff==0 and attrs.WolfRest==true)
           print("FERAL_NOVA_V102_MANUAL_REST_AND_NONCOMBAT_TEAMMATES_PASS")
           '''
           Path('/tmp/feral-v90-native-test.luau').write_text(before+code+after)
           PY
           "$LUAU_RUNNER" /tmp/feral-v90-native-test.luau
+      - name: Runtime mock — recovery status transitions manual Rest, auto recovery, combat pause
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-nova-active-recovery-v10.2.lua').read_text()
+          assert code.rstrip().endswith('return Active')
+          code=code[:code.rfind('return Active')]
+          before=r'''
+          local now=1
+          os={clock=function()return now end}
+          local heartbeat={}
+          function heartbeat:Connect(fn)
+              self.fn=fn
+              return {Disconnect=function()end}
+          end
+          function heartbeat:Fire()if self.fn then self.fn()end end
+          local hum={Health=50,MaxHealth=100}
+          local char={FindFirstChildOfClass=function(self,k)return hum end}
+          local player={Character=char}
+          local services={RunService={Heartbeat=heartbeat},Players={LocalPlayer=player}}
+          game={GetService=function(self,k)return services[k]end}
+          '''
+          after=r'''
+          local native={enabled=true,manualRest=true,active=false,poseSafetyPauses=0}
+          function native.setEnabled(v)native.enabled=v==true end
+          local regen={needsApplied=true,statusApplied=true,restMultipliersReady=true}
+          function regen.setEnabled(v)regen.enabled=v==true end
+          local ctx={native=native,regen=regen,
+              recovery={enabled=false},mobile={enabled=false}}
+          local A=Active.attach(ctx)
+          assert(A.setEnabled(true)==true)
+          assert(A.mode=="MANUAL_REST")
+          assert(A.status:find("GAME CONTROLS POSE",1,true))
+          assert(A.report():find("manual_rest_preserved=true",1,true))
+          now=2
+          heartbeat:Fire()
+          assert(A.reasonSeconds.MANUAL_REST>0)
+          assert(A.woundedBlockedSeconds==0 and A.nativeActiveSeconds==0)
+          native.manualRest=false
+          native.active=true
+          now=3
+          heartbeat:Fire()
+          assert(A.mode=="NATIVE_RECOVERY" and A.nativeActiveSeconds>0)
+          native.active=false
+          native.status="COMBAT TAG ACTIVE / REST OFF"
+          now=4
+          heartbeat:Fire()
+          assert(A.mode=="COMBAT_BLOCKED" and A.combatBlockedSeconds>0)
+          A.close()
+          assert(not A.alive and native.enabled==false)
+          print("FERAL_NOVA_V102_ACTIVE_RECOVERY_MODE_TRANSITIONS_PASS")
+          '''
+          Path('/tmp/feral-v102-active-test.luau').write_text(before+code+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v102-active-test.luau
       - name: Mock platform idle pulses and survival safe default
         shell: bash
         run: |
