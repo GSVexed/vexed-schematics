@@ -5074,10 +5074,12 @@ function Native.attach(ctx)
         feedStarts=0,feedFinishes=0,feedRestReleases=0,
         feedIntentPreemptions=0,feedGraceSeconds=1.25,
         feedAutoReleaseAt=-math.huge,feedEchoesSuppressed=0,
+        feedEchoWindowCount=0,
         conditionPrev=nil,conditionRates={auto={},manual={},baseline={}},
     }
     local conns={}
     local feedConn=nil
+    local feedPoseConn=nil
     local masking=false
     -- v1.1 Bear prototype used mask priority 199, before native WolfAnim.
     local renderName="FERAL_HUB_V73_REST_MASK"
@@ -5337,6 +5339,7 @@ function Native.attach(ctx)
         if N.active then
             N.feedRestReleases+=1
             N.feedAutoReleaseAt=os.clock()
+            N.feedEchoWindowCount=0
         end
         delayInput(reason or "NATIVE FEED / AUTO REST RELEASED",N.feedGraceSeconds)
         return true
@@ -5380,6 +5383,7 @@ function Native.attach(ctx)
             N.feedActive=false
             N.feedUntil=0
             N.feedAutoReleaseAt=-math.huge
+            N.feedEchoWindowCount=0
             N.conditionPrev=nil
         end
         if not N.enabled then
@@ -5553,6 +5557,18 @@ function Native.attach(ctx)
         end
         N.conditionPrev=current
     end
+    local function clearOwnedFeedEcho(char,now)
+        if N.feedChar~=char or N.manualRest
+            or now<=N.manualIntentUntil
+            or now-N.feedAutoReleaseAt>4
+            or N.feedEchoWindowCount>=3
+            or char:GetAttribute("WolfRest")~=true then return end
+        local ok=pcall(function()char:SetAttribute("WolfRest",false)end)
+        if ok then
+            N.feedEchoesSuppressed+=1
+            N.feedEchoWindowCount+=1
+        end
+    end
     local function feedGuard(char,now)
         local nativeFeeding=char:GetAttribute("WolfFeed")==true
         if nativeFeeding then
@@ -5569,17 +5585,12 @@ function Native.attach(ctx)
         -- A delayed acknowledgment of our OWN released Rest(true) can
         -- arrive after feeding starts. It is not a player-owned Rest action.
         -- Clear its local pose only in this bounded own-release window.
-        if N.feedChar==char and now-N.feedAutoReleaseAt<=4
-            and now>N.manualIntentUntil and not N.manualRest
-            and char:GetAttribute("WolfRest")==true
-            and N.feedEchoesSuppressed<3 then
-            local ok=pcall(function()char:SetAttribute("WolfRest",false)end)
-            if ok then N.feedEchoesSuppressed+=1 end
-        end
+        clearOwnedFeedEcho(char,now)
         if N.feedChar==char and (nativeFeeding or now<N.feedUntil) then
             if N.active then
                 N.feedRestReleases+=1
                 N.feedAutoReleaseAt=now
+                N.feedEchoWindowCount=0
                 cancel("FEEDING / DRINKING / REST RELEASED",true)
             end
             N.status=nativeFeeding and "FEEDING / DRINKING / REST PAUSED"
@@ -5615,6 +5626,7 @@ function Native.attach(ctx)
             N.feedUntil=0
             N.feedActive=false
             N.feedAutoReleaseAt=-math.huge
+            N.feedEchoWindowCount=0
         end
         sampleConditions(char,now)
         -- Feeding takes precedence even over an inherited/manual Rest flag.
@@ -5876,10 +5888,13 @@ function Native.attach(ctx)
         end
         if N.conn then N.conn:Disconnect()end
         if feedConn then pcall(function()feedConn:Disconnect()end)end
+        if feedPoseConn then pcall(function()feedPoseConn:Disconnect()end)end
     end
     local function watchFeed(char)
         if feedConn then pcall(function()feedConn:Disconnect()end)end
+        if feedPoseConn then pcall(function()feedPoseConn:Disconnect()end)end
         feedConn=nil
+        feedPoseConn=nil
         N.feedChar=nil
         N.feedActive=false
         N.feedUntil=0
@@ -5893,6 +5908,14 @@ function Native.attach(ctx)
             end)
         end)
         if ok then feedConn=conn end
+        local poseOk,poseConn=pcall(function()
+            return char:GetAttributeChangedSignal("WolfRest"):Connect(function()
+                if N.alive and player.Character==char then
+                    clearOwnedFeedEcho(char,os.clock())
+                end
+            end)
+        end)
+        if poseOk then feedPoseConn=poseConn end
         if char:GetAttribute("WolfFeed")==true then
             N.beforeFeed("SPAWNED FEEDING / AUTO REST OFF")
         end
