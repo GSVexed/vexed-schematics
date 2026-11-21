@@ -659,6 +659,9 @@ jobs:
           local deferred={}
           task={delay=function(t,fn)table.insert(deferred,fn)end}
           local nativeCalls=0
+          -- Official CLI Luau exposes a read-only host _G; shadow it with
+          -- the injected test double used by the game's carry helper.
+          local _G={}
           _G.FeralCarryPress=function()nativeCalls+=1 end
           _G.FeralCarryCan=function()return true end
           '''
