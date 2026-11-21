@@ -319,6 +319,7 @@ function Coordinator.attach(ctx)
         A.lease=nil
         A.lastSnapshot=nil
     end
+    A.isNativeFeed=nativeFeed
     return A
 end
 return Coordinator
