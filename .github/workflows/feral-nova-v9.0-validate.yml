@@ -1,4 +1,4 @@
-name: FERAL NOVA v9.0 Core - 22 Modules, Shared Priorities and Regression
+name: FERAL NOVA v9.0 Core - Eight Integrated Modules and Regression
 on:
   push:
     branches: [main]
@@ -9,6 +9,8 @@ on:
       - 'roblox-tools/feral-nova-grab-v9.0.lua'
       - 'roblox-tools/feral-nova-afk-v9.0.lua'
       - 'roblox-tools/feral-nova-climb-v9.0.lua'
+      - 'roblox-tools/feral-nova-escape-core-v9.0.lua'
+      - 'roblox-tools/feral-nova-carry-core-v9.0.lua'
       - 'roblox-tools/feral-nova-ui-v9.0.lua'
       - '.github/workflows/feral-nova-v9.0-validate.yml'
   workflow_dispatch:
@@ -35,7 +37,7 @@ jobs:
           chmod +x "$t"
           echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
           echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
-      - name: Audit 22 modules; six replacements preserve sixteen original gameplay modules
+      - name: Audit 22 modules; eight replacements preserve fourteen original gameplay modules
         shell: bash
         run: |
           set -euo pipefail
@@ -56,6 +58,8 @@ jobs:
             'feral-nova-afk-v8.0.lua':'feral-nova-afk-v9.0.lua',
             'feral-nova-climb-v15.0.lua':'feral-nova-climb-v9.0.lua',
             'feral-nova-prime-ui-v32.0.lua':'feral-nova-ui-v9.0.lua',
+            'feral-nova-escape-v15.0.lua':'feral-nova-escape-core-v9.0.lua',
+            'feral-nova-carry-v15.0.lua':'feral-nova-carry-core-v9.0.lua',
           }
           assert set(before)-set(after)==set(changed), 'Removed unexpected modules'
           assert set(after)-set(before)==set(changed.values()), 'Unexpected added modules'
@@ -68,6 +72,8 @@ jobs:
           afk=after['feral-nova-afk-v9.0.lua']
           grab=after['feral-nova-grab-v9.0.lua']
           climb=after['feral-nova-climb-v9.0.lua']
+          escape=after['feral-nova-escape-core-v9.0.lua']
+          carry=after['feral-nova-carry-core-v9.0.lua']
           ui=after['feral-nova-ui-v9.0.lua']
           assert 'function A.snapshot(force)' in action
           assert 'function A.allowed(mode,previous)' in action
@@ -85,6 +91,10 @@ jobs:
           assert 'ctx.action.allowed,"grab_press"' in grab
           assert 'remote:FireServer("press",p.session,p.strike,now)' in grab
           assert 'local allowed,why=climbAllowed()' in climb
+          assert 'ctx.action.allowed,"escape"' in escape
+          assert 'ctx.action.allowed,"carry"' in carry
+          assert 'DEFERRED CARRY CANCELLED' in carry
+          assert 'GRAB V2 TIMING HAS PRIORITY' in action
           assert 'Q.pendingUntil=now+2.25' in climb
           assert 'COPY CORE AUDIT' in ui and 'SERVER OUTCOME: VERIFY' in ui
           assert 'AFK.setSurvivalEnabled(false)' in ui
@@ -98,7 +108,7 @@ jobs:
           dest=Path('/tmp/feral-v90-modules')
           dest.mkdir(exist_ok=True)
           for key,value in after.items(): (dest/key).write_text(value)
-          print('FERAL_NOVA_V90_SIX_REBUILT_16_UNCHANGED_MODULES_PASS')
+          print('FERAL_NOVA_V90_EIGHT_REBUILT_14_UNCHANGED_MODULES_PASS')
           PY
       - name: Compile full offline hub and each bundled module
         shell: bash
@@ -494,10 +504,14 @@ jobs:
           assert(A.allowed("recovery")==false)
           assert(A.allowed("afk_walk")==false)
           assert(A.allowed("grab_press")==true)
+          assert(A.allowed("escape")==false)
+          assert(A.allowed("carry")==false)
           context.grabMini.activeSession=false
           assert(A.allowed("grab_press")==false)
           assert(A.release("minigame")==true)
           assert(A.allowed("recovery")==true)
+          assert(A.allowed("escape")==true)
+          assert(A.allowed("carry")==true)
           assert(A.reserve("afk_walk",5)==true)
           assert(A.allowed("recovery")==false)
           assert(A.reserve("minigame",3)==true)
