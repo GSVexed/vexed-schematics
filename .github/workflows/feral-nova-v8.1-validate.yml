@@ -354,6 +354,7 @@ jobs:
             Workspace={GetServerTimeNow=function()return now end}
           }
           game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,Touch=2},KeyCode={Space=3}}
           '''
           after=r'''
           local native={released=0}
