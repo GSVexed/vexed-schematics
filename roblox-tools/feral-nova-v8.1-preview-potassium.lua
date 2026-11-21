@@ -10101,7 +10101,7 @@ else
         log.updatedUIModule="feral-hub-ui-v8.1.lua"
         save()
         if log.result=="READY" then
-            show("READY","v8.1 mobile Rest + auto Perfect + AFK / 42 checks.",false)
+            show("READY","v8.1 mobile Rest + auto Perfect + AFK / 45 checks.",false)
         else
             show("INCOMPLETE","Open HELP and copy the startup report.",true)
         end
