@@ -4315,6 +4315,7 @@ function Native.attach(ctx)
             auto_combat={},manual_combat={},baseline_combat={}},
         combatRestActiveSeconds=0,combatStatusSamples=0,
     }
+    N.blockedByActivity=blockedByActivity
     local conns={}
     local feedConn=nil
     local feedPoseConn=nil
