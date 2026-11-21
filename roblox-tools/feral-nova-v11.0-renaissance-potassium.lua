@@ -5073,6 +5073,7 @@ function Native.attach(ctx)
         conditionPrev=nil,conditionRates={auto={},manual={},baseline={}},
     }
     local conns={}
+    local feedConn=nil
     local masking=false
     -- v1.1 Bear prototype used mask priority 199, before native WolfAnim.
     local renderName="FERAL_HUB_V73_REST_MASK"
@@ -5850,7 +5851,6 @@ function Native.attach(ctx)
         if N.conn then N.conn:Disconnect()end
         if feedConn then pcall(function()feedConn:Disconnect()end)end
     end
-    local feedConn=nil
     local function watchFeed(char)
         if feedConn then pcall(function()feedConn:Disconnect()end)end
         feedConn=nil
