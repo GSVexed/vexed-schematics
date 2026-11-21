@@ -207,6 +207,16 @@ function Native.attach(ctx)
             -- expected. Repeated true echoes mean the game keeps forcing the
             -- visible resting pose: release Rest instead of fighting animation.
             if m.trueEchoes>=3 then
+                -- Before entering backoff, clear only the echo already
+                -- attributed to our OWN just-issued Rest request. Leaving
+                -- this final true behind would misclassify it as manual Rest
+                -- after the cooldown and stall automatic recovery forever.
+                masking=true
+                local cleaned=pcall(function()
+                    m.char:SetAttribute("WolfRest",false)
+                end)
+                masking=false
+                if cleaned then N.maskWrites+=1 else N.maskErrors+=1 end
                 N.poseSafetyPauses+=1
                 N.poseSafetyFailures+=1
                 -- v7.2 permanently excluded this animal after two bursts.
