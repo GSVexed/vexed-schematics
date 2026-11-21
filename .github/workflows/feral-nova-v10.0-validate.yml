@@ -55,14 +55,14 @@ jobs:
           # Runtime preflight must resolve EVERY name against BUNDLED.
           # Full Luau compilation alone cannot catch a stale literal
           # MODULE_ORDER string because the missing lookup occurs at runtime.
-          order_match=re.search(r'local MODULE_ORDER=\\{([^\\n]+)\\}',after)
+          order_match=re.search(r'local MODULE_ORDER=\{([^\n]+)\}',after)
           assert order_match is not None,"MODULE_ORDER missing"
-          order=re.findall(r'"([^"]+\\.lua)"',order_match.group(1))
+          order=re.findall(r'"([^"]+\.lua)"',order_match.group(1))
           assert len(order)==23,"Expected 23 ordered modules"
           assert len(order)==len(set(order)),"Duplicate preflight module name"
           assert set(order)==set(new),f"Preflight lookup mismatch: missing={set(order)-set(new)}, unordered={set(new)-set(order)}"
           # Both the compile order and runtime get() must use embedded names.
-          gets=re.findall(r'\\bget\\("([^"]+\\.lua)"\\)',after)
+          gets=re.findall(r'\bget\("([^"]+\.lua)"\)',after)
           assert gets and set(gets).issubset(set(new)),f"Runtime get() references missing: {set(gets)-set(new)}"
           assert all(len(new[name])>100 for name in order)
           print("FERAL_MODULE_PREFLIGHT_NAME_INTEGRITY_23_23_PASS")
