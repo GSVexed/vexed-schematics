@@ -856,6 +856,7 @@ jobs:
           assert "if x<0 or x>header.AbsoluteSize.X*.66 then return end" in source
           stub=r'''
           local UI={}
+          local function warn(...) end
           local t=1
           local os={clock=function()return t end}
           local Enum={Font={GothamBold=1},TextXAlignment={Left=0}}
