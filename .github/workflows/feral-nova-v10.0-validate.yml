@@ -327,6 +327,7 @@ jobs:
           assert(A.idledEvents==1 and A.pulseSuccess==2)
           -- Synthetic mouse events may be filtered, but real keys may NOT.
           input:Fire({UserInputType=Enum.UserInputType.MouseButton2})
+          changed:Fire({UserInputType=Enum.UserInputType.MouseMovement})
           assert(A.lastPhysicalInputAt==0)
           input:Fire({UserInputType=Enum.UserInputType.Keyboard})
           assert(A.lastPhysicalInputAt==86)
@@ -340,6 +341,13 @@ jobs:
           input:Fire({UserInputType=Enum.UserInputType.Keyboard})
           assert(A.lastPhysicalInputAt==t and not A.travelActive)
           assert(A.userStopCount==1)
+          -- Genuine mouse movement after the short synthetic window
+          -- also cancels auto travel, rather than merely noting activity.
+          A.travelActive=true
+          t=86.4
+          changed:Fire({UserInputType=Enum.UserInputType.MouseMovement})
+          assert(A.lastPhysicalInputAt==t and not A.travelActive)
+          assert(A.userStopCount==2)
           A.setSurvivalEnabled(true)
           t=151
           heartbeat:Fire()
