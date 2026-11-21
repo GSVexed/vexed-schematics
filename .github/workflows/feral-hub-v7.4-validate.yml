@@ -1,0 +1,204 @@
+name: FERAL HUB v7.4 - Compile, Bundle Parity, Recovery Regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-hub-v7.4-potassium.lua'
+      - 'roblox-tools/feral-hub-mobile-recovery-v7.4.lua'
+      - 'roblox-tools/feral-hub-active-recovery-v7.4.lua'
+      - 'roblox-tools/feral-hub-climb-v7.4.lua'
+      - 'roblox-tools/feral-hub-ui-v7.4.lua'
+      - '.github/workflows/feral-hub-v7.4-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler and interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          c="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          t="$(dirname "$c")/luau"
+          test -f "$t"
+          chmod +x "$t"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+          echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
+      - name: Check 19 embedded modules, exact source parity and preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          base=Path('roblox-tools')
+          old=(base/'feral-hub-v7.3-potassium.lua').read_text()
+          cur=(base/'feral-hub-v7.4-potassium.lua').read_text()
+          pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pat,old,re.S))
+          after=dict(re.findall(pat,cur,re.S))
+          assert len(before)==len(after)==19
+          assert set(after)==set(before)
+          changes={key for key in after if after[key]!=before[key]}
+          expected={
+            'feral-nova-native-recovery-v29.0.lua':'feral-hub-mobile-recovery-v7.4.lua',
+            'feral-nova-prime-ui-v32.0.lua':'feral-hub-ui-v7.4.lua'
+          }
+          assert changes==set(expected),f'Unexpected differences: {changes.symmetric_difference(expected)}'
+          for key,path in expected.items():
+            assert after[key]==(base/path).read_text().rstrip(),f'Source mismatch: {path}'
+          native=after['feral-nova-native-recovery-v29.0.lua']
+          assert 'RunService:BindToRenderStep(renderName,199' in native
+          assert native.index('beginMask(char) then') < native.index('if not fire(true,char) then')
+          assert 'legacyRestCadenceSeconds=5' in native
+          assert 'attackInputsObserved+=1' in native
+          assert 'HELD ATTACK / NO REST' not in native
+          assert 'CHAT PRIORITY' not in native
+          assert 'POSE SAFETY / BACKOFF' in native and 'poseRetryAt=now+delay' in native
+          assert 'COMBAT TAG ACTIVE / REST OFF' in native
+          assert 'autoRealRestFallback=false' in after['feral-nova-active-recovery-v29.0.lua']
+          climb=after['feral-nova-climb-v15.0.lua']
+          assert 'Q.pendingUntil=now+2.25' in climb
+          assert 'Q.retapsForPress<1' in climb
+          assert 'buffer_window_seconds=2.25' in climb
+          assert 'FERAL_HUB_STARTUP_v7.json' in cur and 'FERAL_HUB_SESSION_v7.json' in cur
+          assert 'schema="FERAL_HUB_SESSION_V7",version="7.3.0"' in cur
+          assert 'activeRecord.version="feral-hub-v7.4"' in cur
+          assert 'H.precompiledCount+=1' in cur
+          assert 'show("READY","v7.4' in cur
+          assert 'game:HttpGet(' not in cur
+          assert not re.search(r'SetAttribute\(["\'](?:Hunger|Thirst)["\']',native)
+          out=Path('/tmp/feral-v74-modules')
+          out.mkdir(exist_ok=True)
+          for key,value in after.items():
+            (out/key).write_text(value)
+          print('FERAL_HUB_V74_PRESERVED_17_MODULES_TWO_UPDATED_MODULES_PASS')
+          PY
+      - name: Compile full offline hub and each bundled module
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-hub-v7.4-potassium.lua
+          for file in /tmp/feral-v74-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_HUB_V74_LUAU_FULL_COMPILE_PASS
+      - name: Runtime mocked native Rest lifecycle and pose backoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-hub-mobile-recovery-v7.4.lua').read_text()
+          assert code.rstrip().endswith('return Native')
+          code=code[:code.rfind('return Native')]
+          before=r'''
+          local now=1
+          local serverNow=100
+          os={clock=function()return now end}
+          local function event()
+            local e={fn=nil}
+            function e:Connect(fn) self.fn=fn;return {Disconnect=function()end} end
+            function e:Fire(...) if self.fn then self.fn(...) end end
+            return e
+          end
+          local heartbeat=event()
+          local input=event()
+          local focused=false
+          local restChanges=event()
+          local attrs={WolfRest=false,Species="Eagle"}
+          local char={Parent=true}
+          function char:GetAttribute(k)return attrs[k]end
+          function char:SetAttribute(k,v)attrs[k]=v; if k=="WolfRest" then restChanges:Fire() end end
+          function char:GetAttributeChangedSignal(k)return restChanges end
+          local hum={Health=50,MaxHealth=100}
+          function char:FindFirstChildOfClass(k) if k=="Humanoid" then return hum end end
+          local pattrs={}
+          local player={Character=char}
+          function player:GetAttribute(k)return pattrs[k]end
+          local sent={}
+          local remote={}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          function remote:FireServer(k,v)
+            table.insert(sent,{k,v})
+            if v==true then
+              char:SetAttribute("WolfRest",true)
+            end
+          end
+          workspace={GetServerTimeNow=function()return serverNow end}
+          local services={
+            Players={LocalPlayer=player},
+            ReplicatedStorage={FindFirstChild=function(self,k)
+              if k=="WolfActions"then return remote end
+            end},
+            UserInputService={
+              InputBegan=input,
+              GetFocusedTextBox=function()return focused and {} or nil end,
+              IsMouseButtonPressed=function()return false end
+            },
+            RunService={
+              Heartbeat=heartbeat,
+              BindToRenderStep=function(self,k,n,cb) self.render=cb end,
+              UnbindFromRenderStep=function(self,k)self.render=nil end
+            }
+          }
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2},KeyCode={G=9}}
+          '''
+          after=r'''
+          local N=Native.attach({state={alive=true}})
+          assert(N.setEnabled(true)==true)
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==1 and N.maskWrites>=1)
+          assert(attrs.WolfRest==false and N.preMaskStarts==1)
+          -- Mouse held and chat are not combat. Keep the native signal.
+          now=1.2
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,KeyCode=0},false)
+          heartbeat:Fire()
+          assert(N.active and N.nativeOff==0)
+          focused=true
+          now=1.5
+          heartbeat:Fire()
+          assert(N.active and N.nativeOff==0)
+          focused=false
+          now=6.5
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==2)
+          hum.Health=100
+          now=11.5
+          heartbeat:Fire()
+          assert(N.nativeOn==2)
+          pattrs.FeralCombatUntil=120
+          now=12
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOff==1)
+          assert(N.status=="COMBAT TAG ACTIVE / REST OFF")
+          serverNow=130
+          now=13
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==3)
+          -- Three pose echoes within the guard window must release native Rest.
+          for i=1,3 do char:SetAttribute("WolfRest",true) end
+          assert(not N.active and N.poseRetryAt>now and N.nativeOff==2)
+          now=15
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOn==3)
+          now=29
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==4)
+          N.close()
+          assert(not N.active and N.nativeOff==3)
+          print("FERAL_HUB_V74_NATIVE_REST_MOCK_LIFECYCLE_PASS")
+          '''
+          Path('/tmp/feral-v74-native-test.luau').write_text(before+code+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v74-native-test.luau
