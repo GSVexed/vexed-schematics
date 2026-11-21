@@ -9601,11 +9601,8 @@ function AFK.attach(ctx)
             or input.UserInputType==Enum.UserInputType.MouseWheel
             or input.UserInputType==Enum.UserInputType.MouseButton2
         ) then return end
-        if input and input.UserInputType==Enum.UserInputType.MouseMovement
-            or input and input.UserInputType==Enum.UserInputType.MouseWheel then
-            A.lastPhysicalInputAt=t
-            return
-        end
+        -- Mouse/camera movement counts as manual control too. The older
+        -- early return recorded activity but left auto-walk running.
         A.lastPhysicalInputAt=t
         if A.travelActive then
             A.userStopCount+=1
@@ -9628,7 +9625,7 @@ function AFK.attach(ctx)
         if not A.robloxEnabled or not A.alive then return false end
         local t=os.clock()
         A.lastPulseAt=t
-        A.ignoreInputUntil=t+2
+        A.ignoreInputUntil=t+.25
         A.pulseAttempts+=1
         -- First preference: Roblox's VirtualUser. Avoid real-world OS input.
         if virtualUser then
