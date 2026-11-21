@@ -5119,6 +5119,10 @@ function Native.attach(ctx)
                 or char:GetAttribute("WolfRest")~=true then
                 N.manualRest=false
                 N.manualRestChar=nil
+                -- Never reuse a prior manual-activation hint after the
+                -- game has already exited physical Rest: a new own Rest
+                -- echo could otherwise be mistaken for a second manual rest.
+                N.manualIntentUntil=0
                 N.manualRestExits+=1
                 N.nextTick=0
                 N.lastStatus=nil
