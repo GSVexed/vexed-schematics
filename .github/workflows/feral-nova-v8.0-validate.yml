@@ -272,7 +272,7 @@ jobs:
             Players={LocalPlayer=player},
             UserInputService={InputBegan=input,InputChanged=changed},
             RunService={Heartbeat=heartbeat},
-            ReplicatedStorage={},
+            ReplicatedStorage={FindFirstChild=function()return nil end},
             VirtualUser=virtual
           }
           game={GetService=function(self,k)return services[k]end}
