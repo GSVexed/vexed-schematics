@@ -322,6 +322,7 @@ function Climb.attach(ctx)
         if not ok then Q.lastError=tostring(err)end
     end)
     install()
+    Q.isNativeFeed=nativeFeed
     return Q
 end
 return Climb
