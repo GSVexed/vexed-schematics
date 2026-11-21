@@ -1,0 +1,388 @@
+name: FERAL NOVA v8.1 Preview - 22 Modules, Rest/Combat and Perfect Timing
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v8.1-preview-potassium.lua'
+      - 'roblox-tools/feral-hub-mobile-recovery-v8.1.lua'
+      - 'roblox-tools/feral-hub-ui-v8.1.lua'
+      - 'roblox-tools/feral-nova-action-coordinator-v8.1.lua'
+      - 'roblox-tools/feral-nova-grab-autoperfect-v8.1.lua'
+      - '.github/workflows/feral-nova-v8.1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler and interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          c="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          t="$(dirname "$c")/luau"
+          test -f "$t"
+          chmod +x "$t"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+          echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
+      - name: Check 22 modules, preserve v8 foundation and compare exact v8.1 sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          base=Path('roblox-tools')
+          old=(base/'feral-nova-v8.0-foundation-potassium.lua').read_text()
+          cur=(base/'feral-nova-v8.1-preview-potassium.lua').read_text()
+          pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pat,old,re.S))
+          after=dict(re.findall(pat,cur,re.S))
+          assert len(before)==21 and len(after)==22
+          assert set(before).issubset(set(after))
+          expected={
+            'feral-nova-native-recovery-v29.0.lua':'feral-hub-mobile-recovery-v8.1.lua',
+            'feral-nova-prime-ui-v32.0.lua':'feral-hub-ui-v8.1.lua',
+            'feral-nova-action-coordinator-v8.0.lua':'feral-nova-action-coordinator-v8.1.lua',
+          }
+          added={'feral-nova-grab-autoperfect-v8.1.lua':'feral-nova-grab-autoperfect-v8.1.lua'}
+          changes={key for key in before if before[key]!=after[key]}
+          assert changes==set(expected),f'Unexpected module changes: {changes}'
+          assert set(after)-set(before)==set(added)
+          for key,path in (expected|added).items():
+              assert after[key]==(base/path).read_text().rstrip(),f'Module mismatch: {key}'
+          assert 'H.precompiledCount==22' in cur and 'log.moduleCount==22' in cur
+          assert 'activeRecord.version="feral-hub-v8.1"' in cur
+          assert 'schema="FERAL_HUB_SESSION_V7",version="8.1.0"' in cur
+          assert 'Grab.setEnabled(true)' in after['feral-nova-prime-ui-v32.0.lua']
+          assert 'Grab.setEnabled(false)' in after['feral-nova-prime-ui-v32.0.lua']
+          assert 'AFK.setSurvivalEnabled(false)' in after['feral-nova-prime-ui-v32.0.lua']
+          assert 'AFK.setRobloxEnabled(true)' in after['feral-nova-prime-ui-v32.0.lua']
+          native=after['feral-nova-native-recovery-v29.0.lua']
+          assert 'legacyRestCadenceSeconds=5,movingRestCadenceSeconds=3' in native
+          assert 'movingEligibleHPSeconds' in native
+          assert 'stationaryEligibleHPSeconds' in native
+          assert 'N.lastRefreshAt+N.restMinimumSpacingSeconds' in native
+          assert 'guide.nativeReady==true then' in native
+          assert 'function N.beforeMinigame()' in native
+          assert 'ctx.grabMini and ctx.grabMini.activeSession==true' in native
+          assert 'delayInput("ATTACK INPUT / NATIVE REST RELEASED",1.3)' in native
+          assert 'autoRealRestFallback=false' in after['feral-nova-active-recovery-v29.0.lua']
+          grab=after['feral-nova-grab-autoperfect-v8.1.lua']
+          assert 'remote:FireServer("press",p.session,p.strike,now)' in grab
+          assert 'Workspace:GetServerTimeNow()' in grab
+          assert 'function Grab.attach(ctx)' in grab
+          assert 'event~="strike"' in grab
+          assert 'validSession(data.f)' in grab
+          assert 'G.pending=nil' in grab
+          assert 'Player.Idled' not in grab
+          assert 'game:HttpGet(' not in cur
+          out=Path('/tmp/feral-v81-modules')
+          out.mkdir(exist_ok=True)
+          for key,value in after.items():
+              (out/key).write_text(value)
+          print('FERAL_NOVA_V81_19_GAMEPLAY_AND_AFK_MODULES_PRESERVED_PASS')
+          PY
+      - name: Compile full offline hub and each bundled module
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v8.1-preview-potassium.lua
+          for file in /tmp/feral-v81-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_NOVA_V81_LUAU_FULL_COMPILE_PASS
+      - name: Runtime mocked native Rest lifecycle and pose backoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-hub-mobile-recovery-v8.1.lua').read_text()
+          assert code.rstrip().endswith('return Native')
+          code=code[:code.rfind('return Native')]
+          before=r'''
+          local now=1
+          local serverNow=100
+          os={clock=function()return now end}
+          local function event()
+            local e={fn=nil}
+            function e:Connect(fn) self.fn=fn;return {Disconnect=function()end} end
+            function e:Fire(...) if self.fn then self.fn(...) end end
+            return e
+          end
+          local heartbeat=event()
+          local input=event()
+          local focused=false
+          local held=false
+          local restChanges=event()
+          local attrs={WolfRest=false,Species="Eagle"}
+          local char={Parent=true}
+          function char:GetAttribute(k)return attrs[k]end
+          function char:SetAttribute(k,v)attrs[k]=v; if k=="WolfRest" then restChanges:Fire() end end
+          function char:GetAttributeChangedSignal(k)return restChanges end
+          local hum={Health=50,MaxHealth=100}
+          function char:FindFirstChildOfClass(k) if k=="Humanoid" then return hum end end
+          local pattrs={}
+          local player={Character=char}
+          function player:GetAttribute(k)return pattrs[k]end
+          local sent={}
+          local remote={}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          function remote:FireServer(k,v)
+            table.insert(sent,{k,v})
+            if v==true then
+              char:SetAttribute("WolfRest",true)
+            end
+          end
+          workspace={GetServerTimeNow=function()return serverNow end}
+          local services={
+            Players={LocalPlayer=player},
+            ReplicatedStorage={FindFirstChild=function(self,k)
+              if k=="WolfActions"then return remote end
+            end},
+            UserInputService={
+              InputBegan=input,
+              GetFocusedTextBox=function()return focused and {} or nil end,
+              IsMouseButtonPressed=function()return held end
+            },
+            RunService={
+              Heartbeat=heartbeat,
+              BindToRenderStep=function(self,k,n,cb) self.render=cb end,
+              UnbindFromRenderStep=function(self,k)self.render=nil end
+            }
+          }
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2},KeyCode={G=9}}
+          '''
+          after=r'''
+          local guide={enabled=true,alive=true,ready=false,nativeReady=false}
+          local N=Native.attach({state={alive=true},lab=guide})
+          assert(N.setEnabled(true)==true)
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==1 and N.maskWrites>=1)
+          assert(attrs.WolfRest==false and N.preMaskStarts==1)
+          -- New native Mouse1 must release server Rest even before combat tag.
+          now=1.2
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,KeyCode=0},false)
+          assert(not N.active and N.nativeOff==1 and N.attackRestReleases==1)
+          held=true
+          now=1.6
+          heartbeat:Fire()
+          assert(not N.active)
+          held=false
+          focused=true
+          now=1.8
+          heartbeat:Fire()
+          assert(not N.active)
+          focused=false
+          -- An already targeted in-range animal prevents immediate Rest re-arm.
+          guide.nativeReady=true
+          now=2.6
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOn==1)
+          guide.nativeReady=false
+          now=3.2
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==2)
+          guide.ready=true
+          now=3.5
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOff==2 and N.aimedTargetRestReleases==1)
+          guide.ready=false
+          now=4.2
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==3)
+          -- Legacy five-second pulse remains when wounded and not attacking.
+          now=9.3
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==4)
+          hum.Health=100
+          now=14.4
+          heartbeat:Fire()
+          assert(N.nativeOn==4)
+          pattrs.FeralCombatUntil=120
+          now=15
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOff==3)
+          assert(N.status=="COMBAT TAG ACTIVE / REST OFF")
+          serverNow=130
+          now=16
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==5)
+          -- Repeated pose echoes still trigger bounded safety backoff.
+          for i=1,3 do char:SetAttribute("WolfRest",true) end
+          assert(not N.active and N.poseRetryAt>now and N.nativeOff==4)
+          now=17
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOn==5)
+          now=32
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==6)
+          N.close()
+          assert(not N.active and N.nativeOff==5)
+          print("FERAL_NOVA_V81_ATTACK_PRIORITY_REST_LIFECYCLE_PASS")
+          '''
+          Path('/tmp/feral-v81-native-test.luau').write_text(before+code+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v81-native-test.luau
+      - name: Mock platform idle pulses and survival safe default
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-nova-afk-v8.0.lua').read_text()
+          assert code.rstrip().endswith('return AFK')
+          code=code[:code.rfind('return AFK')]
+          before=r'''
+          local t=0
+          os={clock=function()return t end}
+          local function event()
+            local v={}
+            function v:Connect(fn)self.fn=fn;return{Disconnect=function()end}end
+            function v:Fire(...)if self.fn then self.fn(...)end end
+            return v
+          end
+          local heartbeat=event()
+          local input=event()
+          local changed=event()
+          local idled=event()
+          local pulseCount=0
+          local player={Idled=idled,Character=nil}
+          function player:GetAttribute(k)return nil end
+          local virtual={}
+          function virtual:CaptureController()end
+          function virtual:ClickButton2(pos)pulseCount+=1 end
+          local services={
+            Players={LocalPlayer=player},
+            UserInputService={InputBegan=input,InputChanged=changed},
+            RunService={Heartbeat=heartbeat},
+            ReplicatedStorage={FindFirstChild=function()return nil end},
+            VirtualUser=virtual
+          }
+          game={GetService=function(self,k)return services[k]end}
+          Vector2={new=function(x,y)return{x=x,y=y}end}
+          '''
+          after=r'''
+          local A=AFK.attach({
+            state={alive=true},
+            action={snapshot=function()return {char=nil,root=nil,hum=nil,blocked=true} end}
+          })
+          assert(A.robloxEnabled==false and A.survivalEnabled==false)
+          assert(A.setRobloxEnabled(true)==true)
+          t=86
+          heartbeat:Fire()
+          assert(A.pulseAttempts==1 and A.pulseSuccess==1 and pulseCount==1)
+          idled:Fire(120)
+          assert(A.idledEvents==1 and A.pulseSuccess==2)
+          A.setSurvivalEnabled(true)
+          t=151
+          heartbeat:Fire()
+          assert(A.survivalStatus=="WAITING FOR ANIMAL")
+          assert(A.survivalMoves==0)
+          A.setSurvivalEnabled(false)
+          A.close()
+          idled:Fire(155)
+          heartbeat:Fire()
+          assert(A.pulseSuccess==2 and A.alive==false)
+          print("FERAL_NOVA_V81_VIRTUAL_PULSE_AND_SURVIVAL_SAFE_DEFAULT_PASS")
+          '''
+          Path('/tmp/feral-v81-afk-test.luau').write_text(before+code+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v81-afk-test.luau
+      - name: Runtime mock — server-issued Grab V2 Perfect crossings, no fabricated results
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/feral-nova-grab-autoperfect-v8.1.lua').read_text()
+          assert src.rstrip().endswith('return Grab')
+          src=src[:src.rfind('return Grab')]
+          before=r'''
+          local now=10.01
+          os={clock=function()return now end}
+          local function event()
+            local ev={}
+            function ev:Connect(fn)self.fn=fn;return {Disconnect=function()end}end
+            function ev:Fire(...) if self.fn then self.fn(...)end end
+            return ev
+          end
+          local inbound=event()
+          local input=event()
+          local heartbeat=event()
+          local sent={}
+          local remote={OnClientEvent=inbound,Parent=true}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          function remote:FireServer(...)
+            sent[#sent+1]={...}
+          end
+          local char={}
+          local hum={Health=100}
+          function char:FindFirstChildOfClass(k)
+            if k=="Humanoid" then return hum end
+          end
+          local player={Character=char}
+          function player:GetAttribute(k)return nil end
+          local services={
+            Players={LocalPlayer=player},
+            ReplicatedStorage={FindFirstChild=function(self,k)
+              if k=="FeralGrabV2" then return remote end
+              return nil
+            end},
+            UserInputService={
+              InputBegan=input,
+              GetFocusedTextBox=function()return false end,
+            },
+            RunService={Heartbeat=heartbeat},
+            Workspace={GetServerTimeNow=function()return now end}
+          }
+          game={GetService=function(self,k)return services[k]end}
+          '''
+          after=r'''
+          local native={released=0}
+          function native.beforeMinigame()native.released+=1 end
+          local G=Grab.attach({state={alive=true},native=native})
+          assert(G.enabled==false)
+          G.setEnabled(true)
+          assert(G.remoteBinds==1)
+          -- No unsolicited server presses, even while enabled.
+          heartbeat:Fire()
+          assert(#sent==0)
+          inbound:Fire("strike",{f=105,k=2,t0=10,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
+          assert(G.activeSession and G.pending and native.released==1)
+          now=10.49
+          heartbeat:Fire()
+          assert(#sent==1 and sent[1][1]=="press")
+          assert(sent[1][2]==105 and sent[1][3]==2)
+          assert(sent[1][4]==now)
+          assert(G.pressesSent==1 and G.perfectWindowAtPress==1)
+          -- Practice mode (negative session ID) cannot send a game press.
+          inbound:Fire("end",{})
+          inbound:Fire("strike",{f=-1,k=3,t0=11,spd=1,from=0,zc=.4,zw=.215,dur=2.5})
+          assert(#sent==1 and G.skippedMissingId==1)
+          -- If the user presses manually, let native HUD handle it.
+          now=11.03
+          inbound:Fire("strike",{f=108,k=4,t0=11,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
+          assert(G.pending~=nil)
+          input:Fire({UserInputType=1,KeyCode=0},false)
+          assert(G.pending==nil and G.manualOverrides==1)
+          G.close()
+          now=12
+          heartbeat:Fire()
+          inbound:Fire("strike",{f=110,k=5,t0=12,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
+          assert(#sent==1)
+          print("FERAL_NOVA_V81_REAL_STRIKE_PERFECT_CENTER_MOCK_PASS")
+          '''
+          Path('/tmp/feral-v81-grab-test.luau').write_text(before+src+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v81-grab-test.luau
