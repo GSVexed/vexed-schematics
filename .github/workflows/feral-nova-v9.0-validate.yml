@@ -449,6 +449,12 @@ jobs:
           }
           local A=Coordinator.attach(context)
           assert(A.alive and A.allowed("recovery")==true)
+          -- Already-held prey is not a new G/carry input. Preserve
+          -- noncombat healing while stationary or moving with prey.
+          context.carry={classify=function(char)return "HOLDING PREY",true,false end}
+          assert(A.allowed("recovery")==true)
+          assert(A.allowed("afk_walk")==false)
+          context.carry=nil
           -- Extended/experimental client bite range MUST NOT suppress Rest.
           guide.ready=true
           assert(A.allowed("recovery")==true)
