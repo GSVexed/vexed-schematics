@@ -367,7 +367,7 @@ jobs:
           assert(#sent==0)
           inbound:Fire("strike",{f=105,k=2,t0=10,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
           assert(G.activeSession and G.pending and native.released==1)
-          now=10.49
+          now=10.50
           heartbeat:Fire()
           assert(#sent==1 and sent[1][1]=="press")
           assert(sent[1][2]==105 and sent[1][3]==2)
