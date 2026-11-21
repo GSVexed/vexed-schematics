@@ -8,6 +8,7 @@ on:
       - 'roblox-tools/feral-nova-native-recovery-v11.0.lua'
       - 'roblox-tools/feral-nova-active-recovery-v11.0.lua'
       - 'roblox-tools/feral-nova-regen-v11.0.lua'
+      - 'roblox-tools/feral-nova-evidence-v11.0.lua'
       - 'roblox-tools/feral-nova-ui-v11.0.lua'
       - '.github/workflows/feral-nova-v11.0-renaissance-validate.yml'
   workflow_dispatch:
@@ -60,6 +61,7 @@ jobs:
             "feral-nova-native-recovery-v10.3.lua":"feral-nova-native-recovery-v11.0.lua",
             "feral-nova-active-recovery-v10.2.lua":"feral-nova-active-recovery-v11.0.lua",
             "feral-nova-regen-v29.0.lua":"feral-nova-regen-v11.0.lua",
+            "feral-nova-evidence-v10.0.lua":"feral-nova-evidence-v11.0.lua",
             "feral-nova-ui-v10.0.lua":"feral-nova-ui-v11.0.lua"
           }
           assert set(before)-set(current)==set(replacements)
@@ -81,7 +83,7 @@ jobs:
           d.mkdir(exist_ok=True)
           for name,body in current.items():
               (d/name).write_text(body+"\n")
-          print("FERAL_RENAISSANCE_V11_23_MODULES_18_LEGACY_UNCHANGED_PASS")
+          print("FERAL_RENAISSANCE_V11_23_MODULES_17_LEGACY_UNCHANGED_PASS")
           PY
       - name: Compile v11 launcher and every embedded Luau module
         shell: bash
