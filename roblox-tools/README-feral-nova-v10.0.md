@@ -2,11 +2,27 @@
 
 **Built:** 21 November 2026  
 **Status:** Software release with **23 embedded modules**, **54 startup checks**, and the official Luau full-bundle and regression suite passing. Live **v10** game/server validation is still outstanding; v9 successfully reached READY in a real Potassium session.  
-**Canonical release:** `feral-nova-v10.0-potassium.lua`.
+**Recommended active release:** `feral-nova-v10.3-moving-recovery-potassium.lua` (previous v10.0 and v10.2 remain available as rollback versions).
 
 **Recovery integration hotfix, 21 November 2026:** In addition to the v10 startup, AFK and Grab repairs, the current loader now bundles a v10.2 **manual Rest sovereignty** controller and v10.2 action policy. Manual in-game Rest is given ownership of its pose and is no longer overwritten or cancelled by the automatic Rest mask. Merely having a native-bite-ready animal nearby—friend or foe—never counts as combat and does not halt active recovery. Actual attacks, server combat tags, captures/grab timing and explicit AFK movement still have action priority. The UI reports manual Rest distinctly, and all UI module shutdowns are now individually guarded. Dedicated official Luau mocks pass, but live game-server effects remain unverified.
 
-## Current v10.2 cache-safe loader (recommended)
+## Current v10.3 moving recovery / visual Rest fix (recommended)
+
+**Issue:** User observed the animal visibly resting while moving with the automatic recovery controller enabled. The previous v10.2 Native Recovery treated any `WolfRest=true` echo arriving more than one second after its last own Rest request as evidence of **manual** Rest, unbinding the pose mask and leaving a moving Rest animation visible.
+
+**v10.3 fix:** A late Rest echo inside an owned automatic session is kept auto-owned and masked. The local pose guard now also runs before animation evaluation when `RunService.PreAnimation` exists, and at earlier render priority. Stationary, deliberately entered manual Rest remains protected; starting actual movement hands ownership back to the masked **automatic** recovery controller without introducing a movement-related `Rest(false)` pause. The guard excludes the inherited manual pose from repeated-own-echo safety counting. Attack and combat exclusions remain unchanged.
+
+Use the **fresh v10.3 launcher** to avoid the older download cache:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-v10.3-moving-recovery-potassium.lua"))()
+```
+
+A new actual startup report should show `"version":"10.3.0"`. The v10.3 script bundles 23 modules with all names resolving correctly. [Full Luau and simulated regression results](https://github.com/GSVexed/vexed-schematics/actions/runs/44937937943) pass, including a delayed automatic pose echo and stationary-manual-to-moving-auto handoff. **Live visual appearance to other players and actual server healing while moving are not yet independently confirmed.** A local pose mask cannot guarantee how the server or other clients render the character. Shut down previous builds with **End** before loading v10.3.
+
+## Previous v10.2 cache-safe loader (rollback)
+
+
 
 **As of 21 November 2026:** The old `v10.0-potassium.lua` download URL may be cached by the executor. After renaming the Native Recovery, Action Core and Unified Active Recovery modules to v10.2, the earlier script's preflight `MODULE_ORDER` still referenced legacy v9 filenames. Although the canonical GitHub file has since been corrected, repeated user Potassium startup reports showed `Missing module source: feral-nova-native-recovery-v9.0.lua`, version `10.0.0`, proving an outdated payload was still executed.
 
