@@ -593,7 +593,7 @@ jobs:
           heartbeat:Fire()
           assert(E.moving.samples==clean)
           assert(v.survivalIncrease>0 and v.minigamePresses==1)
-          assert(E.report():find("NOT CAUSAL PROOF",1,true))
+          assert(E.report():find("NOT_CAUSAL_PROOF",1,true))
           E.close()
           assert(not E.alive)
           now+=1
