@@ -118,6 +118,7 @@ function Native.attach(ctx)
         feedChar=nil,feedActive=false,feedUntil=0,
         feedStarts=0,feedFinishes=0,feedRestReleases=0,
         feedIntentPreemptions=0,feedGraceSeconds=1.25,
+        feedAutoReleaseAt=-math.huge,feedEchoesSuppressed=0,
         conditionPrev=nil,conditionRates={auto={},manual={},baseline={}},
     }
     local conns={}
@@ -378,7 +379,10 @@ function Native.attach(ctx)
         if ctx.action and type(ctx.action.reserve)=="function" then
             pcall(ctx.action.reserve,"feed",N.feedGraceSeconds)
         end
-        if N.active then N.feedRestReleases+=1 end
+        if N.active then
+            N.feedRestReleases+=1
+            N.feedAutoReleaseAt=os.clock()
+        end
         delayInput(reason or "NATIVE FEED / AUTO REST RELEASED",N.feedGraceSeconds)
         return true
     end
@@ -420,6 +424,7 @@ function Native.attach(ctx)
             N.feedChar=nil
             N.feedActive=false
             N.feedUntil=0
+            N.feedAutoReleaseAt=-math.huge
             N.conditionPrev=nil
         end
         if not N.enabled then
@@ -606,9 +611,20 @@ function Native.attach(ctx)
             N.feedActive=false
             N.feedFinishes+=1
         end
+        -- A delayed acknowledgment of our OWN released Rest(true) can
+        -- arrive after feeding starts. It is not a player-owned Rest action.
+        -- Clear its local pose only in this bounded own-release window.
+        if N.feedChar==char and now-N.feedAutoReleaseAt<=4
+            and now>N.manualIntentUntil and not N.manualRest
+            and char:GetAttribute("WolfRest")==true
+            and N.feedEchoesSuppressed<3 then
+            local ok=pcall(function()char:SetAttribute("WolfRest",false)end)
+            if ok then N.feedEchoesSuppressed+=1 end
+        end
         if N.feedChar==char and (nativeFeeding or now<N.feedUntil) then
             if N.active then
                 N.feedRestReleases+=1
+                N.feedAutoReleaseAt=now
                 cancel("FEEDING / DRINKING / REST RELEASED",true)
             end
             N.status=nativeFeeding and "FEEDING / DRINKING / REST PAUSED"
@@ -643,6 +659,7 @@ function Native.attach(ctx)
             N.feedChar=nil
             N.feedUntil=0
             N.feedActive=false
+            N.feedAutoReleaseAt=-math.huge
         end
         sampleConditions(char,now)
         -- Feeding takes precedence even over an inherited/manual Rest flag.
@@ -855,6 +872,7 @@ function Native.attach(ctx)
             "rest_releases_for_feed="..N.feedRestReleases,
             "feed_intent_preemptions="..N.feedIntentPreemptions,
             "feed_guard_active="..tostring(N.feedActive or os.clock()<N.feedUntil),
+            "late_owned_rest_poses_suppressed_during_feed="..N.feedEchoesSuppressed,
             "last_error="..N.lastError,
             "NOTE=Native Rest requests stay enabled outside combat even while moving.",
             "NOTE=Provenance: v1.1 Bear observed mobile healing under five-second Rest signaling.",
