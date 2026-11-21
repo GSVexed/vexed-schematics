@@ -1,4 +1,4 @@
--- FERAL NOVA v10.2 / ONE ACTIVE RECOVERY CONTROLLER + manual Rest passthrough
+-- FERAL NOVA v10.2 / unified active recovery + player-owned Rest passthrough
 -- Coordinates existing native Rest-signal HP recovery and local HP/status
 -- config. Never starts Safe Rest or Mobile A/B, never writes HP/effect values.
 local Active={}
@@ -14,7 +14,12 @@ function Active.attach(ctx)
         statusInputsApplied=false,restMultiplierReady=false,
         poseSafetyEvents=0,activationCount=0,configOnlySeconds=0,
         nativeActiveSeconds=0,blockedSeconds=0,interventions=0,
-        nextTick=0,lastAt=os.clock(),lastError=""
+        nextTick=0,lastAt=os.clock(),lastError="",
+        lastReason="OFF",reasonSeconds={},modeTransitions=0,
+        lastMode="OFF",woundedBlockedSeconds=0,
+        autoRealRestFallback=false,realRestFallback=false,
+        fallbackCount=0,fallbackReason="DISABLED_BY_USER_PREFERENCE",
+        combatBlockedSeconds=0,
     }
     local function disableLegacy()
         if safeRest and safeRest.enabled then
@@ -55,16 +60,39 @@ function Active.attach(ctx)
             and native.poseBlockedChar~=game:GetService("Players").LocalPlayer.Character or false
         if native and native.manualRest then
             A.mode="MANUAL_REST"
-            A.status="MANUAL REST / GAME CONTROLS POSE / AUTO SIGNAL YIELDED"
+            A.lastReason="PLAYER-OWNED REST"
+            A.status="MANUAL REST ACTIVE / GAME CONTROLS POSE / AUTO PAUSED"
         elseif native and native.active then
             A.mode="NATIVE_RECOVERY"
-            A.status="ACTIVE / GUARDED NATIVE REST + CLIENT STATUS INPUTS"
+            A.status="MOBILE REST SIGNAL / MASKED POSE / SERVER EFFECT UNVERIFIED"
+        elseif native and type(native.poseRetryAt)=="number"
+            and os.clock()<native.poseRetryAt then
+            A.mode="POSE_SAFETY_BACKOFF"
+            A.lastReason="POSE RETRY BACKOFF"
+            A.status="POSE ECHO GUARD / REST RELEASED / AUTOMATIC SAFE RETRY"
         elseif native and native.poseBlockedChar then
             A.mode="POSE_SAFE_CONFIG_ONLY"
             A.status="POSE SAFETY / CONFIG-ONLY UNTIL RESPAWN"
         elseif native and native.enabled then
-            A.mode="WAITING_FOR_SAFE_WINDOW"
-            A.status=native.status or "WAITING FOR SAFE REST WINDOW"
+            local cause=native.status or "UNKNOWN SAFE WINDOW"
+            A.lastReason=cause
+            local inCombat=cause=="COMBAT TAG ACTIVE / REST OFF"
+                or cause=="COMBAT CLOCK UNAVAILABLE / REST OFF"
+            local full=cause=="FULL HP / NO STATUS TO CLEAR"
+            local action=cause=="HELD ATTACK / RECOVERY PAUSED"
+                or cause=="ATTACK / CARRY COOLDOWN"
+                or cause=="CHAT PRIORITY"
+                or cause=="ESCAPE HAS PRIORITY"
+                or cause=="CLIMB HAS PRIORITY"
+                or cause=="FLIGHT / DIVE HAS PRIORITY"
+                or cause=="FEED HAS PRIORITY"
+                or cause=="CARRY HAS PRIORITY"
+                or cause=="NATIVE CARRY / REST RELEASED"
+            A.mode=inCombat and "COMBAT_BLOCKED"
+                or full and "NO_RECOVERY_NEEDED"
+                or action and "PAUSED_FOR_ACTION"
+                or "WAITING_FOR_SAFE_WINDOW"
+            A.status=cause
         elseif A.healthInputsApplied then
             A.mode="CONFIG_ONLY"
             A.status="CLIENT CONFIG ONLY / REST NOT ACTIVE"
@@ -80,19 +108,31 @@ function Active.attach(ctx)
             "single_control_enabled="..tostring(A.enabled),
             "mode="..A.mode,
             "status="..A.status,
+            "native_wait_reason="..A.lastReason,
+            "auto_visible_rest_disabled="..tostring(not A.autoRealRestFallback),
+            "visible_rest_fallback_count="..A.fallbackCount,
+            "combat_blocked_seconds="..string.format("%.2f",A.combatBlockedSeconds),
+            "mode_transition_count="..A.modeTransitions,
+            "wounded_wait_seconds="..string.format("%.2f",A.woundedBlockedSeconds),
             "native_signal_active="..tostring(native and native.active),
             "manual_rest_preserved="..tostring(native and native.manualRest),
             "health_client_config_applied="..tostring(A.healthInputsApplied),
             "status_client_config_applied="..tostring(A.statusInputsApplied),
             "native_rest_status_multiplier_ready="..tostring(A.restMultiplierReady),
             "pose_safety_events="..A.poseSafetyEvents,
+            "pose_retry_remaining_seconds="..string.format("%.1f",math.max(0,(native and native.poseRetryAt or 0)-os.clock())),
             "native_seconds="..string.format("%.2f",A.nativeActiveSeconds),
             "config_only_seconds="..string.format("%.2f",A.configOnlySeconds),
+            "paused_seconds="..string.format("%.2f",A.reasonSeconds.PAUSED_FOR_ACTION or 0),
+            "full_health_seconds="..string.format("%.2f",A.reasonSeconds.NO_RECOVERY_NEEDED or 0),
+            "blocked_other_seconds="..string.format("%.2f",A.reasonSeconds.WAITING_FOR_SAFE_WINDOW or 0),
             "safe_rest_legacy_enabled="..tostring(safeRest and safeRest.enabled),
             "mobile_trial_legacy_enabled="..tostring(mobile and mobile.enabled),
             "NOTE=Client statuses alone do not establish 4x server clearance.",
-            "NOTE=Automatic recovery yields to manual Rest; manual pose is not overwritten.",
-            "NOTE=Nearby players never pause active recovery by proximity alone."
+            "NOTE=No automatic visible Rest, no posture-forcing, no Humanoid.Health writes.",
+            "NOTE=Manual Rest bypasses all automatic Rest masking and cancellation.",
+            "NOTE=Nearby animals alone never stop recovery; actual attacks and combat do.",
+            "NOTE=Actual game-server healing cannot be guaranteed by client-side configuration."
         },"\n")
     end
     local connection
@@ -107,6 +147,21 @@ function Active.attach(ctx)
             local ok,err=pcall(function()
                 disableLegacy()
                 A.refresh()
+                if A.lastMode~=A.mode then
+                    A.modeTransitions+=1
+                    A.lastMode=A.mode
+                end
+                A.reasonSeconds[A.mode]=(A.reasonSeconds[A.mode] or 0)+dt
+                if A.mode=="COMBAT_BLOCKED" then
+                    A.combatBlockedSeconds+=dt
+                end
+                local p=game:GetService("Players").LocalPlayer
+                local c=p and p.Character
+                local h=c and c:FindFirstChildOfClass("Humanoid")
+                if h and h.Health>0 and h.Health<h.MaxHealth-.35
+                    and A.mode~="NATIVE_RECOVERY" and A.mode~="MANUAL_REST" then
+                    A.woundedBlockedSeconds+=dt
+                end
                 if A.mode=="NATIVE_RECOVERY" then
                     A.nativeActiveSeconds+=dt
                 elseif A.mode=="POSE_SAFE_CONFIG_ONLY"
