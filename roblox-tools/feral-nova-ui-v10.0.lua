@@ -400,7 +400,7 @@ function UI.mount(ctx)
     card(414,231,"AGILITY","Local speed/leap and slow-assist inputs","➤",
         agilityOn,function()agility(not agilityOn())end,"agility")
     local regenButton,regenDesc=card(18,318,
-        "ACTIVE RECOVERY","Rest stops for attack inputs, bites and combat","✚",
+        "ACTIVE RECOVERY","Manual Rest respected • allies never pause recovery","✚",
         function()return Active.enabled end,
         function()
             Active.setEnabled(not Active.enabled)
@@ -653,7 +653,7 @@ function UI.mount(ctx)
         "Growth configuration does not establish faster server-recognised Elder growth.\n"..
         "Health: mobile Rest signal outside combat; never forces visible Rest.\n"..
         "Rest requests use 5s idle/3s wounded-motion cadence, subject to server.\n"..
-        "Native Rest releases for mouse attacks and nearby bite windows.\n"..
+        "Real mouse attacks pause auto Rest; nearby animals alone never do.\n"..
         "Roblox idle: virtual input heartbeat; retention not confirmed.\n"..
         "Survival AFK: opt-in short real walks on safe ground.\n"..
         "Grab V2: auto Perfect uses actual native strikes and timestamps.\n"..
@@ -662,7 +662,7 @@ function UI.mount(ctx)
         "Recovery resumes after attacks; real combat blocks it completely.\n"..
         "Repeated pose echoes trigger timed retry, not a lifetime shutdown.\n"..
         "Hunger/Thirst: read-only session samples; NOT infinite needs.\n\n"..
-        "CORE: grab/combat/bite priority outranks Rest and AFK walking.\n"..
+        "CORE: real attacks, grabs and combat outrank automatic Rest.\n"..
         "Extended local bite hints cannot masquerade as actual native reach.\n"..
         "COORDINATION: Auto Escape protects against hostile grabs. Friendly baby\n"..
         "carrying is handled separately. Active Recovery pauses for unsafe actions.\n"..
@@ -912,6 +912,7 @@ function UI.mount(ctx)
                         "Action policy denials: "..tostring(Action.denied),
                         "Action leases granted: "..tostring(Action.leaseCount),
                         "Current recovery status: "..tostring(Native.status),
+                        "Manual Rest protected: "..tostring(Native.manualRest),
                         "",
                         "Native Grab V2 strike events: "..tostring(ev.minigameStrikes),
                         "Timed native presses sent: "..tostring(ev.minigamePresses),
@@ -1013,7 +1014,8 @@ function UI.mount(ctx)
             diagStatus.Text=Diag.shortStatus().."  •  PRIVATE RUNNER SYNC"
             local observed=Diag.lastSnapshot or {}
             local inspect=Mechanics.inspect()
-            local recoveryStatus=Active.mode=="COMBAT_BLOCKED"
+            local recoveryStatus=Active.mode=="MANUAL_REST"
+                and "MANUAL REST / PRESERVED" or Active.mode=="COMBAT_BLOCKED"
                 and "REST OFF / COMBAT" or Active.mode=="NATIVE_RECOVERY"
                 and "MOBILE REST SIGNAL" or Active.mode
             expTitle.Text="HEALTH "..tostring(recoveryStatus):sub(1,28)..
@@ -1026,7 +1028,8 @@ function UI.mount(ctx)
                 "  EXIT OK "..Flight.underwaterExitConfirmed..
                 " / UNCONFIRMED "..Flight.underwaterExitUnconfirmed
             styleButton(autoDiag,Diag.autoSave,Diag.autoSave and "AUTO SAVE EVERY 25s" or "FILE SAVE OFF")
-            recoveryReportButton.Text=Active.mode=="COMBAT_BLOCKED" and "COMBAT PAUSE"
+            recoveryReportButton.Text=Active.mode=="MANUAL_REST" and "MANUAL REST"
+                or Active.mode=="COMBAT_BLOCKED" and "COMBAT PAUSE"
                 or Active.mode=="NATIVE_RECOVERY" and "REST REQUEST"
                 or Active.mode=="POSE_SAFE_CONFIG_ONLY" and "POSE GUARDED"
                 or Active.mode=="PAUSED_FOR_ACTION" and "ACTION BLOCKED"
@@ -1132,7 +1135,7 @@ function UI.mount(ctx)
         pcall(function()Lab.close()end)
         pcall(function()Recovery.close()end)
         pcall(function()Tags.close()end)
-        Escape.close()
+        pcall(function()Escape.close()end)
         pcall(clearFog)
         for _,cn in ipairs(connections) do
             pcall(function()cn:Disconnect()end)
