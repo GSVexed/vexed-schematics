@@ -26,6 +26,7 @@ function Coordinator.attach(ctx)
         transitions=0,lastState="",reserveCalls=0,
         lease=nil,leaseCount=0,expiredLeases=0,
         priorityConflicts=0,characterLeaseReleases=0,
+        cacheCharacterGuard=true,
     }
     local function now()return os.clock()end
     function A.reserve(owner,seconds)
@@ -293,6 +294,7 @@ function Coordinator.attach(ctx)
             "leases_expired="..A.expiredLeases,
             "lower_priority_lease_overwrites_rejected="..A.priorityConflicts,
             "character_switch_lease_resets="..A.characterLeaseReleases,
+            "character_change_invalidates_cached_snapshot="..tostring(A.cacheCharacterGuard),
             "active_lease="..tostring(leaseOwner()),
             "native_bite_proximity_does_not_preempt_rest=true",
             "native_feeding_blocks_recovery_and_afk=true",
