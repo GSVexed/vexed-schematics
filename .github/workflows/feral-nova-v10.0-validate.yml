@@ -52,20 +52,29 @@ jobs:
           old=dict(re.findall(pat,before,re.S))
           new=dict(re.findall(pat,after,re.S))
           assert len(old)==22 and len(new)==23
-          # Only the two repaired action modules and the UI change from v9.
+          # 16 legacy bodies are byte-identical. Rest/autonomous priorities
+          # have a dedicated revision with physically entered Rest preserved.
           assert set(old)-set(new)=={
               "feral-nova-ui-v9.0.lua","feral-nova-afk-v9.0.lua",
-              "feral-nova-grab-v9.0.lua"}
+              "feral-nova-grab-v9.0.lua","feral-nova-native-recovery-v9.0.lua",
+              "feral-nova-action-core-v9.0.lua",
+              "feral-nova-active-recovery-v29.0.lua"}
           assert set(new)-set(old)=={
               "feral-nova-ui-v10.0.lua","feral-nova-evidence-v10.0.lua",
-              "feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua"}
-          assert len(set(old)&set(new))==19
+              "feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua",
+              "feral-nova-native-recovery-v10.2.lua",
+              "feral-nova-action-core-v10.2.lua",
+              "feral-nova-active-recovery-v10.2.lua"}
+          assert len(set(old)&set(new))==16
           for name in set(old)&set(new):
               assert old[name]==new[name],f"unmodified v9 module changed: {name}"
           for name in ["feral-nova-ui-v10.0.lua","feral-nova-evidence-v10.0.lua",
-                       "feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua"]:
+                       "feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua",
+                       "feral-nova-native-recovery-v10.2.lua",
+                       "feral-nova-action-core-v10.2.lua",
+                       "feral-nova-active-recovery-v10.2.lua"]:
               assert new[name]==(root/name).read_text().rstrip(),f"source mismatch: {name}"
-          assert 'log.preservedGameplayModules=19' in after
+          assert 'log.preservedGameplayModules=16' in after
           assert 'H.precompiledCount==23' in after
           assert 'log.moduleCount==23' in after
           assert 'schema="FERAL_HUB_SESSION_V7",version="10.0.0"' in after
@@ -105,7 +114,7 @@ jobs:
           dest=Path("/tmp/feral-v100-modules")
           dest.mkdir(exist_ok=True)
           for name,source in new.items(): (dest/name).write_text(source)
-          print("FERAL_V10_23_MODULES_21_LEGACY_UNCHANGED_PASS")
+          print("FERAL_V102_23_MODULES_16_LEGACY_UNCHANGED_PASS")
           PY
       - name: Compile full offline hub and each bundled module
         shell: bash
@@ -123,7 +132,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          code=Path('roblox-tools/feral-nova-native-recovery-v9.0.lua').read_text()
+          code=Path('roblox-tools/feral-nova-native-recovery-v10.2.lua').read_text()
           assert code.rstrip().endswith('return Native')
           code=code[:code.rfind('return Native')]
           before=r'''
@@ -178,7 +187,8 @@ jobs:
             }
           }
           game={GetService=function(self,k)return services[k]end}
-          Enum={UserInputType={MouseButton1=1,MouseButton2=2},KeyCode={G=9}}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2,Touch=3},
+                KeyCode={G=9,R=10,Z=11,X=12}}
           '''
           after=r'''
           local guide={enabled=true,alive=true,ready=false,nativeReady=false}
@@ -202,11 +212,12 @@ jobs:
           heartbeat:Fire()
           assert(not N.active)
           focused=false
-          -- An already targeted in-range animal prevents immediate Rest re-arm.
+          -- Teammates within bite reach are NOT combat; recovery re-arms
+          -- without depending on whether the guide sees a possible target.
           guide.nativeReady=true
           now=2.6
           heartbeat:Fire()
-          assert(not N.active and N.nativeOn==1)
+          assert(N.active and N.nativeOn==2)
           guide.nativeReady=false
           now=3.2
           heartbeat:Fire()
@@ -220,38 +231,39 @@ jobs:
           guide.nativeReady=true
           now=3.8
           heartbeat:Fire()
-          assert(not N.active and N.nativeOff==2 and N.aimedTargetRestReleases==1)
+          assert(N.active and N.nativeOff==1)
+          assert(N.aimedTargetRestReleases==0)
           guide.nativeReady=false
           guide.ready=false
           now=4.5
           heartbeat:Fire()
-          assert(N.active and N.nativeOn==3)
+          assert(N.active and N.nativeOn==2)
           -- Legacy five-second pulse remains when wounded and not attacking.
           now=9.6
           heartbeat:Fire()
-          assert(N.active and N.nativeOn==4)
+          assert(N.active and N.nativeOn==3)
           hum.Health=100
           now=14.9
           heartbeat:Fire()
-          assert(N.nativeOn==4)
+          assert(N.nativeOn==3)
           pattrs.FeralCombatUntil=120
           now=15.2
           heartbeat:Fire()
-          assert(not N.active and N.nativeOff==3)
+          assert(not N.active and N.nativeOff==2)
           assert(N.status=="COMBAT TAG ACTIVE / REST OFF")
           serverNow=130
           now=16.2
           heartbeat:Fire()
-          assert(N.active and N.nativeOn==5)
-          -- Repeated pose echoes still trigger bounded safety backoff.
+          assert(N.active and N.nativeOn==4)
+          -- Repeated synchronous own-signal echoes trigger bounded safety backoff.
           for i=1,3 do char:SetAttribute("WolfRest",true) end
-          assert(not N.active and N.poseRetryAt>now and N.nativeOff==4)
+          assert(not N.active and N.poseRetryAt>now and N.nativeOff==3)
           now=17.2
           heartbeat:Fire()
-          assert(not N.active and N.nativeOn==5)
+          assert(not N.active and N.nativeOn==4)
           now=32.2
           heartbeat:Fire()
-          assert(N.active and N.nativeOn==6)
+          assert(N.active and N.nativeOn==5)
           -- Integration test: shared action denial must actually
           -- release native Rest, not merely display a blocked status.
           context.action={allowed=function(mode)
@@ -260,15 +272,32 @@ jobs:
           end}
           now=33
           heartbeat:Fire()
-          assert(not N.active and N.nativeOff==5)
+          assert(not N.active and N.nativeOff==4)
           assert(N.status=="ACTION POLICY / GRAB MINIGAME")
           context.action.allowed=function()return true,"SAFE"end
           now=34
           heartbeat:Fire()
-          assert(N.active and N.nativeOn==7)
+          assert(N.active and N.nativeOn==6)
+          -- User explicitly activates Rest while automation is armed.
+          now=34.3
+          input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.R},false)
+          char:SetAttribute("WolfRest",true)
+          assert(N.manualRest and not N.active and N.mask==nil)
+          assert(attrs.WolfRest==true and N.nativeOff==4)
+          now=34.6
+          heartbeat:Fire()
+          assert(N.manualRest and attrs.WolfRest==true and N.nativeOn==6)
+          -- Combat or ordinary attack input MUST NOT make this controller
+          -- claim ownership and send Rest(false) for player-owned Rest.
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,KeyCode=0},false)
+          assert(N.manualRest and N.nativeOff==4)
+          char:SetAttribute("WolfRest",false)
+          now=35
+          heartbeat:Fire()
+          assert(not N.manualRest and N.active and N.nativeOn==7)
           N.close()
-          assert(not N.active and N.nativeOff==6)
-          print("FERAL_NOVA_V90_ATTACK_PRIORITY_REST_LIFECYCLE_PASS")
+          assert(not N.active and N.nativeOff==5)
+          print("FERAL_NOVA_V102_MANUAL_REST_AND_NONCOMBAT_TEAMMATES_PASS")
           '''
           Path('/tmp/feral-v90-native-test.luau').write_text(before+code+after)
           PY
@@ -477,7 +506,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          code=Path('roblox-tools/feral-nova-action-core-v9.0.lua').read_text()
+          code=Path('roblox-tools/feral-nova-action-core-v10.2.lua').read_text()
           assert code.rstrip().endswith('return Coordinator')
           code=code[:code.rfind('return Coordinator')]
           before=r'''
@@ -529,7 +558,8 @@ jobs:
           assert(A.allowed("afk_walk")==false)
           guide.nativeReady=true
           local allowed,why=A.allowed("recovery")
-          assert(not allowed and why=="NATIVE BITE RANGE")
+          assert(allowed and why=="SAFE")
+          assert(A.snapshot(true).nativeBite==true)
           guide.nativeReady=false
           guide.ready=false
           held=true
@@ -564,10 +594,10 @@ jobs:
           assert(A.expiredLeases>=1)
           assert(A.allowed("climb")==true)
           local report=A.report()
-          assert(report:find("extended_local_hint_does_not_preempt_rest=true",1,true))
+          assert(report:find("native_bite_proximity_does_not_preempt_rest=true",1,true))
           A.close()
           assert(A.allowed("recovery")==false)
-          print("FERAL_NOVA_V90_ACTION_POLICY_AND_LEASES_MOCK_PASS")
+          print("FERAL_NOVA_V102_ACTION_POLICY_AND_LEASES_MOCK_PASS")
           '''
           Path('/tmp/feral-v90-core-test.luau').write_text(before+code+after)
           PY
