@@ -209,6 +209,7 @@ jobs:
           -- Delayed owned Rest echo must not strand the character in
           -- physical Rest or be mistaken for an intentional manual Rest.
           char:SetAttribute("WolfRest",true)
+          assert(attrs.WolfRest==false) -- immediate attribute watcher
           heartbeat:Fire()
           assert(attrs.WolfRest==false)
           assert(N.feedEchoesSuppressed>=1)
