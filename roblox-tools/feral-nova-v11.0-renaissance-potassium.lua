@@ -4295,11 +4295,14 @@ function Regen.attach(ctx)
         for _,e in ipairs(statusKeys) do
             local x=old[e.attr]
             local y=new[e.attr]
-            if finite(x) and finite(y) and x>.20 and y<=x+.01 then
-                selected.statusSeconds[e.attr]=(selected.statusSeconds[e.attr] or 0)+elapsed
-                if y<x-.005 then
-                    selected.status[e.attr]=(selected.status[e.attr] or 0)+(x-y)
-                    selected.statusSamples[e.attr]=(selected.statusSamples[e.attr] or 0)+1
+            if finite(x) and x>.20 and (finite(y) or y==nil) then
+                local after=finite(y) and y or 0
+                if after<=x+.01 then
+                    selected.statusSeconds[e.attr]=(selected.statusSeconds[e.attr] or 0)+elapsed
+                    if after<x-.005 then
+                        selected.status[e.attr]=(selected.status[e.attr] or 0)+(x-after)
+                        selected.statusSamples[e.attr]=(selected.statusSamples[e.attr] or 0)+1
+                    end
                 end
             end
         end
@@ -5485,9 +5488,14 @@ function Native.attach(ctx)
             end
             for _,key in ipairs(EFFECTS) do
                 local a,b=old.effects[key],state.effects[key]
-                if finite(a) and finite(b) and a>.2 and b<=a then
-                    N.effectSeconds[key]+=now-N.lastAt
-                    N.effectClears[key]+=a-b
+                -- Fully cleared effects are commonly represented by
+                -- removal of the attribute, not a final numeric zero.
+                if finite(a) and a>.2 and (finite(b) or b==nil) then
+                    local after=finite(b) and b or 0
+                    if after<=a then
+                        N.effectSeconds[key]+=now-N.lastAt
+                        N.effectClears[key]+=a-after
+                    end
                 end
             end
         end
@@ -10728,8 +10736,8 @@ end
 return Grab
 ]==========]
 ,
-["feral-nova-evidence-v10.0.lua"]=[==========[
--- FERAL NOVA 10.0 / game-outcome evidence engine
+["feral-nova-evidence-v11.0.lua"]=[==========[
+-- FERAL NOVA 11.0 / game-outcome evidence with full status-clear transitions
 -- Only reads own animal/game state; never sends any remote, alters attributes
 -- or claims server-authoritative changes. Clean samples are observational.
 local Evidence={}
@@ -10867,14 +10875,16 @@ function Evidence.attach(ctx)
                         local name=entry[1]
                         local v1=new.effects[name]
                         local v0=old.effects[name]
-                        if finite(v1) and finite(v0)
-                            and v0>.01 and v1<=v0
-                            and v1>=0 then
-                            B.statusSeconds[name]=(B.statusSeconds[name] or 0)+dt
-                            local clearance=v0-v1
-                            if clearance>.001 then
-                                B.status[name]=(B.status[name] or 0)+clearance
-                                B.statusTicks[name]=(B.statusTicks[name] or 0)+1
+                        if finite(v0) and v0>.01
+                            and (finite(v1) or v1==nil) then
+                            local after=finite(v1) and v1 or 0
+                            if after<=v0 then
+                                B.statusSeconds[name]=(B.statusSeconds[name] or 0)+dt
+                                local clearance=v0-after
+                                if clearance>.001 then
+                                    B.status[name]=(B.status[name] or 0)+clearance
+                                    B.statusTicks[name]=(B.statusTicks[name] or 0)+1
+                                end
                             end
                         end
                     end
@@ -11013,7 +11023,7 @@ return Evidence
 }
 
 -- Precompile before retiring old hub. No game-server remote requests.
-local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v11.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v11.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v11.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v11.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v11.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v10.0.lua"}
+local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v11.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v11.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v11.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v11.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v11.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v11.0.lua"}
 local compiled={}
 H.precompiledCount=0
 H.phase("Compile-checking every embedded module")
@@ -11101,7 +11111,7 @@ local eagleActions=get("feral-nova-eagle-actions-v32.0.lua")
 local action=get("feral-nova-action-core-v11.0.lua")
 local afk=get("feral-nova-afk-v10.1.lua")
 local grab=get("feral-nova-grab-v10.1.lua")
-local evidence=get("feral-nova-evidence-v10.0.lua")
+local evidence=get("feral-nova-evidence-v11.0.lua")
 local ui=get("feral-nova-ui-v11.0.lua")
 if not core or type(core.new)~="function"
     or not power or type(power.attach)~="function"
@@ -11279,7 +11289,7 @@ else
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
         log.preservedGameplayModules=16
-        log.updatedGameplayModules={"feral-nova-evidence-v10.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-native-recovery-v11.0.lua","feral-nova-action-core-v11.0.lua","feral-nova-active-recovery-v11.0.lua"}
+        log.updatedGameplayModules={"feral-nova-evidence-v11.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-native-recovery-v11.0.lua","feral-nova-action-core-v11.0.lua","feral-nova-active-recovery-v11.0.lua"}
         log.updatedUIModule="feral-nova-ui-v11.0.lua"
         save()
         if log.result=="READY" then
