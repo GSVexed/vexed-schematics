@@ -1019,10 +1019,9 @@ function Native.attach(ctx)
     pcall(function()
         conns[#conns+1]=player:GetAttributeChangedSignal("FeralFeedTap"):Connect(
             function()
-                local value=player:GetAttribute("FeralFeedTap")
-                if value~=nil and value~=false then
-                    N.beforeFeed("NATIVE FEED TAP / AUTO REST RELEASED")
-                end
+                -- WolfController runs toggleFeed on *every attribute change*,
+                -- regardless of the new value. Match the native trigger.
+                N.beforeFeed("NATIVE FEED TAP / AUTO REST RELEASED")
             end)
     end)
     N.conn=RunService.Heartbeat:Connect(function()
