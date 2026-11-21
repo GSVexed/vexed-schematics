@@ -267,7 +267,8 @@ function Native.attach(ctx)
         end
     end)
     local function movingNow(char,hum)
-        local root=char:FindFirstChild("HumanoidRootPart")
+        local root=type(char.FindFirstChild)=="function"
+            and char:FindFirstChild("HumanoidRootPart") or nil
         if not root then return false end
         local speed=0
         local ok,v=pcall(function()return root.AssemblyLinearVelocity end)
