@@ -227,6 +227,10 @@ function H.selfCheck(ctx)
         and type(ctx.native.movingObservedHPGain)=="number")
     add("v81_game_grab_minigame",ctx and ctx.grabMini
         and type(ctx.grabMini.setEnabled)=="function")
+    add("v81_minigame_remote_evidence",ctx and ctx.grabMini
+        and type(ctx.grabMini.strikesSeen)=="number")
+    add("v81_motion_refresh_evidence",ctx and ctx.native
+        and type(ctx.native.movingRefreshRequests)=="number")
     for _,key in ipairs({"power","escape","carry","reach","regen","flight","native",
             "baby","climb","mechanics","eagleActions","lab","recovery",
             "mobile","activeRecovery","tags","diag","action","afk","grabMini"}) do
