@@ -264,6 +264,8 @@ function H.selfCheck(ctx)
     add("v10_evidence_buckets",ctx and ctx.evidence and type(ctx.evidence.moving)=="table"
         and type(ctx.evidence.stationary)=="table")
     add("v112_readonly_evidence_version",ctx and ctx.evidence and ctx.evidence.version=="11.2")
+    add("v112_legacy_engine_rest_retired",ctx and ctx.state and
+        ctx.state.flags and ctx.state.flags.recovery==false)
     add("v112_single_auto_rest_writer",ctx and ctx.recovery and
         ctx.recovery.legacyRetired==true and ctx.mobile and
         ctx.mobile.legacyRetired==true and ctx.native and
@@ -413,8 +415,8 @@ if not pg then warn("[NOVA PRIME] PlayerGui unavailable");return end
 
 -- Preserve the fifteen v15 modules. The v25 UI is a reviewed extension; mechanics is module 16.
 local BUNDLED={
-["feral-aurora-engine-v13.0.lua"]=[==========[
--- FERAL AURORA v13 / Engine: read-only player tracking; single-owner recovery
+["feral-aurora-engine-v11.2.lua"]=[==========[
+-- FERAL NOVA v11.2 / shared engine with all legacy Rest remotes retired
 -- Client presentation, own-character controls and reversible leases. Legacy Rest mask disabled.
 -- No server code, grants, HP writes, Amber writes, death bypass or fake ownership.
 local Engine={}
@@ -621,15 +623,14 @@ function Engine.new(atlas)
         return true
     end
     local function stopRest()
+        -- The engine no longer owns a native Rest session.
+        -- Releasing its *legacy* bookkeeping must NOT cancel a real
+        -- player Rest or the new Native supervisor's recovery signal.
         local m=S.mask;S.mask=nil
-        if m and m.connection then pcall(function()m.connection:Disconnect()end) end
-        local char=S.restChar;S.restChar=nil
-        if char and char.Parent and player.Character==char then
-            local remote=RS:FindFirstChild("WolfActions")
-            if remote and remote:IsA("RemoteEvent") then
-                pcall(function()remote:FireServer("Rest",false)end)
-            end
+        if m and m.connection then
+            pcall(function()m.connection:Disconnect()end)
         end
+        S.restChar=nil
     end
     -- The previous legacy recovery mask forcibly wrote WolfRest=false,
     -- breaking Turtle shell and invalidating recovery observations.
@@ -649,34 +650,14 @@ function Engine.new(atlas)
         return false
     end
     local function recoveryTick(now)
-        if not S.flags.recovery or now-S.lastRest<5 then return end
-        S.lastRest=now
-        local char,hum,root=own()
-        if not root or player:GetAttribute("FeralMenuOpen")==true
-            or not needsRecovery(char,hum) then
-            if S.restChar then stopRest() end
-            return
-        end
-        if S.restChar~=char then
-            if S.restChar then stopRest() end
-            S.restChar=char
-            startRestMask(char)
-        end
-        local remote=RS:FindFirstChild("WolfActions")
-        if not remote or not remote:IsA("RemoteEvent") then
-            S.restFailed=S.restFailed+1
-            if S.restFailed==1 then
-                ctx.notice("Recovery request unavailable. Native remote absent.")
-            end
-            return
-        end
-        local ok=pcall(function()remote:FireServer("Rest",true)end)
-        if ok then S.restSent=S.restSent+1 else S.restFailed=S.restFailed+1 end
+        -- Retired engine branch. The separate native recovery supervisor
+        -- owns every automatic Rest request and all feed/combat exclusions.
+        if S.restChar or S.mask then stopRest()end
     end
     local function turnFeature(key,on)
         if key=="recovery" then
             -- Deprecated core recovery is explicitly unavailable.
-            -- Separate Safe Rest/Mobile modules own all native requests.
+            -- Only the Native Recovery supervisor owns Rest requests.
             if on then return false end
             stopRest()
             S.lastRest=-math.huge
@@ -1303,7 +1284,6 @@ function Engine.new(atlas)
     return ctx
 end
 return Engine
-
 ]==========],
 ["feral-aurora-power-v14.0.lua"]=[==========[
 -- FERAL AURORA FORCE v14 - land vs bird stamina paths and real rate observations
@@ -10258,7 +10238,7 @@ return Evidence
 }
 
 -- Precompile before retiring old hub. No game-server remote requests.
-local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-compat-v11.2.lua","feral-nova-mobile-compat-v11.2.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v11.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v11.2.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v11.2.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v11.2.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v11.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v11.2.lua"}
+local MODULE_ORDER={"feral-aurora-engine-v11.2.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-compat-v11.2.lua","feral-nova-mobile-compat-v11.2.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v11.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v11.2.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v11.2.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v11.2.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v11.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v11.2.lua"}
 local compiled={}
 H.precompiledCount=0
 H.phase("Compile-checking every embedded module")
@@ -10325,7 +10305,7 @@ end
 activeEnv.FERAL_NOVA_PRIME_ACTIVE=nil
 
 H.phase("Initializing preserved core")
-local core=get("feral-aurora-engine-v13.0.lua")
+local core=get("feral-aurora-engine-v11.2.lua")
 local power=get("feral-aurora-power-v14.0.lua")
 local escape=get("feral-nova-escape-core-v9.0.lua")
 local lab=get("feral-nova-combat-v15.0.lua")
@@ -10523,8 +10503,8 @@ else
         local verified=log.selfCheck
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
-        log.preservedGameplayModules=17
-        log.updatedGameplayModules={"feral-nova-evidence-v11.2.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-native-recovery-v11.2.lua","feral-nova-action-core-v11.0.lua","feral-nova-active-recovery-v11.2.lua"}
+        log.preservedGameplayModules=16
+        log.updatedGameplayModules={"feral-aurora-engine-v11.2.lua","feral-nova-evidence-v11.2.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-native-recovery-v11.2.lua","feral-nova-action-core-v11.0.lua","feral-nova-active-recovery-v11.2.lua"}
         log.updatedUIModule="feral-nova-ui-v11.2.lua"
         save()
         if log.result=="READY" then
