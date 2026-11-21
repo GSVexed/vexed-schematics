@@ -22,7 +22,7 @@ function Coordinator.attach(ctx)
     local A={
         alive=true,reads=0,cacheHits=0,lastRead=-math.huge,
         lastSnapshot=nil,lastPriority="STARTING",lastReason="STARTING",
-        decisions=0,denied=0,denials={},allowed={},
+        decisions=0,denied=0,denials={},allowedCounts={},
         transitions=0,lastState="",reserveCalls=0,
         lease=nil,leaseCount=0,expiredLeases=0,
     }
@@ -130,7 +130,7 @@ function Coordinator.attach(ctx)
             local chatOK,focused=pcall(function()
                 return UIS:GetFocusedTextBox()
             end)
-            S.chat=chatOK and focused~=nil
+            S.chat=chatOK and focused~=nil and focused~=false
             S.visibleRest=char:GetAttribute("WolfRest")==true
             S.locomotion=stateName(hum)
             local priorityName="IDLE"
@@ -151,6 +151,7 @@ function Coordinator.attach(ctx)
                 priorityName="AFK_WALK"
             end
             S.priority=priorityName
+            S.priorityRank=priority[priorityName] or -1
             S.reason=priorityName
             S.danger=S.combat or S.victim or S.grab
                 or S.attackHeld or S.nativeBite
@@ -204,7 +205,6 @@ function Coordinator.attach(ctx)
         elseif mode=="grab_press" then
             if not S.grab then reason="NO NATIVE GRAB SESSION"
             elseif S.menu or S.chat then reason="MENU OR CHAT"
-            elseif S.victim and not S.grab then reason="CAPTURED"
             end
         elseif mode=="climb" then
             if S.grab or S.lease=="minigame" then reason="GRAB PRIORITY"
@@ -220,7 +220,7 @@ function Coordinator.attach(ctx)
             A.denials[mode..":"..reason]=(A.denials[mode..":"..reason] or 0)+1
             return false,reason
         end
-        A.allowed[mode]=(A.allowed[mode] or 0)+1
+        A.allowedCounts[mode]=(A.allowedCounts[mode] or 0)+1
         return true,"SAFE"
     end
     function A.report()
