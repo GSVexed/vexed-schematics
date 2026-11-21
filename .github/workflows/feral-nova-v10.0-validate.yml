@@ -256,7 +256,12 @@ jobs:
           heartbeat:Fire()
           assert(N.active and N.nativeOn==4)
           -- Repeated synchronous own-signal echoes trigger bounded safety backoff.
-          for i=1,3 do char:SetAttribute("WolfRest",true) end
+          -- Echo producers stop after our controller releases Rest; don't
+          -- fabricate a fourth, unrelated true change after unbinding.
+          for i=1,3 do
+            if N.active then char:SetAttribute("WolfRest",true) end
+          end
+          assert(attrs.WolfRest==false)
           assert(not N.active and N.poseRetryAt>now and N.nativeOff==3)
           now=17.2
           heartbeat:Fire()
