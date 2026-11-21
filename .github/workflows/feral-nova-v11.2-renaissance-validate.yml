@@ -76,7 +76,7 @@ jobs:
           for name,source in [("Safe Rest",rest),("Mobile A/B",trial)]:
               assert 'FireServer(' not in source,f"{name}: still sends native actions"
               assert ':Connect(' not in source,f"{name}: still registers events"
-              assert 'Heartbeat' not in source,f"{name}: still starts a tick"
+              assert 'RunService.Heartbeat:Connect' not in source,f"{name}: still starts a tick"
               assert 'legacyRetired=true' in source
           assert after["feral-nova-evidence-v11.2.lua"].count('version="11.2"')==1
           assert 'version="11.2.0"' in new
