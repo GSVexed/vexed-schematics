@@ -8922,6 +8922,13 @@ local UIS=game:GetService("UserInputService")
 local RunService=game:GetService("RunService")
 local RS=game:GetService("ReplicatedStorage")
 local player=Players.LocalPlayer
+local function readFeralConfig(name)
+    local folder=RS:FindFirstChild("FeralWorld")
+    local module=folder and folder:FindFirstChild(name)
+    if not module or not module:IsA("ModuleScript") then return nil end
+    local ok,config=pcall(require,module)
+    return ok and type(config)=="table" and config or nil
+end
 local function finite(v)
     return type(v)=="number" and v==v and math.abs(v)<1e9
 end
@@ -8944,7 +8951,28 @@ function AFK.attach(ctx)
         lastError="",lastBlock="NONE",userStopCount=0,
         idleTimeoutSeconds=1200,gameHopWarningSeconds=1080,
         survivalAfkSeconds=120,survivalAfkMoveStuds=4,
+        safeStepStuds=6.5,serverValueIncreasesUnverified=true,
     }
+    -- Feral's own replicated config is preferred to archived defaults.
+    -- We NEVER edit these config objects or local Survival attributes.
+    local liveSurvival=readFeralConfig("SurvivalConfig")
+    if liveSurvival then
+        if finite(liveSurvival.AFK_AFTER)
+            and liveSurvival.AFK_AFTER>=30 and liveSurvival.AFK_AFTER<=600 then
+            A.survivalAfkSeconds=liveSurvival.AFK_AFTER
+        end
+        if finite(liveSurvival.AFK_MOVE)
+            and liveSurvival.AFK_MOVE>=1 and liveSurvival.AFK_MOVE<=20 then
+            A.survivalAfkMoveStuds=liveSurvival.AFK_MOVE
+        end
+    end
+    A.safeStepStuds=math.max(6.5,A.survivalAfkMoveStuds+2)
+    A.desiredTravelPeriod=math.min(70,A.survivalAfkSeconds*.6)
+    local liveAfk=readFeralConfig("AfkConfig")
+    if liveAfk and finite(liveAfk.HOP_AT) and liveAfk.HOP_AT>=150 then
+        A.gameHopWarningSeconds=liveAfk.HOP_AT
+        A.desiredPulsePeriod=math.min(85,liveAfk.HOP_AT*.25)
+    end
     local conns={}
     local virtualUser=nil
     pcall(function()virtualUser=game:GetService("VirtualUser")end)
@@ -8994,7 +9022,10 @@ function AFK.attach(ctx)
     conns[#conns+1]=UIS.InputChanged:Connect(function(input)
         if input.UserInputType==Enum.UserInputType.MouseMovement
             or input.UserInputType==Enum.UserInputType.MouseWheel
-            or input.UserInputType==Enum.UserInputType.Touch then
+            or input.UserInputType==Enum.UserInputType.Touch
+            or (input.KeyCode==Enum.KeyCode.Thumbstick1
+                or input.KeyCode==Enum.KeyCode.Thumbstick2)
+                and input.Position.Magnitude>.25 then
             recordInput(input)
         end
     end)
@@ -9079,7 +9110,8 @@ function AFK.attach(ctx)
         local to=ground(target)
         if not from or not to or math.abs(from.Y-to.Y)>1.5 then return nil end
         local vector=horizontal(target-root.Position)
-        if vector.Magnitude<5.5 or vector.Magnitude>8 then return nil end
+        if vector.Magnitude<=A.survivalAfkMoveStuds+.5
+            or vector.Magnitude>8 then return nil end
         local ok,hit=pcall(function()
             return workspace:Raycast(
                 root.Position+Vector3.new(0,1,0),
@@ -9121,8 +9153,14 @@ function AFK.attach(ctx)
         end
         local current=root.Position
         local anchor=A.anchor
-        local wantsReturn=horizontal(current-anchor).Magnitude>4.2
+        local wantsReturn=horizontal(current-anchor).Magnitude>A.survivalAfkMoveStuds+.2
         local candidates={}
+        if A.safeStepStuds>8 then
+            A.survivalStatus="GAME THRESHOLD TOO LARGE / NO SAFE WALK"
+            A.moveFailures+=1
+            A.lastStepAt=os.clock()
+            return false
+        end
         if wantsReturn then
             candidates[1]=Vector3.new(anchor.X,current.Y,anchor.Z)
         else
@@ -9131,8 +9169,8 @@ function AFK.attach(ctx)
             f=f.Unit
             local side=Vector3.new(-f.Z,0,f.X)
             candidates={
-                current+side*6.5,current-side*6.5,
-                current+f*6.5,current-f*6.5
+                current+side*A.safeStepStuds,current-side*A.safeStepStuds,
+                current+f*A.safeStepStuds,current-f*A.safeStepStuds
             }
         end
         for _,dest in ipairs(candidates) do
@@ -9213,7 +9251,7 @@ function AFK.attach(ctx)
             end
             A.lastSurvival=survival
         end
-        if lastRoot and horizontal(root.Position-lastRoot).Magnitude>=4.2 then
+        if lastRoot and horizontal(root.Position-lastRoot).Magnitude>=A.survivalAfkMoveStuds+.2 then
             A.recentPhysicalTravel=now
             lastRoot=root.Position
         end
@@ -9242,7 +9280,8 @@ function AFK.attach(ctx)
             A.survivalStatus="USER ACTIVE / NO AUTO MOVE"
             return
         end
-        if now-A.recentPhysicalTravel<62 or now-A.lastStepAt<70 then
+        if now-A.recentPhysicalTravel<math.max(20,A.desiredTravelPeriod-8)
+            or now-A.lastStepAt<A.desiredTravelPeriod then
             A.survivalStatus="WAITING / SURVIVAL MOVEMENT TIMER"
             return
         end
@@ -9277,6 +9316,10 @@ function AFK.attach(ctx)
             "safe_steps_reached="..A.survivalArrivals,
             "movement_stops="..A.unsafeStops,
             "move_failures="..A.moveFailures,
+            "observed_survival_afk_after_s="..A.survivalAfkSeconds,
+            "observed_survival_move_threshold_studs="..A.survivalAfkMoveStuds,
+            "checked_safe_step_studs="..A.safeStepStuds,
+            "observed_feral_hop_warning_s="..A.gameHopWarningSeconds,
             "observed_server_survival_seconds_gain="..string.format("%.2f",A.survivalProgress),
             "survival_progress_updates="..A.progressObserved,
             "last_block="..A.lastBlock,
