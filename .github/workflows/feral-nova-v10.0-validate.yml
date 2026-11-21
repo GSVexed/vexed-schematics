@@ -196,11 +196,34 @@ jobs:
           after=r'''
           local guide={enabled=true,alive=true,ready=false,nativeReady=false}
           local context={state={alive=true},lab=guide}
+          local guiHits={}
+          local uiRoot={}
+          context.ui=uiRoot
+          local pg={GetGuiObjectsAtPosition=function()return guiHits end}
+          function player:FindFirstChildOfClass(k)
+            if k=="PlayerGui" then return pg end
+          end
+          services.UserInputService.GetMouseLocation=function()
+            return {X=20,Y=20}
+          end
           local N=Native.attach(context)
           assert(N.setEnabled(true)==true)
           heartbeat:Fire()
           assert(N.active and N.nativeOn==1 and N.maskWrites>=1)
           assert(attrs.WolfRest==false and N.preMaskStarts==1)
+          -- Clicking this hub's own UI must not prime manual Rest intent,
+          -- even if the button/label includes the word Rest.
+          guiHits[1]={Name="Rest",IsDescendantOf=function(_,root)
+            return root==uiRoot
+          end}
+          now=1.05
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,
+              KeyCode=0,Position={X=20,Y=20}},true)
+          assert(N.manualIntentUntil==0 and N.active)
+          guiHits[1]=nil
+          now=1.06
+          input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.R},false)
+          assert(N.manualIntentUntil>now)
           -- New native Mouse1 must release server Rest even before combat tag.
           now=1.2
           input:Fire({UserInputType=Enum.UserInputType.MouseButton1,KeyCode=0},false)
@@ -288,7 +311,10 @@ jobs:
           assert(N.active and N.nativeOn==6)
           -- User explicitly activates Rest while automation is armed.
           now=34.3
-          input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.R},false)
+          guiHits[1]={Name="RestButton",IsDescendantOf=function()return false end}
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,
+              KeyCode=0,Position={X=20,Y=20}},true)
+          assert(N.manualIntentUntil>now)
           char:SetAttribute("WolfRest",true)
           assert(N.manualRest and not N.active and N.mask==nil)
           assert(attrs.WolfRest==true and N.nativeOff==4)
