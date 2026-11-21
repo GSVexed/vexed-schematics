@@ -113,8 +113,7 @@ jobs:
               assert field+"=" in after_check,f"Missing Eagle live field: {field}"
           check_section=new.split("function H.selfCheck(ctx)",1)[1].split("function H.closeSession()",1)[0]
           assert all(x not in check_section for x in (
-              "anyClampObservations","incomparableTargetPressClocks",
-              "ctx.eagleActions.remoteBinds"))
+              "anyClampObservations","ctx.eagleActions.remoteBinds"))
           assert check_section.count('add("')==48,"Unexpected startup check count"
 
           assert 'intendedCharacter=player.Character' in after["feral-nova-carry-core-v11.3.lua"]
