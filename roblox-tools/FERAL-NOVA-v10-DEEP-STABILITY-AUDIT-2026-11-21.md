@@ -39,3 +39,27 @@ Canonical loader:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-v10.0-potassium.lua"))()
 ```
 Do not run old and new hub instances together. Right Shift toggles UI; End performs complete hub shutdown. The archived v7.5 release remains a separate rollback path if native bite/recovery regressions are observed. For live confirmation, compare same-animal, same-max-HP moving and stationary intervals in DATA and inspect native/replicated outcomes instead of trusting a toggle's label.
+
+## v10.2 follow-up: manual Rest sovereignty and noncombat team recovery
+
+**Reported live symptoms:** Physically entering Rest was being forced off; Active Recovery could cease while standing near other animals/teammates.
+
+**Confirmed client-level causes**
+- Native Recovery originally wrote `WolfRest=false` whenever the game wrote `WolfRest=true`; this could override the user's deliberate posture.
+- Both the central Action Core and Native Recovery treated a *potential* native bite target in reach (`lab.nativeReady`) as a reason to pause automatic Rest. A nearby teammate can satisfy that targeting condition without any real attack/combat.
+- When an automatic pose echo guard aborted a signal, a leftover true Rest flag could cause false "manual rest" classification on retry.
+- The physical-rest keyboard/GUI hint could outlive manual Rest and misclassify the next self-owned Rest echo.
+- A click on the hub itself could be mistaken for a Rest GUI click without control-source filtering.
+- One legacy UI cleanup (`Escape.close()`) was not exception-isolated despite the rest of the close calls being guarded.
+
+**Implemented**
+- A v10.2 Native Recovery `manualRest` state yields its pose mask and relinquishes auto-owned Rest without sending a false/off request. The game/user retains ownership until the game's `WolfRest` flag goes false.
+- Real `MouseButton1` attacks and combat tags still release the controller's own automatic Rest. Mere aim/target availability does not.
+- Native self-owned pose echoes still receive guarded masking and temporary retry backoff. A self-owned final echo is cleared before backoff to avoid false player-rest status.
+- Manual activation hints expire and clear on physical-rest exit; processed GUI inputs are classified as possible manual Rest only when they actually originate from a Rest-labelled in-game control, not the hub GUI.
+- Unified Active Recovery exposes `MANUAL_REST`, `NATIVE_RECOVERY`, and `COMBAT_BLOCKED`, with corresponding DATA/help/UI display and counter handling.
+- UI `Escape.close` is protected like the other shutdowns.
+
+**Validation:** updated official Luau 23-module compile and integration mocks, including nearby native-ready target without combat, actual attack preemption, manual keyboard and GUI Rest, initial pre-existing manual Rest, manual exit then automatic re-arm, shutdown without cancelling manual Rest, action coordinator policy leases, active recovery mode transitions, and the previous AFK/Grab/evidence tests.
+
+**Compatibility notes:** The hub remains armed outside combat but server-side healing/rest authority is not controlled or guaranteed. User-controlled physical Rest may be intentionally preserved even during an attempted attack; game logic determines whether it can remain active. Actual captures, Grab V2 timing, attack input, server combat and explicitly opted-in AFK movement can still pause automatic Rest. The 23-module build now contains **16 unchanged legacy v9 module bodies** and seven independently tracked revisions (including the updated v10 UI).
