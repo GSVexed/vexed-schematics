@@ -195,6 +195,11 @@ jobs:
           local now=1
           local serverNow=100
           os={clock=function()return now end}
+          local nativeTypeof=typeof
+          typeof=function(v)
+            if type(v)=="table" and v.__fakeVec then return "Vector3" end
+            return nativeTypeof(v)
+          end
           local function event()
             local e={fn=nil}
             function e:Connect(fn) self.fn=fn;return {Disconnect=function()end} end
@@ -407,6 +412,26 @@ jobs:
           assert(attrs.WolfRest==true)
           N2.close()
           assert(N2.nativeOff==0 and attrs.WolfRest==true)
+          -- Manual Rest while still is preserved. Beginning actual movement
+          -- transfers to automatic mask without a Rest(false) remote or an
+          -- unsafe suspension of moving healing.
+          now=40.3
+          local N3=Native.attach(context)
+          assert(N3.setEnabled(true))
+          heartbeat:Fire()
+          assert(N3.manualRest and not N3.active)
+          hum.MoveDirection={__fakeVec=true,Magnitude=1}
+          now=40.7
+          heartbeat:Fire()
+          assert(not N3.manualRest and N3.active and N3.nativeOn==1)
+          assert(N3.manualRestMotionHandoffs==1 and N3.nativeOff==0)
+          assert(attrs.WolfRest==false and N3.mask~=nil)
+          now=42.2
+          char:SetAttribute("WolfRest",true)
+          assert(N3.active and not N3.manualRest and attrs.WolfRest==false)
+          hum.MoveDirection=nil
+          N3.close()
+          assert(N3.nativeOff==1)
           print("FERAL_NOVA_V103_MOVING_AUTO_REST_LATE_ECHO_MASK_PASS")
           '''
           Path('/tmp/feral-v90-native-test.luau').write_text(before+code+after)
