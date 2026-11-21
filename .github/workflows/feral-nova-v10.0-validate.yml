@@ -1,4 +1,4 @@
-name: FERAL NOVA v10 Release Candidate - 23 Modules, Evidence and Gameplay Regression
+name: FERAL NOVA v10.1 Stability - 23 Modules and Deep Regression
 on:
   push:
     branches: [main]
@@ -7,6 +7,8 @@ on:
       - 'roblox-tools/feral-nova-v10.0-potassium.lua'
       - 'roblox-tools/feral-nova-evidence-v10.0.lua'
       - 'roblox-tools/feral-nova-ui-v10.0.lua'
+      - 'roblox-tools/feral-nova-afk-v10.1.lua'
+      - 'roblox-tools/feral-nova-grab-v10.1.lua'
       - '.github/workflows/feral-nova-v10.0-validate.yml'
   workflow_dispatch:
 permissions:
@@ -32,7 +34,7 @@ jobs:
           chmod +x "$t"
           echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
           echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
-      - name: Audit 23 modules — all 21 prior gameplay bodies remain exact
+      - name: Audit 23 modules — 19 untouched v9 bodies and four independently checked components
         shell: bash
         run: |
           set -euo pipefail
@@ -331,6 +333,13 @@ jobs:
           t=86.1
           input:Fire({UserInputType=Enum.UserInputType.MouseButton1})
           assert(A.lastPhysicalInputAt==t)
+          -- Even during the pulse-suppression interval, a real key must
+          -- immediately halt any already-started autonomous movement.
+          A.travelActive=true
+          t=86.2
+          input:Fire({UserInputType=Enum.UserInputType.Keyboard})
+          assert(A.lastPhysicalInputAt==t and not A.travelActive)
+          assert(A.userStopCount==1)
           A.setSurvivalEnabled(true)
           t=151
           heartbeat:Fire()
@@ -436,6 +445,14 @@ jobs:
           player.Character=newChar
           heartbeat:Fire()
           assert(G.pending==nil and G.activeSession==false)
+          player.Character=char
+          now=11.04
+          inbound:Fire("strike",{f=111,k=10,t0=11,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
+          assert(G.activeSession and G.pending)
+          hum.Health=0
+          heartbeat:Fire()
+          assert(G.pending==nil and G.activeSession==false)
+          hum.Health=100
           G.close()
           now=12
           heartbeat:Fire()
