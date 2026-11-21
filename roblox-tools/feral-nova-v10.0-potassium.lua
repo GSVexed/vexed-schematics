@@ -10769,7 +10769,7 @@ return Evidence
 }
 
 -- Precompile before retiring old hub. No game-server remote requests.
-local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v29.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v9.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v10.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v29.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v9.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v10.0.lua"}
+local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v29.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v10.2.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v10.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v10.2.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v10.2.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v10.0.lua"}
 local compiled={}
 H.precompiledCount=0
 H.phase("Compile-checking every embedded module")
