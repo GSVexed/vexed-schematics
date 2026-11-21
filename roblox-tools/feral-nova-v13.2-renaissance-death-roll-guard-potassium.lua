@@ -4341,6 +4341,7 @@ function Native.attach(ctx)
         deathRollChar=nil,deathRollStateSince=0,
     }
     N.blockedByActivity=blockedByActivity
+    N.nativeDeathRollPresent=nativeDeathRollPresent
     local conns={}
     local feedConn=nil
     local feedPoseConn=nil
