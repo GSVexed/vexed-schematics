@@ -4,6 +4,8 @@
 **Status:** Software release with **23 embedded modules**, **54 startup checks**, and the official Luau full-bundle and regression suite passing. Live **v10** game/server validation is still outstanding; v9 successfully reached READY in a real Potassium session.  
 **Canonical release:** `feral-nova-v10.0-potassium.lua`.
 
+**Stability hotfix, 21 November 2026:** Startup readiness now checks the actual UI instance returned by the v10 mount (rather than the obsolete v32 GUI name). Previous v10 overlays are included in same-session cleanup, all individual UI controller shutdowns are protected against a single cleanup error, and the release workflow now checks these regressions. These are code-level corrections; live-server validation is still required.
+
 ## One-paste Potassium loader
 
 ```lua
