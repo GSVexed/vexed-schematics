@@ -103,7 +103,7 @@ jobs:
           assert all(x not in check_section for x in (
               "anyClampObservations","incomparableTargetPressClocks",
               "ctx.eagleActions.remoteBinds"))
-          assert check_section.count('add("')==44,"Unexpected startup check count"
+          assert check_section.count('add("')==45,"Unexpected startup check count"
 
           assert 'intendedCharacter=player.Character' in after["feral-nova-carry-core-v11.3.lua"]
           assert 'E.nativeCarryPriorityBlocks' in after["feral-nova-eagle-actions-v11.3.1.lua"]
