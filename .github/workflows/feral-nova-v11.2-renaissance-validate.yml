@@ -273,6 +273,22 @@ jobs:
           assert(N.nativeOff==offCount)
           N.close()
           assert(N.nativeOff==offCount)
+          -- First mouse click while a native FeedCan prompt is present
+          -- must preempt Rest instead of being treated solely as an attack.
+          char:SetAttribute("WolfRest",false)
+          now=8.0
+          local N4=Native.attach(ctx)
+          assert(N4.setEnabled(true))
+          heartbeat:Fire()
+          assert(N4.active and N4.nativeOn==1)
+          char:SetAttribute("FeedCan",true)
+          now=8.3
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,
+            KeyCode=0},false)
+          assert(not N4.active and N4.nativeOff==1)
+          assert(N4.feedIntentPreemptions>=1)
+          char:SetAttribute("FeedCan",false)
+          N4.close()
           print("FERAL_RENAISSANCE_V112_NATIVE_FEED_REST_STATUS_MANUAL_PASS")
           '''
           Path("/tmp/feral-v11-native-test.luau").write_text(before+code+after)
