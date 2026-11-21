@@ -339,6 +339,9 @@ function Native.attach(ctx)
                 cancel("NATIVE REST REQUEST FAILED",true)
                 return
             end
+            -- A synchronous server pose echo can trip the guard during
+            -- FireServer; never revive a cancelled signal after the call.
+            if not N.active or N.owned~=char or not N.mask then return end
             N.activations+=1
             N.nextRefresh=now+N.legacyRestCadenceSeconds
             N.lastProgressAt=now
