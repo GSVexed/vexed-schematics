@@ -493,6 +493,17 @@ function Native.attach(ctx)
             N.manualIntentUntil=os.clock()+1.4
         end
         if N.manualRest or processed or UIS:GetFocusedTextBox() then return end
+        -- FeedCan is the game's native interaction-eligibility hint. On
+        -- a real primary click, yield hub-owned Rest *before* a feed action
+        -- is confirmed; this protects the first food/water interaction.
+        -- This is not a claim that FeedCan proves a server resource grant.
+        if input.UserInputType==Enum.UserInputType.MouseButton1 then
+            local char=player.Character
+            if char and char:GetAttribute("FeedCan")==true then
+                N.beforeFeed("ELIGIBLE FEED CLICK / AUTO REST RELEASED")
+                return
+            end
+        end
         if input.UserInputType==Enum.UserInputType.MouseButton1
             or input.UserInputType==Enum.UserInputType.MouseButton2 then
             N.attackInputsObserved+=1
@@ -912,6 +923,7 @@ function Native.attach(ctx)
             "NOTE=4x recovery requires actual observed condition rates, not client REST_MULT settings.",
             "NOTE=Only this native supervisor can send hub-owned Rest requests.",
             "NOTE=Feeding intervals are excluded from 4x status-rate comparisons.",
+            "NOTE=Real primary clicks on native FeedCan release Rest before consumption.",
             "NOTE=Rest traffic or local attributes do not prove server-side healing."
         }
         for _,key in ipairs(EFFECTS) do
