@@ -71,7 +71,7 @@ jobs:
           assert 'Q.retapsForPress<1' in climb
           assert 'buffer_window_seconds=2.25' in climb
           assert 'FERAL_HUB_STARTUP_v7.json' in cur and 'FERAL_HUB_SESSION_v7.json' in cur
-          assert 'schema="FERAL_HUB_SESSION_V7",version="7.3.0"' in cur
+          assert 'schema="FERAL_HUB_SESSION_V7",version="7.4.0"' in cur
           assert 'activeRecord.version="feral-hub-v7.4"' in cur
           assert 'H.precompiledCount+=1' in cur
           assert 'show("READY","v7.4' in cur
