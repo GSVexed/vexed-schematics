@@ -421,6 +421,37 @@ jobs:
           heartbeat:Fire()
           assert(N5.active and N5.nativeOn==2)
           N5.close()
+          -- A combat tag alone does not prohibit 4x-config native Rest.
+          now=12
+          char:SetAttribute("WolfRest",false)
+          player:SetAttribute("FeralCombatUntil",serverNow+60)
+          local N6=Native.attach(ctx)
+          assert(N6.setEnabled(true))
+          assert(N6.blockedByActivity(char,ctx)==nil)
+          char:SetAttribute("FeralBleed",8)
+          heartbeat:Fire()
+          assert(N6.active and N6.nativeOn==1 and N6.nativeOff==0)
+          assert(N6.status:find("COMBAT TAG ALLOWED",1,true))
+          now=12.3
+          char:SetAttribute("FeralBleed",6)
+          heartbeat:Fire()
+          now=12.6
+          char:SetAttribute("FeralBleed",4)
+          heartbeat:Fire()
+          local row=N6.conditionRates.auto_combat.FeralBleed
+          assert(row and row.cleared>=2 and row.seconds>0)
+          assert(N6.combatStatusSamples>=1)
+          assert(N6.combatRestActiveSeconds>=.2)
+          -- Actual attack inputs continue to release Rest immediately.
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,
+            KeyCode=0},false)
+          assert(not N6.active and N6.nativeOff>=1)
+          now=14.1
+          heartbeat:Fire()
+          assert(N6.active and N6.nativeOn>=2)
+          N6.close()
+          player:SetAttribute("FeralCombatUntil",nil)
+          print("FERAL_V131_COMBAT_REST_CLEARANCE_ATTACK_REARM_PASS")
           print("FERAL_RENAISSANCE_V121_NATIVE_E_FEED_FIRST_ACTION_PASS")
           '''
           Path("/tmp/feral-v11-native-test.luau").write_text(before+code+after)
@@ -447,8 +478,9 @@ jobs:
             if k=="HumanoidRootPart" then return root end
           end
           function char:GetAttribute(k)return self.attributes[k]end
+          local pattrs={}
           local player={Character=char}
-          function player:GetAttribute(k)return nil end
+          function player:GetAttribute(k)return pattrs[k]end
           workspace={GetServerTimeNow=function()return 100 end}
           local services={
             Players={LocalPlayer=player},
@@ -512,7 +544,17 @@ jobs:
           assert(A.cacheCharacterGuard==true)
           assert(A.allowed("flight"))
           assert(A.priorityConflicts>=2)
+          -- Health regeneration and status Rest are separate game rules.
+          pattrs.FeralCombatUntil=130
+          local combat=A.snapshot(true)
+          assert(combat.combat and combat.priority=="COMBAT")
+          local canRest,restWhy=A.allowed("recovery")
+          assert(canRest and restWhy=="SAFE")
+          local canAfk,afkWhy=A.allowed("afk_walk")
+          assert(not canAfk and afkWhy=="COMBAT")
+          pattrs.FeralCombatUntil=nil
           A.close()
+          print("FERAL_V131_COMBAT_REST_ALLOWED_AFK_STILL_RESTRICTED_PASS")
           print("FERAL_RENAISSANCE_V113_RANKED_LEASES_FLIGHT_RESPAWN_PASS")
           '''
           Path("/tmp/feral-v11-action-test.luau").write_text(before+code+after)
