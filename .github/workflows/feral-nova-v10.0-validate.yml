@@ -1,4 +1,4 @@
-name: FERAL NOVA v10.2 Cache-Safe Hotfix - 23 Modules and Deep Regression
+name: FERAL NOVA v10.3 Moving Recovery - 23 Modules and Deep Regression
 on:
   push:
     branches: [main]
@@ -6,6 +6,8 @@ on:
       - 'roblox-tools/feral-nova-v10.0-release-candidate-potassium.lua'
       - 'roblox-tools/feral-nova-v10.0-potassium.lua'
       - 'roblox-tools/feral-nova-v10.2-hotfix-potassium.lua'
+      - 'roblox-tools/feral-nova-v10.3-moving-recovery-potassium.lua'
+      - 'roblox-tools/feral-nova-native-recovery-v10.3.lua'
       - 'roblox-tools/feral-nova-evidence-v10.0.lua'
       - 'roblox-tools/feral-nova-ui-v10.0.lua'
       - 'roblox-tools/feral-nova-afk-v10.1.lua'
@@ -35,7 +37,7 @@ jobs:
           chmod +x "$t"
           echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
           echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
-      - name: Audit 23 modules — verify new URL, 16 unchanged v9 bodies and preflight integrity
+      - name: Audit 23 modules — v10.3 pose ownership and all launcher preflight names
         shell: bash
         run: |
           set -euo pipefail
@@ -58,6 +60,11 @@ jobs:
               'activeRecord.version="feral-nova-v10.2"')
           assert fresh==expected_fresh, "Cache-safe v10.2 URL diverges from verified canonical bundle"
           assert 'name="FERAL HUB",version="10.2.0"' in fresh
+          visual=(root/"feral-nova-v10.3-moving-recovery-potassium.lua").read_text()
+          visual_native=(root/"feral-nova-native-recovery-v10.3.lua").read_text().rstrip()
+          assert 'name="FERAL HUB",version="10.3.0"' in visual
+          assert 'feral-nova-native-recovery-v10.2.lua' not in visual
+          assert '-- FERAL NOVA v10.3 MOVING-RECOVERY POSE FIX /' in visual
           pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
           old=dict(re.findall(pat,before,re.S))
           new=dict(re.findall(pat,after,re.S))
@@ -75,7 +82,16 @@ jobs:
           gets=re.findall(r'\bget\("([^"]+\.lua)"\)',after)
           assert gets and set(gets).issubset(set(new)),f"Runtime get() references missing: {set(gets)-set(new)}"
           assert all(len(new[name])>100 for name in order)
-          for label,payload in [("canonical",release),("cache_safe",fresh)]:
+          visual_modules=dict(re.findall(pat,visual,re.S))
+          assert len(visual_modules)==23
+          assert visual_modules["feral-nova-native-recovery-v10.3.lua"]==visual_native
+          assert set(visual_modules)==(set(new)-{"feral-nova-native-recovery-v10.2.lua"})|{"feral-nova-native-recovery-v10.3.lua"}
+          for name in set(visual_modules)&set(new):
+              assert visual_modules[name]==new[name],f"v10.3 changed unrelated module: {name}"
+          assert 'delayedAutoRestEchoesMasked' in visual_native
+          assert 'N.active and N.owned==char' in visual_native
+          assert 'RunService.PreAnimation' in visual_native
+          for label,payload in [("canonical",release),("cache_safe",fresh),("visual_v103",visual)]:
               embedded=dict(re.findall(pat,payload,re.S))
               ordered=re.search(r'local MODULE_ORDER=\{([^\n]+)\}',payload)
               assert ordered is not None,f"{label}: missing MODULE_ORDER"
@@ -160,6 +176,8 @@ jobs:
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.0-release-candidate-potassium.lua
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.0-potassium.lua
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.2-hotfix-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.3-moving-recovery-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v10.3.lua
           for file in /tmp/feral-v100-modules/*.lua; do
             "$LUAU_COMPILER" --null "$file"
           done
@@ -170,7 +188,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          code=Path('roblox-tools/feral-nova-native-recovery-v10.2.lua').read_text()
+          code=Path('roblox-tools/feral-nova-native-recovery-v10.3.lua').read_text()
           assert code.rstrip().endswith('return Native')
           code=code[:code.rfind('return Native')]
           before=r'''
@@ -184,6 +202,7 @@ jobs:
             return e
           end
           local heartbeat=event()
+          local preAnimation=event()
           local input=event()
           local focused=false
           local held=false
@@ -220,6 +239,7 @@ jobs:
             },
             RunService={
               Heartbeat=heartbeat,
+              PreAnimation=preAnimation,
               BindToRenderStep=function(self,k,n,cb) self.render=cb end,
               UnbindFromRenderStep=function(self,k)self.render=nil end
             }
@@ -299,6 +319,16 @@ jobs:
           now=4.5
           heartbeat:Fire()
           assert(N.active and N.nativeOn==2)
+          -- v10.2 bug: Rest(true) echo arriving more than 1s after our request
+          -- was mistaken for manual Rest, exposing a moving physical Rest pose.
+          -- This must remain auto-owned and be masked, without stopping recovery.
+          now=6.2
+          char:SetAttribute("WolfRest",true)
+          assert(N.active and not N.manualRest and attrs.WolfRest==false)
+          assert(N.delayedAutoRestEchoesMasked>=1)
+          preAnimation:Fire()
+          assert(N.preAnimationMaskPasses>=1)
+          assert(N.mask~=nil)
           -- Legacy five-second pulse remains when wounded and not attacking.
           now=9.6
           heartbeat:Fire()
@@ -377,7 +407,7 @@ jobs:
           assert(attrs.WolfRest==true)
           N2.close()
           assert(N2.nativeOff==0 and attrs.WolfRest==true)
-          print("FERAL_NOVA_V102_MANUAL_REST_AND_NONCOMBAT_TEAMMATES_PASS")
+          print("FERAL_NOVA_V103_MOVING_AUTO_REST_LATE_ECHO_MASK_PASS")
           '''
           Path('/tmp/feral-v90-native-test.luau').write_text(before+code+after)
           PY
