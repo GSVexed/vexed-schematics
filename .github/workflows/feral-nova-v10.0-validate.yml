@@ -50,13 +50,20 @@ jobs:
           old=dict(re.findall(pat,before,re.S))
           new=dict(re.findall(pat,after,re.S))
           assert len(old)==22 and len(new)==23
-          assert set(old)-set(new)=={"feral-nova-ui-v9.0.lua"}
+          # Only the two repaired action modules and the UI change from v9.
+          assert set(old)-set(new)=={
+              "feral-nova-ui-v9.0.lua","feral-nova-afk-v9.0.lua",
+              "feral-nova-grab-v9.0.lua"}
           assert set(new)-set(old)=={
-              "feral-nova-ui-v10.0.lua","feral-nova-evidence-v10.0.lua"}
+              "feral-nova-ui-v10.0.lua","feral-nova-evidence-v10.0.lua",
+              "feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua"}
+          assert len(set(old)&set(new))==19
           for name in set(old)&set(new):
-              assert old[name]==new[name],f"v9 gameplay module changed unexpectedly: {name}"
-          for name in ["feral-nova-ui-v10.0.lua","feral-nova-evidence-v10.0.lua"]:
+              assert old[name]==new[name],f"unmodified v9 module changed: {name}"
+          for name in ["feral-nova-ui-v10.0.lua","feral-nova-evidence-v10.0.lua",
+                       "feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua"]:
               assert new[name]==(root/name).read_text().rstrip(),f"source mismatch: {name}"
+          assert 'log.preservedGameplayModules=19' in after
           assert 'H.precompiledCount==23' in after
           assert 'log.moduleCount==23' in after
           assert 'schema="FERAL_HUB_SESSION_V7",version="10.0.0"' in after
@@ -107,7 +114,7 @@ jobs:
           for file in /tmp/feral-v100-modules/*.lua; do
             "$LUAU_COMPILER" --null "$file"
           done
-          echo FERAL_NOVA_V100_LUAU_FULL_COMPILE_PASS
+          echo FERAL_NOVA_V101_LUAU_FULL_COMPILE_PASS
       - name: Runtime mocked native Rest lifecycle and pose backoff
         shell: bash
         run: |
@@ -270,7 +277,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          code=Path('roblox-tools/feral-nova-afk-v8.0.lua').read_text()
+          code=Path('roblox-tools/feral-nova-afk-v10.1.lua').read_text()
           assert code.rstrip().endswith('return AFK')
           code=code[:code.rfind('return AFK')]
           before=r'''
@@ -287,6 +294,8 @@ jobs:
           local changed=event()
           local idled=event()
           local pulseCount=0
+          Enum={UserInputType={MouseMovement=1,MouseWheel=2,
+              MouseButton2=3,Keyboard=4,MouseButton1=5,Touch=6}}
           local player={Idled=idled,Character=nil}
           function player:GetAttribute(k)return nil end
           local virtual={}
@@ -314,6 +323,14 @@ jobs:
           assert(A.pulseAttempts==1 and A.pulseSuccess==1 and pulseCount==1)
           idled:Fire(120)
           assert(A.idledEvents==1 and A.pulseSuccess==2)
+          -- Synthetic mouse events may be filtered, but real keys may NOT.
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton2})
+          assert(A.lastPhysicalInputAt==0)
+          input:Fire({UserInputType=Enum.UserInputType.Keyboard})
+          assert(A.lastPhysicalInputAt==86)
+          t=86.1
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1})
+          assert(A.lastPhysicalInputAt==t)
           A.setSurvivalEnabled(true)
           t=151
           heartbeat:Fire()
@@ -324,7 +341,7 @@ jobs:
           idled:Fire(155)
           heartbeat:Fire()
           assert(A.pulseSuccess==2 and A.alive==false)
-          print("FERAL_NOVA_V90_VIRTUAL_PULSE_AND_SURVIVAL_SAFE_DEFAULT_PASS")
+          print("FERAL_NOVA_V101_REAL_INPUT_NOT_HIDDEN_BY_IDLE_PULSE_PASS")
           '''
           Path('/tmp/feral-v90-afk-test.luau').write_text(before+code+after)
           PY
@@ -335,7 +352,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          src=Path('roblox-tools/feral-nova-grab-v9.0.lua').read_text()
+          src=Path('roblox-tools/feral-nova-grab-v10.1.lua').read_text()
           assert src.rstrip().endswith('return Grab')
           src=src[:src.rfind('return Grab')]
           before=r'''
@@ -401,18 +418,30 @@ jobs:
           inbound:Fire("end",{})
           inbound:Fire("strike",{f=-1,k=3,t0=11,spd=1,from=0,zc=.4,zw=.215,dur=2.5})
           assert(#sent==1 and G.skippedMissingId==1)
+          inbound:Fire("strike",{f="-2",k=9,t0=11,spd=1,from=0,zc=.4,zw=.215,dur=2.5})
+          assert(#sent==1 and G.skippedMissingId==2)
           -- If the user presses manually, let native HUD handle it.
           now=11.03
           inbound:Fire("strike",{f=108,k=4,t0=11,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
           assert(G.pending~=nil)
           input:Fire({UserInputType=1,KeyCode=0},false)
           assert(G.pending==nil and G.manualOverrides==1)
+          -- An abandoned session may not survive an animal respawn.
+          inbound:Fire("strike",{f=109,k=8,t0=11,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
+          assert(G.pending and G.activeSession and G.sessionCharacter==char)
+          local newChar={}
+          function newChar:FindFirstChildOfClass(k)
+            if k=="Humanoid" then return hum end
+          end
+          player.Character=newChar
+          heartbeat:Fire()
+          assert(G.pending==nil and G.activeSession==false)
           G.close()
           now=12
           heartbeat:Fire()
           inbound:Fire("strike",{f=110,k=5,t0=12,spd=1,from=0,zc=.5,zw=.215,dur=2.5})
           assert(#sent==1)
-          print("FERAL_NOVA_V90_REAL_STRIKE_PERFECT_CENTER_MOCK_PASS")
+          print("FERAL_NOVA_V101_GRAB_PRACTICE_SESSION_AND_RESPAWN_GUARDS_PASS")
           '''
           Path('/tmp/feral-v90-grab-test.luau').write_text(before+src+after)
           PY
