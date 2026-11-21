@@ -70,6 +70,15 @@ jobs:
           assert 'game:HttpGet(' not in after
           ui=new["feral-nova-ui-v10.0.lua"]
           assert 'dashboardLayer=make("Frame"' in ui
+          # Prevent release-ready false negatives when an updated UI uses a new name.
+          assert 'Name="FeralNovaV100"' in ui
+          assert 'H.activeUI=window' in after and 'local hub=H.activeUI' in after
+          assert 'hub=pg and pg:FindFirstChild("FeralNovaPrimeV320")' not in after
+          assert '"FeralNovaV100","FeralNovaPrimeV320"' in after
+          # One failed controller close must not prevent remaining cleanup.
+          assert 'pcall(function()Active.close()end)' in ui
+          assert 'pcall(function()Tags.close()end)' in ui
+          assert 'pcall(clearFog)' in ui
           assert 'COPY EVIDENCE' in ui
           assert 'SURVIVAL","COMBAT","ABILITIES","SYSTEM' in ui
           assert 'Evidence.summary()' in ui
