@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'roblox-tools/feral-nova-v11.2-renaissance-complete-potassium.lua'
+      - 'roblox-tools/feral-aurora-engine-v11.2.lua'
       - 'roblox-tools/feral-nova-native-recovery-v11.2.lua'
       - 'roblox-tools/feral-nova-active-recovery-v11.2.lua'
       - 'roblox-tools/feral-nova-ui-v11.2.lua'
@@ -57,6 +58,7 @@ jobs:
           assert set(ordered)==set(after)
           assert set(required).issubset(set(after))
           replacements={
+            "feral-aurora-engine-v13.0.lua":"feral-aurora-engine-v11.2.lua",
             "feral-nova-recovery-v15.0.lua":"feral-nova-recovery-compat-v11.2.lua",
             "feral-nova-mobile-v15.0.lua":"feral-nova-mobile-compat-v11.2.lua",
             "feral-nova-native-recovery-v11.0.lua":"feral-nova-native-recovery-v11.2.lua",
@@ -86,6 +88,12 @@ jobs:
           assert 'Name="FeralNovaV112"' in new
           assert 'v10.0 core + DATA evidence dashboard' not in new
           assert 'v112_single_auto_rest_writer' in new
+          assert 'v112_legacy_engine_rest_retired' in new
+          rest_owners=[name for name,code in after.items()
+                       if 'FireServer("Rest"' in code]
+          assert rest_owners==["feral-nova-native-recovery-v11.2.lua"],rest_owners
+          assert 'FireServer("Rest"' not in after["feral-aurora-engine-v11.2.lua"]
+          assert 'Rest(false)' not in after["feral-aurora-engine-v11.2.lua"]
           assert 'v112_effect_clearance_buckets' in new
           assert 'legacySafeRest' not in new
           assert 'real_server_4x_status_recovery_verified=false' in after["feral-nova-regen-v11.0.lua"]
@@ -95,7 +103,7 @@ jobs:
           dest.mkdir(exist_ok=True)
           for name,body in after.items():
               (dest/name).write_text(body+"\n")
-          print("RENAISSANCE_V112_23_MODULES_17_UNCHANGED_2_LEGACY_RETIRED_PASS")
+          print("RENAISSANCE_V112_23_MODULES_16_UNCHANGED_SOLE_REST_OWNER_PASS")
           PY
       - name: Compile v11.2 launcher and each embedded module
         shell: bash
