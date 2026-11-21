@@ -1031,6 +1031,7 @@ function Native.attach(ctx)
             cancel("NATIVE RECOVERY ERROR",true)
         end
     end)
+    N.isNativeFeed=nativeFeed
     return N
 end
 return Native
