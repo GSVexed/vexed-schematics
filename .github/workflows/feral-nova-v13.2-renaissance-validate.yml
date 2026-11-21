@@ -1,0 +1,128 @@
+name: FERAL NOVA v13.2 Renaissance - Crocodile Death Roll Safety
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-native-recovery-v13.2.lua'
+      - 'roblox-tools/feral-nova-v13.2-renaissance-death-roll-guard-potassium.lua'
+      - '.github/workflows/feral-nova-v13.2-renaissance-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler and interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          c="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          t="$(dirname "$c")/luau"
+          test -f "$t"
+          chmod +x "$t"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+          echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
+      - name: Audit embedded release identity and crocodile-only action guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          bundle=(root/'feral-nova-v13.2-renaissance-death-roll-guard-potassium.lua').read_text()
+          prior=(root/'feral-nova-v13.1-renaissance-combat-status-recovery-potassium.lua').read_text()
+          regex=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          embedded=dict(re.findall(regex,bundle,re.S))
+          older=dict(re.findall(regex,prior,re.S))
+          assert len(embedded)==23 and len(older)==23
+          old='feral-nova-native-recovery-v13.1.lua'
+          new='feral-nova-native-recovery-v13.2.lua'
+          assert set(older)-set(embedded)=={old}
+          assert set(embedded)-set(older)=={new}
+          for name in set(embedded)&set(older):
+              assert embedded[name]==older[name],f'unexpected module modification: {name}'
+          for name,src in embedded.items():
+              assert (root/name).read_text().rstrip()==src,f'stale embedded module: {name}'
+          native=embedded[new]
+          assert 'function N.beforeDeathRoll()' in native
+          assert 'function N.beforeFeed(' in native
+          assert 'local function saltwaterCroc(char)' in native
+          assert 'species:find("SaltwaterCrocodile",1,true)' in native
+          assert 'char:GetAttribute("FeralDeathRollPhys")' in native
+          assert 'function N.beforeDeathRoll()' in native
+          assert 'clearOwnedDeathRollEcho(char,now)' in native
+          assert 'N.deathRollEchoCount>=3' in native
+          assert 'not N.manualRest' not in native.split('local function clearOwnedDeathRollEcho',1)[1].split('local function feedGuard',1)[0] or 'or N.manualRest' in native
+          assert 'and not UIS:GetFocusedTextBox()' in native
+          assert 'N.beforeDeathRoll()' in native
+          assert native.index('N.beforeDeathRoll()\n            return') < native.index('if N.manualRest or processed or UIS:GetFocusedTextBox() then return end')
+          assert 'if syncManualRest(char,now) then return end' in native
+          assert 'if rolling or now<N.deathRollInputUntil' in native
+          assert 'now<N.deathRollStateHoldUntil then' in native
+          assert 'N.nativeDeathRollPresent=nativeDeathRollPresent' in native
+          assert 'N.attackRestReleases+=1' in native
+          assert 'FeralCombatUntil' in native
+          assert 'auto_combat={},manual_combat={},baseline_combat={}' in native
+          assert 'native_rest_allowed_during_combat_tag=true' in native
+          assert 'DeathRollPhys:FireServer' not in native
+          assert 'Animator:Stop' not in native
+          assert ':Stop(0)' not in native
+          assert 'AnimationTrack' not in native
+          assert 'HumanoidRootPart.CFrame=' not in native
+          assert 'WalkSpeed=' not in native
+          assert 'SetAttribute("FeralDeathRollPhys"' not in native
+          assert 'SetAttribute("WolfRest",true)' not in native
+          assert 'FireServer("Rest"' in native
+          assert [name for name,code in embedded.items() if 'FireServer("Rest"' in code]==[new]
+          order=re.search(r'local MODULE_ORDER=\{([^\n]+)\}',bundle)
+          assert order
+          names=re.findall(r'"([^"]+\.lua)"',order.group(1))
+          assert len(names)==23 and set(names)==set(embedded)
+          assert 'version="13.2.0"' in bundle
+          assert 'release="13.2"' in bundle
+          assert 'activeRecord.version="feral-nova-v13.2"' in bundle
+          assert 'Name="FeralNovaV132"' in bundle
+          checks=bundle.split('function H.selfCheck(ctx)',1)[1].split('function H.closeSession()',1)[0]
+          assert checks.count('add("')==56
+          assert 'v132_death_roll_priority_and_echo_guard' in checks
+          dest=Path('/tmp/feral-v132-modules')
+          dest.mkdir(exist_ok=True)
+          for name,code in embedded.items():
+              (dest/name).write_text(code+'\n')
+          helper=native.split('local function saltwaterCroc(char)',1)[1].split('Native.blockedByActivity=blockedByActivity',1)[0]
+          runtime='''local Native={}\nlocal function saltwaterCroc(char)'''+helper+'''
+          local function specimen(s,roll)
+              local attrs={Species=s,FeralDeathRollPhys=roll}
+              return {GetAttribute=function(_,key)return attrs[key] end}
+          end
+          assert(Native.saltwaterCroc(specimen("SaltwaterCrocodile",nil)))
+          assert(Native.saltwaterCroc(specimen("SaltwaterCrocodileAdult",nil)))
+          assert(not Native.saltwaterCroc(specimen("Eagle",nil)))
+          assert(not Native.nativeDeathRollPresent(specimen("SaltwaterCrocodile",nil)))
+          assert(not Native.nativeDeathRollPresent(specimen("Eagle","active")))
+          assert(Native.nativeDeathRollPresent(specimen("SaltwaterCrocodile","active")))
+          assert(not Native.nativeDeathRollPresent(specimen("SaltwaterCrocodile","")))
+          print("FERAL_V132_SPECIES_NATIVE_ROLL_RUNTIME_PASS")
+          '''
+          Path('/tmp/feral-v132-croc-test.luau').write_text(runtime)
+          print('FERAL_V132_IDENTITY_AND_GUARD_SOURCE_PASS')
+          PY
+      - name: Compile v13.2 release and all embedded modules, exercise species/roll guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.2-renaissance-death-roll-guard-potassium.lua
+          for file in /tmp/feral-v132-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          "$LUAU_RUNNER" /tmp/feral-v132-croc-test.luau
+          echo FERAL_V132_ALL_24_LUAU_COMPILE_PASS
