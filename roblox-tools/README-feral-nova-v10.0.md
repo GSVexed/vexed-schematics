@@ -4,7 +4,7 @@
 **Status:** Software release with **23 embedded modules**, **54 startup checks**, and the official Luau full-bundle and regression suite passing. Live **v10** game/server validation is still outstanding; v9 successfully reached READY in a real Potassium session.  
 **Canonical release:** `feral-nova-v10.0-potassium.lua`.
 
-**Stability hotfix, 21 November 2026:** Startup readiness now checks the actual UI instance returned by the v10 mount (rather than the obsolete v32 GUI name). Previous v10 overlays are included in same-session cleanup, all individual UI controller shutdowns are protected against a single cleanup error, and the release workflow now checks these regressions. These are code-level corrections; live-server validation is still required.
+**Deep stability hotfix, 21 November 2026:** The startup GUI check now uses the actual mounted `FeralNovaV100` UI; old v10 overlays are removed on reload and each UI module shutdown is separately protected. Additional v10.1 variants of AFK and Grab V2 repair synthetic-input filtering, reject numeric nonpositive string session IDs and clear stale minigames across animal death/change. The existing one-paste v10.0 release URL includes these fixes. All changes have dedicated official Luau mocks; real-server acceptance still requires live testing.
 
 ## One-paste Potassium loader
 
@@ -78,20 +78,21 @@ The latest private report available during the build was **v9.0**, with **22/22 
 
 Official GitHub Actions workflow: [FERAL v10 validation](https://github.com/GSVexed/vexed-schematics/actions/workflows/feral-nova-v10.0-validate.yml). The tests validate:
 
-1. Exactly 23 embedded modules; **21 gameplay module bodies match v9 byte-for-byte**; v10 UI and new evidence engine each match standalone source.
+1. Exactly 23 embedded modules; **19 legacy gameplay module bodies remain byte-for-byte identical to v9**; four updated components (v10 UI, evidence, v10.1 AFK and v10.1 Grab) each match their standalone source.
 2. Official Luau compilation of the hub and all 23 embedded modules, plus the final canonical release script.
 3. v7.5-style attack-safe native Rest lifecycle, combat-tag and mask retry regression.
 4. v9 Action Core state priorities, native bite vs client hint, timed lease preemption and cleanup.
 5. Automated AFK heartbeat mock and no unsolicited movement.
 6. Native Grab V2 timed single-press mock, manual input priority and practice-id exclusion.
 7. NEW v10 own-animal evidence mock: clean HP status observations, changing movement phases, max-HP growth exclusion, combat exclusion and safe disposal.
-8. Failure containment and full module cleanup interfaces verified during startup checks.
+8. Failure containment, v10 GUI identity, old-overlay removal and protected controller cleanup verified by static/startup checks.
+9. Regression cases for synthetic idle mouse input versus real keyboard/primary-click control, cancellation of active AFK travel, negative string practice Grab IDs, and Grab session cleanup after death or animal change.
 
 **Important distinction:** The above are source parity, simulated game event and compile tests. They cannot prove that the live game server accepts or rewards all attempted local actions. The v10 release remains open to live-specific corrections.
 
 ## Architecture and inherited features
 
-The bundle has 23 Luau modules. v9 refactored 8 action-sensitive modules from earlier versions; v10 adds the `feral-nova-evidence-v10.0.lua` and replaces the UI with `feral-nova-ui-v10.0.lua`. The remaining 21 embedded bodies are preserved from v9.
+The bundle has 23 Luau modules. It preserves 19 v9 module bodies unchanged. Four components are independently checked: `feral-nova-evidence-v10.0.lua`, `feral-nova-ui-v10.0.lua`, `feral-nova-afk-v10.1.lua` and `feral-nova-grab-v10.1.lua`. This is a stability hotfix inside the existing v10 distribution URL, not a claim of newly supported server authority.
 
 The older, mutually exclusive Safe Rest and Mobile Recovery Test components remain available as diagnostic/rollback tools but are not automatically enabled. This avoids losing previous experiments while the integrated Active Recovery controller retains ownership of normal gameplay.
 
