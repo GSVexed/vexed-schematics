@@ -193,10 +193,17 @@ jobs:
           now=3.2
           heartbeat:Fire()
           assert(N.active and N.nativeOn==2)
+          -- v8.1 only true native bite reach blocks Rest; extended local
+          -- "ready" UI hints alone no longer suppress moving healing.
           guide.ready=true
           now=3.5
           heartbeat:Fire()
+          assert(N.active and N.nativeOff==1)
+          guide.nativeReady=true
+          now=3.8
+          heartbeat:Fire()
           assert(not N.active and N.nativeOff==2 and N.aimedTargetRestReleases==1)
+          guide.nativeReady=false
           guide.ready=false
           now=4.2
           heartbeat:Fire()
