@@ -208,11 +208,14 @@ function Regen.attach(ctx)
         for _,e in ipairs(statusKeys) do
             local x=old[e.attr]
             local y=new[e.attr]
-            if finite(x) and finite(y) and x>.20 and y<=x+.01 then
-                selected.statusSeconds[e.attr]=(selected.statusSeconds[e.attr] or 0)+elapsed
-                if y<x-.005 then
-                    selected.status[e.attr]=(selected.status[e.attr] or 0)+(x-y)
-                    selected.statusSamples[e.attr]=(selected.statusSamples[e.attr] or 0)+1
+            if finite(x) and x>.20 and (finite(y) or y==nil) then
+                local after=finite(y) and y or 0
+                if after<=x+.01 then
+                    selected.statusSeconds[e.attr]=(selected.statusSeconds[e.attr] or 0)+elapsed
+                    if after<x-.005 then
+                        selected.status[e.attr]=(selected.status[e.attr] or 0)+(x-after)
+                        selected.statusSamples[e.attr]=(selected.statusSamples[e.attr] or 0)+1
+                    end
                 end
             end
         end
