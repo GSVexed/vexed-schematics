@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'roblox-tools/feral-nova-v10.0-release-candidate-potassium.lua'
+      - 'roblox-tools/feral-nova-v10.0-potassium.lua'
       - 'roblox-tools/feral-nova-evidence-v10.0.lua'
       - 'roblox-tools/feral-nova-ui-v10.0.lua'
       - '.github/workflows/feral-nova-v10.0-validate.yml'
@@ -41,6 +42,10 @@ jobs:
           root=Path("roblox-tools")
           before=(root/"feral-nova-v9.0-core-preview-potassium.lua").read_text()
           after=(root/"feral-nova-v10.0-release-candidate-potassium.lua").read_text()
+          release=(root/"feral-nova-v10.0-potassium.lua").read_text()
+          assert release==after.replace(
+              "-- FERAL NOVA v10.0 RELEASE CANDIDATE /",
+              "-- FERAL NOVA v10.0 RELEASE /",1), "Canonical release diverged from tested bundle"
           pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
           old=dict(re.findall(pat,before,re.S))
           new=dict(re.findall(pat,after,re.S))
@@ -89,6 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.0-release-candidate-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.0-potassium.lua
           for file in /tmp/feral-v100-modules/*.lua; do
             "$LUAU_COMPILER" --null "$file"
           done
