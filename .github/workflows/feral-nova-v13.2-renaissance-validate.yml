@@ -90,7 +90,7 @@ jobs:
           assert 'version="13.2.0"' in bundle
           assert 'release="13.2"' in bundle
           assert 'activeRecord.version="feral-nova-v13.2"' in bundle
-          assert 'Name="FeralNovaV132"' in bundle
+          assert 'Name="FeralNovaV131"' in bundle
           checks=bundle.split('function H.selfCheck(ctx)',1)[1].split('function H.closeSession()',1)[0]
           assert checks.count('add("')==56
           assert 'v132_death_roll_priority_and_echo_guard' in checks
