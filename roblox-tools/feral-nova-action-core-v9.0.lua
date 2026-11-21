@@ -214,6 +214,13 @@ function Coordinator.attach(ctx)
         elseif mode=="carry" then
             if S.grab or S.lease=="minigame" then reason="GRAB PRIORITY"
             elseif S.menu or S.chat then reason="MENU OR CHAT" end
+        elseif mode=="escape" then
+            -- Old shake/tug automation must not compete with the native
+            -- Grab V2 timed-input minigame. Real captured non-V2 escapes
+            -- remain available, including during combat.
+            if S.grab or S.lease=="minigame" then
+                reason="GRAB V2 TIMING HAS PRIORITY"
+            elseif S.menu or S.chat then reason="MENU OR CHAT" end
         else reason="UNKNOWN POLICY"
         end
         A.decisions+=1
