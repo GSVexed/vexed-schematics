@@ -309,7 +309,7 @@ jobs:
           -- Native WolfFeed must release owned Rest instantly, without
           -- waiting for the next heartbeat or requiring manual Rest toggle.
           now=1.4
-          char:SetAttribute("WolfFeed",true)
+          char:SetAttribute("WolfFeed","eat")
           assert(not N.active and N.nativeOff==1)
           heartbeat:Fire()
           assert(N.feedStarts==1 and N.nativeOn==1)
@@ -372,7 +372,7 @@ jobs:
           assert(N4.setEnabled(true))
           heartbeat:Fire()
           assert(N4.active and N4.nativeOn==1)
-          char:SetAttribute("FeedCan",true)
+          char:SetAttribute("FeedCan","eat")
           now=8.3
           input:Fire({UserInputType=Enum.UserInputType.MouseButton1,
             KeyCode=0},false)
@@ -389,10 +389,18 @@ jobs:
           assert(N5.setEnabled(true))
           heartbeat:Fire()
           assert(N5.active and N5.nativeOn==1)
+          assert(N5.isNativeFeed("eat") and N5.isNativeFeed("drink"))
+          assert(N5.isNativeFeed(true) and not N5.isNativeFeed(false))
+          -- A stray E outside a feed prompt must not disrupt recovery.
+          now=10.1
+          input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.E},true)
+          assert(N5.active and N5.feedHotkeyPreemptions==0)
+          char:SetAttribute("FeedCan","drink")
           now=10.2
           input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.E},true)
           assert(N5.feedHotkeyPreemptions==1)
           assert(not N5.active and N5.nativeOff==1)
+          char:SetAttribute("FeedCan",false)
           now=11.8
           heartbeat:Fire()
           assert(N5.active and N5.nativeOn==2)
@@ -414,7 +422,7 @@ jobs:
           before=r'''
           local now=1
           os={clock=function()return now end}
-          local char={Parent=true,attributes={WolfFeed=true,FeedCan=true}}
+          local char={Parent=true,attributes={WolfFeed="drink",FeedCan="eat"}}
           local root={}
           local hum={Health=50}
           function hum:GetState()return {Name="Running"}end
@@ -439,7 +447,9 @@ jobs:
           after=r'''
           local A=Coordinator.attach({})
           local S=A.snapshot(true)
-          assert(S.feeding and S.priority=="FEEDING")
+          assert(S.feeding and S.feedAvailable and S.priority=="FEEDING")
+          assert(A.isNativeFeed("eat") and A.isNativeFeed("drink"))
+          assert(A.isNativeFeed(true) and not A.isNativeFeed(false))
           for _,mode in ipairs({"recovery","afk_walk","climb","carry","flight"}) do
             local ok,reason=A.allowed(mode)
             assert(not ok and reason=="FEEDING / DRINKING")
@@ -982,3 +992,22 @@ jobs:
           Path("/tmp/feral-v122-ui.luau").write_text(m+after)
           PY
           "$LUAU_RUNNER" /tmp/feral-v122-ui.luau
+
+      - name: Runtime mock - Quick Climb gates native eat/drink string types
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("roblox-tools/feral-nova-climb-v13.0.lua").read_text()
+          frag=code.split('local function nativeFeed(value)',1)[1].split('Climb.isNativeFeed=nativeFeed',1)[0]
+          sample='''local function nativeFeed(value)'''+frag+'''
+          assert(nativeFeed("eat") and nativeFeed("drink"))
+          assert(nativeFeed(true))
+          assert(not nativeFeed(false) and not nativeFeed(nil))
+          assert(not nativeFeed("other") and not nativeFeed(0))
+          print("FERAL_V130_CLIMB_NATIVE_FEED_STRING_GUARD_PASS")
+          '''
+          Path('/tmp/feral-v130-climb-feed.luau').write_text(sample)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v130-climb-feed.luau
