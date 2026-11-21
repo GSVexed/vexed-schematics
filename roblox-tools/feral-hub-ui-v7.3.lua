@@ -631,11 +631,12 @@ function UI.mount(ctx)
         "A locally permitted CATCH indicator cannot override game-server carry limits.\n"..
         "Growth configuration does not establish faster server-recognised Elder growth.\n"..
         "Health: mobile Rest signal outside combat; never forces visible Rest.\n"..
+        "Original v1.1-style Rest requests use a five-second healing cadence.\n"..
         "Repeated pose echoes trigger timed retry, not a lifetime shutdown.\n"..
         "Hunger/Thirst: read-only session samples; NOT infinite needs.\n\n"..
         "COORDINATION: Auto Escape protects against hostile grabs. Friendly baby\n"..
         "carrying is handled separately. Active Recovery pauses for unsafe actions.\n"..
-        "Quick Climb uses native Q buffering, not a forced hold key.\n\n"..
+        "Quick Climb buffers Q for 2.25s and retries one missed native mount tap.\n\n"..
         "KEYS: RIGHT SHIFT hide/show  |  END shutdown  |  Q climb  |  G carry\n"..
         "DIAGNOSTICS: The original v32 session report saves locally when supported.\n"..
         "A v7 session report records own HP, Hunger, Thirst and recovery status.\n"..
