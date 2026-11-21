@@ -1,0 +1,831 @@
+name: FERAL NOVA v12.1 Renaissance - Final Native Feeding and Full Regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v12.1-renaissance-final-potassium.lua'
+      - 'roblox-tools/feral-nova-native-recovery-v12.1.lua'
+      - 'roblox-tools/feral-nova-ui-v12.1.lua'
+      - '.github/workflows/feral-nova-v12.1-renaissance-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Luau compiler and interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          c="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          t="$(dirname "$c")/luau"
+          test -f "$t"
+          chmod +x "$t"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+          echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
+      - name: Audit sole Rest owner, 23 dependencies, code provenance and release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path("roblox-tools")
+          old=(root/"feral-nova-v12.0-renaissance-final-potassium.lua").read_text()
+          new=(root/"feral-nova-v12.1-renaissance-final-potassium.lua").read_text()
+          pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pat,old,re.S))
+          after=dict(re.findall(pat,new,re.S))
+          assert len(before)==23 and len(after)==23
+          order_match=re.search(r'local MODULE_ORDER=\{([^\n]+)\}',new)
+          assert order_match, "Missing preflight order"
+          ordered=re.findall(r'"([^"]+\.lua)"',order_match.group(1))
+          required=re.findall(r'\bget\("([^"]+\.lua)"\)',new)
+          assert len(ordered)==23 and len(set(ordered))==23
+          assert set(ordered)==set(after)
+          assert set(required).issubset(set(after))
+          replacements={
+            "feral-nova-native-recovery-v11.2.lua":"feral-nova-native-recovery-v12.1.lua",
+            "feral-nova-ui-v12.0.lua":"feral-nova-ui-v12.1.lua"
+          }
+          assert set(before)-set(after)==set(replacements)
+          assert set(after)-set(before)==set(replacements.values())
+          for name in set(before)&set(after):
+              assert before[name]==after[name],f"Unexpected change in {name}"
+          for name in replacements.values():
+              source=(root/name).read_text().rstrip()
+              assert source==after[name],f"Stale bundle source: {name}"
+          rest=after["feral-nova-recovery-compat-v11.2.lua"]
+          trial=after["feral-nova-mobile-compat-v11.2.lua"]
+          for name,source in [("Safe Rest",rest),("Mobile A/B",trial)]:
+              assert 'FireServer(' not in source,f"{name}: still sends native actions"
+              assert ':Connect(' not in source,f"{name}: still registers events"
+              assert 'RunService.Heartbeat:Connect' not in source,f"{name}: still starts a tick"
+              assert 'legacyRetired=true' in source
+          assert after["feral-nova-evidence-v11.2.lua"].count('version="11.2"')==1
+          assert 'version="12.1.0"' in new
+          assert 'activeRecord.version="feral-nova-v12.1"' in new
+          assert 'release="12.1"' in new
+          assert 'ctx.evidence.version=="11.2"' in new
+          assert 'Name="FeralNovaV121"' in new
+          assert 'v10.0 core + DATA evidence dashboard' not in new
+          assert 'v112_single_auto_rest_writer' in new
+          assert 'v112_legacy_engine_rest_retired' in new
+          rest_owners=[name for name,code in after.items()
+                       if 'FireServer("Rest"' in code]
+          assert rest_owners==["feral-nova-native-recovery-v12.1.lua"],rest_owners
+          assert 'FireServer("Rest"' not in after["feral-aurora-engine-v11.2.lua"]
+          assert 'Rest(false)' not in after["feral-aurora-engine-v11.2.lua"]
+          assert 'v112_effect_clearance_buckets' in new
+          assert 'v113_rank_safe_action_leases' in new
+          assert 'v113_flight_priority_guard' in new
+          assert 'v113_eagle_native_reconnect' in new
+          assert 'v113_grab_session_coherence' in new
+          assert 'v1131_deferred_carry_cancel' in new
+          assert 'v1131_eagle_carry_action_policy' in new
+          assert 'v1132_eagle_replicated_holds' in new
+          assert 'v1132_eagle_native_remote_lifecycle' in new
+          assert 'v1132_eagle_target_timing' in new
+          assert 'v12_eagle_talon_clock_domains' in new
+          assert 'v12_grab_cross_session_strikes' in new
+          assert 'v12_respawn_safe_snapshot_cache' in new
+          assert 'v121_native_E_feed_priority' in new
+          assert 'key==Enum.KeyCode.E' in after["feral-nova-native-recovery-v12.1.lua"]
+          assert 'N.feedHotkeyPreemptions+=1' in after["feral-nova-native-recovery-v12.1.lua"]
+          assert 'Eagle.normalizeStamp=normalizeStamp' in after["feral-nova-eagle-actions-v12.0.lua"]
+          assert 'staleStrikePackets' in after["feral-nova-grab-v12.0.lua"]
+          assert 'A.lastSnapshot.char==(player and player.Character)' in after["feral-nova-action-core-v12.0.lua"]
+          before_check=before.get("feral-nova-eagle-actions-v12.0.lua")
+          after_check=after.get("feral-nova-eagle-actions-v12.0.lua")
+          assert before_check==after_check,"Eagle must remain unchanged in v12.1"
+          for field in ("actualClampObservations","actualClampHoldSeconds",
+                        "nativeLungeBinds","nativeLungeRebinds",
+                        "lastTargetAt","selectedTargetUpdates","serverDeadlineOverwrites"):
+              assert field+"=" in after_check,f"Missing Eagle live field: {field}"
+          check_section=new.split("function H.selfCheck(ctx)",1)[1].split("function H.closeSession()",1)[0]
+          assert all(x not in check_section for x in (
+              "anyClampObservations","ctx.eagleActions.remoteBinds"))
+          assert check_section.count('add("')==49,"Unexpected startup check count"
+
+          assert 'intendedCharacter=player.Character' in after["feral-nova-carry-core-v11.3.lua"]
+          assert 'E.nativeCarryPriorityBlocks' in after["feral-nova-eagle-actions-v12.0.lua"]
+          assert 'rank={minigame=100,feed=88,afk_walk=35}' in after["feral-nova-action-core-v12.0.lua"]
+          assert 'pcall(ctx.action.allowed,"flight")' in after["feral-nova-flight-v11.3.lua"]
+          assert 'if processed then return end' in after["feral-nova-climb-v11.3.lua"]
+          assert 'staleSessionEvents' in after["feral-nova-grab-v12.0.lua"]
+          assert 'bindNativeLunge()' in after["feral-nova-eagle-actions-v12.0.lua"]
+          assert 'legacySafeRest' not in new
+          assert 'real_server_4x_status_recovery_verified=false' in after["feral-nova-regen-v11.0.lua"]
+          assert 'mode="feeding"' in after["feral-nova-native-recovery-v12.1.lua"]
+          assert 'snap.afkMoving or snap.feeding' in after["feral-nova-evidence-v11.2.lua"]
+          dest=Path("/tmp/feral-renaissance-v121-modules")
+          dest.mkdir(exist_ok=True)
+          for name,body in after.items():
+              (dest/name).write_text(body+"\n")
+          print("RENAISSANCE_V121_23_MODULES_21_UNCHANGED_SOLE_REST_OWNER_PASS")
+          PY
+      - name: Compile v12.1 launcher and all 23 embedded modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v12.1-renaissance-final-potassium.lua
+          for file in /tmp/feral-renaissance-v121-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_RENAISSANCE_V121_ALL_24_COMPILE_PASS
+      - name: Runtime mocks - native feeding preempts Rest and conditions include clears
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("roblox-tools/feral-nova-native-recovery-v12.1.lua").read_text()
+          assert code.rstrip().endswith("return Native")
+          code=code[:code.rfind("return Native")]
+          before=r'''
+          local now=1
+          local serverNow=100
+          os={clock=function()return now end}
+          local oldTypeof=typeof
+          typeof=function(v)
+            if type(v)=="table" and v.__fakeVec then return "Vector3" end
+            return oldTypeof(v)
+          end
+          local function event()
+            local e={handlers={}}
+            function e:Connect(fn)
+              local handler={fn=fn,alive=true}
+              table.insert(self.handlers,handler)
+              return {Disconnect=function()handler.alive=false end}
+            end
+            function e:Fire(...)
+              for _,handler in ipairs(self.handlers) do
+                if handler.alive then handler.fn(...) end
+              end
+            end
+            return e
+          end
+          local heartbeat=event()
+          local preAnimation=event()
+          local input=event()
+          local charAdded=event()
+          local restAttrs={}
+          local char={Parent=true}
+          local attrs={WolfRest=false,WolfFeed=false,Species="Eagle"}
+          function char:GetAttribute(k)return attrs[k]end
+          function char:SetAttribute(k,v)
+            attrs[k]=v
+            if restAttrs[k] then restAttrs[k]:Fire() end
+          end
+          function char:GetAttributeChangedSignal(k)
+            if not restAttrs[k] then restAttrs[k]=event()end
+            return restAttrs[k]
+          end
+          function char:FindFirstChild(k)return nil end
+          local hum={Health=50,MaxHealth=100}
+          function char:FindFirstChildOfClass(k)
+            if k=="Humanoid"then return hum end
+          end
+          local pattrs={}
+          local pSignals={}
+          local player={Character=char,CharacterAdded=charAdded}
+          function player:GetAttribute(k)return pattrs[k]end
+          function player:SetAttribute(k,v)
+            pattrs[k]=v
+            if pSignals[k] then pSignals[k]:Fire()end
+          end
+          function player:GetAttributeChangedSignal(k)
+            if not pSignals[k] then pSignals[k]=event()end
+            return pSignals[k]
+          end
+          local sent={}
+          local remote={}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          function remote:FireServer(k,v)
+            table.insert(sent,{k,v})
+            if k=="Rest" and v==true then
+              char:SetAttribute("WolfRest",true)
+            end
+          end
+          local services={
+            Players={LocalPlayer=player},
+            ReplicatedStorage={FindFirstChild=function(self,k)
+              if k=="WolfActions" then return remote end
+            end},
+            UserInputService={
+              InputBegan=input,
+              GetFocusedTextBox=function()return nil end,
+              IsMouseButtonPressed=function()return false end
+            },
+            RunService={
+              Heartbeat=heartbeat,PreAnimation=preAnimation,
+              BindToRenderStep=function(self,k,n,cb) self.render=cb end,
+              UnbindFromRenderStep=function(self,k)self.render=nil end
+            }
+          }
+          workspace={GetServerTimeNow=function()return serverNow end}
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2,Touch=3},
+                KeyCode={G=9,R=10,Z=11,X=12,E=13}}
+          '''
+          after=r'''
+          local ctx={state={alive=true}}
+          local N=Native.attach(ctx)
+          assert(N.setEnabled(true))
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==1)
+          -- Native WolfFeed must release owned Rest instantly, without
+          -- waiting for the next heartbeat or requiring manual Rest toggle.
+          now=1.4
+          char:SetAttribute("WolfFeed",true)
+          assert(not N.active and N.nativeOff==1)
+          heartbeat:Fire()
+          assert(N.feedStarts==1 and N.nativeOn==1)
+          now=2.1
+          char:SetAttribute("WolfFeed",false)
+          heartbeat:Fire()
+          assert(not N.active and N.feedFinishes==1)
+          -- Delayed owned Rest echo must not strand the character in
+          -- physical Rest or be mistaken for an intentional manual Rest.
+          char:SetAttribute("WolfRest",true)
+          assert(attrs.WolfRest==false) -- immediate attribute watcher
+          heartbeat:Fire()
+          assert(attrs.WolfRest==false)
+          assert(N.feedEchoesSuppressed>=1)
+          assert(not N.manualRest)
+          now=2.5
+          heartbeat:Fire()
+          assert(not N.active and N.nativeOn==1)
+          now=3.5
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==2)
+          -- The game-native feed tap starts the same automatic priority
+          -- gate before the WolfFeed animation/attribute becomes visible.
+          now=3.65
+          player:SetAttribute("FeralFeedTap",true)
+          assert(not N.active and N.nativeOff==2 and N.feedIntentPreemptions>=2)
+          now=5.2
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==3)
+          -- Condition disappears on cure; absence means a clearing
+          -- transition, not an unknown/invalid final numeric sample.
+          char:SetAttribute("FeralBleed",8)
+          now=5.5
+          heartbeat:Fire()
+          char:SetAttribute("FeralBleed",6)
+          now=5.8
+          heartbeat:Fire()
+          char:SetAttribute("FeralBleed",nil)
+          now=6.1
+          heartbeat:Fire()
+          assert(N.conditionRates.auto.FeralBleed)
+          assert(N.conditionRates.auto.FeralBleed.cleared>=8)
+          -- Player-owned manual Rest must still work and must not be
+          -- cancelled by a feed intent when auto Rest no longer owns it.
+          now=6.3
+          input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.R},false)
+          char:SetAttribute("WolfRest",true)
+          assert(N.manualRest and not N.active)
+          local offCount=N.nativeOff
+          now=6.4
+          player:SetAttribute("FeralFeedTap",false)
+          assert(N.nativeOff==offCount)
+          N.close()
+          assert(N.nativeOff==offCount)
+          -- First mouse click while a native FeedCan prompt is present
+          -- must preempt Rest instead of being treated solely as an attack.
+          char:SetAttribute("WolfRest",false)
+          now=8.0
+          local N4=Native.attach(ctx)
+          assert(N4.setEnabled(true))
+          heartbeat:Fire()
+          assert(N4.active and N4.nativeOn==1)
+          char:SetAttribute("FeedCan",true)
+          now=8.3
+          input:Fire({UserInputType=Enum.UserInputType.MouseButton1,
+            KeyCode=0},false)
+          assert(not N4.active and N4.nativeOff==1)
+          assert(N4.feedIntentPreemptions>=1)
+          char:SetAttribute("FeedCan",false)
+          N4.close()
+          -- Recovered WolfController binds the actual feed action to E
+          -- through ContextActionService, which may mark input processed.
+          -- The hub must release its own Rest on that E BEFORE returning.
+          now=10
+          char:SetAttribute("WolfRest",false)
+          local N5=Native.attach(ctx)
+          assert(N5.setEnabled(true))
+          heartbeat:Fire()
+          assert(N5.active and N5.nativeOn==1)
+          now=10.2
+          input:Fire({UserInputType=0,KeyCode=Enum.KeyCode.E},true)
+          assert(N5.feedHotkeyPreemptions==1)
+          assert(not N5.active and N5.nativeOff==1)
+          now=11.8
+          heartbeat:Fire()
+          assert(N5.active and N5.nativeOn==2)
+          N5.close()
+          print("FERAL_RENAISSANCE_V121_NATIVE_E_FEED_FIRST_ACTION_PASS")
+          '''
+          Path("/tmp/feral-v11-native-test.luau").write_text(before+code+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v11-native-test.luau
+      - name: Runtime mock - coordinator denies recovery and survival movement while feeding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("roblox-tools/feral-nova-action-core-v12.0.lua").read_text()
+          assert code.rstrip().endswith("return Coordinator")
+          code=code[:code.rfind("return Coordinator")]
+          before=r'''
+          local now=1
+          os={clock=function()return now end}
+          local char={Parent=true,attributes={WolfFeed=true,FeedCan=true}}
+          local root={}
+          local hum={Health=50}
+          function hum:GetState()return {Name="Running"}end
+          function char:FindFirstChildOfClass(k)return hum end
+          function char:FindFirstChild(k)
+            if k=="HumanoidRootPart" then return root end
+          end
+          function char:GetAttribute(k)return self.attributes[k]end
+          local player={Character=char}
+          function player:GetAttribute(k)return nil end
+          workspace={GetServerTimeNow=function()return 100 end}
+          local services={
+            Players={LocalPlayer=player},
+            UserInputService={
+              IsMouseButtonPressed=function()return false end,
+              GetFocusedTextBox=function()return nil end
+            }
+          }
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,MouseButton2=2}}
+          '''
+          after=r'''
+          local A=Coordinator.attach({})
+          local S=A.snapshot(true)
+          assert(S.feeding and S.priority=="FEEDING")
+          for _,mode in ipairs({"recovery","afk_walk","climb","carry","flight"}) do
+            local ok,reason=A.allowed(mode)
+            assert(not ok and reason=="FEEDING / DRINKING")
+          end
+          char.attributes.WolfFeed=false
+          assert(A.reserve("feed",1.25))
+          S=A.snapshot(true)
+          assert(S.priority=="FEEDING")
+          local allowed,reason=A.allowed("recovery")
+          assert(not allowed and reason=="FEEDING / DRINKING")
+          now=3
+          S=A.snapshot(true)
+          assert(S.priority~="FEEDING")
+          allowed,reason=A.allowed("recovery")
+          assert(allowed)
+          -- A lower-priority AFK reservation cannot steal a feeding lease.
+          assert(A.reserve("feed",4))
+          local feedExpiry=A.lease.expires
+          local received,why=A.reserve("afk_walk",8)
+          assert(not received and why=="FEED PRIORITY")
+          assert(A.lease.owner=="feed")
+          assert(A.reserve("feed",1))
+          assert(A.lease.expires>=feedExpiry)
+          local canFly,flyWhy=A.allowed("flight")
+          assert(not canFly and flyWhy=="FEEDING / DRINKING")
+          -- Real native minigame can preempt a feeding lease; AFK cannot.
+          assert(A.reserve("minigame",2))
+          assert(A.lease.owner=="minigame")
+          received,why=A.reserve("afk_walk",8)
+          assert(not received and why=="MINIGAME PRIORITY")
+          assert(A.release("minigame"))
+          assert(A.reserve("afk_walk",1))
+          assert(A.allowed("flight")==false)
+          -- Leases from a previous animal must not survive respawning.
+          local nextChar={Parent=true,attributes={WolfFeed=false}}
+          function nextChar:FindFirstChildOfClass(k)return hum end
+          function nextChar:FindFirstChild(k)
+            if k=="HumanoidRootPart"then return root end
+          end
+          function nextChar:GetAttribute(k)return self.attributes[k]end
+          player.Character=nextChar
+          local fresh=A.snapshot() -- Must bypass cache on character change even within 60 ms
+          assert(fresh.char==nextChar and fresh.lease==nil and A.characterLeaseReleases>=1)
+          assert(A.cacheCharacterGuard==true)
+          assert(A.allowed("flight"))
+          assert(A.priorityConflicts>=2)
+          A.close()
+          print("FERAL_RENAISSANCE_V113_RANKED_LEASES_FLIGHT_RESPAWN_PASS")
+          '''
+          Path("/tmp/feral-v11-action-test.luau").write_text(before+code+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v11-action-test.luau
+
+      - name: Runtime mock - retired Safe Rest and Mobile experiments cannot issue Rest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          rest=Path('roblox-tools/feral-nova-recovery-compat-v11.2.lua').read_text()
+          mobile=Path('roblox-tools/feral-nova-mobile-compat-v11.2.lua').read_text()
+          assert rest.rstrip().endswith('return Recovery')
+          assert mobile.rstrip().endswith('return Mobile')
+          code=r'''
+          local attrs={Species="SnappingTurtle",WolfRest=true,WolfRestAt=90}
+          local char={Parent=true}
+          function char:GetAttribute(k)return attrs[k]end
+          local player={Character=char}
+          game={GetService=function(self,k)
+              if k=="Players"then return {LocalPlayer=player} end
+          end}
+          workspace={GetServerTimeNow=function()return 100 end}
+          '''
+          code+=rest[:rest.rfind('return Recovery')]
+          code+=mobile[:mobile.rfind('return Mobile')]
+          code+=r'''
+          local R=Recovery.attach({})
+          local M=Mobile.attach({})
+          assert(R.legacyRetired and M.legacyRetired)
+          assert(R.setEnabled(true)==false and R.enabled==false)
+          assert(M.setEnabled(true)==false and M.enabled==false)
+          assert(R.beforeCarry()==false and M.beforeCarry()==false)
+          local status,mult=R.snapshot()
+          assert(mult==.30 and status:find("SERVER UNVERIFIED"))
+          assert(R.report():find("automatic_rest_requests=0"))
+          assert(M.report():find("native_rest_requests=0"))
+          R.close()
+          M.close()
+          assert(not R.alive and not M.alive)
+          print("RENAISSANCE_V112_LEGACY_REST_OWNER_RETIREMENT_PASS")
+          '''
+          Path('/tmp/feral-v112-retired.luau').write_text(code)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v112-retired.luau
+
+      - name: Runtime mock - delayed Grab V2 end cannot cancel a new session
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('roblox-tools/feral-nova-grab-v12.0.lua').read_text()
+          assert script.rstrip().endswith('return Grab')
+          script=script[:script.rfind('return Grab')]
+          stub=r'''
+          local function event()
+            local e={handlers={}}
+            function e:Connect(f)
+              local h={fn=f,alive=true}
+              table.insert(self.handlers,h)
+              return {Disconnect=function()h.alive=false end}
+            end
+            function e:Fire(...)
+              for _,h in ipairs(self.handlers) do if h.alive then h.fn(...)end end
+            end
+            return e
+          end
+          local heartbeat=event()
+          local keys=event()
+          local packet=event()
+          local char={Parent=true}
+          function char:FindFirstChildOfClass(k)
+            return {Health=100}
+          end
+          local player={Character=char}
+          function player:GetAttribute(k)return nil end
+          local remote={Parent=true,OnClientEvent=packet}
+          function remote:IsA(k)return k=="RemoteEvent"end
+          local replicated={}
+          function replicated:FindFirstChild(k)
+            if k=="FeralGrabV2"then return remote end
+          end
+          local services={
+            Players={LocalPlayer=player},
+            ReplicatedStorage=replicated,
+            UserInputService={InputBegan=keys,GetFocusedTextBox=function()return nil end},
+            RunService={Heartbeat=heartbeat},
+            Workspace={GetServerTimeNow=function()return 10 end}
+          }
+          game={GetService=function(self,k)return services[k]end}
+          Enum={UserInputType={MouseButton1=1,Touch=2},KeyCode={Space=3}}
+          '''
+          after=r'''
+          local G=Grab.attach({state={alive=true}})
+          assert(G.setEnabled(true))
+          packet:Fire("start",{f="A"})
+          assert(G.activeSession and G.session=="A")
+          packet:Fire("start",{f="B"})
+          assert(G.session=="B" and G.sessionResets>=2)
+          packet:Fire("strike",{f="A"})
+          assert(G.session=="B" and G.staleStrikePackets==1)
+          packet:Fire("end",{f="A"})
+          assert(G.activeSession and G.session=="B")
+          assert(G.staleSessionEvents==1)
+          packet:Fire("end",{f="B"})
+          assert(not G.activeSession and G.session==nil)
+          G.close()
+          print("RENAISSANCE_V113_GRAB_STALE_SESSION_END_PASS")
+          '''
+          Path('/tmp/feral-v113-grab.luau').write_text(stub+script+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v113-grab.luau
+
+      - name: Runtime mock - Eagle selection reuse and late remote rebind
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('roblox-tools/feral-nova-eagle-actions-v12.0.lua').read_text()
+          assert script.rstrip().endswith('return Eagle')
+          script=script[:script.rfind('return Eagle')]
+          stub=r'''
+          local now=1
+          os={clock=function()return now end}
+          local function event()
+            local e={handlers={}}
+            function e:Connect(fn)
+              local h={fn=fn,alive=true}
+              table.insert(self.handlers,h)
+              return {Disconnect=function()h.alive=false end}
+            end
+            function e:Fire(...)
+              for _,h in ipairs(self.handlers) do if h.alive then h.fn(...)end end
+            end
+            return e
+          end
+          local heartbeat=event()
+          local childAdded=event()
+          local childRemoved=event()
+          local charAdded=event()
+          local deadlineChanged=event()
+          local valueChanged=event()
+          local prey={Parent=true}
+          function prey:IsA(k)return k=="Model"end
+          local other={Parent=true}
+          function other:IsA(k)return k=="Model"end
+          local node={Name="FeralTalonTarget",Value=prey}
+          function node:IsA(k)return k=="ObjectValue"end
+          function node:GetAttribute(k)return nil end
+          function node:GetPropertyChangedSignal(k)assert(k=="Value");return valueChanged end
+          local char={Parent=true,ChildAdded=childAdded,ChildRemoved=childRemoved}
+          node.Parent=char
+          function char:GetAttribute(k)
+            if k=="Species" then return "Eagle" end
+          end
+          function char:FindFirstChildOfClass(k) return {Health=100}end
+          function char:FindFirstChild(k)
+            if k=="HumanoidRootPart"then return {Position=0,Size={X=2,Z=2}} end
+            if k=="FeralTalonTarget"then return node end
+          end
+          local player={Character=char,CharacterAdded=charAdded}
+          function player:GetAttributeChangedSignal(k)
+            assert(k=="FeralLungeReadyAt")
+            return deadlineChanged
+          end
+          function player:GetAttribute(k)return nil end
+          local remotes={}
+          local storage={}
+          function storage:FindFirstChild(k) return remotes[k] end
+          local services={
+            Players={LocalPlayer=player},
+            ReplicatedStorage=storage,
+            RunService={Heartbeat=heartbeat},
+            Workspace={GetServerTimeNow=function()return now end}
+          }
+          game={GetService=function(self,k)return services[k]end}
+          '''
+          after=r'''
+          local ctx={mechanics={enabled={carry=true}}}
+          ctx.action={allowed=function(mode)
+            if mode=="carry" then return false,"GRAB PRIORITY" end
+            return true,"SAFE"
+          end}
+          local a,domain=Eagle.normalizeStamp(100000.5,5,100001,30)
+          assert(domain=="SERVER" and math.abs(a-4.5)<.00001)
+          local b,localDomain=Eagle.normalizeStamp(4.8,5,100001,30)
+          assert(localDomain=="LOCAL" and math.abs(b-4.8)<.00001)
+          local invalid,why=Eagle.normalizeStamp(300,5,100001,30)
+          assert(invalid==nil and why=="INCOMPARABLE")
+          local E=Eagle.attach(ctx)
+          assert(E.lastTarget==prey)
+          assert(E.nativeLungeBinds==0)
+          node.Value=nil
+          valueChanged:Fire()
+          assert(E.lastTarget==nil)
+          node.Value=other
+          valueChanged:Fire()
+          assert(E.lastTarget==other and E.selectedTargetUpdates==2)
+          local packet1=event()
+          local remote1={Parent=true,OnClientEvent=packet1}
+          function remote1:IsA(k)return k=="RemoteEvent"end
+          remotes.FeralLunge=remote1
+          now=1.3
+          heartbeat:Fire()
+          assert(E.nativeLungeBinds==1)
+          packet1:Fire("miss")
+          assert(E.serverMissReplies==1)
+          local packet2=event()
+          local remote2={Parent=true,OnClientEvent=packet2}
+          function remote2:IsA(k)return k=="RemoteEvent"end
+          remote1.Parent=nil
+          remotes.FeralLunge=remote2
+          now=1.7
+          heartbeat:Fire()
+          assert(E.nativeLungeBinds==2 and E.nativeLungeRebinds==1)
+          packet1:Fire("miss")
+          assert(E.serverMissReplies==1)
+          packet2:Fire("miss")
+          assert(E.serverMissReplies==2)
+          packet2:Fire("bit")
+          assert(E.nativeCarryPriorityBlocks==1)
+          assert(E.lastWhy:find("GRAB PRIORITY"))
+          childRemoved:Fire(node)
+          assert(E.lastTarget==nil and E.targetNodeRemovals==1)
+          E.close()
+          packet2:Fire("miss")
+          assert(E.serverMissReplies==2)
+          print("RENAISSANCE_V113_EAGLE_REMOTE_REBIND_TARGET_REUSE_PASS")
+          '''
+          Path('/tmp/feral-v113-eagle.luau').write_text(stub+script+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v113-eagle.luau
+
+      - name: Runtime mock - deferred native G cannot target a respawned or captured animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('roblox-tools/feral-nova-carry-core-v11.3.lua').read_text()
+          assert script.rstrip().endswith('return Carry')
+          script=script[:script.rfind('return Carry')]
+          stub=r'''
+          local now=1
+          os={clock=function()return now end}
+          local function event()
+            local e={handlers={}}
+            function e:Connect(fn)
+              local h={fn=fn,alive=true}
+              table.insert(self.handlers,h)
+              return {Disconnect=function()h.alive=false end}
+            end
+            function e:Fire(...)
+              for _,h in ipairs(self.handlers) do if h.alive then h.fn(...)end end
+            end
+            return e
+          end
+          local heartbeat=event()
+          local input=event()
+          local attrs={}
+          local function makeChar()
+            local char={Parent=true,attributes={}}
+            function char:GetAttribute(k)return self.attributes[k]end
+            function char:FindFirstChild(k)return nil end
+            return char
+          end
+          local char=makeChar()
+          local player={Character=char}
+          function player:GetAttribute(k)return attrs[k]end
+          local services={
+            Players={LocalPlayer=player},
+            UserInputService={
+              InputBegan=input,GetFocusedTextBox=function()return nil end},
+            RunService={Heartbeat=heartbeat}
+          }
+          game={GetService=function(self,k)return services[k]end}
+          Enum={KeyCode={G=71}}
+          local deferred={}
+          task={delay=function(t,fn)table.insert(deferred,fn)end}
+          local nativeCalls=0
+          -- Official CLI Luau exposes a read-only host _G; shadow it with
+          -- the injected test double used by the game's carry helper.
+          local _G={}
+          _G.FeralCarryPress=function()nativeCalls+=1 end
+          _G.FeralCarryCan=function()return true end
+          '''
+          after=r'''
+          local ctx={
+            native={beforeCarry=function()return true end}
+          }
+          local C=Carry.attach(ctx)
+          assert(C.press())
+          assert(#deferred==1)
+          player.Character=makeChar()
+          deferred[1]()
+          assert(nativeCalls==0 and C.deferredCharacterDrops==1)
+          now=2
+          player.Character=char
+          assert(C.press())
+          char.attributes.FeralPinned=true
+          deferred[2]()
+          assert(nativeCalls==0 and C.deferredCaptureBlocks==1)
+          char.attributes.FeralPinned=false
+          now=3
+          assert(C.press())
+          deferred[3]()
+          assert(nativeCalls==1 and C.helperCalls==1)
+          C.close()
+          print("RENAISSANCE_V1131_DEFERRED_CARRY_RESPAWN_CAPTURE_PASS")
+          '''
+          Path('/tmp/feral-v1131-carry.luau').write_text(stub+script+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v1131-carry.luau
+
+      - name: Runtime mock - all 69 actual launcher self-checks pass and missing fields fail
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('roblox-tools/feral-nova-v12.1-renaissance-final-potassium.lua').read_text()
+          section=code.split('function H.selfCheck(ctx)',1)[1].split('function H.closeSession()',1)[0]
+          self_check='function H.selfCheck(ctx)'+section
+          stub=r'''
+          local H={precompiledCount=23}
+          local log={moduleCount=23,preflight={loadstringSmoke=true}}
+          local monitoring=true
+          local monitorConnection={}
+          local function save() end
+          local f=function()end
+          local ctx={ui={Parent=true},close=f,onUI=f}
+          for _,k in ipairs({"power","escape","carry","reach","regen","flight",
+             "native","baby","climb","mechanics","eagleActions","lab",
+             "recovery","mobile","activeRecovery","tags","diag","action",
+             "afk","grabMini","evidence"}) do
+            ctx[k]={}
+          end
+          ctx.eagleActions={
+            actualClampObservations=0,actualClampHoldSeconds=0,
+            incomparableTargetPressClocks=0,convertedServerPressStamps=0,
+            nativeLungeBinds=0,nativeLungeRebinds=0,
+            lastTargetAt=-math.huge,selectedTargetUpdates=0,
+            serverDeadlineOverwrites=0,nativeCarryPriorityBlocks=0
+          }
+          ctx.mechanics.growthQuality="UNKNOWN"
+          ctx.activeRecovery.lastReason="NO REASON YET"
+          ctx.activeRecovery.autoRealRestFallback=false
+          ctx.activeRecovery.nativeEligible=false
+          ctx.activeRecovery.refresh=f
+          ctx.diag.payload=f
+          ctx.native.combatTagBlocks=0
+          ctx.native.poseRetryAt=0
+          ctx.native.poseBackoffSeconds=0
+          ctx.native.movingObservedHPGain=0
+          ctx.native.movingRefreshRequests=0
+          ctx.native.beforeFeed=f
+          ctx.native.feedStarts=0
+          ctx.native.feedHotkeyPreemptions=0
+          ctx.native.conditionRates={auto={}}
+          ctx.action.snapshot=f
+          ctx.action.allowed=f
+          ctx.action.reserve=f
+          ctx.action.release=f
+          ctx.action.denials={}
+          ctx.action.transitions=0
+          ctx.action.priorityConflicts=0
+          ctx.action.characterLeaseReleases=0
+          ctx.action.cacheCharacterGuard=true
+          ctx.afk.setRobloxEnabled=f
+          ctx.afk.setSurvivalEnabled=f
+          ctx.grabMini.setEnabled=f
+          ctx.grabMini.strikesSeen=0
+          ctx.grabMini.close=f
+          ctx.grabMini.staleSessionEvents=0
+          ctx.grabMini.staleStrikePackets=0
+          ctx.evidence.summary=f
+          ctx.evidence.report=f
+          ctx.evidence.moving={}
+          ctx.evidence.stationary={}
+          ctx.evidence.version="11.2"
+          ctx.state={flags={recovery=false}}
+          ctx.carry.deferredCharacterDrops=0
+          ctx.flight.actionPriorityBlocks=0
+          ctx.recovery.legacyRetired=true
+          ctx.mobile.legacyRetired=true
+          '''
+          after=r'''
+          local result=H.selfCheck(ctx)
+          assert(result=="SELF-CHECK PASS 69/69",result)
+          assert(log.selfCheck.failed==0 and log.selfCheck.total==69)
+          ctx.eagleActions.nativeLungeRebinds=nil
+          local resultWhenBroken=H.selfCheck(ctx)
+          assert(resultWhenBroken=="SELF-CHECK INCOMPLETE 68/69",
+            resultWhenBroken)
+          assert(log.selfCheck.failed==1)
+          assert(log.selfCheck.checks[12].name=="v1132_eagle_native_remote_lifecycle"
+              or log.selfCheck.checks[13].name=="v1132_eagle_native_remote_lifecycle")
+          print("FERAL_V121_SELF_CHECK_69_OF_69_AND_FAILURE_DETECTION_PASS")
+          '''
+          Path('/tmp/feral-v1132-self-check.luau').write_text(stub+self_check+after)
+          PY
+          "$LUAU_RUNNER" /tmp/feral-v1132-self-check.luau
