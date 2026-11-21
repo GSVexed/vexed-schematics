@@ -91,12 +91,13 @@ local function btn(parent,s,callback,w,h)
         local now=os.clock()
         if now-lastInvoke<.12 then return end
         lastInvoke=now
-        local ok,err=UI.runButtonAction(UI._buttonEvents,s,callback)
+        local label=(b.Name~="TextButton" and b.Name) or s
+        local ok,err=UI.runButtonAction(UI._buttonEvents,label,callback)
         if not ok then
             warn("[FERAL HUB UI] BUTTON ACTION FAILED: "..tostring(err))
         end
         if type(UI._showActionFeedback)=="function" then
-            UI._showActionFeedback(s,ok,err)
+            UI._showActionFeedback(label,ok,err)
         end
         if type(UI._requestRefresh)=="function" then
             pcall(UI._requestRefresh)
@@ -141,6 +142,7 @@ function UI.mount(ctx)
         lastError="",lastRefreshError=""
     }
     UI._buttonEvents=buttonEvents
+    ctx.uiInputHealth=buttonEvents
     local pg=player:FindFirstChildOfClass("PlayerGui")
         or player:WaitForChild("PlayerGui",10)
     if not pg then return nil end
@@ -435,6 +437,7 @@ function UI.mount(ctx)
         -- Larger whole-card click area with the ON/OFF switch above it.
         local hit=btn(cardFrame,titleText,action,386,78)
         hit.Position=UDim2.fromOffset(0,0)
+        hit.Name="CARD_"..id
         hit.BackgroundTransparency=1
         hit.TextTransparency=1
         hit.ZIndex=2
@@ -442,6 +445,7 @@ function UI.mount(ctx)
         if stroke then stroke.Enabled=false end
         local b=btn(cardFrame,"OFF",action,59,33)
         b.Position=UDim2.fromOffset(315,23)
+        b.Name="TOGGLE_"..id
         b.ZIndex=3
         buttons[#buttons+1]={button=b,getter=getter,id=id}
         return b,descText
