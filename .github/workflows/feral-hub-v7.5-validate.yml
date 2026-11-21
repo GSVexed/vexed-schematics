@@ -189,7 +189,7 @@ jobs:
           heartbeat:Fire()
           assert(N.active and N.nativeOn==2)
           guide.ready=true
-          now=3.4
+          now=3.5
           heartbeat:Fire()
           assert(not N.active and N.nativeOff==2 and N.aimedTargetRestReleases==1)
           guide.ready=false
