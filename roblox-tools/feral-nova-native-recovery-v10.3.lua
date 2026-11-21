@@ -111,6 +111,7 @@ function Native.attach(ctx)
         nearbyTargetBlocksRemoved=true,
         delayedAutoRestEchoesMasked=0,preAnimationMaskPasses=0,
         manualRestIntentHits=0,manualRestMotionHandoffs=0,
+        inheritedRestPoseHandoffMasks=0,
     }
     local conns={}
     local masking=false
@@ -253,8 +254,17 @@ function Native.attach(ctx)
                 m.echoWindowAt=now
                 m.trueEchoes=0
             end
-            m.trueEchoes+=1
-            N.poseRecurrences+=1
+            -- The first mask operation may clear the visible pose
+            -- inherited from an already-resting character during manual
+            -- to automatic handoff. It is NOT an additional self-owned
+            -- server Rest echo and must not trip recurrence backoff.
+            if m.initialInheritedRest then
+                m.initialInheritedRest=false
+                N.inheritedRestPoseHandoffMasks+=1
+            else
+                m.trueEchoes+=1
+                N.poseRecurrences+=1
+            end
             -- A single WolfRest=true echo when the native action starts is
             -- expected. Repeated true echoes mean the game keeps forcing the
             -- visible resting pose: release Rest instead of fighting animation.
@@ -294,7 +304,8 @@ function Native.attach(ctx)
         end
     end
     local function beginMask(char)
-        local m={char=char,echoWindowAt=os.clock(),trueEchoes=0}
+        local m={char=char,echoWindowAt=os.clock(),trueEchoes=0,
+            initialInheritedRest=char:GetAttribute("WolfRest")==true}
         N.mask=m
         local ok,conn=pcall(function()
             return char:GetAttributeChangedSignal("WolfRest"):Connect(function()
@@ -694,6 +705,7 @@ function Native.attach(ctx)
             "late_auto_rest_echoes_masked="..N.delayedAutoRestEchoesMasked,
             "verified_manual_rest_input_handoffs="..N.manualRestIntentHits,
             "manual_to_auto_handoffs_on_movement="..N.manualRestMotionHandoffs,
+            "inherited_rest_poses_masked_on_handoff="..N.inheritedRestPoseHandoffMasks,
             "bounded_no_heal_refresh_attempts="..N.restRefreshAttempts,
             "bounded_no_heal_refresh_successes="..N.restRefreshSuccess,
             "local_WolfRest_false_mask_writes="..N.maskWrites,
