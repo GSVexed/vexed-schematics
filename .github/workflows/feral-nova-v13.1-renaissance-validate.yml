@@ -928,7 +928,7 @@ jobs:
           ctx.action.isNativeFeed=nativeFeed
           ctx.climb.isNativeFeed=nativeFeed
           ctx.uiInputHealth={clicks=0,errors=0,refreshErrors=0}
-          ctx.native.conditionRates={auto={}}
+          ctx.native.conditionRates={auto={},auto_combat={}}
           ctx.action.snapshot=f
           ctx.action.allowed=f
           ctx.action.reserve=f
