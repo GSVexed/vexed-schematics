@@ -7356,25 +7356,25 @@ function UI.mount(ctx)
         -- Flush and terminate the recorder before restoring game-side modules.
         pcall(function()Diag.close()end)
         pcall(function()Evidence.close()end)
-        Active.close()
-        Grab.close()
-        AFK.close()
-        Action.close()
-        Eagle.close()
-        Native.close()
-        Climb.close()
-        Baby.close()
-        Flight.close()
-        Mobile.close()
-        Regen.close()
-        Mechanics.close()
-        Reach.close()
-        Carry.close()
-        Lab.close()
-        Recovery.close()
-        Tags.close()
+        pcall(function()Active.close()end)
+        pcall(function()Grab.close()end)
+        pcall(function()AFK.close()end)
+        pcall(function()Action.close()end)
+        pcall(function()Eagle.close()end)
+        pcall(function()Native.close()end)
+        pcall(function()Climb.close()end)
+        pcall(function()Baby.close()end)
+        pcall(function()Flight.close()end)
+        pcall(function()Mobile.close()end)
+        pcall(function()Regen.close()end)
+        pcall(function()Mechanics.close()end)
+        pcall(function()Reach.close()end)
+        pcall(function()Carry.close()end)
+        pcall(function()Lab.close()end)
+        pcall(function()Recovery.close()end)
+        pcall(function()Tags.close()end)
         Escape.close()
-        clearFog()
+        pcall(clearFog)
         for _,cn in ipairs(connections) do
             pcall(function()cn:Disconnect()end)
         end
@@ -10649,7 +10649,7 @@ for _,key in ipairs({"FERAL_NOVA_PRIME_V21","FERAL_NOVA_PRIME_V22","FERAL_NOVA_P
 end
 
 for _,name in ipairs({
-    "FeralNovaPrimeV320","FeralNovaPrimeV310","FeralNovaPrimeV300","FeralNovaPrimeV290","FeralNovaPrimeV280","FeralNovaPrimeV270","FeralNovaPrimeV260","FeralNovaPrimeV250","FeralNovaPrimeV150","FeralNovaPrimeV140","FeralNovaPrimeV130","FeralNovaPrimeV120","FeralNovaPrimeV110","FeralNovaPrimeV100","FeralNovaPrimeV90","FeralNovaPrimeV80","FeralNovaPrimeV70","FeralNovaPrimeV60","FeralNovaPrimeV50","FeralAuroraNovaV40","FeralAuroraForceV31",
+    "FeralNovaV100","FeralNovaPrimeV320","FeralNovaPrimeV310","FeralNovaPrimeV300","FeralNovaPrimeV290","FeralNovaPrimeV280","FeralNovaPrimeV270","FeralNovaPrimeV260","FeralNovaPrimeV250","FeralNovaPrimeV150","FeralNovaPrimeV140","FeralNovaPrimeV130","FeralNovaPrimeV120","FeralNovaPrimeV110","FeralNovaPrimeV100","FeralNovaPrimeV90","FeralNovaPrimeV80","FeralNovaPrimeV70","FeralNovaPrimeV60","FeralNovaPrimeV50","FeralAuroraNovaV40","FeralAuroraForceV31",
     "FeralAuroraHubV30","FeralAuroraHubV21","FeralAuroraHubV20",
     "FeralRecoveryHubV10","FeralRecoveryHubV11","FeralRecoveryHubV12",
     "FeralRecoveryHubV13","FeralFieldHubV10","FeralFieldHubV11",
@@ -10823,6 +10823,7 @@ if not ready or not window then
     pcall(ctx.close)
     error("[FERAL HUB] UI failure: "..tostring(window),0)
 end
+H.activeUI=window
 -- Close a previous v28 instance before starting any new hooks. The v15
 -- engine and all module shutdowns run before new recurring connections exist.
 ctx.notice("FERAL NOVA v10.0: shared action safety, combat-compatible mobile recovery and new DATA dashboard. Observed HP, injury, stamina, AFK and minigame outcomes are separate from client requests. Server acceptance still requires live verification.")
@@ -10881,12 +10882,7 @@ if not worked then
     save()
     show("FAILED",problem,true)
 else
-    local hub
-    pcall(function()
-        local player=game:GetService("Players").LocalPlayer
-        local pg=player and player:FindFirstChildOfClass("PlayerGui")
-        hub=pg and pg:FindFirstChild("FeralNovaPrimeV320")
-    end)
+    local hub=H.activeUI
     if hub and hub.Parent then
         pcall(function()H.brand(hub)end)
         local verified=log.selfCheck
@@ -10908,7 +10904,7 @@ else
         end
     else
         log.result="NO_HUB_CREATED"
-        log.error="Core ended without FeralNovaPrimeV320 UI; inspect report."
+        log.error="Core ended without the mounted FERAL v10 UI; inspect report."
         save()
         show("NO HUB CREATED",log.error,true)
     end
