@@ -5287,15 +5287,51 @@ function Native.attach(ctx)
         end
         return N.enabled
     end
+    local function gameRestGuiPressed(input)
+        -- Avoid confusing a click on this hub (or an unrelated Roblox
+        -- interface) with a manual Rest command. Only a visible in-game
+        -- Rest-labelled control may mark processed mouse/touch input.
+        local pg=nil
+        pcall(function()pg=player:FindFirstChildOfClass("PlayerGui")end)
+        if not pg then return false end
+        local point=nil
+        local okPoint=pcall(function()
+            point=input.Position
+            if input.UserInputType~=Enum.UserInputType.Touch then
+                point=UIS:GetMouseLocation()
+            end
+        end)
+        if not okPoint or not point then return false end
+        local ok,objects=pcall(function()
+            return pg:GetGuiObjectsAtPosition(point.X,point.Y)
+        end)
+        if not ok or type(objects)~="table" then return false end
+        for _,object in ipairs(objects) do
+            if ctx.ui and object:IsDescendantOf(ctx.ui) then
+                return false
+            end
+        end
+        for _,object in ipairs(objects) do
+            local name=string.lower(tostring(object.Name or ""))
+            local label=""
+            pcall(function()label=string.lower(tostring(object.Text or ""))end)
+            if name:find("rest",1,true) or label:find("rest",1,true) then
+                return true
+            end
+        end
+        return false
+    end
     conns[#conns+1]=UIS.InputBegan:Connect(function(input,processed)
         if not N.enabled or not N.alive then return end
         local key=input.KeyCode
         local typ=input.UserInputType
-        -- Capture possible Rest controls even for game-processed GUI
-        -- clicks. A key alone never proves Rest; WolfRest=true must follow.
+        -- Only Rest-associated keyboard or real game Rest GUI controls
+        -- create a manual-intent hint. WolfRest=true is still required.
         if key==Enum.KeyCode.R or key==Enum.KeyCode.Z
-            or key==Enum.KeyCode.X or typ==Enum.UserInputType.Touch
-            or (processed and typ==Enum.UserInputType.MouseButton1) then
+            or key==Enum.KeyCode.X
+            or ((typ==Enum.UserInputType.Touch
+                or (processed and typ==Enum.UserInputType.MouseButton1))
+                and gameRestGuiPressed(input)) then
             N.manualIntentUntil=os.clock()+1.4
         end
         if N.manualRest or processed or UIS:GetFocusedTextBox() then return end
