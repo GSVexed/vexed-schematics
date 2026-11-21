@@ -184,7 +184,9 @@ function Coordinator.attach(ctx)
             elseif S.combatTimeUnknown then reason="COMBAT CLOCK UNKNOWN"
             elseif S.attackHeld then reason="ATTACK HELD"
             elseif S.nativeBite then reason="NATIVE BITE RANGE"
-            elseif S.holding then reason="CARRYING"
+            -- Merely holding already-captured prey is NOT a new carry
+            -- action. Preserve v8.1 mobile recovery uptime outside combat;
+            -- the G input still invokes Native.beforeCarry() immediately.
             elseif S.afkMoving or S.lease=="afk_walk" then
                 reason="SAFE AFK WALK"
             elseif S.menu then reason="MENU" end
