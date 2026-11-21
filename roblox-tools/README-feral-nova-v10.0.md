@@ -6,6 +6,18 @@
 
 **Recovery integration hotfix, 21 November 2026:** In addition to the v10 startup, AFK and Grab repairs, the current loader now bundles a v10.2 **manual Rest sovereignty** controller and v10.2 action policy. Manual in-game Rest is given ownership of its pose and is no longer overwritten or cancelled by the automatic Rest mask. Merely having a native-bite-ready animal nearby—friend or foe—never counts as combat and does not halt active recovery. Actual attacks, server combat tags, captures/grab timing and explicit AFK movement still have action priority. The UI reports manual Rest distinctly, and all UI module shutdowns are now individually guarded. Dedicated official Luau mocks pass, but live game-server effects remain unverified.
 
+## Current v10.2 cache-safe loader (recommended)
+
+**As of 21 November 2026:** The old `v10.0-potassium.lua` download URL may be cached by the executor. After renaming the Native Recovery, Action Core and Unified Active Recovery modules to v10.2, the earlier script's preflight `MODULE_ORDER` still referenced legacy v9 filenames. Although the canonical GitHub file has since been corrected, repeated user Potassium startup reports showed `Missing module source: feral-nova-native-recovery-v9.0.lua`, version `10.0.0`, proving an outdated payload was still executed.
+
+To bypass that stale download, use this **new filename / URL**:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-nova-v10.2-hotfix-potassium.lua"))()
+```
+
+The cache-safe file is byte-identical to the corrected canonical release except its `v10.2` banner, two startup/session version strings (`10.2.0`), and active-record version (`feral-nova-v10.2`). Its 23 embedded modules, preflight names, and runtime `get()` references match. The official validation workflow tests the new file directly. An actual game report should show `"version":"10.2.0"`; `10.0.0` indicates an older script was executed. Shut down any existing instance with **End** before launching the new one.
+
 ## One-paste Potassium loader
 
 ```lua
