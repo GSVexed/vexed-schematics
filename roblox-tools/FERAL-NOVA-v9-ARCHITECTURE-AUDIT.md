@@ -2,7 +2,7 @@
 
 **Audit date:** 21 November 2026  
 **Code inspected:** [v8.1 preview](feral-nova-v8.1-preview-potassium.lua), a single embedded 22-module bundle (~9,400 module-source lines).  
-**First replacement:** [v9.0 Core Preview](feral-nova-v9.0-core-preview-potassium.lua) — 22 modules, 6 deliberately rebuilt, 16 exact preserved module bodies.  
+**First replacement:** [v9.0 Core Preview](feral-nova-v9.0-core-preview-potassium.lua) — 22 modules, 8 deliberately rebuilt, 14 exact preserved module bodies.  
 **Known gameplay fallback:** [v7.5](feral-hub-v7.5-potassium.lua), confirmed by the user to restore normal bites and visible damage bars.  
 **DO NOT call this a finished full overhaul yet.** This is a functioning architectural first stage with automated tests and still-unverified live-game outcomes.
 
@@ -29,11 +29,11 @@ Main safety invariants:
 |---:|---|---|---|
 | 1 | `feral-aurora-engine-v13.0.lua` | Main character/tracker lifecycle, visuals, shared state | Preserved; future lifecycle refactor candidate |
 | 2 | `feral-aurora-power-v14.0.lua` | Client stamina/no-drain, speed, jump profiles | Preserved; server-side endurance not claimed |
-| 3 | `feral-nova-escape-v15.0.lua` | Native grab shake/tug/getoff attempts | Preserved; needs state-level success-rate evidence |
+| 3 | `feral-nova-escape-v15.0.lua` | Native grab shake/tug/getoff attempts | **Rebuilt as `feral-nova-escape-core-v9.0.lua`**: old shake pauses while Grab V2 timing takes priority |
 | 4 | `feral-nova-combat-v15.0.lua` | Local bite-readiness guide, target geometry and hit correlations | Preserved; true server bite range not assumed |
 | 5 | `feral-nova-recovery-v15.0.lua` | Legacy visible Rest controller, normally inactive | Preserved for regression compatibility; eventual retirement candidate |
 | 6 | `feral-nova-mobile-v15.0.lua` | Older experimental moving-Rest A/B testing, normally inactive | Preserved; eventually fold into one recovery test harness |
-| 7 | `feral-nova-carry-v15.0.lua` | G carry/drop helper and captured/holding-state reader | Preserved |
+| 7 | `feral-nova-carry-v15.0.lua` | G carry/drop helper and captured/holding-state reader | **Rebuilt as `feral-nova-carry-core-v9.0.lua`**: both immediate and delayed G requests check action priority |
 | 8 | `feral-nova-reach-v14.0.lua` | Local bite-target reach config lease | Preserved; server benefit unproven |
 | 9 | `feral-nova-regen-v29.0.lua` | Client HP and status-decay config leases | Preserved; distinguish local settings from server benefit |
 | 10 | `feral-nova-flight-v28.0.lua` | Surface takeoff, guarded flight and underwater exit | Preserved; validate with native outcomes |
@@ -90,14 +90,14 @@ Never label the UI green/working solely because a client-side setting was assign
 
 The v9 [CI workflow](https://github.com/GSVexed/vexed-schematics/actions/workflows/feral-nova-v9.0-validate.yml) enforces:
 
-1. Exactly 22 embedded modules; exact source parity for the six replacements; byte-for-byte preservation of the 16 untouched module bodies.
+1. Exactly 22 embedded modules; exact source parity for the eight replacements; byte-for-byte preservation of the 14 untouched module bodies.
 2. Compilation by the official Luau compiler for the single-file hub and all embedded modules.
 3. The old attack-first native Rest mock: Mouse1 immediate release, held attacks, native bite-window preemption, strict combat tags, pose-echo backoff and re-arming.
 4. Separate two-stage AFK mock: no unsolicited survival movement, native virtual input heartbeat and no actions after close.
 5. Grab V2 mock: native server strike, one real-timestamp center-crossing press, no practice-mode press, manual input priority and shutdown cleanup.
 6. Action Core mock: local extended hint is not native bite reach, capture/combat preempt recovery, timed priority leases, correct ownership/release and shutdown.
 7. Integrated native-Rest mock: coordinator denial physically releases Rest; after denial clears, recovery can re-arm.
-8. Regression: merely holding already-captured prey does not unnecessarily disable noncombat recovery.
+8. Regression: merely holding already-captured prey does not unnecessarily disable noncombat recovery. Native Grab V2 priority also prevents legacy shake spam and hub-initiated carry presses from interfering with the timing session.
 
 Passing CI is necessary but not sufficient for a public fully validated gameplay release. The bundle now includes **49 startup self-checks** for module availability and supported interfaces. These check wiring, not claims that server behaviour changed.
 
