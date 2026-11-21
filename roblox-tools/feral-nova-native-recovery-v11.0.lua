@@ -533,9 +533,14 @@ function Native.attach(ctx)
             end
             for _,key in ipairs(EFFECTS) do
                 local a,b=old.effects[key],state.effects[key]
-                if finite(a) and finite(b) and a>.2 and b<=a then
-                    N.effectSeconds[key]+=now-N.lastAt
-                    N.effectClears[key]+=a-b
+                -- Fully cleared effects are commonly represented by
+                -- removal of the attribute, not a final numeric zero.
+                if finite(a) and a>.2 and (finite(b) or b==nil) then
+                    local after=finite(b) and b or 0
+                    if after<=a then
+                        N.effectSeconds[key]+=now-N.lastAt
+                        N.effectClears[key]+=a-after
+                    end
                 end
             end
         end
