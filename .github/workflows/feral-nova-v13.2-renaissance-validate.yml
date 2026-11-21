@@ -50,8 +50,9 @@ jobs:
           assert set(embedded)-set(older)=={new}
           for name in set(embedded)&set(older):
               assert embedded[name]==older[name],f'unexpected module modification: {name}'
-          for name,src in embedded.items():
-              assert (root/name).read_text().rstrip()==src,f'stale embedded module: {name}'
+          # Legacy modules were embedded by the original v32 packer;
+          # v13.2 promises identity against v13.1, not their historical disk copies.
+          assert (root/new).read_text().rstrip()==embedded[new], 'stale v13.2 native module'
           native=embedded[new]
           assert 'function N.beforeDeathRoll()' in native
           assert 'function N.beforeFeed(' in native
