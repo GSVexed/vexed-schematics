@@ -5925,7 +5925,7 @@ return Tags
 
 ]==========],
 ["feral-nova-prime-ui-v32.0.lua"]=[==========[
--- FERAL HUB v7.0 | Always-mobile masked Rest signal except combat; Eagle clock fix
+-- FERAL HUB v7.3 | Stable recovery backoff and honest server-outcome reporting
 -- One-screen high-impact UI. Six meaningful switches; no multi-profile setup.
 local UI={}
 local Players=game:GetService("Players")
@@ -6224,7 +6224,7 @@ function UI.mount(ctx)
     local title=txt(header,"F E R A L   H U B",21,C.ink,true)
     title.Position=UDim2.fromOffset(37,11)
     title.Size=UDim2.fromOffset(360,27)
-    local subtitle=txt(header,"v7.0  •  MOBILE RECOVERY / EAGLE CARRY",10,C.muted)
+    local subtitle=txt(header,"v7.3  •  GUARDED RECOVERY / EAGLE CARRY",10,C.muted)
     subtitle.Position=UDim2.fromOffset(38,37)
     subtitle.Size=UDim2.fromOffset(385,20)
     local live=corner(make("Frame",{
@@ -6557,13 +6557,15 @@ function UI.mount(ctx)
         "The hub separates physical holds from holds matching assisted targets.\n"..
         "A locally permitted CATCH indicator cannot override game-server carry limits.\n"..
         "Growth configuration does not establish faster server-recognised Elder growth.\n"..
-        "Health: mobile Rest signal while outside combat. Never forces visible Rest.\n\n"..
+        "Health: mobile Rest signal outside combat; never forces visible Rest.\n"..
+        "Repeated pose echoes trigger timed retry, not a lifetime shutdown.\n"..
+        "Hunger/Thirst: read-only session samples; NOT infinite needs.\n\n"..
         "COORDINATION: Auto Escape protects against hostile grabs. Friendly baby\n"..
         "carrying is handled separately. Active Recovery pauses for unsafe actions.\n"..
         "Quick Climb uses native Q buffering, not a forced hold key.\n\n"..
         "KEYS: RIGHT SHIFT hide/show  |  END shutdown  |  Q climb  |  G carry\n"..
         "DIAGNOSTICS: The original v32 session report saves locally when supported.\n"..
-        "A separate v5 report records startup and own-character health snapshots.\n"..
+        "A v7 session report records own HP, Hunger, Thirst and recovery status.\n"..
         "No new network telemetry is transmitted by this release.",
         13,C.ink,false)
     helpBody.Position=UDim2.fromOffset(22,68)
@@ -6621,7 +6623,7 @@ function UI.mount(ctx)
     selfCheck.Position=UDim2.fromOffset(432,560)
     selfCheck.ZIndex=31
     local copyGoals=btn(helpLayer,"COPY HEALTH + CARRY",function()
-        helpCopy("FERAL HUB v7 / HEALTH AND EAGLE CARRY\n"..
+        helpCopy("FERAL HUB v7.3 / HEALTH AND EAGLE CARRY\n"..
             Active.report().."\n\n"..Native.report()..
             "\n\n"..Recovery.report().."\n\n"..Regen.report()..
             "\n\n"..Carry.report().."\n\n"..Eagle.report()..
@@ -6851,7 +6853,6 @@ function UI.mount(ctx)
     return gui
 end
 return UI
-
 ]==========]
 ,["feral-nova-mechanics-v28.0.lua"]=[==========[
 -- FERAL HUB v5 / stage-aware and balanced Eagle growth measurements; client-only mechanics
@@ -8924,9 +8925,9 @@ else
         local verified=log.selfCheck
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
-        log.preservedGameplayModules=14
-        log.updatedGameplayModules={"feral-hub-eagle-v7.2.lua","feral-hub-mobile-recovery-v7.3.lua","feral-hub-active-recovery-v7.3.lua","feral-hub-diagnostics-v7.0.lua"}
-        log.updatedUIModule="feral-hub-ui-v7.0.lua"
+        log.preservedGameplayModules=16
+        log.updatedGameplayModules={"feral-hub-mobile-recovery-v7.3.lua","feral-hub-active-recovery-v7.3.lua"}
+        log.updatedUIModule="feral-hub-ui-v7.3.lua"
         save()
         if log.result=="READY" then
             show("READY","v7.3 recovery guard / 35 startup checks passed.",false)
