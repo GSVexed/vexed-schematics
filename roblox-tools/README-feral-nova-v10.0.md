@@ -4,7 +4,7 @@
 **Status:** Software release with **23 embedded modules**, **54 startup checks**, and the official Luau full-bundle and regression suite passing. Live **v10** game/server validation is still outstanding; v9 successfully reached READY in a real Potassium session.  
 **Canonical release:** `feral-nova-v10.0-potassium.lua`.
 
-**Deep stability hotfix, 21 November 2026:** The startup GUI check now uses the actual mounted `FeralNovaV100` UI; old v10 overlays are removed on reload and each UI module shutdown is separately protected. Additional v10.1 variants of AFK and Grab V2 repair synthetic-input filtering, reject numeric nonpositive string session IDs and clear stale minigames across animal death/change. The existing one-paste v10.0 release URL includes these fixes. All changes have dedicated official Luau mocks; real-server acceptance still requires live testing.
+**Recovery integration hotfix, 21 November 2026:** In addition to the v10 startup, AFK and Grab repairs, the current loader now bundles a v10.2 **manual Rest sovereignty** controller and v10.2 action policy. Manual in-game Rest is given ownership of its pose and is no longer overwritten or cancelled by the automatic Rest mask. Merely having a native-bite-ready animal nearby—friend or foe—never counts as combat and does not halt active recovery. Actual attacks, server combat tags, captures/grab timing and explicit AFK movement still have action priority. The UI reports manual Rest distinctly, and all UI module shutdowns are now individually guarded. Dedicated official Luau mocks pass, but live game-server effects remain unverified.
 
 ## One-paste Potassium loader
 
@@ -22,8 +22,8 @@ The new build is intentionally based on the working v9.0 game action architectur
 
 The v9/v10 action core replaces scattered game-action priorities with a single read-only state policy:
 
-- **Native grab session > captured > actual combat > real attack input > native bite eligibility > carrying/climb/flight > AFK movement > idle.**
-- Recovery releases Rest whenever a real conflicting higher-priority action starts and can resume afterward; the broader local-only bite hint no longer creates needless healing pauses.
+- **Native grab session > captured > actual combat > real attack input > native bite eligibility (guide only) > carrying/climb/flight > AFK movement > idle.** Native target/bite eligibility is **not** itself a recovery-blocking attack.
+- Automatic recovery releases only its **own** Rest signal for conflicting actual actions, then resumes after they end. Physical Rest requested by the player takes precedence: the hub yields and does **not** overwrite `WolfRest` or send an automatic `Rest(false)` against the player's Rest. A nearby animal alone cannot trigger a recovery pause.
 - Auto Escape now defers its legacy shake/tug automation during the actual Grab V2 timing minigame.
 - Hub-initiated native G carrying checks the action policy before an input and again if that input was deferred; *manual* native G remains untouched.
 - Buffered Q climbing defers to actual grabs/menus/chat and retains the 2.25-second buffer and one guarded re-tap.
@@ -32,11 +32,11 @@ The v9/v10 action core replaces scattered game-action priorities with a single r
 
 ### Recovery and noncombat status effects
 
-- The original successful v7.5 combat-first Rest release remains in place.
+- The original successful v7.5 combat-first Rest release remains in place for actual attacks and combat, while native-bite proximity no longer interrupts resting with teammates.
 - Noncombat hidden-pose native Rest uses a 5-second compatibility request refresh while still, and at most a 3-second bounded refresh while moving and wounded. Actual HP effects are **not guaranteed** by local Rest flags.
 - Regeneration configuration is a reversible client edit, not evidence that the server accepted additional healing.
 - The game’s recovered `NeedsConfig` lists 0.01 base HP regeneration and a 2× Rest multiplier, and the recovered status config indicates a 4× Rest multiplier for relevant status clearance. Those are *game config values* and do not prove every server outcome.
-- It does **not** forcibly regenerate health while fighting, fabricate injury expiration, or write Humanoid Health.
+- It does **not** forcibly regenerate health while fighting, fabricate injury expiration, or write Humanoid Health. Manual Rest has its own explicit status; when you leave manual Rest, the automation may re-arm outside combat.
 
 ### Combat, Eagle, stamina and movement
 
@@ -78,21 +78,23 @@ The latest private report available during the build was **v9.0**, with **22/22 
 
 Official GitHub Actions workflow: [FERAL v10 validation](https://github.com/GSVexed/vexed-schematics/actions/workflows/feral-nova-v10.0-validate.yml). The tests validate:
 
-1. Exactly 23 embedded modules; **19 legacy gameplay module bodies remain byte-for-byte identical to v9**; four updated components (v10 UI, evidence, v10.1 AFK and v10.1 Grab) each match their standalone source.
+1. Exactly 23 embedded modules; **16 legacy gameplay bodies remain byte-for-byte identical to v9**. Seven changed components—the v10 UI, evidence, v10.1 AFK/Grab, v10.2 native recovery/action core/unified active recovery—each match standalone source.
 2. Official Luau compilation of the hub and all 23 embedded modules, plus the final canonical release script.
-3. v7.5-style attack-safe native Rest lifecycle, combat-tag and mask retry regression.
-4. v9 Action Core state priorities, native bite vs client hint, timed lease preemption and cleanup.
+3. v7.5-style attack-safe native Rest lifecycle, combat-tag, manual Rest and pose-mask retry regression; auto recovery resumes after a user leaves manual Rest.
+4. v10.2 Action Core: nearby native bite targets do not stop recovery, but actual mouse attacks, combat, capture, minigame leases and AFK safety still take precedence.
 5. Automated AFK heartbeat mock and no unsolicited movement.
 6. Native Grab V2 timed single-press mock, manual input priority and practice-id exclusion.
 7. NEW v10 own-animal evidence mock: clean HP status observations, changing movement phases, max-HP growth exclusion, combat exclusion and safe disposal.
 8. Failure containment, v10 GUI identity, old-overlay removal and protected controller cleanup verified by static/startup checks.
-9. Regression cases for synthetic idle mouse input versus real keyboard/primary-click control, cancellation of active AFK travel, negative string practice Grab IDs, and Grab session cleanup after death or animal change.
+9. Regression cases for synthetic idle input versus manual control, AFK travel cancellation, negative string Grab IDs, and grab cleanup after death or animal change.
+10. Unified Active Recovery mode transitions: `MANUAL_REST` → `NATIVE_RECOVERY` → `COMBAT_BLOCKED`, without falsely treating manual Rest as missing healing uptime.
+11. Manual Rest respected even when already active before the hub loads; safe shutdown never sends an auto-owned Rest-off request against it.
 
 **Important distinction:** The above are source parity, simulated game event and compile tests. They cannot prove that the live game server accepts or rewards all attempted local actions. The v10 release remains open to live-specific corrections.
 
 ## Architecture and inherited features
 
-The bundle has 23 Luau modules. It preserves 19 v9 module bodies unchanged. Four components are independently checked: `feral-nova-evidence-v10.0.lua`, `feral-nova-ui-v10.0.lua`, `feral-nova-afk-v10.1.lua` and `feral-nova-grab-v10.1.lua`. This is a stability hotfix inside the existing v10 distribution URL, not a claim of newly supported server authority.
+The bundle has 23 Luau modules, retaining 16 original v9 bodies unchanged. Seven updated modules are independently checked against their standalone code: `feral-nova-evidence-v10.0.lua`, `feral-nova-ui-v10.0.lua`, `feral-nova-afk-v10.1.lua`, `feral-nova-grab-v10.1.lua`, `feral-nova-native-recovery-v10.2.lua`, `feral-nova-action-core-v10.2.lua` and `feral-nova-active-recovery-v10.2.lua`. These corrections are shipped inside the existing v10 loader path and do not claim server authority.
 
 The older, mutually exclusive Safe Rest and Mobile Recovery Test components remain available as diagnostic/rollback tools but are not automatically enabled. This avoids losing previous experiments while the integrated Active Recovery controller retains ownership of normal gameplay.
 
