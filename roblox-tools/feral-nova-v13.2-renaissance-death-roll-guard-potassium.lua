@@ -6232,7 +6232,7 @@ function UI.mount(ctx)
         or player:WaitForChild("PlayerGui",10)
     if not pg then return nil end
     local gui=make("ScreenGui",{
-        Name="FeralNovaV132",ResetOnSpawn=false,
+        Name="FeralNovaV131",ResetOnSpawn=false,
         DisplayOrder=210,ZIndexBehavior=Enum.ZIndexBehavior.Sibling
     },pg)
     ctx.ui=gui
