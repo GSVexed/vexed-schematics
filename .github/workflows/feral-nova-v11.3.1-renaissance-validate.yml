@@ -99,7 +99,7 @@ jobs:
           assert 'pcall(ctx.action.allowed,"flight")' in after["feral-nova-flight-v11.3.lua"]
           assert 'if processed then return end' in after["feral-nova-climb-v11.3.lua"]
           assert 'staleSessionEvents' in after["feral-nova-grab-v11.3.lua"]
-          assert 'bindNativeLunge()' in after["feral-nova-eagle-actions-v11.3.lua"]
+          assert 'bindNativeLunge()' in after["feral-nova-eagle-actions-v11.3.1.lua"]
           assert 'legacySafeRest' not in new
           assert 'real_server_4x_status_recovery_verified=false' in after["feral-nova-regen-v11.0.lua"]
           assert 'mode="feeding"' in after["feral-nova-native-recovery-v11.2.lua"]
