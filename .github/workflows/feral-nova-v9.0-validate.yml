@@ -174,7 +174,8 @@ jobs:
           '''
           after=r'''
           local guide={enabled=true,alive=true,ready=false,nativeReady=false}
-          local N=Native.attach({state={alive=true},lab=guide})
+          local context={state={alive=true},lab=guide}
+          local N=Native.attach(context)
           assert(N.setEnabled(true)==true)
           heartbeat:Fire()
           assert(N.active and N.nativeOn==1 and N.maskWrites>=1)
@@ -243,8 +244,22 @@ jobs:
           now=32.2
           heartbeat:Fire()
           assert(N.active and N.nativeOn==6)
-          N.close()
+          -- Integration test: shared action denial must actually
+          -- release native Rest, not merely display a blocked status.
+          context.action={allowed=function(mode)
+            assert(mode=="recovery")
+            return false,"GRAB MINIGAME"
+          end}
+          now=33
+          heartbeat:Fire()
           assert(not N.active and N.nativeOff==5)
+          assert(N.status=="ACTION POLICY / GRAB MINIGAME")
+          context.action.allowed=function()return true,"SAFE"end
+          now=34
+          heartbeat:Fire()
+          assert(N.active and N.nativeOn==7)
+          N.close()
+          assert(not N.active and N.nativeOff==6)
           print("FERAL_NOVA_V90_ATTACK_PRIORITY_REST_LIFECYCLE_PASS")
           '''
           Path('/tmp/feral-v90-native-test.luau').write_text(before+code+after)
