@@ -1,10 +1,11 @@
-name: FERAL NOVA v10.1 Stability - 23 Modules and Deep Regression
+name: FERAL NOVA v10.2 Cache-Safe Hotfix - 23 Modules and Deep Regression
 on:
   push:
     branches: [main]
     paths:
       - 'roblox-tools/feral-nova-v10.0-release-candidate-potassium.lua'
       - 'roblox-tools/feral-nova-v10.0-potassium.lua'
+      - 'roblox-tools/feral-nova-v10.2-hotfix-potassium.lua'
       - 'roblox-tools/feral-nova-evidence-v10.0.lua'
       - 'roblox-tools/feral-nova-ui-v10.0.lua'
       - 'roblox-tools/feral-nova-afk-v10.1.lua'
@@ -34,7 +35,7 @@ jobs:
           chmod +x "$t"
           echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
           echo "LUAU_RUNNER=$t" >> "$GITHUB_ENV"
-      - name: Audit 23 modules — 19 untouched v9 bodies and four independently checked components
+      - name: Audit 23 modules — verify new URL, 16 unchanged v9 bodies and preflight integrity
         shell: bash
         run: |
           set -euo pipefail
@@ -45,9 +46,18 @@ jobs:
           before=(root/"feral-nova-v9.0-core-preview-potassium.lua").read_text()
           after=(root/"feral-nova-v10.0-release-candidate-potassium.lua").read_text()
           release=(root/"feral-nova-v10.0-potassium.lua").read_text()
+          fresh=(root/"feral-nova-v10.2-hotfix-potassium.lua").read_text()
           assert release==after.replace(
               "-- FERAL NOVA v10.0 RELEASE CANDIDATE /",
               "-- FERAL NOVA v10.0 RELEASE /",1), "Canonical release diverged from tested bundle"
+          expected_fresh=release.replace(
+              "-- FERAL NOVA v10.0 RELEASE /",
+              "-- FERAL NOVA v10.2 CACHE-FRESH RELEASE /",1
+          ).replace('version="10.0.0"','version="10.2.0"').replace(
+              'activeRecord.version="feral-nova-v10.0"',
+              'activeRecord.version="feral-nova-v10.2"')
+          assert fresh==expected_fresh, "Cache-safe v10.2 URL diverges from verified canonical bundle"
+          assert 'name="FERAL HUB",version="10.2.0"' in fresh
           pat=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
           old=dict(re.findall(pat,before,re.S))
           new=dict(re.findall(pat,after,re.S))
@@ -65,6 +75,16 @@ jobs:
           gets=re.findall(r'\bget\("([^"]+\.lua)"\)',after)
           assert gets and set(gets).issubset(set(new)),f"Runtime get() references missing: {set(gets)-set(new)}"
           assert all(len(new[name])>100 for name in order)
+          for label,payload in [("canonical",release),("cache_safe",fresh)]:
+              embedded=dict(re.findall(pat,payload,re.S))
+              ordered=re.search(r'local MODULE_ORDER=\{([^\n]+)\}',payload)
+              assert ordered is not None,f"{label}: missing MODULE_ORDER"
+              names=re.findall(r'"([^"]+\.lua)"',ordered.group(1))
+              required=re.findall(r'\bget\("([^"]+\.lua)"\)',payload)
+              assert len(names)==23 and len(embedded)==23,f"{label}: invalid module count"
+              assert set(names)==set(embedded),f"{label}: missing module source {set(names)-set(embedded)}"
+              assert set(required).issubset(set(embedded)),f"{label}: stale get() reference"
+              assert "feral-nova-native-recovery-v9.0.lua" not in payload, f"{label}: stale native recovery"
           print("FERAL_MODULE_PREFLIGHT_NAME_INTEGRITY_23_23_PASS")
           # 16 legacy bodies are byte-identical. Rest/autonomous priorities
           # have a dedicated revision with physically entered Rest preserved.
@@ -139,6 +159,7 @@ jobs:
           set -euo pipefail
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.0-release-candidate-potassium.lua
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.0-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v10.2-hotfix-potassium.lua
           for file in /tmp/feral-v100-modules/*.lua; do
             "$LUAU_COMPILER" --null "$file"
           done
