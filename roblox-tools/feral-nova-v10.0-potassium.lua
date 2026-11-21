@@ -9497,8 +9497,8 @@ function Coordinator.attach(ctx)
 end
 return Coordinator
 ]==========],
-["feral-nova-afk-v9.0.lua"]=[==========[
--- FERAL NOVA CORE v9.0 / two independent AFK systems under central action policy.
+["feral-nova-afk-v10.1.lua"]=[==========[
+-- FERAL NOVA v10.1 / two independent AFK systems under central action policy.
 -- Platform idle heartbeat: virtual input, best-effort, not guaranteed.
 -- Survival activity: optional conservative WALK, never spoof FeralSurvival.
 local AFK={}
@@ -9593,7 +9593,14 @@ function AFK.attach(ctx)
     end
     local function recordInput(input)
         local t=os.clock()
-        if t<A.ignoreInputUntil then return end
+        -- VirtualUser emits mouse-button/movement events; suppress those only.
+        -- Never suppress real keyboard/touch/primary-click input, because it
+        -- must immediately cancel an autonomous walk even after an idle pulse.
+        if t<A.ignoreInputUntil and input and (
+            input.UserInputType==Enum.UserInputType.MouseMovement
+            or input.UserInputType==Enum.UserInputType.MouseWheel
+            or input.UserInputType==Enum.UserInputType.MouseButton2
+        ) then return end
         if input and input.UserInputType==Enum.UserInputType.MouseMovement
             or input and input.UserInputType==Enum.UserInputType.MouseWheel then
             A.lastPhysicalInputAt=t
@@ -9908,7 +9915,7 @@ function AFK.attach(ctx)
     end)
     function A.report()
         return table.concat({
-            "FERAL NOVA v8.0 | Roblox Idle + Survival Activity",
+            "FERAL NOVA v10.1 | Roblox Idle + Survival Activity",
             "platform_enabled="..tostring(A.robloxEnabled),
             "platform_status="..A.robloxStatus,
             "virtual_pulse_attempts="..A.pulseAttempts,
@@ -9950,8 +9957,8 @@ end
 return AFK
 ]==========]
 ,
-["feral-nova-grab-v9.0.lua"]=[==========[
--- FERAL NOVA CORE v9.0 / native Grab V2 assistant with priority leases.
+["feral-nova-grab-v10.1.lua"]=[==========[
+-- FERAL NOVA v10.1 / native Grab V2 assistant with priority leases.
 -- Uses ONLY actual own-game OnClientEvent("strike") and matching
 -- FeralGrabV2:FireServer("press",sessionId,strikeId,Workspace:GetServerTimeNow()).
 -- No forged strike/start events, no fake results and no timestamp spoofing.
@@ -9972,8 +9979,17 @@ end
 local function validSession(v)
     if type(v)=="number" then return finite(v) and v>0 and v%1==0 end
     if type(v)=="string" then
-        return #v>=1 and #v<=90 and
-            v:match("^[%w_%-]+$")~=nil and v~="-1"
+        if #v<1 or #v>90 or not v:match("^[%w_%-]+$") then
+            return false
+        end
+        -- Old logic rejected "-1" only; "-2" and "0" strings
+        -- could be mistaken for real sessions and send a remote.
+        local asNumber=tonumber(v)
+        if asNumber~=nil then
+            return finite(asNumber) and asNumber>0
+                and asNumber%1==0
+        end
+        return true
     end
     return false
 end
@@ -10020,7 +10036,7 @@ Grab.crossing=crossing
 function Grab.attach(ctx)
     local G={
         enabled=false,alive=true,activeSession=false,
-        status="OFF",session=nil,pending=nil,serial=0,
+        status="OFF",session=nil,sessionCharacter=nil,pending=nil,serial=0,
         strikesSeen=0,pressesAttempted=0,pressesSent=0,pressErrors=0,
         perfectWindowAtPress=0,missedWindow=0,
         skippedMissingId=0,invalidStrikePackets=0,manualOverrides=0,
@@ -10038,6 +10054,7 @@ function Grab.attach(ctx)
         G.pending=nil
         G.activeSession=false
         G.session=nil
+        G.sessionCharacter=nil
         if ctx.action and type(ctx.action.release)=="function" then
             ctx.action.release("minigame")
         end
@@ -10083,6 +10100,7 @@ function Grab.attach(ctx)
                     return
                 end
                 G.session=id
+                G.sessionCharacter=player.Character
                 G.activeSession=true
                 G.lastSessionAt=os.clock()
                 G.status="SESSION FOUND / WATCHING STRIKES"
@@ -10140,6 +10158,7 @@ function Grab.attach(ctx)
             return
         end
         G.session=id
+        G.sessionCharacter=player.Character
         G.activeSession=true
         G.lastSessionAt=os.clock()
         if ctx.native and ctx.native.beforeMinigame then
@@ -10216,9 +10235,15 @@ function Grab.attach(ctx)
                 bindRemote()
             end
         end
-        if G.activeSession and not G.pending
-            and nowClock-G.lastSessionAt>8 then
-            revoke("SESSION TIMEOUT / NO STRIKE")
+        if G.activeSession then
+            local current=player.Character
+            local hum=current and current:FindFirstChildOfClass("Humanoid")
+            if not current or not hum or hum.Health<=0
+                or (G.sessionCharacter and current~=G.sessionCharacter) then
+                revoke("ANIMAL CHANGED OR DEAD / GRAB SESSION RESET")
+            elseif not G.pending and nowClock-G.lastSessionAt>8 then
+                revoke("SESSION TIMEOUT / NO STRIKE")
+            end
         end
         local p=G.pending
         if not p then return end
@@ -10296,7 +10321,7 @@ function Grab.attach(ctx)
     end)
     function G.report()
         return table.concat({
-            "FERAL NOVA v8.1 | Grab V2 Auto Perfect",
+            "FERAL NOVA v10.1 | Grab V2 Auto Perfect",
             "enabled="..tostring(G.enabled),
             "active_native_session="..tostring(G.activeSession),
             "status="..G.status,
@@ -10623,7 +10648,7 @@ return Evidence
 }
 
 -- Precompile before retiring old hub. No game-server remote requests.
-local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v29.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v9.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v10.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v29.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v9.0.lua","feral-nova-afk-v9.0.lua","feral-nova-grab-v9.0.lua","feral-nova-evidence-v10.0.lua"}
+local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v29.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v9.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v10.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v29.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v9.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua","feral-nova-evidence-v10.0.lua"}
 local compiled={}
 H.precompiledCount=0
 H.phase("Compile-checking every embedded module")
@@ -10709,8 +10734,8 @@ local diagnostics=get("feral-nova-diagnostics-v32.0.lua")
 local activeRecovery=get("feral-nova-active-recovery-v29.0.lua")
 local eagleActions=get("feral-nova-eagle-actions-v32.0.lua")
 local action=get("feral-nova-action-core-v9.0.lua")
-local afk=get("feral-nova-afk-v9.0.lua")
-local grab=get("feral-nova-grab-v9.0.lua")
+local afk=get("feral-nova-afk-v10.1.lua")
+local grab=get("feral-nova-grab-v10.1.lua")
 local evidence=get("feral-nova-evidence-v10.0.lua")
 local ui=get("feral-nova-ui-v10.0.lua")
 if not core or type(core.new)~="function"
@@ -10888,8 +10913,8 @@ else
         local verified=log.selfCheck
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
-        log.preservedGameplayModules=21
-        log.updatedGameplayModules={"feral-nova-evidence-v10.0.lua"}
+        log.preservedGameplayModules=19
+        log.updatedGameplayModules={"feral-nova-evidence-v10.0.lua","feral-nova-afk-v10.1.lua","feral-nova-grab-v10.1.lua"}
         log.updatedUIModule="feral-nova-ui-v10.0.lua"
         save()
         if log.result=="READY" then
