@@ -1,5 +1,5 @@
 -- FERAL NOVA CORE v9.0 / shared arbiter for Rest, combat, AFK, Grab and climb
--- 22 modules, six rebuilt; all other v8.1 systems preserved.
+-- 22 modules, eight rebuilt; all other v8.1 systems preserved.
 -- Uses no game:HttpGet. Loaded gameplay state is client-side; server acceptance unverified.
 local H={}
 local bootAt=os.clock()
@@ -1775,8 +1775,8 @@ end
 return Power
 
 ]==========],
-["feral-nova-escape-v15.0.lua"]=[==========[
--- FERAL NOVA PRIME v15 / Native escape with verified friendly baby pickup.
+["feral-nova-escape-core-v9.0.lua"]=[==========[
+-- FERAL NOVA CORE v9.0 / native escape with Grab V2 priority and friendly baby protection.
 -- Captured FeralLungeUI: TUG_MIN_GAP=.10, SHAKE_MIN_GAP=.15,
 -- SHAKE_MASH=false (directional FeralShakeTaps), getoff gap=.40.
 -- Only sends native actions while its OWN character reports a grab
@@ -1997,6 +1997,14 @@ function Escape.attach(ctx)
             E.status="PAUSED FOR CHAT"
             return
         end
+        if ctx.action and type(ctx.action.allowed)=="function" then
+            local ok,allowed,reason=pcall(ctx.action.allowed,"escape")
+            if not ok or not allowed then
+                drop()
+                E.status="ACTION PRIORITY / "..tostring(reason)
+                return
+            end
+        end
         local char=player.Character
         local hum=char and char:FindFirstChildOfClass("Humanoid")
         if char~=E.lastCharacter then connectChar(char)end
@@ -2160,7 +2168,8 @@ function Escape.attach(ctx)
             "carry_or_capture_state="..E.lastCarryState,
             "input="..E.input,
             "last_error="..E.lastError,
-            "NOTE=Native requests and observed release do not prove which action caused release."
+            "NOTE=Native requests and observed release do not prove which action caused release.",
+            "NOTE=v9 prioritizes real Grab V2 timing over legacy shake/tug actions."
         },"\n")
     end
     function E.close()
@@ -2182,7 +2191,6 @@ function Escape.attach(ctx)
     return E
 end
 return Escape
-
 ]==========],
 ["feral-nova-combat-v15.0.lua"]=[==========[
 -- FERAL NOVA PRIME v15 / Attack-input vs native bite correlation in extended reach.
@@ -3533,8 +3541,8 @@ end
 return Mobile
 
 ]==========],
-["feral-nova-carry-v15.0.lua"]=[==========[
--- FERAL NOVA PRIME v15 / Native carry priority including masked Rest controller.
+["feral-nova-carry-core-v9.0.lua"]=[==========[
+-- FERAL NOVA CORE v9.0 / hub-initiated carry respects Grab V2 action priority.
 -- FeralCarryClient uses G and sets _G.FeralCarryCan / _G.FeralCarryPress.
 -- Predator holding prey: own FeralClamp ObjectValue with Carry or Value.
 -- Carcass holding: own FeralCarcassCarry attribute.
@@ -3678,8 +3686,23 @@ function Carry.attach(ctx)
     function C.beforeCarry()
         return releaseForCarry()
     end
+    local function mayCarry()
+        if ctx.action and type(ctx.action.allowed)=="function" then
+            local ok,allowed,reason=pcall(ctx.action.allowed,"carry")
+            if not ok then return false,"ACTION CORE ERROR" end
+            return allowed,reason
+        end
+        return true,"NO ACTION CORE"
+    end
     function C.press()
         if not C.alive then return false end
+        local safe,why=mayCarry()
+        if not safe then
+            C.blocked+=1
+            C.lastError="Carry action priority: "..tostring(why)
+            C.status="CARRY INPUT BLOCKED / "..tostring(why)
+            return false
+        end
         refresh()
         local now=os.clock()
         if now-C.lastAt<.39 then
@@ -3704,6 +3727,12 @@ function Carry.attach(ctx)
         local function invoke()
             if not C.alive or currentToken~=token then return end
             if UIS:GetFocusedTextBox() then return end
+            local safe,why=mayCarry()
+            if not safe then
+                C.blocked+=1
+                C.status="DEFERRED CARRY CANCELLED / "..tostring(why)
+                return
+            end
             local fn,can=native()
             -- A native helper may report pickup as ineligible while
             -- *already holding prey*. Let the game-owned helper handle
@@ -3759,7 +3788,9 @@ function Carry.attach(ctx)
             "captured_episodes="..tostring(C.victimEpisodes),
             "blocked_interactions="..tostring(C.blocked),
             "last_error="..C.lastError,
-            "NOTE=Native G/carry helper is game-controlled. Requests are not proof of pickup."
+            "NOTE=Native G/carry helper is game-controlled. Requests are not proof of pickup.",
+            "NOTE=v9 Grab V2 timing has priority over hub-initiated G carry.",
+            "NOTE=Manual G remains native; coordinator checks only our hub button."
         },"\n")
     end
     function C.close()
@@ -3793,7 +3824,6 @@ function Carry.attach(ctx)
     return C
 end
 return Carry
-
 ]==========],
 ["feral-nova-reach-v14.0.lua"]=[==========[
 -- FERAL NOVA PRIME v14 / Nonphysical claim reach controller.
@@ -9225,6 +9255,13 @@ function Coordinator.attach(ctx)
         elseif mode=="carry" then
             if S.grab or S.lease=="minigame" then reason="GRAB PRIORITY"
             elseif S.menu or S.chat then reason="MENU OR CHAT" end
+        elseif mode=="escape" then
+            -- Old shake/tug automation must not compete with the native
+            -- Grab V2 timed-input minigame. Real captured non-V2 escapes
+            -- remain available, including during combat.
+            if S.grab or S.lease=="minigame" then
+                reason="GRAB V2 TIMING HAS PRIORITY"
+            elseif S.menu or S.chat then reason="MENU OR CHAT" end
         else reason="UNKNOWN POLICY"
         end
         A.decisions+=1
@@ -10116,7 +10153,7 @@ return Grab
 }
 
 -- Precompile before retiring old hub. No game-server remote requests.
-local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-v15.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-v15.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v29.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v9.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v9.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v29.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v9.0.lua","feral-nova-afk-v9.0.lua","feral-nova-grab-v9.0.lua"}
+local MODULE_ORDER={"feral-aurora-engine-v13.0.lua","feral-aurora-power-v14.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-combat-v15.0.lua","feral-nova-recovery-v15.0.lua","feral-nova-mobile-v15.0.lua","feral-nova-carry-core-v9.0.lua","feral-nova-reach-v14.0.lua","feral-nova-regen-v29.0.lua","feral-nova-flight-v28.0.lua","feral-nova-native-recovery-v9.0.lua","feral-nova-baby-v15.0.lua","feral-nova-climb-v9.0.lua","feral-nova-tags-v8.0.lua","feral-nova-ui-v9.0.lua","feral-nova-mechanics-v28.0.lua","feral-nova-diagnostics-v32.0.lua","feral-nova-active-recovery-v29.0.lua","feral-nova-eagle-actions-v32.0.lua","feral-nova-action-core-v9.0.lua","feral-nova-afk-v9.0.lua","feral-nova-grab-v9.0.lua"}
 local compiled={}
 H.precompiledCount=0
 H.phase("Compile-checking every embedded module")
@@ -10185,11 +10222,11 @@ activeEnv.FERAL_NOVA_PRIME_ACTIVE=nil
 H.phase("Initializing preserved core")
 local core=get("feral-aurora-engine-v13.0.lua")
 local power=get("feral-aurora-power-v14.0.lua")
-local escape=get("feral-nova-escape-v15.0.lua")
+local escape=get("feral-nova-escape-core-v9.0.lua")
 local lab=get("feral-nova-combat-v15.0.lua")
 local recovery=get("feral-nova-recovery-v15.0.lua")
 local mobile=get("feral-nova-mobile-v15.0.lua")
-local carry=get("feral-nova-carry-v15.0.lua")
+local carry=get("feral-nova-carry-core-v9.0.lua")
 local tags=get("feral-nova-tags-v8.0.lua")
 local reach=get("feral-nova-reach-v14.0.lua")
 local regen=get("feral-nova-regen-v29.0.lua")
@@ -10380,8 +10417,8 @@ else
         local verified=log.selfCheck
         log.result=(verified and verified.failed==0) and "READY" or "DEGRADED"
         log.phase=log.result=="READY" and "ready" or "needs_review"
-        log.preservedGameplayModules=16
-        log.updatedGameplayModules={"feral-nova-native-recovery-v9.0.lua","feral-nova-action-core-v9.0.lua","feral-nova-afk-v9.0.lua","feral-nova-grab-v9.0.lua","feral-nova-climb-v9.0.lua"}
+        log.preservedGameplayModules=14
+        log.updatedGameplayModules={"feral-nova-action-core-v9.0.lua","feral-nova-native-recovery-v9.0.lua","feral-nova-grab-v9.0.lua","feral-nova-afk-v9.0.lua","feral-nova-climb-v9.0.lua","feral-nova-escape-core-v9.0.lua","feral-nova-carry-core-v9.0.lua"}
         log.updatedUIModule="feral-nova-ui-v9.0.lua"
         save()
         if log.result=="READY" then
