@@ -37,7 +37,7 @@ local CFG = {
     maxExportBytes = 2147483648,
     maxMemoryGrowthMiB = 256,
     sourceTimeoutSeconds = 9,
-    checkpointSeconds = 5,
+    checkpointSeconds = 10,
     maxConsecutiveTimeouts = 3,
 }
 if game.PlaceId ~= CFG.rootPlaceId and game.GameId ~= CFG.universeId then
@@ -1108,6 +1108,20 @@ function D.checkpoint()
     D.metadataWrite("manifest.json",body)
     D.hasCheckpoint = true
     D.lastCheckpoint, D.saveRequested = os.clock(), false
+    D.lastCheckpointFingerprint = table.concat({
+        tostring(D.c.objects),tostring(D.c.sourceExported),
+        tostring(D.c.sourceFailed),tostring(D.c.remotes),
+        tostring(D.sourceTerminal or 0),tostring(D.payloadCount),
+        tostring(D.c.rapidSceneRecords),D.phase
+    },"/")
+end
+function D.hasUnsavedProgress()
+    return D.lastCheckpointFingerprint ~= table.concat({
+        tostring(D.c.objects),tostring(D.c.sourceExported),
+        tostring(D.c.sourceFailed),tostring(D.c.remotes),
+        tostring(D.sourceTerminal or 0),tostring(D.payloadCount),
+        tostring(D.c.rapidSceneRecords),D.phase
+    },"/")
 end
 function D.cooperate(force)
     D.safeRender(false)
@@ -1115,10 +1129,10 @@ function D.cooperate(force)
         task.wait()
         D.lastYield = os.clock()
     end
-    if D.saveRequested or os.clock() - D.lastCheckpoint >= CFG.checkpointSeconds then D.checkpoint() end
+    if D.saveRequested or (D.hasUnsavedProgress() and os.clock() - D.lastCheckpoint >= CFG.checkpointSeconds) then D.checkpoint() end
     while D.paused and not D.stop do
         D.safeRender(false)
-        if D.saveRequested or os.clock() - D.lastCheckpoint >= CFG.checkpointSeconds then D.checkpoint() end
+        if D.saveRequested or (D.hasUnsavedProgress() and os.clock() - D.lastCheckpoint >= CFG.checkpointSeconds) then D.checkpoint() end
         task.wait(0.15)
     end
     local memory = D.memoryMiB()
