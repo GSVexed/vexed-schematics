@@ -473,7 +473,10 @@ local function storeBytecode(entry,bytes,method,oldRecord)
     D.bytecodeSaved+=#bytes
     D.c.bytecodeBytes+=#bytes
     local first=bytes:byte(1)
-    local format=(first and (first>=3 and first<=9)) and "likely_luau"
+    -- The live Arena/Potassium MCP probe returned bytecode with leading
+    -- version byte 14. Preserve unchanged bytes and treat supported Luau
+    -- version numbers 3..14 as plausible, not independently validated.
+    local format=(first and (first>=3 and first<=14)) and "likely_luau"
         or "format_unverified"
     if format=="format_unverified" then D.c.bytecodeUnknownFormat+=1 end
     local meta={
