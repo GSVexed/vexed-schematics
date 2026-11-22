@@ -53,6 +53,7 @@ local D={
        nativeTimeouts=0,fallbackTimeouts=0,files=0,writeErrors=0},
     errors={},sources={},visited={},privateRoots={},names={},
     streams={},scriptQueue={},cache={version=2,next=0,entries={}},
+    createdDirs={},
     scannedComplete=false,sourceComplete=false,stopReason=nil,
     showReport=false,gui=nil,connections={},outputFiles={},
 }
@@ -120,16 +121,26 @@ function D.encode(v)
     return "{}"
 end
 function D.mk(path)
+    -- Potassium workspace directories are reused constantly while writing
+    -- streams. Cache directory checks so file counts do not multiply mkdir
+    -- calls. An initial existing directory is detected with isfolder.
+    if D.createdDirs[path] then return true end
     if API.isfolder then
         local ok,v=pcall(API.isfolder,path)
-        if ok and v then return true end
+        if ok and v then D.createdDirs[path]=true;return true end
     end
     if not API.mkdir then return false end
     local ok,v=pcall(API.mkdir,path)
-    if ok and v~=false then return true end
+    if ok and v~=false then
+        D.createdDirs[path]=true
+        return true
+    end
     if API.isfolder then
         local pass,exists=pcall(API.isfolder,path)
-        return pass and exists
+        if pass and exists then
+            D.createdDirs[path]=true
+            return true
+        end
     end
     return false
 end
