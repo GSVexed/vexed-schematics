@@ -1,4 +1,4 @@
--- ARENA NOVA | Phase 4 integrated hub | v1.1.0
+-- ARENA NOVA | Phase 4 experimental final pass | v1.2.0
 -- Client-side UI, outline-only player ESP, names-only tags, weapon reach, passive disaster cues.
 -- Experimental server-authoritative mechanics are intentionally not represented as working.
 -- No diagnostic collection, remote firing, decompilation, bytecode export or file writes.
@@ -51,7 +51,7 @@ local incomingOptions = environment.__ARENA_NOVA_BOOT_CONFIG
 environment.__ARENA_NOVA_BOOT_CONFIG = nil
 
 local running = true
-local VERSION = "1.1.0"
+local VERSION = "1.2.0"
 local settings = {
     outlines = true,
     names = true,
@@ -675,7 +675,7 @@ local researchPage = create("ScrollingFrame", main, {
     Size = UDim2.new(1, -28, 0, 215),
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = palette.border,
-    CanvasSize = UDim2.fromOffset(0, 361),
+    CanvasSize = UDim2.fromOffset(0, 616),
     Visible = false,
 })
 local toggleUI = {}
@@ -722,6 +722,194 @@ for index, definition in ipairs(definitions) do
     toggleUI[definition.key] = {button = row, text = name, status = status}
 end
 
+
+-- Experimental client mechanics. Each control is OPT-IN and deliberately labelled as a
+-- trial; a local effect cannot prove server-side acceptance or anti-cheat compatibility.
+-- Never send an extra attack: the reach trial modifies the game's existing SwingFired request.
+local trialEnabled = {melee = false, stamina = false, knockback = false}
+local trialConnections = {}
+local swingBinding, originalSwingFire, wrappedSwingFire = nil, nil, nil
+local TRIAL_REACH_OFFSET = 2.5
+local TRIAL_KNOCK_MULT = 0.40
+
+local function getClientNetwork()
+    local scripts = player:FindFirstChild("PlayerScripts")
+    local common = scripts and scripts:FindFirstChild("common")
+    local source = common and common:FindFirstChild("Network")
+    if not source or not source:IsA("ModuleScript") then
+        return nil
+    end
+    local okay, module = pcall(require, source)
+    if okay and type(module) == "table" then
+        return module
+    end
+    return nil
+end
+
+local function disableMeleeTrial()
+    trialEnabled.melee = false
+    if swingBinding and swingBinding.Fire == wrappedSwingFire then
+        pcall(function()
+            swingBinding.Fire = originalSwingFire
+        end)
+    end
+    swingBinding, originalSwingFire, wrappedSwingFire = nil, nil, nil
+end
+
+local function enableMeleeTrial()
+    if trialEnabled.melee then
+        return true
+    end
+    local network = getClientNetwork()
+    local entry = network and network.SwingFired
+    if type(entry) ~= "table" or type(entry.Fire) ~= "function" then
+        return false
+    end
+    swingBinding = entry
+    originalSwingFire = entry.Fire
+    wrappedSwingFire = function(packet)
+        if trialEnabled.melee and type(packet) == "table"
+            and typeof(packet.origin) == "Vector3"
+            and game.PlaceId ~= 72238253016204 then
+            local character = player.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if root and root:IsA("BasePart") then
+                local revised = table.clone(packet)
+                revised.origin = packet.origin + root.CFrame.LookVector * TRIAL_REACH_OFFSET
+                return originalSwingFire(revised)
+            end
+        end
+        return originalSwingFire(packet)
+    end
+    local installed = pcall(function()
+        entry.Fire = wrappedSwingFire
+    end)
+    if not installed then
+        swingBinding, originalSwingFire, wrappedSwingFire = nil, nil, nil
+        return false
+    end
+    trialEnabled.melee = true
+    return true
+end
+
+local function stopStaminaTrial()
+    trialEnabled.stamina = false
+    if trialConnections.stamina then
+        trialConnections.stamina:Disconnect()
+        trialConnections.stamina = nil
+    end
+end
+
+local function startStaminaTrial()
+    if trialEnabled.stamina then
+        return true
+    end
+    local elapsed = 0
+    trialEnabled.stamina = true
+    trialConnections.stamina = RunService.PostSimulation:Connect(function(dt)
+        if not running or game.PlaceId == 72238253016204 then
+            return
+        end
+        elapsed += dt
+        if elapsed < 0.09 then
+            return
+        end
+        elapsed = 0
+        local character = player.Character
+        local sim = character and character:FindFirstChild("SimState")
+        if not sim then
+            return
+        end
+        -- This changes the same client simulation anchor the movement code reads.
+        -- It is NOT a write to authoritative server stamina.
+        local now = time()
+        sim:SetAttribute("StaminaAnchor", 250)
+        sim:SetAttribute("StaminaAnchorAt", now)
+        sim:SetAttribute("StaminaRegenAt", now)
+        sim:SetAttribute("SprintExhausted", false)
+        sim:SetAttribute("BlockExhausted", false)
+    end)
+    return true
+end
+
+local function stopKnockbackTrial()
+    trialEnabled.knockback = false
+    if trialConnections.knockback then
+        trialConnections.knockback:Disconnect()
+        trialConnections.knockback = nil
+    end
+end
+
+local function startKnockbackTrial()
+    if trialEnabled.knockback then
+        return true
+    end
+    trialEnabled.knockback = true
+    trialConnections.knockback = RunService.PostSimulation:Connect(function(_)
+        if not running or game.PlaceId == 72238253016204 then
+            return
+        end
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local sim = character and character:FindFirstChild("SimState")
+        local stats = character and character:FindFirstChild("CombatStats")
+        if not root or not sim or not stats then
+            return
+        end
+        local knockedAt = sim:GetAttribute("KnockAt")
+        local knockVelocity = stats:GetAttribute("KnockVelocity")
+        if type(knockedAt) ~= "number" or typeof(knockVelocity) ~= "Vector3" then
+            return
+        end
+        local age = time() - knockedAt
+        if age < 0 or age > 0.55 or knockVelocity.Magnitude < 2 then
+            return
+        end
+        -- Damp replicated knock movement only while a recent knock impulse exists.
+        -- This cannot cancel a server-enforced stun/damage and may be corrected.
+        local velocity = root.AssemblyLinearVelocity
+        if velocity.Magnitude > 1 and velocity:Dot(knockVelocity) > 0 then
+            root.AssemblyLinearVelocity = Vector3.new(
+                velocity.X * TRIAL_KNOCK_MULT,
+                velocity.Y,
+                velocity.Z * TRIAL_KNOCK_MULT
+            )
+        end
+    end)
+    return true
+end
+
+local trialStart = {
+    melee = enableMeleeTrial,
+    stamina = startStaminaTrial,
+    knockback = startKnockbackTrial,
+}
+local trialStop = {
+    melee = disableMeleeTrial,
+    stamina = stopStaminaTrial,
+    knockback = stopKnockbackTrial,
+}
+local function setTrial(id, enabled)
+    if not running or trialStart[id] == nil then
+        return false
+    end
+    if not enabled then
+        trialStop[id]()
+        return true
+    end
+    local ok, success = pcall(trialStart[id])
+    if not ok or success ~= true then
+        trialStop[id]()
+        return false
+    end
+    return true
+end
+local function stopAllTrials()
+    for id, stop in pairs(trialStop) do
+        stop()
+    end
+end
+
 local researchRows = {
     {"EXTENDED MELEE", "UNVERIFIED"},
     {"INFINITE STAMINA", "UNVERIFIED"},
@@ -734,15 +922,28 @@ local researchRows = {
     {"DISASTER IMMUNITY", "UNVERIFIED"},
     {"KNOCKBACK / STUN", "UNVERIFIED"},
 }
+local trialRows = {
+    ["EXTENDED MELEE"] = "melee",
+    ["INFINITE STAMINA"] = "stamina",
+    ["KNOCKBACK / STUN"] = "knockback",
+}
+local trialUi = {}
 local researchIndicators = {}
 for index, entry in ipairs(researchRows) do
-    local row = create("Frame", researchPage, {
+    local trialId = trialRows[entry[1]]
+    local rowProps = {
         Name = "Research_" .. index,
         BackgroundColor3 = palette.surface,
         BorderSizePixel = 0,
         Position = UDim2.fromOffset(0, (index - 1) * 36),
         Size = UDim2.new(1, -6, 0, 32),
-    })
+    }
+    if trialId then
+        rowProps.Text = ""
+        rowProps.AutoButtonColor = false
+        rowProps.Active = true
+    end
+    local row = create(if trialId then "TextButton" else "Frame", researchPage, rowProps)
     makeCorner(row, 6)
     create("TextLabel", row, {
         BackgroundTransparency = 1,
@@ -758,14 +959,120 @@ for index, entry in ipairs(researchRows) do
         BackgroundTransparency = 1,
         Position = UDim2.new(1, -129, 0, 0),
         Size = UDim2.fromOffset(119, 32),
-        Text = entry[2],
+        Text = if trialId then "TRY (LOCAL)" else entry[2],
         Font = Enum.Font.Gotham,
         TextColor3 = palette.muted,
         TextSize = 9,
         TextXAlignment = Enum.TextXAlignment.Right,
     })
     researchIndicators[entry[1]] = stateLabel
+    if trialId then
+        trialUi[trialId] = stateLabel
+        connect(row.Activated, function()
+            local request = not trialEnabled[trialId]
+            local accepted = setTrial(trialId, request)
+            if request and not accepted then
+                stateLabel.Text = "UNAVAILABLE"
+                stateLabel.TextColor3 = palette.muted
+            else
+                stateLabel.Text = if trialEnabled[trialId] then "LOCAL TRIAL" else "TRY (LOCAL)"
+                stateLabel.TextColor3 = if trialEnabled[trialId]
+                    then Color3.fromRGB(244, 180, 102) else palette.muted
+            end
+        end)
+    end
 end
+
+local perkControls = {}
+create("TextLabel", researchPage, {
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(10, 365),
+    Size = UDim2.new(1, -15, 0, 23),
+    Text = "BUILT-IN PERKS  ·  SERVER VALIDATED",
+    Font = Enum.Font.GothamBold,
+    TextSize = 9,
+    TextColor3 = palette.muted,
+    TextXAlignment = Enum.TextXAlignment.Left,
+})
+local perkNames = {"Catlike", "Quick Recovery", "Iron Lungs", "Conserver", "Storm Rider"}
+for index, perkName in ipairs(perkNames) do
+    local button = create("TextButton", researchPage, {
+        Name = "Perk_" .. index,
+        BackgroundColor3 = palette.surface,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(0, 393 + (index - 1) * 37),
+        Size = UDim2.new(1, -6, 0, 32),
+        Text = "",
+        Active = true,
+        AutoButtonColor = false,
+    })
+    makeCorner(button, 6)
+    create("TextLabel", button, {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(11, 0),
+        Size = UDim2.new(1, -132, 1, 0),
+        Text = string.upper(perkName),
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextColor3 = palette.white,
+    })
+    local state = create("TextLabel", button, {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -129, 0, 0),
+        Size = UDim2.fromOffset(119, 32),
+        Text = "EQUIP",
+        Font = Enum.Font.Gotham,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        TextColor3 = palette.muted,
+    })
+    perkControls[perkName] = {button = button, label = state}
+end
+local lastPerkRequest = -math.huge
+local function requestOwnedPerk(name)
+    if os.clock() - lastPerkRequest < 0.8 then
+        return false, "COOLDOWN"
+    end
+    local network = getClientNetwork()
+    local action = network and network.PerkAction
+    if type(action) ~= "table" or type(action.Fire) ~= "function" then
+        return false, "UNAVAILABLE"
+    end
+    local first = player:GetAttribute("Perk1")
+    local second = player:GetAttribute("Perk2")
+    if first == name or second == name then
+        return false, "EQUIPPED"
+    end
+    local shared = ReplicatedStorage:FindFirstChild("Shared")
+    local constants = shared and shared:FindFirstChild("constants")
+    local moduleScript = constants and constants:FindFirstChild("Perks")
+    if moduleScript then
+        local loaded, module = pcall(require, moduleScript)
+        if loaded and type(module) == "table" then
+            local row = module.rows and module.rows[name]
+            if row and row.kind == "Progression" and type(module.unlockedIn) == "function" then
+                local mask = player:GetAttribute("UnlockedMask")
+                if type(mask) ~= "number" or not module.unlockedIn(mask, name) then
+                    return false, "LOCKED"
+                end
+            end
+        end
+    end
+    -- When both slots are filled, an explicit click replaces Slot 2.
+    -- Pass ownership and final acceptance are verified by the actual game server.
+    local slot = if type(first) ~= "string" or first == "" then 1
+        else if type(second) ~= "string" or second == "" then 2 else 2
+    local sent = pcall(function()
+        action.Fire({action = "Equip", slot = slot, perk = name})
+    end)
+    if sent then
+        lastPerkRequest = os.clock()
+        return true, "REQUESTED"
+    end
+    return false, "UNAVAILABLE"
+end
+
 local function refreshEquippedPerks()
     local first = player:GetAttribute("Perk1")
     local second = player:GetAttribute("Perk2")
@@ -787,6 +1094,37 @@ local function refreshEquippedPerks()
         oxygen.Text = if ownsEquipped("Iron Lungs") then "LUNGS EQUIPPED" else "UNVERIFIED"
         oxygen.TextColor3 = if ownsEquipped("Iron Lungs") then palette.accent else palette.muted
     end
+    local disaster = researchIndicators["DISASTER IMMUNITY"]
+    if disaster then
+        disaster.Text = if ownsEquipped("Storm Rider") then "LIGHTNING AVOIDED" else "UNVERIFIED"
+        disaster.TextColor3 = if ownsEquipped("Storm Rider") then palette.accent else palette.muted
+    end
+    for name, control in pairs(perkControls) do
+        if ownsEquipped(name) then
+            control.label.Text = "EQUIPPED"
+            control.label.TextColor3 = palette.accent
+        elseif type(first) == "string" and first ~= ""
+            and type(second) == "string" and second ~= "" then
+            control.label.Text = "REPLACE 2"
+            control.label.TextColor3 = palette.muted
+        else
+            control.label.Text = "EQUIP"
+            control.label.TextColor3 = palette.muted
+        end
+    end
+end
+for name, control in pairs(perkControls) do
+    connect(control.button.Activated, function()
+        local accepted, message = requestOwnedPerk(name)
+        control.label.Text = message
+        control.label.TextColor3 = if accepted then Color3.fromRGB(244, 180, 102)
+            else palette.muted
+        task.delay(1.4, function()
+            if running then
+                refreshEquippedPerks()
+            end
+        end)
+    end)
 end
 connect(player:GetAttributeChangedSignal("Perk1"), refreshEquippedPerks)
 connect(player:GetAttributeChangedSignal("Perk2"), refreshEquippedPerks)
@@ -1017,6 +1355,11 @@ connect(quietButton.Activated, function()
             storedToggles[definition.key] = settings[definition.key]
             setOption(definition.key, false)
         end
+        stopAllTrials()
+        for id, label in pairs(trialUi) do
+            label.Text = "TRY (LOCAL)"
+            label.TextColor3 = palette.muted
+        end
         quietButton.Text = "RESTORE"
     end
 end)
@@ -1086,6 +1429,7 @@ local function unload()
         return
     end
     running = false
+    stopAllTrials()
     stopDisasters()
     stopReach()
     restoreNativeNames()
@@ -1109,6 +1453,8 @@ environment.__ARENA_NOVA_PHASE4 = {
     version = VERSION,
     set = setOption,
     options = settings,
+    trials = trialEnabled,
+    setTrial = setTrial,
 }
 connect(unloadButton.Activated, unload)
 
