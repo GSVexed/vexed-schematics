@@ -1,0 +1,85 @@
+name: ARENA NOVA v1.1 - heavyweight source capture
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-client-diagnostic-v1.1.0-heavyweight.lua'
+      - '.github/workflows/arena-nova-v110-heavyweight-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate complete coverage, early snapshots, source pipeline and no gameplay actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          old=Path('roblox-tools/arena-nova-client-diagnostic-v1.0.0.lua').read_text()
+          new=Path('roblox-tools/arena-nova-client-diagnostic-v1.1.0-heavyweight.lua').read_text()
+          assert len(new)>len(old)
+          checks=[
+            'rootPlaceId = 72238253016204',
+            'universeId = 7209131331',
+            'version = "1.1.0"',
+            'snapshotMode = "LOBBY"',
+            'D.snapshotMode == "LOBBY" and "MATCH" or "LOBBY"',
+            'function D.rapidSceneCapture()',
+            'D.rapidSceneCapture()',
+            'D.c.rapidSceneRecords+=1',
+            'D.checkpoint() -- each root becomes independently uploadable',
+            'D.pendingDiscovered = D.pendingDiscovered + #children',
+            'D.pendingDiscovered = math.max(0,D.pendingDiscovered - 1)',
+            'function D.collectSources()',
+            'D.fastSourcePassComplete=true',
+            'D.c.sourceQueueCreated=#queue',
+            'D.exportSource(entry,body,"Source_property")',
+            'D.exportSource(entry,state.body,"decompile")',
+            'D.cacheBytecode(entry,state.fingerprint)',
+            'D.sourcePassComplete=true',
+            'CFG.decompileWorkers',
+            'local dispatch=API.defer or API.spawn',
+            'function D.finalizePending(reason)',
+            'function D.filterSource(source)',
+            'function D.refreshPrivacy()',
+            'function D.checkpoint()',
+            'if not API.write or not API.mkdir then',
+            'source-results/',
+            'raw_bytecode_exported = false',
+            'scope = "all_eligible_game_and_platform_scripts"',
+          ]
+          for x in checks: assert x in new,x
+          for x in [':FireServer(',':InvokeServer(', 'game:HttpGet(',
+                    'sethiddenproperty(', 'setthreadidentity(', 'getgc(', 'getconnections(']:
+            assert x not in new,x
+          assert '108901361810209' not in new
+          assert 'ARENA_NOVA_' in new
+          assert 'workerTimeouts' in new
+          assert 'rapidLimitHit' in new
+          assert 'if not D.stop then D.inventory() end' in new
+          assert 'if not D.stop and not D.sourceAbortReason then D.collectSources() end' in new
+          assert 'return D.safeName' not in new # no arbitrary name leak
+          print('ARENA_NOVA_V110_DEEP_COVERAGE_AND_SAFE_SOURCE_PRECHECK_PASSED')
+          PY
+      - name: Install Luau 0.747
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/arena-nova-v110-luau.zip
+          mkdir -p /tmp/arena-nova-v110-luau
+          unzip -q /tmp/arena-nova-v110-luau.zip -d /tmp/arena-nova-v110-luau
+          compiler="$(find /tmp/arena-nova-v110-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile entire heavyweight diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-client-diagnostic-v1.1.0-heavyweight.lua
+          echo ARENA_NOVA_V110_LUAU_COMPILE_PASS
