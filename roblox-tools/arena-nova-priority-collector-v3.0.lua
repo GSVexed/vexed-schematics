@@ -251,13 +251,23 @@ function D.saveCache()
     end
 end
 function D.loadCache()
-    local blob=D.readFile(CFG.home.."/cache_index.json.txt")
-    if not blob then return end
-    local ok,t=pcall(function()return Http:JSONDecode(blob)end)
+    -- Start with the existing v2 result set when possible: users should not
+    -- have to rebuild source that was already saved in the slow old scan.
+    local own=D.readFile(CFG.home.."/cache_index.json.txt")
+    local previous=own or D.readFile("ARENA_NOVA_SMART_V2/cache_index.json.txt")
+    if not previous then return end
+    local ok,t=pcall(function()return Http:JSONDecode(previous)end)
     if ok and type(t)=="table" and t.version==2
         and type(t.entries)=="table" then
         D.cache=t
         if type(D.cache.next)~="number" then D.cache.next=0 end
+        if not own then
+            for _,entry in pairs(D.cache.entries) do
+                if type(entry)=="table" and type(entry.path)=="string" then
+                    D.c.cachedV2SourcesImported+=1
+                end
+            end
+        end
     end
 end
 function D.logErr(kind,key)
@@ -679,18 +689,31 @@ function D.exportSource(entry,body,method,cacheConfidence)
         method=method,status="exported",file=path,bytes=#filtered,
         adler32=D.adler32(filtered),cache_confidence=cacheConfidence,
         privacy_filtered=true,original_source_guaranteed=false})
-    if method~="persistent_cache" and API.read and API.write then
-        D.cache.next+=1
-        local cachePath=CFG.home.."/sources/S"..string.format("%06d",D.cache.next)..".source.txt"
-        if D.write(cachePath,filtered) then
-            D.cache.entries[D.cacheKey(entry)]={
-                path=cachePath,placeVersion=placeVersion,
-                bytes=#filtered,adler32=D.adler32(filtered),
-                category=entry.category,created_unix=os.time()
-            }
-        end
+    if API.read and API.write then
+        -- The capture is the canonical cache source. Do not write the same
+        -- source again into a duplicate cache file (v2 doubled disk writes).
+        D.cache.entries[D.cacheKey(entry)]={
+            path=path,placeVersion=placeVersion,
+            bytes=#filtered,adler32=D.adler32(filtered),
+            category=entry.category,created_unix=os.time()
+        }
     end
     return true,nil
+end
+function D.exportCachedSource(entry,body,confidence)
+    local index=D.c.sourceExported+1
+    local path=D.session.."/sources/S"..string.format("%05d",index)..".source.txt"
+    if not D.write(path,body) then return false end
+    D.c.sourceExported+=1
+    D.record("source_results",{path=entry.path,class=entry.class,
+        method="persistent_cache",status="exported",file=path,bytes=#body,
+        adler32=D.adler32(body),cache_confidence=confidence,
+        privacy_filtered=true,original_source_guaranteed=false})
+    D.cache.entries[D.cacheKey(entry)]={
+        path=path,placeVersion=placeVersion,bytes=#body,adler32=D.adler32(body),
+        category=entry.category,created_unix=os.time()
+    }
+    return true
 end
 function D.tryCache(entry)
     if not API.read then return false end
@@ -703,8 +726,9 @@ function D.tryCache(entry)
         D.cache.entries[D.cacheKey(entry)]=nil
         return false
     end
-    -- Cache reuse is same-game-version/path, not bytecode identity proof.
-    local ok=D.exportSource(entry,body,"persistent_cache",
+    -- Cached content is already sanitized and checksum-verified. Copy into
+    -- the standalone current capture without repeating the costly Lua lexer.
+    local ok=D.exportCachedSource(entry,body,
         "same_place_version_and_script_path_unverified")
     if ok then D.c.cacheHit+=1;D.c.cacheUnverified+=1 end
     return ok
@@ -827,10 +851,13 @@ function D.collectSources()
             D.checkpoint();D.saveCache();lastCacheSave=os.clock()
         end
     end
+    if D.stopReason=="source_attempt_budget" then
+        D.c.sourceAttemptCapReached=1
+    end
     D.c.sourceDeferred=math.max(0,#D.scriptQueue-completed)
     D.c.sourceSkippedTime=(D.stopReason=="time_budget") and D.c.sourceDeferred or 0
     D.sourceComplete=completed==#D.scriptQueue and not D.stopped
-        and D.stopReason~="time_budget"
+        and D.stopReason==nil
     D.checkpoint();D.saveCache()
 end
 function D.updateUI()
