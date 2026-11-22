@@ -45,7 +45,8 @@ local D={
     started=0,deadline=0,latest="Ready. Nothing has been scanned.",
     c={objects=0,scripts=0,eligible=0,remotes=0,values=0,focus=0,
        attrs=0,details=0,readWarnings=0,sourceExported=0,
-       nativeSuccess=0,fallbackSuccess=0,cacheHit=0,cacheUnverified=0,
+       directSourceSuccess=0,nativeSuccess=0,fallbackSuccess=0,
+       cacheHit=0,cacheUnverified=0,
        cacheInvalid=0,cachedFailuresSkipped=0,sourceFailures=0,
        sourceDeferred=0,sourceSkippedTime=0,sourceQueued=0,
        rapid=0,privacySkipped=0,redactions=0,unsafeSource=0,
@@ -643,16 +644,31 @@ function D.tryCache(entry)
     if ok then D.c.cacheHit+=1;D.c.cacheUnverified+=1 end
     return ok
 end
+function D.failureKind(raw)
+    local text=tostring(raw or ""):lower()
+    if text:find("timeout",1,true) then return "decompiler_timeout" end
+    if text:find("permission",1,true) or text:find("security",1,true)
+        then return "permission_denied" end
+    if text:find("bytecode",1,true) and text:find("unsupported",1,true)
+        then return "unsupported_bytecode" end
+    if text:find("no bytecode",1,true) or text:find("empty bytecode",1,true)
+        then return "no_accessible_bytecode" end
+    if text:find("not supported",1,true) or text:find("unavailable",1,true)
+        then return "decompiler_unavailable" end
+    if text=="api_missing" then return "executor_api_missing" end
+    return "executor_failure_details_withheld"
+end
 function D.failSource(entry,reason,attempted)
     D.c.sourceFailures+=1
     D.record("source_results",{path=entry.path,class=entry.class,
         status="failed",reason=reason,attempted=attempted~=false})
     D.logErr(reason,entry.path)
-    -- Failure cache suppresses the same known unsupported script until
-    -- the Roblox place changes. Always clearly labelled as prior failure.
+    -- Failed source is retried after a cooldown, never permanently written
+    -- off. A new game place-version immediately invalidates the skip.
     D.cache.entries[D.cacheKey(entry)]={
         failed=reason,placeVersion=placeVersion,
-        category=entry.category,created_unix=os.time()}
+        category=entry.category,created_unix=os.time(),
+        retry_after_unix=os.time()+900}
 end
 function D.collectSources()
     D.phase="SOURCE EXTRACTION"
@@ -667,7 +683,9 @@ function D.collectSources()
         local cached=D.cache.entries[D.cacheKey(entry)]
         if D.tryCache(entry) then
             completed+=1
-        elseif cached and cached.failed and cached.placeVersion==placeVersion then
+        elseif cached and cached.failed and cached.placeVersion==placeVersion
+            and type(cached.retry_after_unix)=="number"
+            and os.time()<cached.retry_after_unix then
             D.c.cachedFailuresSkipped+=1
             D.record("source_results",{path=entry.path,class=entry.class,
                 status="prior_failure_not_retried",
@@ -682,13 +700,15 @@ function D.collectSources()
                     math.min(CFG.decompileTimeout,math.max(0.1,D.deadline-os.clock())))
                 if not ok and body=="timeout" then D.c.nativeTimeouts+=1 end
             end
-            local accepted,why=ok and D.exportSource(entry,body,method,nil) or false,nil
-            if ok and not accepted then
-                local use,reason=D.plausibleSource(body)
-                why=reason or "invalid_or_comment_only_source"
+            local accepted,why=false,nil
+            if ok then
+                accepted,why=D.exportSource(entry,body,method,nil)
+            else
+                why=D.failureKind(body)
             end
             if accepted then
-                D.c.nativeSuccess+=1
+                if method=="Source_property" then D.c.directSourceSuccess+=1
+                else D.c.nativeSuccess+=1 end
             elseif API.bytecode and API.decompile and os.clock()+1<D.deadline then
                 -- Recovery is capped and only used for a failing game script;
                 -- inaccessible platform bytecode is not worth delaying game data.
