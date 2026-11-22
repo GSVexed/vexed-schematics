@@ -56,12 +56,14 @@ local D={
     queue={},privateRoots={},privateNames={},dirs={},streams={},
     savedFiles={},cache={schema=4,entries={}},bytecodeSaved=0,
     visits=0,scanLimitHit=false,captureId="",
+    scopeTruncated=0,slowBytecodeCalls=0,lastRecordTime=0,
     c={objects=0,scripts=0,eligible=0,queued=0,remotes=0,values=0,
        attrs=0,privacySkipped=0,platformSkipped=0,
        bytecodeNew=0,bytecodeCache=0,bytecodeFailed=0,
        bytecodeUnavailable=0,bytecodeSkipped=0,bytecodeTooLarge=0,
        bytecodeUnknownFormat=0,bytecodeAttempts=0,
        bytecodeTimeout=0,bytecodeBytes=0,readErrors=0,
+       slowBytecodeCalls=0,scopesTruncated=0,
        writeErrors=0,files=0,rootScopes=0},
     report=nil,gui=nil,refs=nil
 }
@@ -195,6 +197,7 @@ local function summary()
         place_version=game.PlaceVersion,elapsed_seconds=
             math.floor((os.clock()-D.t0)*10)/10,
         inventory_complete=D.inventoryComplete,
+        scope_truncated=D.scopeTruncated>0,
         bytecode_export_complete=D.extractionComplete,
         scope="gameplay_roots_client_scripts_only_platform_excluded",
         no_in_game_decompile=true,server_only_source_unavailable=true,
@@ -387,7 +390,12 @@ function D.discover()
                     yieldBrief(true)
                 end
             end
-            if #stack>0 then D.c.bytecodeSkipped+=#stack end
+            if #stack>0 then
+                D.scopeTruncated+=1
+                D.c.scopesTruncated+=1
+                emit("limits",{root=scope.name,objects_pending_approx=#stack,
+                    reason="discovery_scope_limit_or_time_budget"})
+            end
             D.checkpoint()
         end
     end
@@ -398,6 +406,7 @@ function D.discover()
     D.c.queued=#D.queue
     D.inventoryComplete=D.c.objects<maxObjects and
         os.clock()-t0<budget and not D.stopped
+        and D.scopeTruncated==0 and D.c.rootScopes==#allRoots
     emit("coverage",{roots_traversed=D.c.rootScopes,
          indexed_objects=D.c.objects,
          eligible=D.c.eligible,queued=D.c.queued,
@@ -440,7 +449,8 @@ local function storeBytecode(entry,bytes,method,oldRecord)
     if not enough then return false,err end
     if D.bytecodeSaved+#bytes>CFG.maxSessionBinaryBytes then return false,"byte_budget" end
     local idx=D.c.bytecodeNew+D.c.bytecodeCache+1
-    local path=D.root.."/bytecode/B"..string.format("%05d",idx)..".luauc"
+    local relative="bytecode/B"..string.format("%05d",idx)..".luauc"
+    local path=D.root.."/"..relative
     if not write(path,bytes) then return false,"write_failed" end
     -- Binary read-back for the first file only: verifies that Potassium can
     -- round-trip NUL-containing binary strings without re-reading every file.
@@ -460,7 +470,7 @@ local function storeBytecode(entry,bytes,method,oldRecord)
     if format=="format_unverified" then D.c.bytecodeUnknownFormat+=1 end
     local meta={
         script_path=entry.path,class=entry.class,method=method,
-        file=path,bytes=#bytes,adler32=checksum,
+        file=relative,bytes=#bytes,adler32=checksum,
         format_guess=format,first_byte=first,
         original_source_included=false,source_decompiled_in_game=false,
         cached_using_unverified_path_and_version=(method=="cache_copy")
