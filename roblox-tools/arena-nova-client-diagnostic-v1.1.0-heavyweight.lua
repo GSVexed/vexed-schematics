@@ -1716,56 +1716,145 @@ function D.exportBytecodeReuse(entry,candidate)
     if info.privacy_edits > 0 then D.c.sourceRedacted = D.c.sourceRedacted + 1 end
     D.c.redactions = D.c.redactions + info.privacy_edits
 end
+-- Readable-source sweep is deliberately separate from slow decompilation.
+-- All code already readable through Source is sealed before source workers run.
+-- This is a full-content collector: no game or platform source class is
+-- silently discarded merely because it has a low Arena-specific priority.
 function D.collectSources()
-    D.phase = "sources"
-    D.sourcePhaseStarted = os.clock()
-    D.startupStage,D.startupStep = "sources","Inventory saved; source collection is running."
-    local timeoutStreak = 0
-    for _, bucket in ipairs(D.buckets) do
-        for _, entry in ipairs(bucket) do
+    D.phase="sources"
+    D.sourcePhaseStarted=os.clock()
+    D.startupStage,D.startupStep="sources","Readable-source sweep first; then two deep workers."
+    local queue={}
+    D.current="Stage 1/2: saving immediately readable script sources"
+    for _,bucket in ipairs(D.buckets) do
+        for _,entry in ipairs(bucket) do
             if not D.cooperate(false) or D.sourceAbortReason then return end
-            D.sourceCursor = D.sourceCursor + 1
-            D.c.sourceAttempted = D.c.sourceAttempted + 1
-            D.current = "Source " .. D.sourceCursor .. " / " .. D.c.eligible .. " | " .. entry.category .. " | instance " .. entry.id
-            -- Source property access may be denied; no security identity changes are used.
-            local ok, body = D.read(entry.instance,"Source")
-            local method = "Source_property"
-            local fingerprint,reused = nil,nil
-            if not ok or type(body) ~= "string" or body == "" then
-                if API.decompile then
-                    fingerprint,reused = D.findBytecodeReuse(entry)
-                    if not reused then
-                        if D.stop or D.sourceAbortReason then ok,body = false,"cancelled"
-                        else ok, body = D.boundedCall(API.decompile,entry.instance,CFG.sourceTimeoutSeconds,
-                            "Decompile " .. entry.category .. " instance " .. entry.id) end
-                    end
-                    method = "decompile"
-                else ok,body = false,"source_unavailable_no_decompiler" end
-            end
-            if reused then
-                timeoutStreak = 0
-                D.exportBytecodeReuse(entry,reused)
-            elseif ok and type(body) == "string" and #body > 0 then
-                timeoutStreak = 0
-                D.exportSource(entry,body,method)
+            local ok,body=D.read(entry.instance,"Source")
+            if ok and type(body)=="string" and #body>0 then
+                D.c.sourceAttempted+=1
+                D.sourceCursor+=1
+                D.exportSource(entry,body,"Source_property")
+                D.c.directSourceSaved+=1
+                entry.instance=nil
             else
-                D.c.sourceFailed = D.c.sourceFailed + 1
-                local reason = body == "timeout" and "timeout" or body == "cancelled" and "cancelled"
-                    or body == "uncancellable_worker" and "uncancellable_worker"
-                    or body == "source_unavailable_no_decompiler" and "source_unavailable_no_decompiler"
-                    or (ok and "empty_or_invalid_source" or D.errorKind(body))
-                D.sourceResult(entry,reason,{method = method,error_details_withheld = true})
-                D.log("source",entry.id,reason)
-                if reason == "timeout" then timeoutStreak = timeoutStreak + 1 else timeoutStreak = 0 end
-                if timeoutStreak >= CFG.maxConsecutiveTimeouts then
-                    D.sourceAbortReason = "repeated_decompiler_timeouts"; return
-                end
+                queue[#queue+1]=entry
             end
-            D.cacheBytecode(entry,fingerprint)
-            entry.instance = nil
         end
     end
-    D.sourcePassComplete = true
+    D.fastSourcePassComplete=true
+    D.c.sourceQueueCreated=#queue
+    D.current="Readable sources saved. Deep queue has "..#queue.." remaining scripts."
+    D.checkpoint()
+    local active={}
+    D.sourceWorkers=active
+    local nextJob=1
+    local timeoutStreak=0
+    local workers=math.max(1,math.min(CFG.decompileWorkers,3))
+    if not API.defer and not API.spawn then
+        D.sourceAbortReason="decompiler_worker_dispatch_unavailable"
+        return
+    end
+    local function finishFailure(entry,reason,method)
+        D.c.sourceFailed+=1
+        D.sourceResult(entry,reason,{method=method or "decompile",error_details_withheld=true})
+        D.log("source",entry.id,reason)
+        entry.instance=nil
+    end
+    local function startSource(entry)
+        D.c.sourceAttempted+=1
+        D.c.queuedDecompiles+=1
+        D.sourceCursor+=1
+        if not API.decompile then
+            finishFailure(entry,"source_unavailable_no_decompiler","not_available")
+            return
+        end
+        local fingerprint,reused=D.findBytecodeReuse(entry)
+        if reused then
+            D.exportBytecodeReuse(entry,reused)
+            entry.instance=nil
+            timeoutStreak=0
+            return
+        end
+        if D.stop or D.sourceAbortReason then return end
+        local state={entry=entry,fingerprint=fingerprint,
+            t0=os.clock(),done=false,alive=true,
+            ok=false,body=nil,thread=nil}
+        local worker=coroutine.create(function()
+            if not state.alive then return end
+            local ok,body=pcall(API.decompile,entry.instance)
+            if state.alive then state.ok,state.body,state.done=ok,body,true end
+        end)
+        state.thread=worker
+        local dispatch=API.defer or API.spawn
+        local started=pcall(dispatch,worker)
+        if not started and dispatch~=API.spawn and API.spawn then
+            started=pcall(API.spawn,worker)
+        end
+        if not started then
+            D.c.workerDispatchFailures+=1
+            state.alive=false
+            finishFailure(entry,"decompiler_dispatch_failed")
+            return
+        end
+        active[#active+1]=state
+        D.c.decompilerWorkersStarted+=1
+    end
+    local function finishWorker(state,timedOut)
+        state.alive=false
+        local entry=state.entry
+        if timedOut then
+            D.c.workerTimeouts+=1
+            local cancelled=false
+            if API.cancel then cancelled=pcall(API.cancel,state.thread) end
+            finishFailure(entry,cancelled and "timeout" or "uncancellable_worker")
+            timeoutStreak+=1
+            if not cancelled then
+                D.sourceAbortReason="uncancellable_decompiler_worker"
+            end
+        elseif state.done and state.ok
+            and type(state.body)=="string" and #state.body>0 then
+            D.exportSource(entry,state.body,"decompile")
+            D.cacheBytecode(entry,state.fingerprint)
+            entry.instance=nil
+            timeoutStreak=0
+        else
+            local reason=state.done and state.ok and "empty_or_invalid_source"
+                or D.errorKind(state.body)
+            finishFailure(entry,reason)
+            timeoutStreak=0
+        end
+    end
+    while (nextJob<=#queue or #active>0) and not D.stop and not D.sourceAbortReason do
+        while nextJob<=#queue and #active<workers and not D.stop
+            and not D.sourceAbortReason do
+            local entry=queue[nextJob]
+            nextJob+=1
+            D.current="Stage 2/2 deep decomp: "..(nextJob-1).."/"..#queue..
+                " queued, "..#active.." workers active"
+            startSource(entry)
+            if nextJob%24==0 and not D.cooperate(false) then break end
+        end
+        local now=os.clock()
+        for i=#active,1,-1 do
+            local state=active[i]
+            if state.done or now-state.t0>=CFG.sourceTimeoutSeconds then
+                table.remove(active,i)
+                finishWorker(state,not state.done)
+            end
+        end
+        if timeoutStreak>=CFG.maxConsecutiveTimeouts then
+            D.sourceAbortReason="repeated_decompiler_timeouts"
+        end
+        if not D.stop and not D.sourceAbortReason then D.cooperate(true) end
+    end
+    for _,state in ipairs(active) do
+        state.alive=false
+        if API.cancel then pcall(API.cancel,state.thread) end
+    end
+    D.sourceWorkers={}
+    if not D.stop and not D.sourceAbortReason and nextJob>#queue then
+        D.sourcePassComplete=true
+    end
 end
 function D.finalizePending(reason)
     for _, entry in ipairs(D.scripts) do
@@ -1839,6 +1928,12 @@ function D.launch()
         D.reportVisible = true
         warn(D.startupReport())
     end
+    -- Never leave a decompiler worker belonging to a closed scan alive.
+    for _,state in ipairs(D.sourceWorkers or {}) do
+        state.alive=false
+        if API.cancel and state.thread then pcall(API.cancel,state.thread) end
+    end
+    D.sourceWorkers={}
     if D.activeWorker and API.cancel then pcall(API.cancel,D.activeWorker) end
     D.activeWorker = nil
     for _, connection in ipairs(D.watchers) do pcall(function() connection:Disconnect() end) end
