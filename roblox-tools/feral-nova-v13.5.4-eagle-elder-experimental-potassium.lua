@@ -4927,7 +4927,7 @@ end
 return Flight
 ]==========],
 ["feral-nova-native-recovery-v13.3.lua"]=[==========[
--- FERAL NOVA v13.5.4 / First-bite Rest release at input priority, mixpack safe.
+-- FERAL NOVA v13.5.3 / First-bite Rest release at input priority, mixpack safe.
 -- Previously observed mobile Rest signal sometimes doubled real HP recovery.
 -- Keep native Rest requests active outside combat, including movement.
 -- Never treat delayed self-owned Rest echoes as real manual Rest actions.
