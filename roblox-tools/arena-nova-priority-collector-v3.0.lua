@@ -898,6 +898,16 @@ function D.run()
         D.running=false;D.updateUI()
         return
     end
+    D.mk(CFG.home)
+    D.buildPrivacy()
+    D.loadCache()
+    local stamp=os.date("!%Y%m%d_%H%M%S")
+    local suffix=Http:GenerateGUID(false):gsub("%W",""):sub(1,8)
+    D.session=CFG.home.."/captures/"..D.mode.."_"..stamp.."_"..suffix
+    if not D.mk(CFG.home.."/captures") or not D.mk(D.session) then
+        D.phase="WRITE FAILED";D.latest="Could not create capture directory."
+        D.running=false;D.updateUI();return
+    end
     D.frameConnection=game:GetService("RunService").Heartbeat:Connect(function(dt)
         if not D.running or dt<=0 or dt>1 then return end
         local instantaneous=math.min(144,1/dt)
@@ -911,16 +921,6 @@ function D.run()
             end
         end
     end)
-    D.mk(CFG.home)
-    D.buildPrivacy()
-    D.loadCache()
-    local stamp=os.date("!%Y%m%d_%H%M%S")
-    local suffix=Http:GenerateGUID(false):gsub("%W",""):sub(1,8)
-    D.session=CFG.home.."/captures/"..D.mode.."_"..stamp.."_"..suffix
-    if not D.mk(CFG.home.."/captures") or not D.mk(D.session) then
-        D.phase="WRITE FAILED";D.latest="Could not create capture directory."
-        D.running=false;D.updateUI();return
-    end
     D.write(D.session.."/README.txt",
         "ARENA NOVA PRIORITY v3.0 - game-focused, self-contained capture.\n"..
         "Source cache in "..CFG.home.."/cache_index.json.txt supports later scans.\n"..
