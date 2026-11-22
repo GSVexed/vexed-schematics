@@ -1,5 +1,5 @@
--- ARENA NOVA | Core + hold-right-click aim | v1.4.0
--- Client-side UI, outline-only player ESP, names-only tags, weapon reach, passive disaster cues.
+-- ARENA NOVA | Core + selectable loot ESP | v1.5.0
+-- Player outlines, clean player/loot labels, weapon reach, alerts, right-click aim and loot filters.
 -- Client-side visual tools plus optional hold-right-click camera tracking; no server-state modification.
 -- No gameplay remotes, diagnostics, perk actions, decompilation or file writes.
 
@@ -8,6 +8,8 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local CollectionService = game:GetService("CollectionService")
+local TweenService = game:GetService("TweenService")
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -51,15 +53,16 @@ local incomingOptions = environment.__ARENA_NOVA_BOOT_CONFIG
 environment.__ARENA_NOVA_BOOT_CONFIG = nil
 
 local running = true
-local VERSION = "1.4.0"
+local VERSION = "1.5.0"
 local settings = {
     outlines = true,
     names = true,
     reach = true,
     disasters = true,
     aim = true,
+    loot = true,
 }
-for _, option in ipairs({ "outlines", "names", "reach", "disasters", "aim" }) do
+for _, option in ipairs({ "outlines", "names", "reach", "disasters", "aim", "loot" }) do
     local fromTeleport = type(incomingOptions) == "table" and incomingOptions[option]
     local fromPrior = type(lastOptions) == "table" and lastOptions[option]
     if type(fromTeleport) == "boolean" then
@@ -68,6 +71,10 @@ for _, option in ipairs({ "outlines", "names", "reach", "disasters", "aim" }) do
         settings[option] = fromPrior
     end
 end
+local loadedHidden = if type(incomingOptions) == "table" then incomingOptions.lootHidden else nil
+local previousHidden = if type(lastOptions) == "table" then lastOptions.lootHidden else nil
+settings.lootHidden = if type(loadedHidden) == "string" then loadedHidden
+    else if type(previousHidden) == "string" then previousHidden else ""
 local globals = {}
 local function connect(signal, callback, owner)
     local connection = signal:Connect(callback)
@@ -712,6 +719,257 @@ local function startAim()
     aimBound = ok
 end
 
+
+-- This reads the game's existing loot CollectionService tags, with no remote
+-- requests and no broad Workspace.Descendants scanning. Rendering is capped.
+local LOOT_GROUPS = {
+    {name="WEAPONS",kind="Weapon",ids={"Falchions","Knife","Katana","Sword","Hammer","Mace","Stone-Headed Axe","Flail","Battle Axe","Hatchet","Trident","Spear","Stone-Tipped Spear","Bow","Wooden Bow","Blow Gun","Wooden Blow Gun","Kunai","Pickaxe"}},
+    {name="FOOD & HEALING",kind="Consumable",ids={"Apple","Blackberry","Blueberry","Darkberry","Grape","Bread","Coconut","Cooked Meat","Corn","Crab","Raw Meat","Mushroom","Bandage","Medicine","Bottle","Poison Bottle"}},
+    {name="RESOURCES",kind="Resource",ids={"Firewood","Stone","Herb","Bone"}},
+    {name="AMMO",kind="Ammo",ids={"Arrows","Wooden Arrows","Darts","Bone Darts"}},
+    {name="UTILITIES",kind="Utility",ids={"Disguise","Torch","Wooden Torch"}},
+    {name="UPGRADES",kind="Upgrade",ids={"Backpack"}},
+    {name="CRATES",kind="Crate",ids={"__Crate"}},
+    {name="OTHER",kind="Other",ids={"__Other"}},
+}
+local LOOT_COLORS = {
+    Weapon=Color3.fromRGB(240,191,105),
+    Consumable=Color3.fromRGB(118,212,161),
+    Resource=Color3.fromRGB(118,181,224),
+    Ammo=Color3.fromRGB(168,182,202),
+    Utility=Color3.fromRGB(151,196,225),
+    Upgrade=Color3.fromRGB(188,159,233),
+    Crate=Color3.fromRGB(225,173,124),
+    Other=Color3.fromRGB(186,199,213),
+}
+local lootKinds = {}
+for _, group in ipairs(LOOT_GROUPS) do
+    for _, id in ipairs(group.ids) do
+        lootKinds[id] = group.kind
+    end
+end
+local lootExcluded = {}
+for id in string.gmatch(settings.lootHidden, "[^|]+") do
+    if lootKinds[id] then lootExcluded[id] = true end
+end
+local function saveLootFilter()
+    local names = {}
+    for id, disabled in pairs(lootExcluded) do
+        if disabled and lootKinds[id] then table.insert(names,id) end
+    end
+    table.sort(names)
+    settings.lootHidden = table.concat(names,"|")
+end
+local lootEntries = {}
+local taggedLoot = {Highlightable={}, Crate={}}
+local lootSignals = {}
+local lootFolder = nil
+local lootUpdate = nil
+local lootItemRows = nil
+local LOOT_CAP = 64
+local LOOT_LABEL_CAP = 22
+local LOOT_LABEL_DISTANCE = 150
+
+local function readLootItems()
+    if lootItemRows then return end
+    local shared = ReplicatedStorage:FindFirstChild("Shared")
+    local constants = shared and shared:FindFirstChild("constants")
+    local mod = constants and constants:FindFirstChild("Items")
+    if mod and mod:IsA("ModuleScript") then
+        local ok, value = pcall(require, mod)
+        if ok and type(value) == "table" and type(value.rows) == "table" then
+            lootItemRows = value.rows
+        end
+    end
+end
+local function getLootPart(entry)
+    if entry.part and entry.part.Parent and entry.part:IsDescendantOf(entry.model) then
+        return entry.part
+    end
+    local model = entry.model
+    local part = model.PrimaryPart
+    if not part or not part:IsA("BasePart") then
+        part = model:FindFirstChildWhichIsA("BasePart",true)
+    end
+    entry.part = part
+    return part
+end
+local function identifyLoot(entry)
+    local model = entry.model
+    if entry.crates > 0 then
+        local size = model:GetAttribute("Size")
+        return "__Crate", (if type(size) == "string" and size ~= ""
+            then size.." Crate" else "Crate"), "Crate"
+    end
+    local raw = model:GetAttribute("ItemId") or model:GetAttribute("LootId")
+        or model:GetAttribute("Id")
+    if type(raw) ~= "string" or raw == "" then raw = model.Name end
+    local id = if lootKinds[raw] then raw else "__Other"
+    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt",true)
+    if id == "__Other" and prompt and lootKinds[prompt.ObjectText] then
+        id = prompt.ObjectText
+    end
+    local kind = lootKinds[id] or "Other"
+    local row = lootItemRows and lootItemRows[raw]
+    local display = if type(row) == "table" and type(row.displayName) == "string"
+        then row.displayName
+        else if id ~= "__Other" then id
+        else if prompt and prompt.ObjectText ~= "" then prompt.ObjectText
+        else if raw == "Model" or raw == "Loot" then "Loot" else raw
+    return id, tostring(display):gsub("_"," "), kind
+end
+local function clearLootEntry(entry)
+    if entry.fade then entry.fade:Cancel(); entry.fade = nil end
+    if entry.highlight then entry.highlight:Destroy(); entry.highlight = nil end
+    if entry.billboard then entry.billboard:Destroy(); entry.billboard = nil end
+    entry.label = nil
+    entry.showingLabel = false
+    entry.drawnId = nil
+end
+local function removeLootEntry(model)
+    local entry = lootEntries[model]
+    if entry then
+        clearLootEntry(entry)
+        lootEntries[model] = nil
+    end
+end
+local function attachLootVisual(entry, part, id, display, kind)
+    if entry.highlight and entry.billboard and entry.part == part and entry.drawnId == id then return end
+    clearLootEntry(entry)
+    local color = LOOT_COLORS[kind] or LOOT_COLORS.Other
+    entry.highlight = create("Highlight",lootFolder,{
+        Name="ArenaNovaLoot",Adornee=entry.model,
+        DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,
+        OutlineColor=color,OutlineTransparency=0.18,
+        FillColor=color,FillTransparency=1,Enabled=true,
+    })
+    entry.billboard = create("BillboardGui",playerGui,{
+        Name="ArenaNovaLootLabel",Adornee=part,
+        Size=UDim2.fromOffset(150,20),StudsOffsetWorldSpace=Vector3.new(0,1.05,0),
+        AlwaysOnTop=true,LightInfluence=0,MaxDistance=0,ResetOnSpawn=false,
+    })
+    entry.label = create("TextLabel",entry.billboard,{
+        BackgroundTransparency=1,BorderSizePixel=0,Size=UDim2.fromScale(1,1),
+        Text=string.upper(display),Font=Enum.Font.GothamMedium,
+        TextSize=11,TextScaled=false,TextTruncate=Enum.TextTruncate.AtEnd,
+        TextXAlignment=Enum.TextXAlignment.Center,
+        TextColor3=color,TextStrokeColor3=Color3.fromRGB(8,11,20),
+        TextTransparency=1,TextStrokeTransparency=1,
+    })
+    entry.showingLabel = false
+    entry.drawnId = id
+end
+local function labelLoot(entry, show)
+    if not entry.label or entry.showingLabel == show then return end
+    entry.showingLabel = show
+    if entry.fade then entry.fade:Cancel() end
+    entry.fade = TweenService:Create(entry.label,TweenInfo.new(0.18,Enum.EasingStyle.Quad),{
+        TextTransparency=if show then 0 else 1,
+        TextStrokeTransparency=if show then 0.66 else 1,
+    })
+    entry.fade:Play()
+end
+local function onLootTagged(instance, tag)
+    if taggedLoot[tag][instance] then return end
+    local model = if instance:IsA("Model") then instance else instance:FindFirstAncestorOfClass("Model")
+    if not model then return end
+    taggedLoot[tag][instance] = model
+    local entry = lootEntries[model]
+    if not entry then
+        entry = {model=model, sources=0, crates=0}
+        lootEntries[model] = entry
+    end
+    entry.sources += 1
+    if tag == "Crate" then entry.crates += 1 end
+end
+local function onLootUntagged(instance, tag)
+    local model = taggedLoot[tag][instance]
+    if not model then return end
+    taggedLoot[tag][instance] = nil
+    local entry = lootEntries[model]
+    if not entry then return end
+    entry.sources -= 1
+    if tag == "Crate" then entry.crates = math.max(0,entry.crates - 1) end
+    if entry.sources <= 0 then removeLootEntry(model) else clearLootEntry(entry) end
+end
+local function refreshLootESP()
+    if not running or not settings.loot or not lootFolder then return end
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    local camera = Workspace.CurrentCamera
+    local origin = if root and root:IsA("BasePart") then root.Position
+        else if camera then camera.CFrame.Position else nil
+    if not origin or game.PlaceId == 72238253016204 then
+        for _, entry in pairs(lootEntries) do clearLootEntry(entry) end
+        return
+    end
+    local candidates = {}
+    for _, entry in pairs(lootEntries) do
+        if entry.sources > 0 and entry.model:IsDescendantOf(Workspace) then
+            local id, label, kind = identifyLoot(entry)
+            local part = getLootPart(entry)
+            if part and part:IsDescendantOf(Workspace) and not lootExcluded[id] then
+                local distance = (part.Position - origin).Magnitude
+                table.insert(candidates,{
+                    entry=entry,part=part,id=id,label=label,kind=kind,distance=distance,
+                })
+            else
+                clearLootEntry(entry)
+            end
+        else
+            clearLootEntry(entry)
+        end
+    end
+    table.sort(candidates,function(a,b)
+        local ad = a.distance * (if a.entry.highlight then 0.96 else 1)
+        local bd = b.distance * (if b.entry.highlight then 0.96 else 1)
+        return ad < bd
+    end)
+    local labels = 0
+    for index, item in ipairs(candidates) do
+        if index <= LOOT_CAP then
+            attachLootVisual(item.entry,item.part,item.id,item.label,item.kind)
+            local show = labels < LOOT_LABEL_CAP and item.distance < LOOT_LABEL_DISTANCE
+            if show then labels += 1 end
+            labelLoot(item.entry,show)
+        else
+            clearLootEntry(item.entry)
+        end
+    end
+end
+local function stopLootESP()
+    if lootUpdate then lootUpdate:Disconnect(); lootUpdate = nil end
+    disconnectAll(lootSignals)
+    for _, entry in pairs(lootEntries) do clearLootEntry(entry) end
+    table.clear(lootEntries)
+    for _, map in pairs(taggedLoot) do table.clear(map) end
+    if lootFolder then lootFolder:Destroy(); lootFolder = nil end
+end
+local function startLootESP()
+    if lootFolder then return end
+    readLootItems()
+    lootFolder = create("Folder",Workspace,{Name="ArenaNovaLootESP"})
+    for _, tag in ipairs({"Highlightable","Crate"}) do
+        connect(CollectionService:GetInstanceAddedSignal(tag),function(object)
+            onLootTagged(object,tag)
+        end,lootSignals)
+        connect(CollectionService:GetInstanceRemovedSignal(tag),function(object)
+            onLootUntagged(object,tag)
+        end,lootSignals)
+        for _, object in ipairs(CollectionService:GetTagged(tag)) do
+            onLootTagged(object,tag)
+        end
+    end
+    refreshLootESP()
+    local elapsed = 0
+    lootUpdate = RunService.Heartbeat:Connect(function(dt)
+        elapsed += dt
+        if elapsed >= 0.4 then
+            elapsed = 0
+            refreshLootESP()
+        end
+    end)
+end
+
 -- UI shell: all working modules have a single-click toggle.
 local ui = create("ScreenGui", playerGui, {
     Name = "ArenaNovaPhase4",
@@ -732,8 +990,8 @@ local palette = {
 }
 local main = create("Frame", ui, {
     Name = "Panel",
-    Size = UDim2.fromOffset(354, 368),
-    Position = UDim2.new(0.5, -177, 0.5, -184),
+    Size = UDim2.fromOffset(354, 422)
+    Position = UDim2.new(0.5, -177, 0.5, -211)
     BackgroundColor3 = palette.panel,
     BorderSizePixel = 0,
     Visible = true,
@@ -785,7 +1043,7 @@ makeCorner(hideButton, 7)
 local livePage = create("Frame", main, {
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(14, 62),
-    Size = UDim2.new(1, -28, 0, 270),
+    Size = UDim2.new(1, -28, 0, 325)
     Visible = true,
 })
 local toggleUI = {}
@@ -795,6 +1053,7 @@ local definitions = {
     {key = "reach", label = "WEAPON REACH"},
     {key = "disasters", label = "DISASTER ALERTS"},
     {key = "aim", label = "RIGHT-CLICK AIM"},
+    {key = "loot", label = "LOOT ESP    ·    G"},
 }
 for index, definition in ipairs(definitions) do
     local row = create("TextButton", livePage, {
@@ -834,11 +1093,311 @@ for index, definition in ipairs(definitions) do
 end
 
 
+
+-- LOOT FILTER: an integrated dropdown with item-by-item multi-select,
+-- grouped bulk toggles, search and small state indicators.
+local filterButton = create("TextButton",toggleUI.loot.button,{
+    Name="LootFilterButton",
+    Position=UDim2.new(1,-165,0.5,-13),
+    Size=UDim2.fromOffset(85,26),
+    BackgroundColor3=palette.panel,
+    BorderSizePixel=0,
+    Text="ALL  ▾",
+    TextColor3=palette.white,
+    Font=Enum.Font.GothamBold,
+    TextSize=10,
+    AutoButtonColor=false,
+    Active=true,
+    ZIndex=6,
+})
+makeCorner(filterButton,6)
+toggleUI.loot.text.Size = UDim2.new(1,-181,1,0)
+
+local filterPopup = create("Frame",main,{
+    Name="LootFilterDropdown",
+    BackgroundColor3=palette.panel,
+    Position=UDim2.fromOffset(14,84),
+    Size=UDim2.new(1,-28,0,287),
+    BorderSizePixel=0,
+    Active=true,
+    Visible=false,
+    ZIndex=40,
+})
+makeCorner(filterPopup,9)
+makeStroke(filterPopup,palette.border,0.12)
+create("TextLabel",filterPopup,{
+    BackgroundTransparency=1,
+    Position=UDim2.fromOffset(13,8),
+    Size=UDim2.new(1,-54,0,23),
+    Text="LOOT FILTER",
+    TextColor3=palette.white,
+    Font=Enum.Font.GothamBold,
+    TextSize=12,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ZIndex=41,
+})
+local filterClose = create("TextButton",filterPopup,{
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.new(1,-36,0,8),
+    Size=UDim2.fromOffset(26,25),
+    Text="×",
+    TextColor3=palette.white,
+    Font=Enum.Font.GothamMedium,
+    TextSize=17,
+    AutoButtonColor=false,
+    ZIndex=42,
+})
+makeCorner(filterClose,5)
+local filterSearch = create("TextBox",filterPopup,{
+    Name="FindLoot",
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.fromOffset(10,40),
+    Size=UDim2.new(1,-20,0,29),
+    PlaceholderText="Search for an item...",
+    PlaceholderColor3=palette.muted,
+    Text="",
+    TextColor3=palette.white,
+    Font=Enum.Font.Gotham,
+    TextSize=12,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ClearTextOnFocus=false,
+    ZIndex=42,
+})
+makeCorner(filterSearch,6)
+create("UIPadding",filterSearch,{PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)})
+local filterAll = create("TextButton",filterPopup,{
+    Name="SelectAll",
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.fromOffset(10,76),
+    Size=UDim2.fromOffset(147,26),
+    Text="SELECT ALL",
+    TextColor3=palette.muted,
+    Font=Enum.Font.GothamBold,
+    TextSize=10,
+    AutoButtonColor=false,
+    ZIndex=42,
+})
+makeCorner(filterAll,5)
+local filterNone = create("TextButton",filterPopup,{
+    Name="ClearAll",
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.new(1,-157,0,76),
+    Size=UDim2.fromOffset(147,26),
+    Text="CLEAR ALL",
+    TextColor3=palette.muted,
+    Font=Enum.Font.GothamBold,
+    TextSize=10,
+    AutoButtonColor=false,
+    ZIndex=42,
+})
+makeCorner(filterNone,5)
+local filterScroll = create("ScrollingFrame",filterPopup,{
+    Name="LootChoices",
+    BackgroundTransparency=1,
+    BorderSizePixel=0,
+    Position=UDim2.fromOffset(9,109),
+    Size=UDim2.new(1,-18,0,169),
+    ScrollBarThickness=3,
+    ScrollBarImageColor3=palette.border,
+    CanvasSize=UDim2.fromOffset(0,0),
+    ZIndex=42,
+})
+local filterLayout = create("UIListLayout",filterScroll,{
+    SortOrder=Enum.SortOrder.LayoutOrder,
+    Padding=UDim.new(0,3),
+})
+local filterGroupRows = {}
+local filterExpanded = {}
+local updateLootFilterUI
+
+for groupIndex,group in ipairs(LOOT_GROUPS) do
+    local groupData = {group=group,items={}}
+    filterExpanded[group.kind] = false
+    local headerRow = create("TextButton",filterScroll,{
+        Name=group.kind.."_All",
+        BackgroundColor3=palette.surface,
+        BorderSizePixel=0,
+        Size=UDim2.new(1,-7,0,29),
+        LayoutOrder=groupIndex*100,
+        Text="",
+        AutoButtonColor=false,
+        ZIndex=43,
+    })
+    makeCorner(headerRow,5)
+    create("Frame",headerRow,{
+        BackgroundColor3=LOOT_COLORS[group.kind],
+        BorderSizePixel=0,
+        Position=UDim2.fromOffset(9,10),
+        Size=UDim2.fromOffset(7,7),
+        ZIndex=44,
+    })
+    create("TextLabel",headerRow,{
+        BackgroundTransparency=1,
+        Position=UDim2.fromOffset(23,0),
+        Size=UDim2.new(1,-104,1,0),
+        Text=group.name,
+        TextColor3=palette.white,
+        Font=Enum.Font.GothamMedium,
+        TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        ZIndex=44,
+    })
+    local counter = create("TextLabel",headerRow,{
+        BackgroundTransparency=1,
+        Position=UDim2.new(1,-77,0,0),
+        Size=UDim2.fromOffset(47,29),
+        Text="",
+        TextColor3=palette.muted,
+        Font=Enum.Font.Gotham,
+        TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Right,
+        ZIndex=44,
+    })
+    local expand = create("TextButton",headerRow,{
+        BackgroundTransparency=1,
+        Position=UDim2.new(1,-30,0,0),
+        Size=UDim2.fromOffset(29,29),
+        Text="▸",
+        TextColor3=palette.muted,
+        Font=Enum.Font.GothamBold,
+        TextSize=14,
+        AutoButtonColor=false,
+        ZIndex=45,
+    })
+    groupData.header=headerRow
+    groupData.counter=counter
+    groupData.expand=expand
+    connect(headerRow.Activated,function()
+        local anyDisabled=false
+        for _,id in ipairs(group.ids) do
+            if lootExcluded[id] then anyDisabled=true;break end
+        end
+        for _,id in ipairs(group.ids) do
+            lootExcluded[id]=if anyDisabled then nil else true
+        end
+        saveLootFilter()
+        refreshLootESP()
+        if updateLootFilterUI then updateLootFilterUI() end
+    end)
+    connect(expand.Activated,function()
+        filterExpanded[group.kind]=not filterExpanded[group.kind]
+        if updateLootFilterUI then updateLootFilterUI() end
+    end)
+    for itemIndex,id in ipairs(group.ids) do
+        local display=if id=="__Crate" then "Crates"
+            else if id=="__Other" then "Other loot"
+            else id
+        local row=create("TextButton",filterScroll,{
+            Name="Choice_"..id,
+            BackgroundColor3=Color3.fromRGB(26,30,41),
+            BorderSizePixel=0,
+            Size=UDim2.new(1,-7,0,25),
+            LayoutOrder=groupIndex*100+itemIndex,
+            Text="",
+            Visible=false,
+            AutoButtonColor=false,
+            ZIndex=43,
+        })
+        makeCorner(row,5)
+        create("TextLabel",row,{
+            BackgroundTransparency=1,
+            Position=UDim2.fromOffset(18,0),
+            Size=UDim2.new(1,-61,1,0),
+            Text=display,
+            TextColor3=palette.white,
+            Font=Enum.Font.Gotham,
+            TextSize=11,
+            TextXAlignment=Enum.TextXAlignment.Left,
+            ZIndex=44,
+        })
+        local check=create("TextLabel",row,{
+            BackgroundColor3=palette.accent,
+            BorderSizePixel=0,
+            Position=UDim2.new(1,-29,0.5,-9),
+            Size=UDim2.fromOffset(19,18),
+            Text="✓",
+            TextColor3=palette.panel,
+            Font=Enum.Font.GothamBold,
+            TextSize=11,
+            ZIndex=44,
+        })
+        makeCorner(check,5)
+        table.insert(groupData.items,{id=id,name=display,row=row,check=check})
+        connect(row.Activated,function()
+            lootExcluded[id]=if lootExcluded[id] then nil else true
+            saveLootFilter()
+            refreshLootESP()
+            if updateLootFilterUI then updateLootFilterUI() end
+        end)
+    end
+    table.insert(filterGroupRows,groupData)
+end
+updateLootFilterUI=function()
+    local term=string.lower(filterSearch.Text)
+    term=term:match("^%s*(.-)%s*$") or ""
+    local total,selected=0,0
+    for _,group in ipairs(LOOT_GROUPS) do
+        for _,id in ipairs(group.ids) do
+            total+=1
+            if not lootExcluded[id] then selected+=1 end
+        end
+    end
+    filterButton.Text=if selected==total then "ALL  ▾"
+        else tostring(selected).."/"..tostring(total).."  ▾"
+    for _,widget in ipairs(filterGroupRows) do
+        local enabled=0
+        local matched=0
+        local groupMatch=term=="" or string.find(string.lower(widget.group.name),term,1,true)~=nil
+        for _,item in ipairs(widget.items) do
+            if not lootExcluded[item.id] then enabled+=1 end
+            local matches=groupMatch or string.find(string.lower(item.name),term,1,true)~=nil
+            if matches then matched+=1 end
+            item.row.Visible=matches and (filterExpanded[widget.group.kind] or term~="")
+            item.check.Text=if lootExcluded[item.id] then "–" else "✓"
+            item.check.BackgroundColor3=if lootExcluded[item.id] then palette.border else palette.accent
+            item.check.TextColor3=if lootExcluded[item.id] then palette.white else palette.panel
+        end
+        widget.header.Visible=matched>0 or term==""
+        widget.counter.Text=tostring(enabled).."/"..tostring(#widget.items)
+        widget.expand.Text=if filterExpanded[widget.group.kind] or term~="" then "▾" else "▸"
+    end
+end
+connect(filterLayout:GetPropertyChangedSignal("AbsoluteContentSize"),function()
+    filterScroll.CanvasSize=UDim2.fromOffset(0,filterLayout.AbsoluteContentSize.Y+9)
+end)
+connect(filterSearch:GetPropertyChangedSignal("Text"),function()
+    updateLootFilterUI()
+end)
+connect(filterButton.Activated,function()
+    filterPopup.Visible=not filterPopup.Visible
+    if filterPopup.Visible then updateLootFilterUI() end
+end)
+connect(filterClose.Activated,function()
+    filterPopup.Visible=false
+end)
+connect(filterAll.Activated,function()
+    table.clear(lootExcluded)
+    saveLootFilter()
+    refreshLootESP()
+    updateLootFilterUI()
+end)
+connect(filterNone.Activated,function()
+    for id in pairs(lootKinds) do lootExcluded[id]=true end
+    saveLootFilter()
+    refreshLootESP()
+    updateLootFilterUI()
+end)
+updateLootFilterUI()
+
 -- Core-only build: no experimental combat/stamina/knockback hooks,
 -- no perk manipulation, and no speculative resource or immunity controls.
 local footer = create("Frame", main, {
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(15, 339),
+    Position = UDim2.fromOffset(15, 393)
     Size = UDim2.new(1, -30, 0, 23),
 })
 create("TextLabel", footer, {
@@ -1040,6 +1599,12 @@ local function setOption(key, value)
         else
             stopAim()
         end
+    elseif key == "loot" then
+        if value then
+            startLootESP()
+        else
+            stopLootESP()
+        end
     end
     repaintToggle(key)
 end
@@ -1074,6 +1639,7 @@ end)
 local function setMenuVisible(visible)
     if running then
         main.Visible = visible
+        if not visible then filterPopup.Visible = false end
     end
 end
 connect(hideButton.Activated, function()
@@ -1085,6 +1651,8 @@ connect(UserInputService.InputBegan, function(input, processed)
     end
     if input.KeyCode == Enum.KeyCode.RightShift then
         setMenuVisible(not main.Visible)
+    elseif input.KeyCode == Enum.KeyCode.G and not processed then
+        setOption("loot",not settings.loot)
     end
 end)
 
@@ -1120,6 +1688,7 @@ local function unload()
         return
     end
     running = false
+    stopLootESP()
     stopAim()
     stopDisasters()
     stopReach()
@@ -1160,12 +1729,14 @@ if type(teleportQueue) == "function" then
     connect(player.OnTeleport, function(state)
         if running and not didQueue and state == Enum.TeleportState.Started then
             local config = string.format(
-                "{outlines=%s,names=%s,reach=%s,disasters=%s,aim=%s}",
+                "{outlines=%s,names=%s,reach=%s,disasters=%s,aim=%s,loot=%s,lootHidden=%q}",
                 tostring(settings.outlines),
                 tostring(settings.names),
                 tostring(settings.reach),
                 tostring(settings.disasters),
-                tostring(settings.aim)
+                tostring(settings.aim),
+                tostring(settings.loot),
+                settings.lootHidden
             )
             local loader = [[local env=_G;if type(getgenv)=="function" then local ok,x=pcall(getgenv);if ok and type(x)=="table" then env=x end end;env.__ARENA_NOVA_BOOT_CONFIG=]]
                 .. config
@@ -1202,5 +1773,8 @@ if settings.disasters then
 end
 if settings.aim then
     startAim()
+end
+if settings.loot then
+    startLootESP()
 end
 print("[ARENA NOVA] Core-only v" .. VERSION .. " loaded. Right Shift opens/closes the hub.")
