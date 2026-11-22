@@ -60,7 +60,6 @@ jobs:
               'DisplayName',
               'CharacterAdded',
               'GetAttribute',
-              'Catlike',
               'MaxDistance = 0',
               'reachModel:PivotTo',
               'ALL OFF',
