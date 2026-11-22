@@ -1,0 +1,89 @@
+name: FERAL NOVA v13.5.2 Mixpack-Safe Auto Rest
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.5.2-mixpack-safe-rest-potassium.lua'
+      - 'roblox-tools/feral-nova-native-recovery-v13.5.2.lua'
+      - '.github/workflows/feral-nova-v13.5.2-mixpack-safe-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert passive proximity cannot block Rest, all 23 modules preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.5.1-general-ghost-hit-reliability-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.5.2-mixpack-safe-rest-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pattern,old,re.S))
+          after=dict(re.findall(pattern,new,re.S))
+          assert len(before)==len(after)==23,(len(before),len(after))
+          assert set(before)==set(after)
+          diff={name for name in before if before[name]!=after[name]}
+          assert diff=={'feral-nova-native-recovery-v13.3.lua'},diff
+          for name in set(before)-diff: assert before[name]==after[name],name
+          native=after['feral-nova-native-recovery-v13.3.lua']
+          assert native.strip()==(root/'feral-nova-native-recovery-v13.5.2.lua').read_text().strip()
+          # Neither a target ring nor a nearby mixed-pack animal can
+          # preempt Rest. No hidden tree/Cobra proximity fallback remains.
+          assert 'nearbyAttackTarget(' not in native
+          assert 'GENERAL PRE-BITE CONTACT / REST YIELDED' not in native
+          assert 'TREE COMBAT NEARBY / REST YIELDED' not in native
+          assert 'COBRA PRE-BITE RANGE / REST YIELDED' not in native
+          assert 'GetAttribute("FeralPack")' not in native
+          assert 'mixpackSafeRecovery=true' in native
+          assert 'passive_target_rest_preemption_disabled=true' in native
+          assert 'N.lastAttackIntentAt=os.clock()' in native
+          assert 'N.generalBiteRestHandoffs+=1' in native
+          assert 'cobra and 2.4 or N.generalAttackHoldSeconds' in native
+          assert 'N.beforeKingsStrike(' in native
+          assert 'N.beforeFeed(' in native
+          assert 'N.manualRest' in native
+          assert 'UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)' in native
+          combat=after['feral-nova-combat-v15.0.lua']
+          reach=after['feral-nova-reach-v14.0.lua']
+          assert 'score=gap-dot*2' in combat
+          assert 'C.eligibleGhostSamples+=1' in combat
+          assert 'Instance.new("TextLabel")' not in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'CONE=math.min(original.CONE+48,124)' in reach
+          assert 'desired.biteLook=function(char,forward)' in reach
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in reach
+          assert 'release="13.5.2"' in new
+          assert 'version="13.5.2"' in new
+          assert 'activeRecord.version="feral-nova-v13.5.2"' in new
+          directory=Path('/tmp/feral-1352-modules')
+          directory.mkdir(exist_ok=True)
+          for name,body in after.items(): (directory/name).write_text(body+'\n')
+          print('FERAL_V1352_MIXPACK_SAFE_NO_PROXIMITY_REST_BLOCKS_23_MODULES_PRESERVED')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile integrated launcher and 23 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.2-mixpack-safe-rest-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v13.5.2.lua
+          for file in /tmp/feral-1352-modules/*.lua; do "$LUAU_COMPILER" --null "$file"; done
+          echo FERAL_V1352_ALL_MODULES_COMPILE_PASS
