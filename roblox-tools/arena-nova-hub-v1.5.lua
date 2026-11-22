@@ -1093,6 +1093,306 @@ for index, definition in ipairs(definitions) do
 end
 
 
+
+-- LOOT FILTER: an integrated dropdown with item-by-item multi-select,
+-- grouped bulk toggles, search and small state indicators.
+local filterButton = create("TextButton",toggleUI.loot.button,{
+    Name="LootFilterButton",
+    Position=UDim2.new(1,-165,0.5,-13),
+    Size=UDim2.fromOffset(85,26),
+    BackgroundColor3=palette.panel,
+    BorderSizePixel=0,
+    Text="ALL  ▾",
+    TextColor3=palette.white,
+    Font=Enum.Font.GothamBold,
+    TextSize=10,
+    AutoButtonColor=false,
+    Active=true,
+    ZIndex=6,
+})
+makeCorner(filterButton,6)
+toggleUI.loot.text.Size = UDim2.new(1,-181,1,0)
+
+local filterPopup = create("Frame",main,{
+    Name="LootFilterDropdown",
+    BackgroundColor3=palette.panel,
+    Position=UDim2.fromOffset(14,84),
+    Size=UDim2.new(1,-28,0,287),
+    BorderSizePixel=0,
+    Active=true,
+    Visible=false,
+    ZIndex=40,
+})
+makeCorner(filterPopup,9)
+makeStroke(filterPopup,palette.border,0.12)
+create("TextLabel",filterPopup,{
+    BackgroundTransparency=1,
+    Position=UDim2.fromOffset(13,8),
+    Size=UDim2.new(1,-54,0,23),
+    Text="LOOT FILTER",
+    TextColor3=palette.white,
+    Font=Enum.Font.GothamBold,
+    TextSize=12,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ZIndex=41,
+})
+local filterClose = create("TextButton",filterPopup,{
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.new(1,-36,0,8),
+    Size=UDim2.fromOffset(26,25),
+    Text="×",
+    TextColor3=palette.white,
+    Font=Enum.Font.GothamMedium,
+    TextSize=17,
+    AutoButtonColor=false,
+    ZIndex=42,
+})
+makeCorner(filterClose,5)
+local filterSearch = create("TextBox",filterPopup,{
+    Name="FindLoot",
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.fromOffset(10,40),
+    Size=UDim2.new(1,-20,0,29),
+    PlaceholderText="Search for an item...",
+    PlaceholderColor3=palette.muted,
+    Text="",
+    TextColor3=palette.white,
+    Font=Enum.Font.Gotham,
+    TextSize=12,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ClearTextOnFocus=false,
+    ZIndex=42,
+})
+makeCorner(filterSearch,6)
+create("UIPadding",filterSearch,{PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)})
+local filterAll = create("TextButton",filterPopup,{
+    Name="SelectAll",
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.fromOffset(10,76),
+    Size=UDim2.fromOffset(147,26),
+    Text="SELECT ALL",
+    TextColor3=palette.muted,
+    Font=Enum.Font.GothamBold,
+    TextSize=10,
+    AutoButtonColor=false,
+    ZIndex=42,
+})
+makeCorner(filterAll,5)
+local filterNone = create("TextButton",filterPopup,{
+    Name="ClearAll",
+    BackgroundColor3=palette.surface,
+    BorderSizePixel=0,
+    Position=UDim2.new(1,-157,0,76),
+    Size=UDim2.fromOffset(147,26),
+    Text="CLEAR ALL",
+    TextColor3=palette.muted,
+    Font=Enum.Font.GothamBold,
+    TextSize=10,
+    AutoButtonColor=false,
+    ZIndex=42,
+})
+makeCorner(filterNone,5)
+local filterScroll = create("ScrollingFrame",filterPopup,{
+    Name="LootChoices",
+    BackgroundTransparency=1,
+    BorderSizePixel=0,
+    Position=UDim2.fromOffset(9,109),
+    Size=UDim2.new(1,-18,0,169),
+    ScrollBarThickness=3,
+    ScrollBarImageColor3=palette.border,
+    CanvasSize=UDim2.fromOffset(0,0),
+    ZIndex=42,
+})
+local filterLayout = create("UIListLayout",filterScroll,{
+    SortOrder=Enum.SortOrder.LayoutOrder,
+    Padding=UDim.new(0,3),
+})
+local filterGroupRows = {}
+local filterExpanded = {}
+local updateLootFilterUI
+
+for groupIndex,group in ipairs(LOOT_GROUPS) do
+    local groupData = {group=group,items={}}
+    filterExpanded[group.kind] = false
+    local headerRow = create("TextButton",filterScroll,{
+        Name=group.kind.."_All",
+        BackgroundColor3=palette.surface,
+        BorderSizePixel=0,
+        Size=UDim2.new(1,-7,0,29),
+        LayoutOrder=groupIndex*100,
+        Text="",
+        AutoButtonColor=false,
+        ZIndex=43,
+    })
+    makeCorner(headerRow,5)
+    create("Frame",headerRow,{
+        BackgroundColor3=LOOT_COLORS[group.kind],
+        BorderSizePixel=0,
+        Position=UDim2.fromOffset(9,10),
+        Size=UDim2.fromOffset(7,7),
+        ZIndex=44,
+    })
+    create("TextLabel",headerRow,{
+        BackgroundTransparency=1,
+        Position=UDim2.fromOffset(23,0),
+        Size=UDim2.new(1,-104,1,0),
+        Text=group.name,
+        TextColor3=palette.white,
+        Font=Enum.Font.GothamMedium,
+        TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        ZIndex=44,
+    })
+    local counter = create("TextLabel",headerRow,{
+        BackgroundTransparency=1,
+        Position=UDim2.new(1,-77,0,0),
+        Size=UDim2.fromOffset(47,29),
+        Text="",
+        TextColor3=palette.muted,
+        Font=Enum.Font.Gotham,
+        TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Right,
+        ZIndex=44,
+    })
+    local expand = create("TextButton",headerRow,{
+        BackgroundTransparency=1,
+        Position=UDim2.new(1,-30,0,0),
+        Size=UDim2.fromOffset(29,29),
+        Text="▸",
+        TextColor3=palette.muted,
+        Font=Enum.Font.GothamBold,
+        TextSize=14,
+        AutoButtonColor=false,
+        ZIndex=45,
+    })
+    groupData.header=headerRow
+    groupData.counter=counter
+    groupData.expand=expand
+    connect(headerRow.Activated,function()
+        local anyDisabled=false
+        for _,id in ipairs(group.ids) do
+            if lootExcluded[id] then anyDisabled=true;break end
+        end
+        for _,id in ipairs(group.ids) do
+            lootExcluded[id]=if anyDisabled then nil else true
+        end
+        saveLootFilter()
+        refreshLootESP()
+        if updateLootFilterUI then updateLootFilterUI() end
+    end)
+    connect(expand.Activated,function()
+        filterExpanded[group.kind]=not filterExpanded[group.kind]
+        if updateLootFilterUI then updateLootFilterUI() end
+    end)
+    for itemIndex,id in ipairs(group.ids) do
+        local display=if id=="__Crate" then "Crates"
+            else if id=="__Other" then "Other loot"
+            else id
+        local row=create("TextButton",filterScroll,{
+            Name="Choice_"..id,
+            BackgroundColor3=Color3.fromRGB(26,30,41),
+            BorderSizePixel=0,
+            Size=UDim2.new(1,-7,0,25),
+            LayoutOrder=groupIndex*100+itemIndex,
+            Text="",
+            Visible=false,
+            AutoButtonColor=false,
+            ZIndex=43,
+        })
+        makeCorner(row,5)
+        create("TextLabel",row,{
+            BackgroundTransparency=1,
+            Position=UDim2.fromOffset(18,0),
+            Size=UDim2.new(1,-61,1,0),
+            Text=display,
+            TextColor3=palette.white,
+            Font=Enum.Font.Gotham,
+            TextSize=11,
+            TextXAlignment=Enum.TextXAlignment.Left,
+            ZIndex=44,
+        })
+        local check=create("TextLabel",row,{
+            BackgroundColor3=palette.accent,
+            BorderSizePixel=0,
+            Position=UDim2.new(1,-29,0.5,-9),
+            Size=UDim2.fromOffset(19,18),
+            Text="✓",
+            TextColor3=palette.panel,
+            Font=Enum.Font.GothamBold,
+            TextSize=11,
+            ZIndex=44,
+        })
+        makeCorner(check,5)
+        table.insert(groupData.items,{id=id,name=display,row=row,check=check})
+        connect(row.Activated,function()
+            lootExcluded[id]=if lootExcluded[id] then nil else true
+            saveLootFilter()
+            refreshLootESP()
+            if updateLootFilterUI then updateLootFilterUI() end
+        end)
+    end
+    table.insert(filterGroupRows,groupData)
+end
+updateLootFilterUI=function()
+    local term=string.lower(filterSearch.Text)
+    term=term:match("^%s*(.-)%s*$") or ""
+    local total,selected=0,0
+    for _,group in ipairs(LOOT_GROUPS) do
+        for _,id in ipairs(group.ids) do
+            total+=1
+            if not lootExcluded[id] then selected+=1 end
+        end
+    end
+    filterButton.Text=if selected==total then "ALL  ▾"
+        else tostring(selected).."/"..tostring(total).."  ▾"
+    for _,widget in ipairs(filterGroupRows) do
+        local enabled=0
+        local matched=0
+        local groupMatch=term=="" or string.find(string.lower(widget.group.name),term,1,true)~=nil
+        for _,item in ipairs(widget.items) do
+            if not lootExcluded[item.id] then enabled+=1 end
+            local matches=groupMatch or string.find(string.lower(item.name),term,1,true)~=nil
+            if matches then matched+=1 end
+            item.row.Visible=matches and (filterExpanded[widget.group.kind] or term~="")
+            item.check.Text=if lootExcluded[item.id] then "–" else "✓"
+            item.check.BackgroundColor3=if lootExcluded[item.id] then palette.border else palette.accent
+            item.check.TextColor3=if lootExcluded[item.id] then palette.white else palette.panel
+        end
+        widget.header.Visible=matched>0 or term==""
+        widget.counter.Text=tostring(enabled).."/"..tostring(#widget.items)
+        widget.expand.Text=if filterExpanded[widget.group.kind] or term~="" then "▾" else "▸"
+    end
+end
+connect(filterLayout:GetPropertyChangedSignal("AbsoluteContentSize"),function()
+    filterScroll.CanvasSize=UDim2.fromOffset(0,filterLayout.AbsoluteContentSize.Y+9)
+end)
+connect(filterSearch:GetPropertyChangedSignal("Text"),function()
+    updateLootFilterUI()
+end)
+connect(filterButton.Activated,function()
+    filterPopup.Visible=not filterPopup.Visible
+    if filterPopup.Visible then updateLootFilterUI() end
+end)
+connect(filterClose.Activated,function()
+    filterPopup.Visible=false
+end)
+connect(filterAll.Activated,function()
+    table.clear(lootExcluded)
+    saveLootFilter()
+    refreshLootESP()
+    updateLootFilterUI()
+end)
+connect(filterNone.Activated,function()
+    for id in pairs(lootKinds) do lootExcluded[id]=true end
+    saveLootFilter()
+    refreshLootESP()
+    updateLootFilterUI()
+end)
+updateLootFilterUI()
+
 -- Core-only build: no experimental combat/stamina/knockback hooks,
 -- no perk manipulation, and no speculative resource or immunity controls.
 local footer = create("Frame", main, {
@@ -1339,6 +1639,7 @@ end)
 local function setMenuVisible(visible)
     if running then
         main.Visible = visible
+        if not visible then filterPopup.Visible = false end
     end
 end
 connect(hideButton.Activated, function()
