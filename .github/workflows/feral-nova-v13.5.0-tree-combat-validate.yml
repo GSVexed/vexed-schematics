@@ -1,0 +1,100 @@
+name: FERAL NOVA v13.5.0 Tree Combat - Bite and Recovery Validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.5.0-tree-combat-potassium.lua'
+      - '.github/workflows/feral-nova-v13.5.0-tree-combat-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve all modules and verify native tree-combat safeguards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.4.9-no-bite-text-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.5.0-tree-combat-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pattern,old,re.S))
+          after=dict(re.findall(pattern,new,re.S))
+          assert len(before)==len(after)==23,(len(before),len(after))
+          assert set(before)==set(after)
+          changed={name for name in before if before[name]!=after[name]}
+          expected={'feral-nova-combat-v15.0.lua','feral-nova-reach-v14.0.lua',
+                    'feral-nova-native-recovery-v13.3.lua'}
+          assert changed==expected,(changed,expected)
+          for name in set(before)-changed:
+              assert before[name]==after[name],name
+          sources=[
+              ('feral-nova-combat-v15.9.lua','feral-nova-combat-v15.0.lua'),
+              ('feral-nova-reach-v14.2.lua','feral-nova-reach-v14.0.lua'),
+              ('feral-nova-native-recovery-v13.5.0.lua','feral-nova-native-recovery-v13.3.lua')]
+          for source,module in sources:
+              assert (root/source).read_text().strip()==after[module].strip(),source
+          reach=after['feral-nova-reach-v14.0.lua']
+          combat=after['feral-nova-combat-v15.0.lua']
+          recovery=after['feral-nova-native-recovery-v13.3.lua']
+          assert 'CONE=math.min(original.CONE+48,124)' in reach
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in reach
+          assert 'return gap-.84' in reach
+          assert 'desired.biteLook=function(char,forward)' in reach
+          assert 'desired.dyMult=function(char)' in reach
+          assert 'FeralClimbAxis' in reach
+          assert 'treeMatch(char,model,root,enemyRoot)' in reach
+          assert 'if not climbTarget then return nil end' in reach
+          assert 'for _,key in ipairs({"REACH","HIT_SCALE","CONE","SLACK","MAX_DY","bodyGap","biteLook","dyMult"})' in reach
+          assert 'C.treeCacheHits+=1' in reach
+          assert 'ctx.reach.treeTarget(char,root,27)' in combat
+          assert 'tryNativeTreeClaim(char,char:GetAttribute("WolfBiteAt"))' in combat
+          assert 'if Vector3.new(lv.X,0,lv.Z).Magnitude>=.01 then return end' in combat
+          assert 'if not candidate or not candidate.certain then' in combat
+          assert 'char:GetAttribute("WolfBiteAt")~=biteAt' in combat
+          assert 'remote:FireServer("BiteHit",{t=biteAt,m=target.model})' in combat
+          assert 'SERVER ACCEPTANCE UNVERIFIED' in combat
+          assert 'Instance.new("TextLabel")' not in combat
+          assert 'CombatAimHint' not in combat
+          assert 'record.h.OutlineColor=DIVE_COLOR' in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'RunService:BindToRenderStep("FERAL_NOVA_BITE_SMOOTH_V156"' in combat
+          assert 'TREE COMBAT NEARBY / REST YIELDED' in recovery
+          assert 'N.beforeKingsStrike' in recovery
+          assert 'release="13.5.0"' in new
+          assert 'version="13.5.0"' in new
+          assert 'activeRecord.version="feral-nova-v13.5.0"' in new
+          directory=Path('/tmp/feral-1350-modules')
+          directory.mkdir(exist_ok=True)
+          for name,body in after.items():
+              (directory/name).write_text(body+'\n')
+          print('FERAL_V1350_23_MODULES_TREE_COMBAT_AIM_AND_REST_INVARIANTS_PASS')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile launcher and all 23 gameplay modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.0-tree-combat-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.9.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-reach-v14.2.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v13.5.0.lua
+          for file in /tmp/feral-1350-modules/*.lua; do "$LUAU_COMPILER" --null "$file"; done
+          echo FERAL_V1350_ALL_LUAU_MODULES_COMPILE_PASS
