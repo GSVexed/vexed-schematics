@@ -316,12 +316,26 @@ local FOCUS={"arena","round","map","combat","damage","weapon","inventory",
 "ability","power","perk","event","remote","tool","projectile","attack",
 "shield","block","parry","heal","match","lobby","config"}
 function D.focus(path)
-    local low=path:lower()
+    -- Do not classify every descendant of "Map" or "Arena" as focused.
+    -- Inspect local leaf and immediate parent instead of the entire ancestry.
+    local leaf=path:match("([^/]+)$") or path
+    local parent=path:match("/([^/]+)/[^/]+$") or ""
+    local low=(leaf.." "..parent):lower()
     for _,word in ipairs(FOCUS) do
         if low:find(word,1,true) then return true end
     end
     return false
 end
+local PLATFORM_ROOTS={
+    CoreGui=true,CorePackages=true,
+    RobloxReplicatedStorage=true,RobloxReplicatedScriptStorage=true,
+}
+local PLATFORM_MODULES={PlayerModule=true,ChatScript=true}
+local SERVICE_PRIORITY={
+    ReplicatedFirst=1,ReplicatedStorage=2,StarterPlayer=3,
+    StarterPack=4,StarterGui=5,Players=6,
+    Workspace=12,Lighting=14,SoundService=15,Teams=16
+}
 local function isPlatform(path)
     return path:find("^game/CoreGui")
         or path:find("^game/CorePackages")
@@ -329,6 +343,14 @@ local function isPlatform(path)
         or path:find("^game/RobloxReplicatedScriptStorage")
         or path:find("/PlayerModule",1,true)
         or path:find("/ChatScript",1,true)
+end
+function D.summarizeExcluded(parentPath,obj,why)
+    local ok,kids=pcall(function()return obj:GetChildren()end)
+    local directChildren=ok and #kids or nil
+    D.c.platformRootsSkipped+=1
+    D.record("excluded_platform",{path=parentPath,reason=why,
+        immediate_children=directChildren,descendants_scanned=false,
+        decompilation_attempted=false})
 end
 function D.rapidScene()
     D.phase="RAPID SNAPSHOT"
@@ -374,18 +396,18 @@ function D.rapidScene()
     D.checkpoint()
 end
 function D.enumerate()
-    D.phase="FULL INVENTORY"
+    D.phase="GAMEPLAY INVENTORY"
     D.latest="Inventorying all accessible game objects and client scripts."
     -- Parent-frame traversal proves ancestry; avoid walking parent chain
     -- per object (a major performance cost in the inherited collector).
-    local queue={{game,"game",0,0,"game"}}
-    local head=1
+    local stack={{game,"game",0,0,"game"}}
     local id=0
     local categoryCount={game=0,platform=0}
     local burst=0
-    while head<=#queue and not D.stopped and D.c.objects<CFG.maxObjects do
-        local frame=queue[head]
-        queue[head]=false;head+=1
+    local inventoryStarted=os.clock()
+    while #stack>0 and not D.stopped and D.c.objects<CFG.maxObjects do
+        local frame=stack[#stack]
+        stack[#stack]=nil
         local obj,path,parent,depth,root=frame[1],frame[2],frame[3],frame[4],frame[5]
         if not D.visited[obj] and obj~=D.gui and not D.privateRoots[obj] then
             D.visited[obj]=true
@@ -475,21 +497,35 @@ function D.enumerate()
                 if depth<CFG.maxDepth then
                     local cok,kids=pcall(function()return obj:GetChildren()end)
                     if cok and type(kids)=="table" then
+                        -- LIFO DFS: scan code-bearing services before
+                        -- massive Workspace geometry. Sort roots once.
+                        if obj==game then
+                            table.sort(kids,function(a,b)
+                                return (SERVICE_PRIORITY[a.Name] or 50)
+                                    < (SERVICE_PRIORITY[b.Name] or 50)
+                            end)
+                        end
                         local siblingCounts={}
-                        for _,kid in ipairs(kids) do
+                        for index=#kids,1,-1 do
+                            local kid=kids[index]
                             local n=kid.Name
                             local low=n:lower():gsub("[^%w]","")
                             local privateBranch=(low=="playerdata" or low=="userdata"
                                 or low=="profiles" or low=="authdata"
                                 or low=="privatemessages" or low=="directmessages")
-                            if not D.privateRoots[kid] and kid~=D.gui and not privateBranch then
+                            local skipPlatform=(depth==0 and PLATFORM_ROOTS[n])
+                                or PLATFORM_MODULES[n]
+                            if skipPlatform then
+                                D.summarizeExcluded(path.."/"..n,kid,
+                                    "roblox_platform_subtree_not_decompiled")
+                            elseif not D.privateRoots[kid] and kid~=D.gui and not privateBranch then
                                 local safe=D.safeString(n,"name")
                                 local key=safe.."|"..kid.ClassName
                                 local ordinal=(siblingCounts[key] or 0)+1
                                 siblingCounts[key]=ordinal
                                 local segment=safe
                                 if ordinal>1 then segment=safe.."~"..ordinal end
-                                queue[#queue+1]={kid,path.."/"..segment,id,depth+1,
+                                stack[#stack+1]={kid,path.."/"..segment,id,depth+1,
                                     depth==0 and safe or root}
                             else D.c.privacySkipped+=1 end
                         end
@@ -503,12 +539,13 @@ function D.enumerate()
             D.latest="Inventory: "..D.c.objects.." objects, "..D.c.eligible.." eligible client scripts"
             D.updateUI()
             task.wait()
-            if os.clock()>=D.deadline-8 then
+            local maxInventory=(D.mode=="MATCH" and 11 or CFG.maxInventorySeconds)
+            if os.clock()-inventoryStarted>=maxInventory or os.clock()>=D.deadline-CFG.sourceReserveSeconds then
                 D.stopReason="inventory_time_budget";break
             end
         end
     end
-    D.scannedComplete=head>#queue and not D.stopped
+    D.scannedComplete=#stack==0 and not D.stopped
         and D.c.objects<CFG.maxObjects
     if D.c.objects>=CFG.maxObjects then D.stopReason="object_safety_cap" end
     table.sort(D.scriptQueue,function(a,b)
@@ -518,7 +555,8 @@ function D.enumerate()
     D.c.sourceQueued=#D.scriptQueue
     D.record("coverage",{complete=D.scannedComplete,counts=categoryCount,
         eligible=D.c.eligible,queued=#D.scriptQueue,
-        limit=CFG.maxObjects,pending=math.max(0,#queue-head+1)})
+        limit=CFG.maxObjects,pending=#stack,
+        platform_exclusions=D.c.platformRootsSkipped})
     D.checkpoint()
 end
 function D.runLimited(fn,target,timeout)
