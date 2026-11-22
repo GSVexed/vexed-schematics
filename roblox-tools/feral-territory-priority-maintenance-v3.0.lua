@@ -142,6 +142,7 @@ local totalRetries,totalSkipped,totalCompleted=0,0,0
 local lastFailure=nil
 local autoBusy=false
 local busySnap=false
+local movementToken=0
 local targets={}
 local index=1
 local selectedKey=nil
@@ -223,7 +224,7 @@ local function event(s)
 end
 
 gui=Instance.new("ScreenGui")
-gui.Name="FERAL_TerritoryMaintainV2"
+gui.Name="FERAL_TerritoryMaintainV3"
 gui.ResetOnSpawn=false
 gui.IgnoreGuiInset=true
 gui.DisplayOrder=360
@@ -301,14 +302,18 @@ local function stop()
     release()
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
     if gui then gui:Destroy() gui=nil end
-    if env.FERAL_TERRITORY_MAINTENANCE_V2
-        and env.FERAL_TERRITORY_MAINTENANCE_V2.stop==stop then
-        env.FERAL_TERRITORY_MAINTENANCE_V2=nil
+    movementToken+=1
+    attempt=nil
+    if env.FERAL_TERRITORY_MAINTENANCE_V3
+        and env.FERAL_TERRITORY_MAINTENANCE_V3.stop==stop then
+        env.FERAL_TERRITORY_MAINTENANCE_V3=nil
     end
 end
 closeB.Activated:Connect(stop)
 
 local function choose(i)
+    movementToken+=1
+    attempt=nil
     if #targets==0 then
         selectedKey=nil
         say("No targets in "..mode.." mode")
@@ -332,6 +337,7 @@ modeB.Activated:Connect(function()
     elseif mode=="SCENT" then mode="CLAIM"
     elseif mode=="CLAIM" then mode="ALL"
     else mode="PRIORITY" end
+    movementToken+=1
     attempt=nil
     selectedKey=nil
     rebuild()
@@ -342,12 +348,16 @@ worstB.Activated:Connect(function()
     release()
     mode="SCENT"
     modeB.Text="MODE: SCENT"
+    movementToken+=1
+    attempt=nil
     selectedKey=nil
     rebuild()
     say(target() and "Selected lowest-scent owned hex" or "No owned hexes found")
 end)
 reloadB.Activated:Connect(function()
     release()
+    movementToken+=1
+    attempt=nil
     rebuild()
     say("Targets updated from replicated territory state")
 end)
@@ -358,6 +368,8 @@ returnB.Activated:Connect(function()
         return
     end
     release()
+    movementToken+=1
+    attempt=nil
     local moved=pcall(function()
         c:PivotTo(c:GetPivot()+(returnCFrame.Position-r.Position))
         r.AssemblyLinearVelocity=Vector3.zero
@@ -454,6 +466,9 @@ end
 
 local function moveTo(t)
     if not t then return false,"No target selected" end
+    movementToken+=1
+    local thisMovement=movementToken
+    attempt=nil
     local c,r,h=root()
     if not c then return false,"Spawn a living animal first" end
     local pack=me:GetAttribute("FeralPack")
@@ -474,7 +489,9 @@ local function moveTo(t)
     lastLandingError=nil
     attemptedLandingHex=t.key
     local ground,groundInfo=streamGround(t,c,r)
-    if not active then return false,"Panel was closed" end
+    if not active or movementToken~=thisMovement then
+        return false,"Movement canceled"
+    end
     if not ground then
         lastLandingError="No safe landing: "..t.key.." — "..groundInfo
         event(lastLandingError)
@@ -883,5 +900,5 @@ env.FERAL_TERRITORY_MAINTENANCE_V3={
     end
 }
 update()
-print(string.format("[FERAL Territory v3.0] Hexes: %d, eligible: %d. Default SCENT mode; Auto requires real _hold increase.",#all,countTypes().eligible))
+print(string.format("[FERAL Territory v3.0] Hexes: %d, eligible: %d. Default PRIORITY mode; Auto checks actual _hold and ownership.",#all,countTypes().eligible))
 print("[FERAL Territory v3.0] Live character movement, bounded retries, server territory observation.")
