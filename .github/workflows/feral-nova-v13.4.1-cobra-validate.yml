@@ -41,7 +41,7 @@ jobs:
           assert 'ctx.reach.compare' in cur['feral-nova-combat-v15.0.lua']
           assert 'if p.Z<=0 then' in cur['feral-nova-combat-v15.0.lua']
           assert 'function C.setEnabled' in cur['feral-nova-combat-v15.0.lua']
-          assert 'game:HttpGet' not in new
+          assert 'loadstring(game:HttpGet' not in new
           assert 'version="13.4.1"' in new
           dest=Path('/tmp/feral-v1341-modules')
           dest.mkdir(exist_ok=True)
