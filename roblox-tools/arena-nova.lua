@@ -825,6 +825,8 @@ local function clearLootEntry(entry)
     entry.label = nil
     entry.showingLabel = false
     entry.drawnId = nil
+    entry.drawnPart = nil
+    entry.drawnText = nil
 end
 local function removeLootEntry(model)
     local entry = lootEntries[model]
@@ -834,7 +836,8 @@ local function removeLootEntry(model)
     end
 end
 local function attachLootVisual(entry, part, id, display, kind)
-    if entry.highlight and entry.billboard and entry.part == part and entry.drawnId == id then return end
+    if entry.highlight and entry.billboard and entry.drawnPart == part
+        and entry.drawnId == id and entry.drawnText == display then return end
     clearLootEntry(entry)
     local color = LOOT_COLORS[kind] or LOOT_COLORS.Other
     entry.highlight = create("Highlight",lootFolder,{
@@ -858,6 +861,8 @@ local function attachLootVisual(entry, part, id, display, kind)
     })
     entry.showingLabel = false
     entry.drawnId = id
+    entry.drawnPart = part
+    entry.drawnText = display
 end
 local function labelLoot(entry, show)
     if not entry.label or entry.showingLabel == show then return end
@@ -990,8 +995,8 @@ local palette = {
 }
 local main = create("Frame", ui, {
     Name = "Panel",
-    Size = UDim2.fromOffset(354, 422)
-    Position = UDim2.new(0.5, -177, 0.5, -211)
+    Size = UDim2.fromOffset(354, 422),
+    Position = UDim2.new(0.5, -177, 0.5, -211),
     BackgroundColor3 = palette.panel,
     BorderSizePixel = 0,
     Visible = true,
@@ -1043,7 +1048,7 @@ makeCorner(hideButton, 7)
 local livePage = create("Frame", main, {
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(14, 62),
-    Size = UDim2.new(1, -28, 0, 325)
+    Size = UDim2.new(1, -28, 0, 325),
     Visible = true,
 })
 local toggleUI = {}
@@ -1397,7 +1402,7 @@ updateLootFilterUI()
 -- no perk manipulation, and no speculative resource or immunity controls.
 local footer = create("Frame", main, {
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(15, 393)
+    Position = UDim2.fromOffset(15, 393),
     Size = UDim2.new(1, -30, 0, 23),
 })
 create("TextLabel", footer, {
