@@ -9629,7 +9629,7 @@ end
 return Active
 ]==========]
 ,["feral-nova-eagle-actions-v12.0.lua"]=[==========[
--- FERAL NOVA v13.5.6 / manual Eagle Talon consistency and native targeting gate
+-- FERAL NOVA v13.5.5 / manual Eagle Talon consistency and native targeting gate
 -- Activated by existing Eagle Carry and Talon CD toggles.
 -- Uses the original game request protocol; never sends blind lunge packets.
 -- Native "bit" and "clamp" replies determine the observed result.
