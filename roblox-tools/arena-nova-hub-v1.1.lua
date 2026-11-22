@@ -1133,7 +1133,7 @@ if type(teleportQueue) == "function" then
             )
             local loader = [[local env=_G;if type(getgenv)=="function" then local ok,x=pcall(getgenv);if ok and type(x)=="table" then env=x end end;env.__ARENA_NOVA_BOOT_CONFIG=]]
                 .. config
-                .. [[;loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/arena-nova-hub-v1.1.lua"))()]]
+                .. [[;loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/arena-nova.lua"))()]]
             local queued = pcall(teleportQueue, loader)
             didQueue = queued
         elseif state == Enum.TeleportState.Failed then
