@@ -849,7 +849,7 @@ autoB.Activated:Connect(function()
                                 completed=true
                                 break
                             end
-                            if os.clock()-a.lastEvidenceAt>28 then
+                            if os.clock()-a.lastEvidenceAt>40 then
                                 reason="No server-replicated scent increase"
                                 break
                             end
