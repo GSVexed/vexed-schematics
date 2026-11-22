@@ -352,7 +352,11 @@ function Combat.attach(ctx)
         local lv=root.CFrame.LookVector
         if Vector3.new(lv.X,0,lv.Z).Magnitude>=.01 then return end
         local reach=ctx.reach
-        local candidate=reach and reach.treeTarget
+        if not reach or not reach.enabled or not reach.applied then
+            C.treeAssistAborts+=1
+            return
+        end
+        local candidate=reach.treeTarget
             and reach.treeTarget(char,root,15) or nil
         if not candidate or not candidate.certain then
             C.treeAssistAborts+=1;return
