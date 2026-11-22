@@ -483,6 +483,7 @@ end
 -- Moving the model pivot every frame is smoother than reconstructing geometry at 18 Hz.
 local function layoutReach(radius)
     local angleStep = math.pi * 2 / RING_SEGMENTS
+    local currentPivot = reachModel:GetPivot()
     local previous = Vector3.new(radius, 0, 0)
     for i = 1, RING_SEGMENTS do
         local angle = i * angleStep
@@ -490,7 +491,8 @@ local function layoutReach(radius)
         local direction = nextPoint - previous
         local part = reachParts[i]
         part.Size = Vector3.new(direction.Magnitude + 0.012, 0.065, 0.065)
-        part.CFrame = CFrame.lookAt((previous + nextPoint) * 0.5, nextPoint)
+        part.CFrame = currentPivot
+            * CFrame.lookAt((previous + nextPoint) * 0.5, nextPoint)
             * CFrame.Angles(0, math.pi / 2, 0)
         previous = nextPoint
     end
