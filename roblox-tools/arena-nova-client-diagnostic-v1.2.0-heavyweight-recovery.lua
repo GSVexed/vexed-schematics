@@ -1882,6 +1882,8 @@ function D.collectSources()
             failFinal(entry,reason,"bytecode_fallback",entry.nativeFailure)
         end
     end
+    local fastFingerprintsEnabled=true
+    local quickFingerprint
     local function workerOutcome(state,timedOut)
         local entry,method=state.entry,state.method
         local elapsed=os.clock()-state.t0
@@ -1935,8 +1937,7 @@ function D.collectSources()
     -- reconstruction without invoking the expensive decompiler again.
     -- If the executor's getter is itself slow, disable this optimization
     -- immediately rather than adding latency to every remaining script.
-    local fastFingerprintsEnabled=true
-    local function quickFingerprint(entry)
+    quickFingerprint=function(entry)
         if not fastFingerprintsEnabled or not API.bytecode or not API.read then
             return nil,nil
         end
