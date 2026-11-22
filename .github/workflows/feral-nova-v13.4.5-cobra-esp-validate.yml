@@ -74,8 +74,8 @@ jobs:
           set -euo pipefail
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua
           "$LUAU_COMPILER" --null roblox-tools/feral-nova-reach-v14.1.lua
-          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.2.lua
-          "$LUAU_COMPILER" --null roblox-tools/feral-nova-ui-v13.4.5.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.4.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-ui-v13.4.3.lua
           for file in /tmp/feral-v1345-modules/*.lua; do
             "$LUAU_COMPILER" --null "$file"
           done
