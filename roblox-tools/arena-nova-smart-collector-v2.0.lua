@@ -677,6 +677,20 @@ function D.collectSources()
     local lastCacheSave=os.clock()
     for idx,entry in ipairs(D.scriptQueue) do
         if D.stopped then D.stopReason="user_stopped";break end
+        -- Circuit breaker: if the executor cannot complete native decompilation,
+        -- do not consume the whole budget attempting hundreds of doomed calls.
+        if D.c.nativeTimeouts>=3 and D.c.nativeSuccess==0
+            and D.c.fallbackSuccess==0 then
+            D.stopReason="decompiler_timeout_circuit_breaker"
+            D.latest="Native decompiler timed out repeatedly; saved source and inventory."
+            break
+        end
+        if D.c.sourceFailures>=10 and D.c.nativeSuccess==0
+            and D.c.fallbackSuccess==0 and D.c.directSourceSuccess==0 then
+            D.stopReason="decompiler_failure_circuit_breaker"
+            D.latest="No usable source from repeated decompiles; saved inventory."
+            break
+        end
         if os.clock()>=D.deadline then
             D.stopReason="time_budget";break
         end
@@ -815,6 +829,10 @@ function D.run()
     elseif D.stopReason=="time_budget" or D.stopReason=="inventory_time_budget" then
         D.phase="BUDGET REACHED - SAVED"
         D.latest="Time budget reached. Run again to continue, reusing cached source."
+    elseif D.stopReason=="decompiler_timeout_circuit_breaker"
+        or D.stopReason=="decompiler_failure_circuit_breaker" then
+        D.phase="DECOMPILER BLOCKED - SAVED"
+        D.latest="Repeated decompiler failure. Data saved; inspect source_results and errors."
     else
         D.phase="COMPLETE";D.latest="Saved. ZIP the capture folder to share it."
     end
