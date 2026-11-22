@@ -22,7 +22,7 @@ jobs:
           from pathlib import Path
           import re
           root=Path('roblox-tools')
-          old=(root/'feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua').read_text()
+          old=(root/'feral-nova-v13.4.3-ui-version-corrected-potassium.lua').read_text()
           new=(root/'feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua').read_text()
           pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
           before=dict(re.findall(pattern,old,re.S))
