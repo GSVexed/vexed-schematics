@@ -1,4 +1,4 @@
--- ARENA NOVA | Core + selectable loot ESP | v1.5.0
+-- ARENA NOVA | Core + predictive bow aim | v1.6.0
 -- Player outlines, clean player/loot labels, weapon reach, alerts, right-click aim and loot filters.
 -- Client-side visual tools plus optional hold-right-click camera tracking; no server-state modification.
 -- No gameplay remotes, diagnostics, perk actions, decompilation or file writes.
@@ -53,7 +53,7 @@ local incomingOptions = environment.__ARENA_NOVA_BOOT_CONFIG
 environment.__ARENA_NOVA_BOOT_CONFIG = nil
 
 local running = true
-local VERSION = "1.5.0"
+local VERSION = "1.6.0"
 local settings = {
     outlines = true,
     names = true,
@@ -588,137 +588,350 @@ local function startReach()
     end)
 end
 
--- Hold-right-click camera tracking. Acquisition is by SCREEN-CENTRE distance,
--- not 3D range; keep the selected target until RMB is released or it disappears.
--- Runs just after Roblox's camera update, affects local camera only.
+-- Hold LEFT ALT to lock the opponent nearest the centre of the viewport.
+-- For Bow/Wooden Bow, lead the moving target using live charge, projectile
+-- launch speed and gravity from the game's actual Ballistics and Weapons code.
+-- The native Ballistics.aimVelocity solver handles gravity once; we supply
+-- a FUTURE target position, NOT an already-compensated pitch.
+-- CameraRig.aimPoint is the shot-origin aim source used by ShotIntent, so an
+-- optional reversible wrapper aligns real shot intent with predictive camera.
 local AIM_BIND = "ArenaNovaAim_" .. tostring(player.UserId)
-local AIM_RESPONSE = 28
+local AIM_PRIORITY = Enum.RenderPriority.Camera.Value + 4
+local AIM_RESPONSE = 29
+local AIM_TRACKED_SPEED_MAX = 88
+local AIM_LATENCY_SECONDS = 0.045
+local AIM_MAX_FLIGHT_SECONDS = 2.8
 local aimBound = false
 local aimTarget = nil
 local aimHeldLastFrame = false
+local aimPredictedPoint = nil
+local aimMotion = {target=nil,part=nil,lastPosition=nil,lastAt=nil,velocity=Vector3.zero}
+local aimRig = nil
+local aimRigOriginal = nil
+local aimRigWrapper = nil
+local aimBindEpoch = 0
+local aimRigConnected = false
 
-local function aimPointFor(target)
+local function clearAimTarget()
+    aimTarget = nil
+    aimPredictedPoint = nil
+    aimHeldLastFrame = false
+    aimMotion.target = nil
+    aimMotion.part = nil
+    aimMotion.lastPosition = nil
+    aimMotion.lastAt = nil
+    aimMotion.velocity = Vector3.zero
+end
+
+local function aimBodyPart(target)
     if not target or target == player or target.Parent ~= Players then
-        return nil
+        return nil, nil
     end
     local character = target.Character
     if not character or not character:IsDescendantOf(Workspace) then
-        return nil
+        return nil, nil
     end
     local stats = character:FindFirstChild("CombatStats")
     if stats then
         local health = stats:GetAttribute("Health")
         if type(health) == "number" and health <= 0 then
-            return nil
+            return nil, nil
         end
     end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health <= 0 then
-        return nil
-    end
-    local head = character:FindFirstChild("Head")
-    if head and head:IsA("BasePart") then
-        return head.Position
+        return nil, nil
     end
     local root = character:FindFirstChild("HumanoidRootPart")
     if root and root:IsA("BasePart") then
-        return root.Position + Vector3.new(0, 1.45, 0)
+        -- More forgiving bow target: centre-mass rather than the head.
+        return root, root.Position + Vector3.new(0, 0.65, 0)
     end
-    return nil
+    local head = character:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        return head, head.Position
+    end
+    return nil, nil
 end
 
 local function onScreenAimPoint(camera, target)
-    local point = aimPointFor(target)
-    if not point then
-        return nil, nil
-    end
-    local screen, visible = camera:WorldToViewportPoint(point)
-    if not visible or screen.Z <= 0 then
-        return nil, nil
-    end
-    return point, screen
+    local _, point = aimBodyPart(target)
+    if not point then return nil, nil end
+    local projection, visible = camera:WorldToViewportPoint(point)
+    if not visible or projection.Z <= 0 then return nil, nil end
+    return point, projection
 end
 
 local function closestToCrosshair(camera)
-    local viewport = camera.ViewportSize
-    local cx, cy = viewport.X * 0.5, viewport.Y * 0.5
-    local best, bestDistance = nil, math.huge
+    local size = camera.ViewportSize
+    local cx, cy = size.X * 0.5, size.Y * 0.5
+    local winner, bestPixels2 = nil, math.huge
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= player then
             local point, screen = onScreenAimPoint(camera, other)
-            if point and screen then
+            if point then
                 local dx, dy = screen.X - cx, screen.Y - cy
-                local distance = dx * dx + dy * dy
-                if distance < bestDistance then
-                    bestDistance = distance
-                    best = other
+                local pixels2 = dx*dx + dy*dy
+                if pixels2 < bestPixels2 then
+                    winner, bestPixels2 = other, pixels2
                 end
             end
         end
     end
-    return best
+    return winner
+end
+
+local function getBowRanged()
+    local character = player.Character
+    local stats = character and character:FindFirstChild("CombatStats")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not stats or not root or not root:IsA("BasePart") then
+        return nil, nil
+    end
+    local itemId = stats:GetAttribute("Equipped")
+    if itemId ~= "Bow" and itemId ~= "Wooden Bow" then
+        return nil, nil
+    end
+    local ranged = nil
+    if weaponsModule and type(weaponsModule.get) == "function" then
+        local ok, weapon = pcall(weaponsModule.get, itemId)
+        if ok and type(weapon) == "table" and type(weapon.ranged) == "table" then
+            ranged = weapon.ranged
+        end
+    end
+    -- Source-backed fallbacks when the live Weapons module isn't available.
+    if not ranged then
+        ranged = {
+            range = if itemId == "Bow" then 500 else 450,
+            gravity = 1/3,
+            chargeTime = 1.2,
+        }
+    end
+    return ranged, root
+end
+
+local function bowLaunchSpeed(ranged, root)
+    -- Shared.combat.Ballistics.charge uses smoothstep(drawTime / chargeTime).
+    local charge = 1
+    local drawing = root:GetAttribute("Drawing") == true
+    local drawAt = root:GetAttribute("DrawAt")
+    if drawing and type(drawAt) == "number"
+        and type(ranged.chargeTime) == "number" and ranged.chargeTime > 0 then
+        local elapsed = Workspace:GetServerTimeNow() - drawAt
+        local fraction = math.clamp(elapsed / ranged.chargeTime, 0, 1)
+        charge = fraction * fraction * (3 - 2*fraction)
+    else
+        local previousCharge = root:GetAttribute("ReleaseCharge")
+        if type(previousCharge) == "number" then
+            charge = math.clamp(previousCharge, 0, 1)
+        end
+    end
+    local baseSpeed = if type(ranged.range) == "number" then ranged.range else 500
+    return baseSpeed * (0.5 + 0.5*charge)
+end
+
+local function smoothedAimVelocity(target, part, dt)
+    local now = os.clock()
+    if aimMotion.target ~= target or aimMotion.part ~= part then
+        aimMotion.target = target
+        aimMotion.part = part
+        aimMotion.lastPosition = part.Position
+        aimMotion.lastAt = now
+        aimMotion.velocity = part.AssemblyLinearVelocity
+        return aimMotion.velocity
+    end
+    local observed = part.AssemblyLinearVelocity
+    local elapsed = now - (aimMotion.lastAt or now)
+    if aimMotion.lastPosition and elapsed > 0.009 and elapsed < 0.22 then
+        local fromPosition = (part.Position - aimMotion.lastPosition) / elapsed
+        if fromPosition.Magnitude < AIM_TRACKED_SPEED_MAX then
+            -- Coordinate movement tends to be more stable than packet velocity
+            -- for remote characters but can be noisy at low frame rates.
+            observed = observed * 0.38 + fromPosition * 0.62
+        end
+    end
+    aimMotion.lastPosition = part.Position
+    aimMotion.lastAt = now
+    if observed.Magnitude > AIM_TRACKED_SPEED_MAX then
+        observed = observed.Unit * AIM_TRACKED_SPEED_MAX
+    end
+    local alpha = 1 - math.exp(-13 * math.clamp(dt, 0, 0.1))
+    aimMotion.velocity = aimMotion.velocity:Lerp(observed, alpha)
+    return aimMotion.velocity
+end
+
+-- Low-arc ballistic solution for a stationary predicted point. This obtains
+-- the travel time; the game's own Ballistics module generates final pitch.
+local function bowFlightTime(origin, destination, speed, gravity)
+    local displacement = destination - origin
+    local flat = Vector3.new(displacement.X, 0, displacement.Z).Magnitude
+    if speed < 1 then return nil end
+    if flat < 0.01 then return math.abs(displacement.Y) / speed end
+    if gravity <= 0.01 then
+        return displacement.Magnitude / speed
+    end
+    local speed2 = speed*speed
+    local discriminant = speed2*speed2
+        - gravity*(gravity*flat*flat + 2*displacement.Y*speed2)
+    if discriminant < 0 then return nil end
+    local theta = math.atan((speed2-math.sqrt(discriminant))/(gravity*flat))
+    local horizontalSpeed = speed*math.cos(theta)
+    if horizontalSpeed <= 0.01 then return nil end
+    return flat/horizontalSpeed
+end
+
+local function bowLeadPoint(part, location, ranged, root, dt)
+    local speed = bowLaunchSpeed(ranged, root)
+    local gravityMultiplier = if type(ranged.gravity) == "number"
+        then ranged.gravity else 1/3
+    local gravity = Workspace.Gravity * gravityMultiplier
+    local velocity = smoothedAimVelocity(aimTarget, part, dt)
+    local origin = root.Position
+    local travelTime = bowFlightTime(origin, location, speed, gravity)
+    if not travelTime then return location end
+    -- Solve the future position, re-evaluating time at each iteration.
+    local predicted = location
+    for _ = 1, 3 do
+        travelTime = math.clamp(travelTime, 0, AIM_MAX_FLIGHT_SECONDS)
+        predicted = location + velocity * (travelTime + AIM_LATENCY_SECONDS)
+        local nextTime = bowFlightTime(origin, predicted, speed, gravity)
+        if not nextTime then break end
+        travelTime = nextTime
+    end
+    return predicted
+end
+
+-- ShotIntent and the client ghost-projectile path call CameraRig.aimPoint().
+-- Modify that shared aim-point accessor only while LeftAlt is held on a bow.
+local function restoreAimRig()
+    if aimRig and aimRigWrapper and aimRigOriginal then
+        pcall(function()
+            if aimRig.aimPoint == aimRigWrapper then
+                aimRig.aimPoint = aimRigOriginal
+            end
+        end)
+    end
+    aimRig, aimRigOriginal, aimRigWrapper = nil, nil, nil
+    aimRigConnected = false
+end
+
+local function bindAimRig(epoch)
+    if aimRigConnected then return true end
+    local scripts = player:FindFirstChild("PlayerScripts")
+    local common = scripts and scripts:FindFirstChild("common")
+    local cameraFolder = common and common:FindFirstChild("camera")
+    local source = cameraFolder and cameraFolder:FindFirstChild("CameraRig")
+    if not source or not source:IsA("ModuleScript") then
+        return false
+    end
+    local success, rig = pcall(require, source)
+    if not success or type(rig) ~= "table" or type(rig.aimPoint) ~= "function" then
+        return false
+    end
+    if not running or not settings.aim or epoch ~= aimBindEpoch then
+        return false
+    end
+    local original = rig.aimPoint
+    local wrapped = function(...)
+        if running and settings.aim and aimHeldLastFrame and aimTarget
+            and typeof(aimPredictedPoint) == "Vector3"
+            and UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+            and not UserInputService:GetFocusedTextBox() then
+            return aimPredictedPoint
+        end
+        return original(...)
+    end
+    local installed = pcall(function()
+        rig.aimPoint = wrapped
+    end)
+    if not installed or rig.aimPoint ~= wrapped then
+        return false
+    end
+    aimRig, aimRigOriginal, aimRigWrapper = rig, original, wrapped
+    aimRigConnected = true
+    return true
 end
 
 local function stopAim()
+    aimBindEpoch += 1
     if aimBound then
         pcall(function()
             RunService:UnbindFromRenderStep(AIM_BIND)
         end)
         aimBound = false
     end
-    aimTarget = nil
-    aimHeldLastFrame = false
+    clearAimTarget()
+    restoreAimRig()
 end
 
 local function startAim()
-    if aimBound then
-        return
-    end
-    aimTarget = nil
-    aimHeldLastFrame = false
+    if aimBound then return end
+    clearAimTarget()
+    aimBindEpoch += 1
+    local epoch = aimBindEpoch
+    -- Binding CameraRig may need its module to finish starting. Do it away
+    -- from the render thread, and cancel cleanly on toggle off/unload.
+    task.spawn(function()
+        for _ = 1, 12 do
+            if not running or not settings.aim or epoch ~= aimBindEpoch then return end
+            if bindAimRig(epoch) then return end
+            task.wait(1)
+        end
+    end)
     local ok = pcall(function()
-        RunService:BindToRenderStep(AIM_BIND, Enum.RenderPriority.Camera.Value + 1, function(dt)
-            if not running or not settings.aim then
-                return
-            end
-            local held = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-            if not held or UserInputService:GetFocusedTextBox() then
-                aimTarget = nil
-                aimHeldLastFrame = false
+        RunService:BindToRenderStep(AIM_BIND, AIM_PRIORITY, function(dt)
+            if not running or not settings.aim then return end
+            -- No longer uses RMB, which remains entirely game-controlled.
+            local alt = UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+            if not alt or UserInputService:GetFocusedTextBox() then
+                clearAimTarget()
                 return
             end
             local camera = Workspace.CurrentCamera
             if not camera then
-                aimTarget = nil
-                aimHeldLastFrame = false
+                clearAimTarget()
                 return
             end
             local point = nil
             if aimHeldLastFrame and aimTarget then
-                point = onScreenAimPoint(camera, aimTarget)
+                -- Preserve target lock during the hold even when a long lead
+                -- shifts the visible target away from the viewport centre.
+                local _, trackedPoint = aimBodyPart(aimTarget)
+                point = trackedPoint
             end
             if not point then
                 aimTarget = closestToCrosshair(camera)
-                if aimTarget then
-                    point = onScreenAimPoint(camera, aimTarget)
-                end
+                if aimTarget then point = onScreenAimPoint(camera, aimTarget) end
+                -- A newly acquired target must not reuse previous target velocity.
+                aimMotion.target = nil
             end
             aimHeldLastFrame = true
-            if not point then
+            if not point or not aimTarget then
+                aimPredictedPoint = nil
                 return
+            end
+            local part, base = aimBodyPart(aimTarget)
+            if not part or not base then
+                aimPredictedPoint = nil
+                return
+            end
+            local ranged, root = getBowRanged()
+            local aimPoint = base
+            if ranged and root then
+                aimPoint = bowLeadPoint(part, base, ranged, root, dt)
+                aimPredictedPoint = aimPoint
+            else
+                aimPredictedPoint = nil
             end
             local current = camera.CFrame
-            if (point - current.Position).Magnitude <= 0.05 then
-                return
-            end
-            local desired = CFrame.lookAt(current.Position, point)
+            if (aimPoint - current.Position).Magnitude < 0.05 then return end
+            local desired = CFrame.lookAt(current.Position, aimPoint)
             local alpha = 1 - math.exp(-AIM_RESPONSE * math.clamp(dt, 0, 0.1))
             camera.CFrame = current:Lerp(desired, alpha)
         end)
     end)
     aimBound = ok
 end
-
 
 -- This reads the game's existing loot CollectionService tags, with no remote
 -- requests and no broad Workspace.Descendants scanning. Rendering is capped.
@@ -1057,7 +1270,7 @@ local definitions = {
     {key = "names", label = "PLAYER NAMETAGS"},
     {key = "reach", label = "WEAPON REACH"},
     {key = "disasters", label = "DISASTER ALERTS"},
-    {key = "aim", label = "RIGHT-CLICK AIM"},
+    {key = "aim", label = "LEFT ALT AIM · BOW"},
     {key = "loot", label = "LOOT ESP    ·    G"},
 }
 for index, definition in ipairs(definitions) do
