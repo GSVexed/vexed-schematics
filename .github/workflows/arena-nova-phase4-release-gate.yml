@@ -1,4 +1,4 @@
-name: ARENA NOVA Phase 4 hub release gate
+name: ARENA NOVA hub release gate
 on:
   push:
     branches: [main]
@@ -7,6 +7,7 @@ on:
       - 'roblox-tools/arena-nova-hub-v1.1.lua'
       - 'roblox-tools/arena-nova-hub-v1.2.lua'
       - 'roblox-tools/arena-nova-hub-v1.2.1.lua'
+      - 'roblox-tools/arena-nova-hub-v1.3.lua'
       - 'roblox-tools/arena-nova.lua'
       - '.github/workflows/arena-nova-phase4-release-gate.yml'
   workflow_dispatch:
@@ -24,19 +25,32 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('roblox-tools/arena-nova-hub-v1.2.1.lua')
+          p=Path('roblox-tools/arena-nova-hub-v1.3.lua')
           if not p.exists():
               raise SystemExit('Expected Arena NOVA Phase4 hub source has not been published yet')
           s=p.read_text('utf-8-sig')
           stable=Path('roblox-tools/arena-nova.lua')
           assert stable.exists(), 'Stable Arena NOVA script not published'
           assert stable.read_text('utf-8-sig') == s, 'Stable launcher is out of sync with versioned source'
-          # Phase 5 regression: local-player Entity.simOf returns HumanoidRootPart.
-          assert 'character:FindFirstChild("SimState")' not in s, 'stale local sim child lookup'
-          assert 'root:SetAttribute("StaminaAnchor", 250)' in s, 'stamina trial not aimed at HRP'
-          assert 'root:GetAttribute("KnockAt")' in s, 'knockback trial not aimed at HRP'
-          assert 'reachReadElapsed' in s, 'range lookups not throttled'
-          assert 'gui:FindFirstChild("PlayerName", true)' in s, 'native tag lookup not recursive'
+          # Core edition: no gameplay-affecting trials, perk actions or research UI.
+          forbidden_core = (
+              'TRIAL_REACH_OFFSET',
+              'startStaminaTrial',
+              'startKnockbackTrial',
+              'PerkAction',
+              'requestOwnedPerk',
+              'stopAllTrials',
+              'researchPage',
+              'tabButtons',
+              'SwingFired',
+              'setTrial',
+          )
+          for token in forbidden_core:
+              assert token not in s, f'non-core feature still present: {token}'
+          assert 'CORE EDITION' in s, 'Core-only identity missing'
+          assert 'ALL OFF' in s and 'RESTORE' in s, 'Quick off/restore missing'
+          assert 'gui:FindFirstChild("PlayerName", true)' in s, 'name cleanup not hardened'
+          assert 'reachReadElapsed' in s, 'reach lookups not throttled'
           for expected in (
               '7209131331',
               'RightShift',
@@ -52,11 +66,6 @@ jobs:
               'ALL OFF',
               'RESTORE',
               'queue_on_teleport',
-              'TRIAL_REACH_OFFSET',
-              'startStaminaTrial',
-              'startKnockbackTrial',
-              'stopAllTrials',
-              'requestOwnedPerk',
           ):
               assert expected in s, f'missing approved-feature invariant: {expected}'
           for forbidden in (
@@ -69,7 +78,7 @@ jobs:
               'loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/chatgpt-minecraft-testlab',
           ):
               assert forbidden not in s, f'unexpected diagnostic/source extraction tool: {forbidden}'
-          print('ARENA_NOVA_PHASE4_STATIC_GATE_PASS')
+          print('ARENA_NOVA_CORE_STATIC_GATE_PASS')
           PY
       - name: Install official Luau compiler
         shell: bash
@@ -88,5 +97,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.2.1.lua
-          echo ARENA_NOVA_PHASE4_LUAU_COMPILE_PASS
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.3.lua
+          echo ARENA_NOVA_CORE_LUAU_COMPILE_PASS
