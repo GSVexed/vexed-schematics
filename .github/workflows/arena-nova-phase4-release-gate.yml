@@ -8,6 +8,7 @@ on:
       - 'roblox-tools/arena-nova-hub-v1.2.lua'
       - 'roblox-tools/arena-nova-hub-v1.2.1.lua'
       - 'roblox-tools/arena-nova-hub-v1.3.lua'
+      - 'roblox-tools/arena-nova-hub-v1.4.lua'
       - 'roblox-tools/arena-nova.lua'
       - '.github/workflows/arena-nova-phase4-release-gate.yml'
   workflow_dispatch:
@@ -25,7 +26,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('roblox-tools/arena-nova-hub-v1.3.lua')
+          p=Path('roblox-tools/arena-nova-hub-v1.4.lua')
           if not p.exists():
               raise SystemExit('Expected Arena NOVA Phase4 hub source has not been published yet')
           s=p.read_text('utf-8-sig')
@@ -51,6 +52,12 @@ jobs:
           assert 'ALL OFF' in s and 'RESTORE' in s, 'Quick off/restore missing'
           assert 'gui:FindFirstChild("PlayerName", true)' in s, 'name cleanup not hardened'
           assert 'reachReadElapsed' in s, 'reach lookups not throttled'
+          assert 'Enum.RenderPriority.Camera.Value + 1' in s, 'aim not ordered after Roblox camera'
+          assert 'WorldToViewportPoint' in s, 'aim selection must use screen projection'
+          assert 'UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)' in s, 'aim must be hold-to-use'
+          assert 'closestToCrosshair' in s, 'aim selector missing'
+          assert 'stopAim()' in s and 'UnbindFromRenderStep' in s, 'aim cleanup missing'
+          assert 'RIGHT-CLICK AIM' in s and 'aim = true' in s, 'aim toggle missing'
           for expected in (
               '7209131331',
               'RightShift',
@@ -96,5 +103,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.3.lua
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.4.lua
           echo ARENA_NOVA_CORE_LUAU_COMPILE_PASS
