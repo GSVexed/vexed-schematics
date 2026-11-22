@@ -9,6 +9,7 @@ on:
       - 'roblox-tools/arena-nova-hub-v1.2.1.lua'
       - 'roblox-tools/arena-nova-hub-v1.3.lua'
       - 'roblox-tools/arena-nova-hub-v1.4.lua'
+      - 'roblox-tools/arena-nova-hub-v1.5.lua'
       - 'roblox-tools/arena-nova.lua'
       - '.github/workflows/arena-nova-phase4-release-gate.yml'
   workflow_dispatch:
@@ -26,7 +27,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('roblox-tools/arena-nova-hub-v1.4.lua')
+          p=Path('roblox-tools/arena-nova-hub-v1.5.lua')
           if not p.exists():
               raise SystemExit('Expected Arena NOVA Phase4 hub source has not been published yet')
           s=p.read_text('utf-8-sig')
@@ -58,6 +59,16 @@ jobs:
           assert 'closestToCrosshair' in s, 'aim selector missing'
           assert 'stopAim()' in s and 'UnbindFromRenderStep' in s, 'aim cleanup missing'
           assert 'RIGHT-CLICK AIM' in s and 'aim = true' in s, 'aim toggle missing'
+          assert 'Enum.KeyCode.G' in s, 'loot toggle hotkey missing'
+          assert 'CollectionService:GetTagged(tag)' in s, 'loot tag discovery missing'
+          assert 'GetInstanceAddedSignal(tag)' in s and 'GetInstanceRemovedSignal(tag)' in s, 'loot lifecycle missing'
+          assert 'LOOT_CAP = 64' in s and 'LOOT_LABEL_CAP = 22' in s, 'loot FPS or clutter cap missing'
+          assert 'filterPopup' in s and 'filterSearch' in s, 'loot dropdown and search missing'
+          assert 'filterAll.Activated' in s and 'filterNone.Activated' in s, 'filter group actions missing'
+          assert 'settings.lootHidden' in s, 'item filter persistence missing'
+          assert 'saveLootFilter()' in s, 'filter selection updates missing'
+          assert 'stopLootESP()' in s, 'loot cleanup missing'
+
           for expected in (
               '7209131331',
               'RightShift',
@@ -103,5 +114,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.4.lua
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.5.lua
           echo ARENA_NOVA_CORE_LUAU_COMPILE_PASS
