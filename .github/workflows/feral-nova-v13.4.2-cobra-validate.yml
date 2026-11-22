@@ -44,7 +44,7 @@ jobs:
           assert 'loadstring(game:HttpGet' not in new
           assert 'cobraBase={spit=strike.SPIT_RANGE' in cur['feral-nova-combat-v15.0.lua']
           assert 'info.spit*.88' in cur['feral-nova-combat-v15.0.lua']
-          assert 'version="13.4.1"' in new
+          assert 'version="13.4.2"' in new
           dest=Path('/tmp/feral-v1342-modules')
           dest.mkdir(exist_ok=True)
           for name,code in cur.items():
