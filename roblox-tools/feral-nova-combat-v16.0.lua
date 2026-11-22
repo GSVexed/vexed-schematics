@@ -199,8 +199,12 @@ function Combat.attach(ctx)
             -- helper read only model attributes and marked teammates as
             -- valid, producing false positive bite indicators.
             local owner=Players:GetPlayerFromCharacter(model)
-            local pack=owner and owner:GetAttribute("FeralPack")
-                or model:GetAttribute("FeralPack")
+            local pack
+            if owner then
+                pack=owner:GetAttribute("FeralPack")
+            else
+                pack=model:GetAttribute("FeralPack")
+            end
             if ownPack~=nil and pack==ownPack then
                 C.friendlyTargetsExcluded+=1
                 return
