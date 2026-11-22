@@ -252,8 +252,15 @@ local function bindCharacter(record, character)
         end
     end, record.characterConnections)
     connect(character.AncestryChanged, function(_, parent)
-        if not parent and record.character == character then
-            resetCharacter(record)
+        if record.character ~= character then
+            return
+        end
+        if parent then
+            updateCharacterParts(record)
+        else
+            -- A streamed model can temporarily leave Workspace and later return.
+            removeHighlight(record)
+            removeName(record)
         end
     end, record.characterConnections)
     updateCharacterParts(record)
@@ -327,8 +334,19 @@ local function maybeSuppressNative(gui)
     if not running or not settings.names or nativeBillboards[gui] or not nativeForTrackedHead(gui) then
         return
     end
-    local state = {original = gui.Enabled, signal = nil}
+    local state = {original = gui.Enabled, signal = nil, removed = nil}
     nativeBillboards[gui] = state
+    state.removed = gui.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if state.signal then
+                state.signal:Disconnect()
+            end
+            if state.removed then
+                state.removed:Disconnect()
+            end
+            nativeBillboards[gui] = nil
+        end
+    end)
     state.signal = gui:GetPropertyChangedSignal("Enabled"):Connect(function()
         if running and settings.names and gui.Parent and gui.Enabled then
             gui.Enabled = false
@@ -351,6 +369,11 @@ local function restoreNativeNames()
         if state.signal then
             pcall(function()
                 state.signal:Disconnect()
+            end)
+        end
+        if state.removed then
+            pcall(function()
+                state.removed:Disconnect()
             end)
         end
         if gui.Parent then
