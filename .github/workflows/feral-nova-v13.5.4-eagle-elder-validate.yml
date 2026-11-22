@@ -1,0 +1,74 @@
+name: FERAL NOVA v13.5.4 Eagle Elder catch safety
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.5.4-eagle-elder-experimental-potassium.lua'
+      - 'roblox-tools/feral-nova-eagle-actions-v13.5.4.lua'
+      - '.github/workflows/feral-nova-v13.5.4-eagle-elder-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all old modules preserved and Eagle controls isolated
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path("roblox-tools")
+          old=(root/"feral-nova-v13.5.3-first-bite-rest-off-potassium.lua").read_text()
+          new=(root/"feral-nova-v13.5.4-eagle-elder-experimental-potassium.lua").read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          a=dict(re.findall(pattern,old,re.S));b=dict(re.findall(pattern,new,re.S))
+          assert len(a)==len(b)==23,(len(a),len(b))
+          assert a.keys()==b.keys()
+          diff={k for k in a if a[k]!=b[k]}
+          assert diff=={"feral-nova-eagle-actions-v12.0.lua"},diff
+          eagle=(root/"feral-nova-eagle-actions-v13.5.4.lua").read_text().strip()
+          assert b["feral-nova-eagle-actions-v12.0.lua"].strip()==eagle
+          assert "elder_prey_native_retries=" in eagle
+          assert "elder_prey_replicated_holds=" in eagle
+          assert "E.cooldownGateNativeLimited" in eagle
+          assert 'species~="Eagle" and species~="BaldEagle"' in eagle
+          assert "nativeDragAfterScratch()" in eagle
+          assert 'remote:FireServer("latch",row.prey,rel,"drag")' in eagle
+          assert 'ctx.action.allowed,"carry"' in eagle
+          assert 'if os.clock()-E.lastDragAt<5 then' in eagle
+          assert 'if not permitted or mode~="drag" then' in eagle
+          assert 'if E.cooldownOn and not cooldown then' in eagle
+          assert 'restoreReady()' in eagle
+          assert 'version="13.5.4"' in new
+          assert 'release="13.5.4"' in new
+          assert 'activeRecord.version="feral-nova-v13.5.4"' in new
+          assert "FERAL_HUB_FIRST_BITE_YIELD_V1353" in b["feral-nova-native-recovery-v13.3.lua"]
+          directory=Path("/tmp/feral-1354-modules")
+          directory.mkdir(exist_ok=True)
+          for name,body in b.items():(directory/name).write_text(body+"\n")
+          print("FERAL_V1354_23_MODULES_PRESERVED_ONLY_EAGLE_CHANGED")
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile all 23 Luau modules and standalone
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.4-eagle-elder-experimental-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-eagle-actions-v13.5.4.lua
+          for file in /tmp/feral-1354-modules/*.lua; do "$LUAU_COMPILER" --null "$file"; done
+          echo FERAL_V1354_ALL_LUAU_COMPILE_PASS
