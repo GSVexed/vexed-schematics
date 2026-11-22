@@ -1019,6 +1019,7 @@ function D.manifest()
     return {
         schema = "arena-nova-client-diagnostic/1.1.0", version = CFG.version, session_id = D.session,
         capture_mode = D.snapshotMode, universe_id = game.GameId, root_place_id = CFG.rootPlaceId,
+        rapid_scene_complete = D.rapidSceneComplete,
         place_id = game.PlaceId, started_utc = D.startedUtc, updated_utc = os.date("!%Y-%m-%dT%H:%M:%SZ"),
         elapsed_seconds = math.floor(os.clock() - D.started), phase = D.phase,
         inventory_traversal_exhausted = D.inventoryComplete, source_pass_finished = D.sourcePassComplete,
@@ -1440,6 +1441,116 @@ function D.supplementalInventory()
         end
     end
 end
+-- Fast, read-only, bounded scene impression captured and checkpointed BEFORE
+-- heavyweight hierarchy/Source work. Not a replacement for full inventory.
+-- Death, despawn or a map change cannot retroactively erase this saved pass.
+function D.rapidSceneCapture()
+    D.phase="rapid_scene"
+    D.startupStage="rapid_scene"
+    D.current="Capturing immediate "..D.snapshotMode.." state before deep archive..."
+    D.refreshPrivacy()
+    local workspaceRoot=game:GetService("Workspace")
+    local replicated=game:GetService("ReplicatedStorage")
+    local roots
+    if D.snapshotMode=="MATCH" then
+        roots={
+            {workspaceRoot,"Workspace",2600},
+            {player:FindFirstChildOfClass("Backpack"),"Backpack",650},
+            {replicated,"ReplicatedStorage",1800},
+            {playerGui,"PlayerGui",550},
+            {game:GetService("Lighting"),"Lighting",450},
+            {game:GetService("StarterPack"),"StarterPack",450}
+        }
+    else
+        roots={
+            {replicated,"ReplicatedStorage",2450},
+            {workspaceRoot,"Workspace",1900},
+            {playerGui,"PlayerGui",700},
+            {player:FindFirstChildOfClass("Backpack"),"Backpack",350},
+            {game:GetService("StarterPack"),"StarterPack",500},
+            {game:GetService("Lighting"),"Lighting",450}
+        }
+    end
+    local scanned=0
+    for _,spec in ipairs(roots) do
+        if D.stop or scanned>=CFG.rapidMaxObjects then break end
+        local root,rootName,limit=spec[1],spec[2],spec[3]
+        if root then
+            local queue={{obj=root,path="game/"..rootName,depth=0}}
+            local head,seen=1,0
+            while head<=#queue and seen<limit and scanned<CFG.rapidMaxObjects and not D.stop do
+                local item=queue[head]
+                queue[head]=false
+                head+=1
+                local obj=item.obj
+                local safe,cls=pcall(function()return obj.ClassName end)
+                if safe and not D.private(obj) then
+                    local _,name=pcall(function()return obj.Name end)
+                    name=tostring(name or "[unknown]")
+                    if not D.otherIdentities[name] then
+                        seen+=1
+                        scanned+=1
+                        D.c.rapidObjects+=1
+                        local important=D.focus(item.path) or item.depth<=2 or cls=="Tool"
+                            or cls=="RemoteEvent" or cls=="RemoteFunction"
+                            or cls=="UnreliableRemoteEvent" or cls=="ModuleScript"
+                            or cls=="LocalScript" or cls=="StringValue"
+                            or cls=="NumberValue" or cls=="IntValue"
+                            or cls=="BoolValue" or cls=="ObjectValue"
+                        if important then
+                            local attributes={}
+                            local count=0
+                            local ok,got=pcall(function()return obj:GetAttributes()end)
+                            if ok and type(got)=="table" then
+                                for key,val in pairs(got) do
+                                    if count>=CFG.rapidAttributeLimit then break end
+                                    count+=1
+                                    local scrub=D.sensitiveKey(key) and "[redacted-key]" or D.safeName(tostring(key))
+                                    attributes[scrub]=D.value(val,key,true)
+                                    D.c.rapidAttributes+=1
+                                end
+                            end
+                            local value=nil
+                            if D.isa(obj,"ValueBase") then
+                                local vok,v=pcall(function()return obj.Value end)
+                                if vok then value=D.value(v,name,true);D.c.rapidValues+=1 end
+                            end
+                            local rec={name=D.stringValue(D.safeName(name),"instance_name",false),
+                                class=cls,path=D.text(item.path),root=rootName,
+                                depth=item.depth,attributes=attributes,value=value,
+                                observed_seconds=math.floor((os.clock()-D.started)*100)/100}
+                            D.emit("rapid-scene/"..D.snapshotMode:lower(),rec)
+                            D.c.rapidSceneRecords+=1
+                        end
+                        if item.depth<CFG.rapidMaxDepth then
+                            local ok,kids=pcall(function()return obj:GetChildren()end)
+                            if ok and type(kids)=="table" then
+                                for _,child in ipairs(kids) do
+                                    local childName=child.Name
+                                    if childName and not D.otherIdentities[childName] then
+                                        local safeName=D.safeName(childName)
+                                        queue[#queue+1]={obj=child,
+                                            path=item.path.."/"..safeName:gsub("~","~0"):gsub("/","~1"),
+                                            depth=item.depth+1}
+                                    end
+                                end
+                            else D.c.rapidReadFailures+=1 end
+                        end
+                    end
+                end
+                if scanned%100==0 then
+                    D.current="Immediate "..D.snapshotMode.." scene: "..scanned.." objects"
+                    if not D.cooperate(false) then break end
+                end
+            end
+            if head<=#queue then D.c.rapidLimitHit+=1 end
+            D.checkpoint() -- each root becomes independently uploadable
+        end
+    end
+    D.rapidSceneComplete=not D.stop
+    D.current="Early scene captured and saved; starting full heavyweight inventory."
+    D.checkpoint()
+end
 function D.inventory()
     D.phase = "inventory"
     D.startupStage,D.startupStep = "inventory","File checks passed; inventory is running."
@@ -1666,7 +1777,8 @@ function D.finalizePending(reason)
 end
 function D.run()
     D.preflight()
-    D.inventory()
+    D.rapidSceneCapture()
+    if not D.stop then D.inventory() end
     if not D.stop and not D.sourceAbortReason then D.collectSources() end
     local reason = D.sourceAbortReason or (D.stop and "stopped_before_source" or "not_attempted")
     D.finalizePending(reason)
