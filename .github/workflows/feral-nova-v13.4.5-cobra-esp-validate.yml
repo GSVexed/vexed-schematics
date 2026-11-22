@@ -1,0 +1,82 @@
+name: FERAL NOVA v13.4.5 - Bite Helper Preserved + Cobra ESP Range
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua'
+      - '.github/workflows/feral-nova-v13.4.5-cobra-esp-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify unchanged modules and Cobra guide behaviour
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pattern,old,re.S))
+          after=dict(re.findall(pattern,new,re.S))
+          assert len(before)==len(after)==23,(len(before),len(after))
+          assert set(before)==set(after)
+          changed={name for name in before if before[name]!=after[name]}
+          assert changed=={'feral-nova-combat-v15.0.lua'},changed
+          for name in set(before)-changed:
+              assert before[name]==after[name],name
+          combat=after['feral-nova-combat-v15.0.lua']
+          assert combat.strip()==(root/'feral-nova-combat-v15.4.lua').read_text().strip()
+          assert 'local gui=Instance.new("ScreenGui")' in combat
+          assert 'local circle=Instance.new("Frame")' in combat
+          assert 'local hint=Instance.new("TextLabel")' in combat
+          assert 'local function showAim(char,best,camera)' in combat
+          assert 'showAim(char,best,workspace.CurrentCamera)' in combat
+          assert 'hint.Size=UDim2.fromOffset(280,42)' in combat
+          assert 'BITE: %s\\nCOBRA:' not in combat
+          assert 'record.h.OutlineColor=DIVE_COLOR' in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'ctx.refreshTracker=recolorRefresh' in combat
+          assert 'baseRefresh(force)' in combat
+          assert 'info.throw*.90' in combat and 'info.spit*.88' in combat
+          assert 'release="13.4.5"' in new
+          assert 'version="13.4.5"' in new
+          assert 'activeRecord.version="feral-nova-v13.4.5"' in new
+          assert 'v13.1 RENAISSANCE  •  COMBAT REST RECOVERY' not in after['feral-nova-ui-v13.1.lua']
+          dest=Path('/tmp/feral-v1345-modules')
+          dest.mkdir(exist_ok=True)
+          for name,code in after.items():
+              (dest/name).write_text(code+'\n')
+          print('FERAL_V1345_UI_PRESERVED_COBRA_ESP_RANGE_23_MODULES_PASS')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          c="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+      - name: Compile launcher, reach, combat and all embedded modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-reach-v14.1.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.2.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-ui-v13.4.5.lua
+          for file in /tmp/feral-v1345-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_NOVA_V1345_LAUNCHER_AND_23_MODULES_COMPILE_PASS
