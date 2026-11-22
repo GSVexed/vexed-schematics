@@ -5,6 +5,7 @@ on:
     paths:
       - 'roblox-tools/arena-nova-hub-v1.0.lua'
       - 'roblox-tools/arena-nova-hub-v1.1.lua'
+      - 'roblox-tools/arena-nova.lua'
       - '.github/workflows/arena-nova-phase4-release-gate.yml'
   workflow_dispatch:
 permissions:
@@ -25,6 +26,9 @@ jobs:
           if not p.exists():
               raise SystemExit('Expected Arena NOVA Phase4 hub source has not been published yet')
           s=p.read_text('utf-8-sig')
+          stable=Path('roblox-tools/arena-nova.lua')
+          assert stable.exists(), 'Stable Arena NOVA script not published'
+          assert stable.read_text('utf-8-sig') == s, 'Stable launcher is out of sync with versioned source'
           for expected in (
               '7209131331',
               'RightShift',
