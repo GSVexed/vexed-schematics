@@ -1,0 +1,92 @@
+name: FERAL NOVA v13.4.7 Smooth Bite Guide Validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.4.7-smooth-bite-helper-potassium.lua'
+      - 'roblox-tools/feral-nova-combat-v15.6.lua'
+      - '.github/workflows/feral-nova-v13.4.7-smooth-bite-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 23-module preservation and per-frame bite UX
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.4.6-cobra-hit-reliability-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.4.7-smooth-bite-helper-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pattern,old,re.S))
+          after=dict(re.findall(pattern,new,re.S))
+          assert len(before)==len(after)==23,(len(before),len(after))
+          assert set(before)==set(after)
+          changed={name for name in before if before[name]!=after[name]}
+          assert changed=={'feral-nova-combat-v15.0.lua'},changed
+          for name in set(before)-changed:
+              assert before[name]==after[name],name
+          combat=after['feral-nova-combat-v15.0.lua']
+          assert (root/'feral-nova-combat-v15.6.lua').read_text().strip()==combat.strip()
+          assert 'RunService:BindToRenderStep("FERAL_NOVA_BITE_SMOOTH_V156"' in combat
+          assert 'Enum.RenderPriority.Camera.Value+1' in combat
+          assert 'RunService:UnbindFromRenderStep("FERAL_NOVA_BITE_SMOOTH_V156")' in combat
+          assert 'RunService.RenderStepped:Connect(protectedDraw)' in combat
+          assert 'local function drawGuide(dt)' in combat
+          assert 'smoothPosition:Lerp(desired,alpha)' in combat
+          assert 'local alpha=1-math.exp(-28*delta)' in combat
+          assert 'local function candidate(char,hum,root,preferModel)' in combat
+          assert 'if preferModel==model then score-=C.stableTargetPenalty end' in combat
+          assert 'C.nextScan=now+C.scanInterval' in combat
+          assert 'hint.Visible=char:GetAttribute("Species")~="KingCobra"' in combat
+          assert 'local width=math.min(280,math.max(95,viewport.X-26))' in combat
+          assert 'record.h.OutlineColor=DIVE_COLOR' in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'ctx.refreshTracker=recolorRefresh' in combat
+          assert 'ctx.reach.compare' in combat
+          assert 'showAim(char,best' not in combat
+          reach=after['feral-nova-reach-v14.0.lua']
+          assert 'CONE=math.min(original.CONE+48,124)' in reach
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in reach
+          assert 'return gap-.84' in reach
+          native=after['feral-nova-native-recovery-v13.3.lua']
+          assert 'N.beforeKingsStrike' in native
+          assert 'COBRA PRE-BITE RANGE / REST YIELDED' in native
+          assert 'release="13.4.7"' in new
+          assert 'version="13.4.7"' in new
+          assert 'activeRecord.version="feral-nova-v13.4.7"' in new
+          directory=Path('/tmp/feral-1347-modules')
+          directory.mkdir(exist_ok=True)
+          for name,body in after.items():
+              (directory/name).write_text(body+'\n')
+          print('FERAL_V1347_23_MODULES_ONE_COMBAT_MODULE_CHANGED')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile full bundle, combat source and every embedded module
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.4.7-smooth-bite-helper-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.6.lua
+          for file in /tmp/feral-1347-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_V1347_SMOOTH_BITE_ALL_MODULES_COMPILE_PASS
