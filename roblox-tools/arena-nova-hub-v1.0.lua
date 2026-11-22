@@ -974,6 +974,27 @@ environment.__ARENA_NOVA_PHASE4 = {
 }
 connect(unloadButton.Activated, unload)
 
+-- Potassium supports queue_on_teleport; retain the hub across lobby -> match
+-- only when the executor exposes the queue function. Unload cancels future queuing.
+local teleportQueue = nil
+if type(queue_on_teleport) == "function" then
+    teleportQueue = queue_on_teleport
+elseif type(queueonteleport) == "function" then
+    teleportQueue = queueonteleport
+end
+local didQueue = false
+if type(teleportQueue) == "function" then
+    connect(player.OnTeleport, function(state)
+        if running and not didQueue and state == Enum.TeleportState.Started then
+            local loader = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/arena-nova-hub-v1.0.lua"))()'
+            local queued = pcall(teleportQueue, loader)
+            didQueue = queued
+        elseif state == Enum.TeleportState.Failed then
+            didQueue = false
+        end
+    end)
+end
+
 connect(Players.PlayerAdded, trackPlayer)
 connect(Players.PlayerRemoving, removePlayer)
 connect(playerGui.DescendantAdded, function(object)
