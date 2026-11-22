@@ -1,0 +1,72 @@
+name: FERAL NOVA v13.5.6 Eagle and Mobile Recovery
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-native-recovery-v13.5.6.lua'
+      - 'roblox-tools/feral-nova-v13.5.6-eagle-mobile-recovery-experimental-potassium.lua'
+      - '.github/workflows/feral-nova-v13.5.6-mobile-recovery-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm only native recovery changed and no Rest pose regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.5.5-eagle-talon-reliability-experimental-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.5.6-eagle-mobile-recovery-experimental-potassium.lua').read_text()
+          native=(root/'feral-nova-native-recovery-v13.5.6.lua').read_text().strip()
+          rx=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          a=dict(re.findall(rx,old,re.S));b=dict(re.findall(rx,new,re.S))
+          assert len(a)==len(b)==23,(len(a),len(b))
+          assert a.keys()==b.keys()
+          assert {k for k in a if a[k]!=b[k]}=={'feral-nova-native-recovery-v13.3.lua'}
+          assert native==b['feral-nova-native-recovery-v13.3.lua'].strip()
+          assert 'movingRestCadenceSeconds=5' in native
+          assert 'legacyRestCadenceSeconds=5' in native
+          assert 'conditionMotionRates=' in native
+          assert 'old.moving==moving' in native
+          assert 'status_motion_boundary_intervals_excluded=' in native
+          assert 'FeralInjury' in native and 'FeralBleed' in native and 'FeralVenomAmt' in native
+          assert 'FERAL_HUB_FIRST_BITE_YIELD_V1353' in native
+          assert 'N.beforeBiteInput("EARLIEST BITE INPUT / AUTO REST OFF")' in native
+          assert 'if N.manualRest' in native
+          assert 'if m.trueEchoes>=3 then' in native
+          assert 'TURTLE SHELL PROTECTED / NO MASK' in native
+          assert 'Enum.ContextActionResult.Pass' in native
+          assert 'version="13.5.6"' in new
+          assert 'release="13.5.6"' in new
+          assert 'activeRecord.version="feral-nova-v13.5.6"' in new
+          d=Path('/tmp/feral-1356-modules');d.mkdir(exist_ok=True)
+          for name,body in b.items(): (d/name).write_text(body+'\n')
+          print('FERAL_V1356_23_MODULES_PRESERVED_RECOVERY_ONLY_CHANGED')
+          PY
+      - name: Install Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau1356.zip
+          mkdir -p /tmp/luau1356
+          unzip -q /tmp/luau1356.zip -d /tmp/luau1356
+          compiler="$(find /tmp/luau1356 -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile launcher and all 23 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.6-eagle-mobile-recovery-experimental-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v13.5.6.lua
+          for f in /tmp/feral-1356-modules/*.lua; do "$LUAU_COMPILER" --null "$f"; done
+          echo FERAL_V1356_LUAU_ALL_PASS
