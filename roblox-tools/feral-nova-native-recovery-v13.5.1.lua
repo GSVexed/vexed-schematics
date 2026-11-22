@@ -56,8 +56,12 @@ local function nearbyAttackTarget(char,ctx)
         local otherHum=model:FindFirstChildOfClass("Humanoid")
         local otherRoot=model:FindFirstChild("HumanoidRootPart")
         if not otherRoot or not otherHum or otherHum.Health<=0 then return false end
-        local pack=otherPlayer and otherPlayer:GetAttribute("FeralPack")
-            or model:GetAttribute("FeralPack")
+        local pack
+        if otherPlayer then
+            pack=otherPlayer:GetAttribute("FeralPack")
+        else
+            pack=model:GetAttribute("FeralPack")
+        end
         if ownPack~=nil and ownPack==pack then return false end
         local d=otherRoot.Position-root.Position
         local dist=d.Magnitude
