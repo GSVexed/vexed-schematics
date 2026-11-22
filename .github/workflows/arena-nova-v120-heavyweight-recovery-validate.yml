@@ -1,0 +1,72 @@
+name: ARENA NOVA v1.2 - resilient decompilation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-client-diagnostic-v1.2.0-heavyweight-recovery.lua'
+      - '.github/workflows/arena-nova-v120-heavyweight-recovery-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify full archive coverage and new failure handling
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('roblox-tools/arena-nova-client-diagnostic-v1.2.0-heavyweight-recovery.lua').read_text()
+          checks=[
+            'universeId = 7209131331',
+            'version = "1.2.0"',
+            'D.rapidSceneCapture()',
+            'if not D.stop then D.inventory() end',
+            'function D.collectSources()',
+            'D.fastSourcePassComplete=true',
+            'D.exportSource(entry,body,"Source_property")',
+            'createWorker(entry,entry.instance,',
+            'createWorker(entry,bytes,',
+            'D.exportBytecodeReuse(entry,reused)',
+            'D.cacheBytecode(entry,entry.fingerprint)',
+            'entry.nativeFailure=reason',
+            'pendingFallback[#pendingFallback+1]=entry',
+            'for at,entry in ipairs(pendingFallback) do',
+            'D.c.nativeDecompileFailure+=1',
+            'D.c.fallbackExported+=1',
+            'source-attempts/',
+            'Property read warnings (separate from decompile failures): ',
+            'if consecutiveUnusual>=CFG.nativeAdaptiveFailures and limit>1 then',
+            'D.sourcePassComplete=not D.stop and not D.sourceAbortReason',
+            'function D.finalizePending(reason)',
+            'function D.filterSource(source)',
+            'function D.refreshPrivacy()',
+            'function D.checkpoint()',
+            'scope = "all_eligible_game_and_platform_scripts"',
+          ]
+          for x in checks:
+            assert x in text,x
+          for bad in [':FireServer(',':InvokeServer(', 'request({',
+                      'game:HttpGet(', 'sethiddenproperty(', 'setthreadidentity(', 'getgc(', 'getconnections(']:
+            assert bad not in text,bad
+          assert '108901361810209' not in text
+          print('ARENA_V120_FULL_COVERAGE_SAFE_FALLBACK_VALIDATED')
+          PY
+      - name: Install official Luau compiler
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/arena-luau.zip
+          mkdir -p /tmp/arena-luau
+          unzip -q /tmp/arena-luau.zip -d /tmp/arena-luau
+          compiler="$(find /tmp/arena-luau -type f -name luau-compile | head -1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile full heavyweight v1.2 Luau
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-client-diagnostic-v1.2.0-heavyweight-recovery.lua
+          echo ARENA_NOVA_V120_LUAU_COMPILE_PASS
