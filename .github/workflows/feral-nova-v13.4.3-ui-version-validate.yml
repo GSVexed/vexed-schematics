@@ -1,0 +1,79 @@
+name: FERAL NOVA v13.4.3 - UI Version Display Regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.4.3-ui-version-corrected-potassium.lua'
+      - '.github/workflows/feral-nova-v13.4.3-cobra-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify unchanged modules and Cobra guide behaviour
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          before=(root/'feral-nova-v13.4.2-cobra-shot-safety-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.4.3-ui-version-corrected-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          old=dict(re.findall(pattern,before,re.S))
+          cur=dict(re.findall(pattern,new,re.S))
+          assert len(old)==len(cur)==23, (len(old),len(cur))
+          assert set(old)==set(cur)
+          changed={name for name in old if old[name]!=cur[name]}
+          assert changed=={'feral-nova-ui-v13.1.lua'},changed
+          for name in set(old)-changed:
+              assert old[name]==cur[name]
+          legacy_ui=cur['feral-nova-ui-v13.1.lua']
+          assert (root/'feral-nova-ui-v13.4.3.lua').read_text().strip()==legacy_ui.strip()
+          assert 'local release=tostring(ctx.hubBuild and ctx.hubBuild.release or "UNKNOWN")' in legacy_ui
+          assert '"v"..release.." RENAISSANCE  •  COBRA COMBAT"' in legacy_ui
+          assert 'helpCopy("FERAL NOVA v"..release' in legacy_ui
+          assert '"Build: FERAL NOVA v"..release' in legacy_ui
+          assert 'v13.1 RENAISSANCE' not in legacy_ui
+          assert 'release="13.4.3"' in new
+          assert 'version="13.4.3"' in new
+          assert 'activeRecord.version="feral-nova-v13.4.3"' in new
+          assert 'loadstring(game:HttpGet' not in new
+          assert 'ctx.reach.compare' in cur['feral-nova-combat-v15.0.lua']
+          assert 'cobraBase={spit=strike.SPIT_RANGE' in cur['feral-nova-combat-v15.0.lua']
+          assert 'CONE=math.min(original.CONE+48,124)' in cur['feral-nova-reach-v14.0.lua']
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in cur['feral-nova-reach-v14.0.lua']
+          dest=Path('/tmp/feral-v1343-modules')
+          dest.mkdir(exist_ok=True)
+          for name,code in cur.items():
+              (dest/name).write_text(code+'\n')
+          print('FERAL_NOVA_V1343_UI_ONLY_CHANGED_22_OTHER_MODULES_IDENTICAL_PASS')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          c="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$c"
+          chmod +x "$c"
+          echo "LUAU_COMPILER=$c" >> "$GITHUB_ENV"
+      - name: Compile launcher, reach, combat and all embedded modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.4.3-ui-version-corrected-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-reach-v14.1.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.2.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-ui-v13.4.3.lua
+          for file in /tmp/feral-v1343-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_NOVA_V1343_LAUNCHER_AND_23_MODULES_COMPILE_PASS
