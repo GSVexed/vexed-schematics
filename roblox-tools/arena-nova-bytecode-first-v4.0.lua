@@ -57,6 +57,7 @@ local D={
     savedFiles={},cache={schema=4,entries={}},bytecodeSaved=0,
     visits=0,scanLimitHit=false,captureId="",
     scopeTruncated=0,slowBytecodeCalls=0,lastRecordTime=0,
+    fps=60,lowFPSTime=0,fpsConnection=nil,
     c={objects=0,scripts=0,eligible=0,queued=0,remotes=0,values=0,
        attrs=0,privacySkipped=0,platformSkipped=0,
        bytecodeNew=0,bytecodeCache=0,bytecodeFailed=0,
@@ -64,6 +65,7 @@ local D={
        bytecodeUnknownFormat=0,bytecodeAttempts=0,
        bytecodeTimeout=0,bytecodeBytes=0,readErrors=0,
        slowBytecodeCalls=0,scopesTruncated=0,
+       cachedFailuresSkipped=0,fpsGuardTriggers=0,
        writeErrors=0,files=0,rootScopes=0},
     report=nil,gui=nil,refs=nil
 }
@@ -202,6 +204,8 @@ local function summary()
         scope="gameplay_roots_client_scripts_only_platform_excluded",
         no_in_game_decompile=true,server_only_source_unavailable=true,
         binary_bytecode_not_privacy_scrubbed=true,
+        fps_estimate=math.floor(D.fps),
+        fps_guard_triggered=D.stopReason=="fps_guard",
         output_root=D.root,counts=D.c,
         caution="Source/bytecode compatibility is executor-dependent",
         cache_reuse_by_place_version_path_not_exact_byte_identity=true
@@ -233,6 +237,10 @@ local function saveCache()
 end
 local function logFailure(entry,reason,elapsed,method)
     D.c.bytecodeFailed+=1
+    D.cache.entries[tostring(game.PlaceId).."|"..entry.class.."|"..entry.path]={
+        failed=reason,place_version=game.PlaceVersion,
+        retry_after=os.time()+CFG.retryFailureAfter
+    }
     emit("bytecode_results",{script_path=entry.path,
        class=entry.class,status="unavailable",reason=reason,
        elapsed_ms=math.floor((elapsed or 0)*1000),method=method})
@@ -495,6 +503,11 @@ function D.collectBytecode()
     for idx,entry in ipairs(D.queue) do
         if D.stopped then D.stopReason="user_stopped";break end
         if os.clock()>=D.deadline then D.stopReason="time_budget";break end
+        if D.lowFPSTime>1.1 then
+            D.stopReason="fps_guard"
+            D.c.fpsGuardTriggers+=1
+            break
+        end
         if D.c.bytecodeAttempts>=attemptsLimit then
             D.stopReason="bytecode_attempt_budget";break
         end
@@ -503,7 +516,15 @@ function D.collectBytecode()
         end
         local ck=D.cache.entries[cacheKey(entry)]
         local hit=false
-        if ck and ck.place_version==game.PlaceVersion and
+        if ck and ck.failed and ck.place_version==game.PlaceVersion
+            and type(ck.retry_after)=="number"
+            and os.time()<ck.retry_after then
+            D.c.cachedFailuresSkipped+=1
+            emit("bytecode_results",{script_path=entry.path,class=entry.class,
+                status="prior_failure_not_retried",reason=ck.failed})
+            hit=true
+        end
+        if not hit and ck and ck.place_version==game.PlaceVersion and
             type(ck.file)=="string" then
             local cached=read(ck.file)
             if cached and #cached==ck.bytes and adler32(cached)==ck.adler32 then
@@ -514,6 +535,9 @@ function D.collectBytecode()
             D.c.bytecodeAttempts+=1
             local ok,bytes,elapsed=callBounded(API.get,entry.obj,
                 math.min(CFG.apiTimeout,math.max(0.05,D.deadline-os.clock())))
+            if elapsed>=0.55 then
+                D.c.slowBytecodeCalls+=1
+            end
             if not ok then
                 local reason=bytes=="timeout" and "timeout"
                     or bytes=="api_missing" and "api_missing"
@@ -536,6 +560,11 @@ function D.collectBytecode()
         entry.obj=nil
         if healthFailures>=5 and D.c.bytecodeNew==0 then
             D.stopReason="bytecode_api_not_working";break
+        end
+        if D.c.bytecodeAttempts>=6 and D.c.slowBytecodeCalls>=5 then
+            D.stopReason="bytecode_getter_too_slow"
+            D.current="Bytecode retrieval itself is too slow; sample and diagnostics saved."
+            break
         end
         if completed%5==0 then
             D.current="Processed "..completed.."/"..#D.queue..
@@ -588,6 +617,13 @@ function D.run()
         D.current="Could not create capture folder."
         D.running=false;D.refresh();return
     end
+    D.fpsConnection=RunService.Heartbeat:Connect(function(dt)
+        if not D.running or dt<=0 or dt>0.5 then return end
+        local inst=math.min(150,1/dt)
+        D.fps=D.fps*0.85+inst*0.15
+        if D.fps<24 then D.lowFPSTime+=dt
+        else D.lowFPSTime=math.max(0,D.lowFPSTime-dt) end
+    end)
     write(D.root.."/README.txt",
         "ARENA NOVA BYTECODE-FIRST v4.0.0\n"..
         "ZIP the whole capture folder and upload it to ChatGPT.\n"..
@@ -598,7 +634,8 @@ function D.run()
     D.checkpoint()
     local ok=pcall(function()
         D.discover()
-        if not D.stopped and os.clock()<D.deadline then D.collectBytecode() end
+        if not D.stopped and not D.stopReason and os.clock()<D.deadline
+            and D.lowFPSTime<=1.1 then D.collectBytecode() end
     end)
     if not ok then
         D.phase="FAILED - PARTIAL SAVED"
@@ -616,6 +653,7 @@ function D.run()
     end
     D.checkpoint();saveCache()
     D.running=false
+    if D.fpsConnection then D.fpsConnection:Disconnect();D.fpsConnection=nil end
     D.refresh()
     warn("[ARENA V4] "..D.phase.." | "..(D.root or "")..
         " | binary files="..(D.c.bytecodeNew+D.c.bytecodeCache))
