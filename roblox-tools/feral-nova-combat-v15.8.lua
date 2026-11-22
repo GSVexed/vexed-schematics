@@ -420,6 +420,7 @@ function Combat.attach(ctx)
     local smoothPosition=nil
     local lastGuideModel=nil
     local function drawGuide(dt)
+        local char=player.Character
         if not C.alive or not ctx.state.alive or not C.enabled then
             circle.Visible=false
             smoothPosition=nil;lastGuideModel=nil
