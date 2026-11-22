@@ -86,6 +86,8 @@ end
 -- Replicated character tracking: never create a fake proxy for an unstreamed player.
 local targets = {}
 local nativeBillboards = {}
+local outlineFolder = create("Folder", Workspace, {Name = "ArenaNovaOutlines"})
+local suppressNativeNames = nil
 local neutralOutline = Color3.fromRGB(170, 184, 201)
 local function healthOutlineColor(record)
     if not record.stats then
@@ -138,7 +140,7 @@ local function refreshPlayerVisuals(record)
     end
     if settings.outlines then
         if not record.highlight then
-            record.highlight = create("Highlight", Workspace, {
+            record.highlight = create("Highlight", outlineFolder, {
                 Name = "ArenaNovaOutline",
                 Adornee = character,
                 DepthMode = Enum.HighlightDepthMode.AlwaysOnTop,
@@ -229,6 +231,9 @@ local function updateCharacterParts(record)
     local stats = character:FindFirstChild("CombatStats")
     assignStats(record, stats)
     refreshPlayerVisuals(record)
+    if settings.names and suppressNativeNames then
+        suppressNativeNames()
+    end
 end
 local function bindCharacter(record, character)
     resetCharacter(record)
@@ -331,7 +336,7 @@ local function maybeSuppressNative(gui)
     end)
     gui.Enabled = false
 end
-local function suppressNativeNames()
+suppressNativeNames = function()
     if not settings.names then
         return
     end
@@ -409,6 +414,9 @@ local reachFolder = nil
 local reachParts = {}
 local reachConnection = nil
 local RING_SEGMENTS = 30
+local reachRayParams = RaycastParams.new()
+reachRayParams.FilterType = Enum.RaycastFilterType.Exclude
+reachRayParams.IgnoreWater = true
 local function stopReach()
     if reachConnection then
         reachConnection:Disconnect()
@@ -467,11 +475,8 @@ local function startReach()
             return
         end
         local groundY = root.Position.Y - 2.9
-        local parameters = RaycastParams.new()
-        parameters.FilterType = Enum.RaycastFilterType.Exclude
-        parameters.FilterDescendantsInstances = {character}
-        parameters.IgnoreWater = true
-        local hit = Workspace:Raycast(root.Position, Vector3.new(0, -12, 0), parameters)
+        reachRayParams.FilterDescendantsInstances = {character}
+        local hit = Workspace:Raycast(root.Position, Vector3.new(0, -12, 0), reachRayParams)
         if hit then
             groundY = hit.Position.Y + 0.09
         end
@@ -946,6 +951,9 @@ local function unload()
     stopDisasters()
     stopReach()
     restoreNativeNames()
+    if outlineFolder then
+        outlineFolder:Destroy()
+    end
     for target in pairs(targets) do
         removePlayer(target)
     end
