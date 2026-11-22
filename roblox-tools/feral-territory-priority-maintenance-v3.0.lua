@@ -1,7 +1,7 @@
--- FERAL Territory Position Probe v2.2: STREAMED ALL-HEX CLAIM + RE-SCENT
+-- FERAL Territory Position Maintenance v3.0: SMART SNAP + PRIORITY
 -- Experimental position-based maintenance. No server-side capture authority is implied.
 -- Reads FeralTerritory.Hexes and per-hex attributes. Does not modify territory attrs.
--- Optional AUTO SCENT tries one ground-safe position at a time and pauses on no evidence.
+-- Moves the actual animal. Automatic retries are bounded; success requires replicated territory state.
 local Players=game:GetService("Players")
 local RS=game:GetService("ReplicatedStorage")
 local WS=game:GetService("Workspace")
@@ -12,7 +12,7 @@ if not me or game.PlaceId~=108901361810209 then
     return
 end
 local env=(type(getgenv)=="function" and getgenv()) or _G
-for _,name in ipairs({"FERAL_POSITION_CLAIM_PROBE","FERAL_TERRITORY_MAINTENANCE_V2","FERAL_RADIUS_EXPERIMENT"}) do
+for _,name in ipairs({"FERAL_POSITION_CLAIM_PROBE","FERAL_TERRITORY_MAINTENANCE_V2","FERAL_TERRITORY_MAINTENANCE_V3","FERAL_RADIUS_EXPERIMENT"}) do
     local old=env[name]
     if type(old)=="table" and type(old.stop)=="function" then
         pcall(old.stop)
@@ -134,14 +134,21 @@ local function countTypes()
     return n
 end
 
-local mode="SCENT" -- SCENT includes all owned hexes, ordered by lowest hold.
+local mode="PRIORITY" -- Restore urgent pack scent, then capture other territory.
+local SCENT_TRIGGER=0.85
+local SCENT_SUCCESS=0.97
+local retryCooldown={}
+local totalRetries,totalSkipped,totalCompleted=0,0,0
+local lastFailure=nil
+local autoBusy=false
+local busySnap=false
 local targets={}
 local index=1
 local selectedKey=nil
 local active=true
 local auto=false
 local autoToken=0
-local lastStatus="Ready — SCENT targets already owned hexes"
+local lastStatus="PRIORITY: restore scent under 85%, then claim"
 local changedCount=0
 local claimedCount=0
 local reScentCount=0
@@ -158,7 +165,14 @@ local L={}
 
 local function score(t)
     local h=hold(t.key)
-    return h==nil and 2 or h
+    if isOwned(t.key) then
+        if h==nil then return -1 end
+        if h<0.35 then return 300+(1-h)*100 end
+        if h<SCENT_TRIGGER then return 200+(1-h)*100 end
+        return -100
+    end
+    local owner=value(t.key,"owner")
+    return owner==nil and 100 or 80
 end
 local function rebuild()
     local prior=selectedKey
@@ -166,15 +180,16 @@ local function rebuild()
     for _,t in ipairs(all) do
         if not isNeutral(t.key)
             and (mode=="ALL" or (mode=="SCENT" and isOwned(t.key))
-            or (mode=="CLAIM" and not isOwned(t.key))) then
+            or (mode=="CLAIM" and not isOwned(t.key))
+            or (mode=="PRIORITY" and score(t)>0)) then
             table.insert(result,t)
         end
     end
-    if mode=="SCENT" then
+    if mode=="SCENT" or mode=="PRIORITY" then
         table.sort(result,function(a,b)
             local ha,hb=score(a),score(b)
             if ha==hb then return a.key<b.key end
-            return ha<hb
+            return ha>hb
         end)
     elseif mode=="CLAIM" then
         table.sort(result,function(a,b)
@@ -240,7 +255,7 @@ local function label(name,y,sz)
     L[name]=l
     return l
 end
-label("Title",10,24).Text="FERAL  |  CLAIM + RE-SCENT v2.2"
+label("Title",10,24).Text="FERAL  |  SMART CLAIM + SCENT v3"
 L.Title.Font=Enum.Font.GothamBold
 L.Title.TextSize=14
 label("Counts",42)
@@ -264,7 +279,7 @@ local function button(n,s,x,y,w,color)
     Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
     return b
 end
-local modeB=button("Mode","MODE: SCENT",12,242,103,Color3.fromRGB(56,81,111))
+local modeB=button("Mode","MODE: PRIORITY",12,242,103,Color3.fromRGB(56,81,111))
 local prevB=button("Prev","<",121,242,29,Color3.fromRGB(57,79,101))
 local nextB=button("Next",">",155,242,29,Color3.fromRGB(57,79,101))
 local snapB=button("Snap","SNAP",190,242,60,Color3.fromRGB(42,109,128))
@@ -313,9 +328,10 @@ nextB.Activated:Connect(function()
 end)
 modeB.Activated:Connect(function()
     release()
-    if mode=="SCENT" then mode="CLAIM"
+    if mode=="PRIORITY" then mode="SCENT"
+    elseif mode=="SCENT" then mode="CLAIM"
     elseif mode=="CLAIM" then mode="ALL"
-    else mode="SCENT" end
+    else mode="PRIORITY" end
     attempt=nil
     selectedKey=nil
     rebuild()
@@ -514,7 +530,7 @@ local function report()
     local _,r=root()
     local a=attempt
     return {
-        version="2.2.0",mode=mode,biome=biome,
+        version="3.0.0",mode=mode,biome=biome,
         hexCount=n.total,claimable=n.eligible,neutral=n.neutral,
         owned=n.owned,fading=n.fading,other=n.remaining,
         selected=t and t.key,
@@ -529,7 +545,11 @@ local function report()
         observedOwnerChange=a and a.evidenceOwner or false,
         changesObserved=changedCount,
         claimChanges=claimedCount,scentChanges=reScentCount,
-        autoEnabled=auto,lastStatus=lastStatus,
+        autoEnabled=auto,totalSnapRetries=totalRetries,
+        totalSkipped=totalSkipped,totalCompleted=totalCompleted,
+        currentSnaps=a and a.snapCount or 0,
+        snapFailed=a and a.failed or false,
+        lastFailure=lastFailure,lastStatus=lastStatus,
         events=sampleLog
     }
 end
@@ -541,11 +561,13 @@ copyB.Activated:Connect(function()
         "owned","fading","other","selected","selectedHold","selectedOwnerIsPack",
         "selectedDistance","testKey","testAge","observedScentRise",
         "observedClaimProgress","observedOwnerChange","changesObserved",
-        "claimChanges","scentChanges","autoEnabled","attemptedLandingHex","landingError","lastStatus"
+        "claimChanges","scentChanges","autoEnabled","attemptedLandingHex",
+        "landingError","totalSnapRetries","totalSkipped","totalCompleted",
+        "currentSnaps","snapFailed","lastFailure","lastStatus"
     }) do
         table.insert(v,key.."="..tostring(p[key]))
     end
-    local result="[FERAL TERRITORY MAINTENANCE V2.2] "..table.concat(v," | ")
+    local result="[FERAL TERRITORY MAINTENANCE V3.0] "..table.concat(v," | ")
     if type(setclipboard)=="function" then
         local success=pcall(setclipboard,result)
         say(success and "Copied! Paste results into ChatGPT" or "Copy failed; printed in console")
@@ -719,10 +741,10 @@ autoB.Activated:Connect(function()
     end)
 end)
 
-env.FERAL_TERRITORY_MAINTENANCE_V2={
+env.FERAL_TERRITORY_MAINTENANCE_V3={
     stop=stop,report=report,
     selectMode=function(m)
-        if m=="SCENT" or m=="CLAIM" or m=="ALL" then
+        if m=="PRIORITY" or m=="SCENT" or m=="CLAIM" or m=="ALL" then
             release()
             mode=m
             modeB.Text="MODE: "..mode
@@ -734,5 +756,5 @@ env.FERAL_TERRITORY_MAINTENANCE_V2={
     end
 }
 update()
-print(string.format("[FERAL Territory v2.2] Hexes: %d, eligible: %d. Default SCENT mode; Auto requires real _hold increase.",#all,countTypes().eligible))
-print("[FERAL Territory v2.2] No server-owned territory attributes are ever written.")
+print(string.format("[FERAL Territory v3.0] Hexes: %d, eligible: %d. Default SCENT mode; Auto requires real _hold increase.",#all,countTypes().eligible))
+print("[FERAL Territory v3.0] Live character movement, bounded retries, server territory observation.")
