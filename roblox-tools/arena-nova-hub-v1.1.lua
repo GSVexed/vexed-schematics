@@ -903,7 +903,7 @@ local function startDisasters()
     local token = disasterToken
     for _, disaster in ipairs(observableDisasters) do
         local attribute = disaster .. "Until"
-        connect(Workspace:GetAttributeChangedSignal(attribute), function()
+        local function readDisasterFlag()
             local untilAt = Workspace:GetAttribute(attribute)
             if type(untilAt) ~= "number" then
                 return
@@ -912,9 +912,14 @@ local function startDisasters()
                 return Workspace:GetServerTimeNow()
             end)
             if ok and untilAt > serverTime then
-                showDisasterCue(disaster, string.upper(disaster) .. " ACTIVE")
+                local label = disaster:gsub("(%l)(%u)", "%1 %2")
+                showDisasterCue(disaster, string.upper(label) .. " ACTIVE")
             end
-        end, disasterConnections)
+        end
+        connect(Workspace:GetAttributeChangedSignal(attribute), readDisasterFlag, disasterConnections)
+        if Workspace:GetAttribute(attribute) ~= nil then
+            readDisasterFlag()
+        end
     end
     task.spawn(function()
         local scripts = player:FindFirstChild("PlayerScripts")
@@ -987,14 +992,18 @@ local function setOption(key, value)
     end
     repaintToggle(key)
 end
+local storedToggles = nil
 for _, definition in ipairs(definitions) do
     local key = definition.key
     connect(toggleUI[key].button.Activated, function()
+        if storedToggles then
+            storedToggles = nil
+            quietButton.Text = "ALL OFF"
+        end
         setOption(key, not settings[key])
     end)
     repaintToggle(key)
 end
-local storedToggles = nil
 connect(quietButton.Activated, function()
     if storedToggles then
         for _, definition in ipairs(definitions) do
@@ -1136,8 +1145,13 @@ end
 connect(Players.PlayerAdded, trackPlayer)
 connect(Players.PlayerRemoving, removePlayer)
 connect(playerGui.DescendantAdded, function(object)
-    if object:IsA("BillboardGui") then
+    if object:IsA("BillboardGui") and object.Name == "PlayerBillboard" then
         maybeSuppressNative(object)
+        task.defer(function()
+            if running and object.Parent then
+                maybeSuppressNative(object)
+            end
+        end)
     end
 end)
 for _, target in ipairs(Players:GetPlayers()) do
