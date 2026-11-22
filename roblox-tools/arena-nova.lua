@@ -1,4 +1,4 @@
--- ARENA NOVA | Phase 4 experimental final pass | v1.2.0
+-- ARENA NOVA | Phase 5 refinement build | v1.2.1
 -- Client-side UI, outline-only player ESP, names-only tags, weapon reach, passive disaster cues.
 -- Experimental server-authoritative mechanics are intentionally not represented as working.
 -- No diagnostic collection, remote firing, decompilation, bytecode export or file writes.
@@ -51,7 +51,7 @@ local incomingOptions = environment.__ARENA_NOVA_BOOT_CONFIG
 environment.__ARENA_NOVA_BOOT_CONFIG = nil
 
 local running = true
-local VERSION = "1.2.0"
+local VERSION = "1.2.1"
 local settings = {
     outlines = true,
     names = true,
@@ -337,7 +337,8 @@ local function nativeForTrackedHead(gui)
     if not gui:IsA("BillboardGui") or gui.Name ~= "PlayerBillboard" then
         return false
     end
-    if not gui:FindFirstChild("PlayerName") or not gui:FindFirstChild("HealthBar") then
+    if not gui:FindFirstChild("PlayerName", true)
+        or not gui:FindFirstChild("HealthBar", true) then
         return false
     end
     for _, record in pairs(targets) do
@@ -520,6 +521,8 @@ local function startReach()
         table.insert(reachParts, part)
     end
     local rayElapsed = math.huge
+    local reachReadElapsed = math.huge
+    local cachedReach = nil
     local currentRadius = nil
     local groundY = nil
     local lastCharacter = nil
@@ -536,19 +539,27 @@ local function startReach()
             return
         end
         local character = player.Character
+        if character ~= lastCharacter then
+            lastCharacter = character
+            rayElapsed = math.huge
+            reachReadElapsed = math.huge
+            groundY = nil
+            currentRadius = nil
+            cachedReach = nil
+        end
         local root = character and character:FindFirstChild("HumanoidRootPart")
-        local radius = selectedReach()
+        reachReadElapsed += dt
+        if reachReadElapsed >= 0.11 then
+            reachReadElapsed = 0
+            cachedReach = selectedReach()
+        end
+        local radius = cachedReach
         if not root or not root:IsA("BasePart") or not radius then
             if shown then
                 setReachVisible(false)
                 shown = false
             end
             return
-        end
-        if character ~= lastCharacter then
-            lastCharacter = character
-            rayElapsed = math.huge
-            groundY = nil
         end
         if radius ~= currentRadius then
             layoutReach(radius)
@@ -816,18 +827,23 @@ local function startStaminaTrial()
         end
         elapsed = 0
         local character = player.Character
-        local sim = character and character:FindFirstChild("SimState")
-        if not sim then
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local stats = character and character:FindFirstChild("CombatStats")
+        if not root or not root:IsA("BasePart") or not stats then
             return
         end
-        -- This changes the same client simulation anchor the movement code reads.
-        -- It is NOT a write to authoritative server stamina.
+        local health = stats:GetAttribute("Health")
+        if type(health) == "number" and health <= 0 then
+            return
+        end
+        -- Entity.simOf() returns the local HumanoidRootPart, not a
+        -- separate SimState child. This is local simulation state only.
         local now = time()
-        sim:SetAttribute("StaminaAnchor", 250)
-        sim:SetAttribute("StaminaAnchorAt", now)
-        sim:SetAttribute("StaminaRegenAt", now)
-        sim:SetAttribute("SprintExhausted", false)
-        sim:SetAttribute("BlockExhausted", false)
+        root:SetAttribute("StaminaAnchor", 250)
+        root:SetAttribute("StaminaAnchorAt", now)
+        root:SetAttribute("StaminaRegenAt", now)
+        root:SetAttribute("SprintExhausted", false)
+        root:SetAttribute("BlockExhausted", false)
     end)
     return true
 end
@@ -851,12 +867,11 @@ local function startKnockbackTrial()
         end
         local character = player.Character
         local root = character and character:FindFirstChild("HumanoidRootPart")
-        local sim = character and character:FindFirstChild("SimState")
         local stats = character and character:FindFirstChild("CombatStats")
-        if not root or not sim or not stats then
+        if not root or not root:IsA("BasePart") or not stats then
             return
         end
-        local knockedAt = sim:GetAttribute("KnockAt")
+        local knockedAt = root:GetAttribute("KnockAt")
         local knockVelocity = stats:GetAttribute("KnockVelocity")
         if type(knockedAt) ~= "number" or typeof(knockVelocity) ~= "Vector3" then
             return
