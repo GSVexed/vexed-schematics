@@ -2786,6 +2786,7 @@ function Combat.attach(ctx)
             or "MOVE CLOSER / TURN / ADJUST HEIGHT"
         if C.boostedOnlyReady then C.clientOnlyWarnings+=1 end
         showAim(char,best,workspace.CurrentCamera)
+    end
     function C.setEnabled(v)
         C.enabled=v==true
         if not C.enabled then circle.Visible=false;hint.Visible=false end
