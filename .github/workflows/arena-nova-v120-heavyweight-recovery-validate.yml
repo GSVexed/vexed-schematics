@@ -34,7 +34,7 @@ jobs:
             'D.cacheBytecode(entry,entry.fingerprint)',
             'entry.nativeFailure=reason',
             'pendingFallback[#pendingFallback+1]=entry',
-            'for at,entry in ipairs(pendingFallback) do',
+            'while cursor<=#pendingFallback and #active<limit',
             'D.c.nativeDecompileFailure+=1',
             'D.c.fallbackExported+=1',
             'source-attempts/',
