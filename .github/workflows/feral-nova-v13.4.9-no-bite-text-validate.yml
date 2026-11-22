@@ -1,0 +1,80 @@
+name: FERAL NOVA v13.4.9 No Bite Text - All Animals
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.4.9-no-bite-text-potassium.lua'
+      - 'roblox-tools/feral-nova-combat-v15.8.lua'
+      - '.github/workflows/feral-nova-v13.4.9-no-bite-text-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate entire bite-text removal and unchanged modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.4.8-cobra-text-overlay-fix-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.4.9-no-bite-text-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          prev=dict(re.findall(pattern,old,re.S))
+          curr=dict(re.findall(pattern,new,re.S))
+          assert len(prev)==len(curr)==23
+          assert set(prev)==set(curr)
+          changes={k for k in prev if prev[k]!=curr[k]}
+          assert changes=={'feral-nova-combat-v15.0.lua'},changes
+          combat=curr['feral-nova-combat-v15.0.lua']
+          assert combat.strip()==(root/'feral-nova-combat-v15.8.lua').read_text().strip()
+          assert 'Instance.new("TextLabel")' not in combat
+          assert 'CombatAimHint' not in combat
+          assert not re.search(r'\bhint\s*[\.:]',combat)
+          assert 'local function drawGuide(dt)\n        local char=player.Character' in combat
+          assert 'circle.Visible=true' in combat
+          assert 'centerDot.BackgroundColor3=shade' in combat
+          assert 'RunService:BindToRenderStep("FERAL_NOVA_BITE_SMOOTH_V156"' in combat
+          assert 'smoothPosition:Lerp(desired,alpha)' in combat
+          assert 'staleGuideWindowsRemoved' in combat
+          assert 'record.h.OutlineColor=DIVE_COLOR' in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'ctx.refreshTracker=recolorRefresh' in combat
+          reach=curr['feral-nova-reach-v14.0.lua']
+          assert 'CONE=math.min(original.CONE+48,124)' in reach
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in reach
+          assert 'return gap-.84' in reach
+          assert 'N.beforeKingsStrike' in curr['feral-nova-native-recovery-v13.3.lua']
+          assert 'release="13.4.9"' in new
+          assert 'version="13.4.9"' in new
+          assert 'activeRecord.version="feral-nova-v13.4.9"' in new
+          dest=Path('/tmp/feral-1349-modules')
+          dest.mkdir(exist_ok=True)
+          for key,body in curr.items(): (dest/key).write_text(body+'\n')
+          print('FERAL_V1349_ALL_ANIMALS_TEXT_FREE_23_MODULES_PRESERVED')
+          PY
+      - name: Install Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile launcher and all 23 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.4.9-no-bite-text-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.8.lua
+          for file in /tmp/feral-1349-modules/*.lua; do "$LUAU_COMPILER" --null "$file"; done
+          echo FERAL_V1349_LUAU_COMPILE_SUCCESS
