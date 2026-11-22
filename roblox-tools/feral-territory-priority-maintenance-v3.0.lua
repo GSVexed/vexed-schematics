@@ -580,21 +580,27 @@ local function observe()
         event(a.key.." claimed by pack after SNAP")
     end
     if owner==a.pack and nowHold~=nil
-        and a.lastHold~=nil and nowHold>a.lastHold+0.001
-        and not a.evidenceScent then
-        a.evidenceScent=true
-        reScentCount+=1
-        changedCount+=1
-        event(a.key.." scent rose after SNAP")
+        and a.lastHold~=nil and nowHold>a.lastHold+0.001 then
+        a.lastEvidenceAt=os.clock()
+        if not a.evidenceScent then
+            a.evidenceScent=true
+            reScentCount+=1
+            changedCount+=1
+            event(a.key.." scent rose after SNAP")
+        end
     end
     if by==a.pack and state=="claim" and type(nowProg)=="number"
-        and nowProg>a.lastProgress+0.001 and not a.evidenceProgress then
-        a.evidenceProgress=true
-        changedCount+=1
-        event(a.key.." claim progressed after SNAP")
+        and nowProg>a.lastProgress+0.001 then
+        a.lastEvidenceAt=os.clock()
+        if not a.evidenceProgress then
+            a.evidenceProgress=true
+            changedCount+=1
+            event(a.key.." claim progressed after SNAP")
+        end
     end
     a.lastHold=nowHold
     if type(nowProg)=="number" then a.lastProgress=nowProg end
+    keepTarget()
 end
 
 local function report()
@@ -680,12 +686,16 @@ local function update()
         h and string.format("%.1f%%",h*100) or "unknown")
     L.Distance.Text="Hex-center distance: "..(dist and string.format("%.0f",dist) or "not spawned")
         .." | Old radius: 120"
-    L.Telemetry.Text=string.format("State: %s | Claim: %s",
+    L.Telemetry.Text=string.format("State: %s | Claim: %s | Tries: %s",
         tostring(state or "idle"),
         type(progress)=="number" and string.format("%.1f%%",progress*100)
-            or "unknown")
+            or "unknown",
+        attempt and tostring(attempt.snapCount) or "-")
     if attempt and attempt.key==t.key then
-        if attempt.evidenceScent then
+        if attempt.failed then
+            L.Evidence.Text="SNAP FAILED: "..tostring(lastFailure)
+            L.Evidence.TextColor3=Color3.fromRGB(251,149,132)
+        elseif attempt.evidenceScent then
             L.Evidence.Text="REPLICATED SCENT INCREASE OBSERVED"
             L.Evidence.TextColor3=Color3.fromRGB(133,243,177)
         elseif attempt.evidenceOwner then
