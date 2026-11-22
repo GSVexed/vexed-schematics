@@ -10,6 +10,7 @@ on:
       - 'roblox-tools/arena-nova-hub-v1.3.lua'
       - 'roblox-tools/arena-nova-hub-v1.4.lua'
       - 'roblox-tools/arena-nova-hub-v1.5.lua'
+      - 'roblox-tools/arena-nova-hub-v1.6.lua'
       - 'roblox-tools/arena-nova.lua'
       - '.github/workflows/arena-nova-phase4-release-gate.yml'
   workflow_dispatch:
@@ -27,7 +28,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('roblox-tools/arena-nova-hub-v1.5.lua')
+          p=Path('roblox-tools/arena-nova-hub-v1.6.lua')
           if not p.exists():
               raise SystemExit('Expected Arena NOVA Phase4 hub source has not been published yet')
           s=p.read_text('utf-8-sig')
@@ -53,12 +54,19 @@ jobs:
           assert 'ALL OFF' in s and 'RESTORE' in s, 'Quick off/restore missing'
           assert 'gui:FindFirstChild("PlayerName", true)' in s, 'name cleanup not hardened'
           assert 'reachReadElapsed' in s, 'reach lookups not throttled'
-          assert 'Enum.RenderPriority.Camera.Value + 1' in s, 'aim not ordered after Roblox camera'
+          assert 'Enum.RenderPriority.Camera.Value + 4' in s, 'aim not ordered after Arena camera, first-person and shake'
           assert 'WorldToViewportPoint' in s, 'aim selection must use screen projection'
-          assert 'UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)' in s, 'aim must be hold-to-use'
+          assert 'UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)' in s, 'aim must be held LeftAlt'
           assert 'closestToCrosshair' in s, 'aim selector missing'
           assert 'stopAim()' in s and 'UnbindFromRenderStep' in s, 'aim cleanup missing'
-          assert 'RIGHT-CLICK AIM' in s and 'aim = true' in s, 'aim toggle missing'
+          assert 'LEFT ALT AIM' in s and 'aim = true' in s, 'LeftAlt aim toggle missing'
+          assert 'RIGHT-CLICK AIM' not in s, 'old right-click aim still present'
+          assert 'IsMouseButtonPressed(Enum.UserInputType.MouseButton2)' not in s, 'old right-click input still present'
+          assert 'bowLeadPoint' in s and 'bowFlightTime' in s, 'ballistic prediction missing'
+          assert 'bowLaunchSpeed' in s and 'DrawAt' in s, 'charge-aware bow calculation missing'
+          assert 'rig.aimPoint = wrapped' in s, 'native shot aim-point link missing'
+          assert 'restoreAimRig()' in s, 'shot aim-point restoration missing'
+          assert 'AIM_LATENCY_SECONDS' in s, 'flight time delay handling missing'
           assert 'Enum.KeyCode.G' in s, 'loot toggle hotkey missing'
           assert 'CollectionService:GetTagged(tag)' in s, 'loot tag discovery missing'
           assert 'GetInstanceAddedSignal(tag)' in s and 'GetInstanceRemovedSignal(tag)' in s, 'loot lifecycle missing'
@@ -114,5 +122,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.5.lua
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.6.lua
           echo ARENA_NOVA_CORE_LUAU_COMPILE_PASS
