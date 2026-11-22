@@ -1,0 +1,91 @@
+name: FERAL NOVA v13.4.6 Cobra Hit Reliability and Bite Range
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.4.6-cobra-hit-reliability-potassium.lua'
+      - '.github/workflows/feral-nova-v13.4.6-cobra-hit-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all 23 modules, enlarged reach, visual and Rest repair invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          before=(root/'feral-nova-v13.4.5-cobra-esp-plus-bite-guide-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.4.6-cobra-hit-reliability-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          old=dict(re.findall(pattern,before,re.S))
+          cur=dict(re.findall(pattern,new,re.S))
+          assert len(old)==len(cur)==23,(len(old),len(cur))
+          assert set(old)==set(cur)
+          changed={name for name in old if old[name]!=cur[name]}
+          assert changed=={'feral-nova-combat-v15.0.lua','feral-nova-native-recovery-v13.3.lua'},changed
+          for name in set(old)-changed:
+              assert old[name]==cur[name],name
+          for file,name in [('feral-nova-combat-v15.5.lua','feral-nova-combat-v15.0.lua'),('feral-nova-native-recovery-v13.4.6.lua','feral-nova-native-recovery-v13.3.lua')]:
+              assert (root/file).read_text().strip()==cur[name].strip()
+          reach=cur['feral-nova-reach-v14.0.lua']
+          assert 'CONE=math.min(original.CONE+48,124)' in reach
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in reach
+          assert 'return gap-.84' in reach
+          combat=cur['feral-nova-combat-v15.0.lua']
+          assert 'hint.Visible=char:GetAttribute("Species")~="KingCobra"' in combat
+          assert 'circle.Visible=true' in combat
+          assert 'local function showAim(char,best,camera)' in combat
+          assert 'showAim(char,best,workspace.CurrentCamera)' in combat
+          assert 'record.h.OutlineColor=DIVE_COLOR' in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'local lineClear=unobstructed(char,root2,model)' in combat
+          assert 'ctx.refreshTracker=recolorRefresh' in combat
+          assert 'bite_claim_windows_with_no_observed_hp_drop' in combat
+          recovery=cur['feral-nova-native-recovery-v13.3.lua']
+          assert 'target.gap<target.reach+28' in recovery
+          assert 'local preAim=blocked=="COBRA PRE-BITE RANGE / REST YIELDED"' in recovery
+          assert 'N.beforeKingsStrike(' in recovery
+          assert 'GetAttributeChangedSignal("FeralKingsPress")' in recovery
+          assert 'CAS:BindActionAtPriority(cobraPriorityName' in recovery
+          assert 'Enum.ContextActionResult.Pass' in recovery
+          assert 'CAS:UnbindAction("FERAL_HUB_COBRA_KINGS_YIELD_V1346")' in recovery
+          assert 'release="13.4.6"' in new
+          assert 'version="13.4.6"' in new
+          assert 'activeRecord.version="feral-nova-v13.4.6"' in new
+          assert 'loadstring(game:HttpGet' not in new
+          directory=Path('/tmp/feral-1346-modules')
+          directory.mkdir(exist_ok=True)
+          for name,body in cur.items():
+              (directory/name).write_text(body+'\n')
+          print('FERAL_V1346_23_MODULES_TWO_CHANGED_ALL_REACH_AND_BITE_FEATURES_PRESERVED')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile complete v13.4.6 launcher and all 23 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.4.6-cobra-hit-reliability-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v15.5.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v13.4.6.lua
+          for file in /tmp/feral-1346-modules/*.lua; do
+            "$LUAU_COMPILER" --null "$file"
+          done
+          echo FERAL_V1346_COMPILATION_PASSED
