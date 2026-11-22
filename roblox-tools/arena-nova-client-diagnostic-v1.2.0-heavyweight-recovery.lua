@@ -16,6 +16,7 @@ local CFG = {
     bytecodeReadTimeoutSeconds = 2,
     maxTemporaryBytecodeBytes = 4194304,
     nativeAdaptiveFailures = 3,
+    quickFingerprintTimeoutSeconds = 0.6,
     decompileWorkers = 2,
     rapidMaxObjects = 6500,
     rapidMaxDepth = 14,
@@ -116,7 +117,9 @@ local D = {
         nativeDecompileSuccess=0,nativeDecompileFailure=0,
         fallbackAttempted=0,fallbackExported=0,fallbackUnavailable=0,
         decompilerPlaceholders=0,adaptiveSingleWorker=0,
-        terminalSourceFailure=0,bytecodeReadErrors=0},
+        terminalSourceFailure=0,bytecodeReadErrors=0,
+        identicalCodeDeepDecompAvoided=0,fastFingerprintCalls=0,
+        fastFingerprintStoppedDueSlowAPI=0},
     limits = {}, otherIdentities = {}, privateRoots = {}, connections = {}, watchers = {},
     pendingDiscovered = 0, activeWorker = nil, sourceCursor = 0, memoryStart = 0,
 }
@@ -1912,13 +1915,63 @@ function D.collectSources()
             return false
         end
         attemptLog(entry,method,"exported",nil,elapsed)
-        if method=="native" then D.c.nativeDecompileSuccess+=1
+        if method=="native" then
+            D.c.nativeDecompileSuccess+=1
+            local fp=entry.nativeFingerprint
+            if not fp and fastFingerprintsEnabled then
+                local reused
+                reused,fp=quickFingerprint(entry)
+            end
+            if fp then D.cacheBytecode(entry,fp) end
+            entry.nativeFingerprint=nil
         else D.c.fallbackExported+=1 end
         if method=="bytecode" and entry.fingerprint then
             D.cacheBytecode(entry,entry.fingerprint)
         end
         entry.instance=nil
         return true
+    end
+    -- A verified bytecode fingerprint can reuse an earlier, already-saved
+    -- reconstruction without invoking the expensive decompiler again.
+    -- If the executor's getter is itself slow, disable this optimization
+    -- immediately rather than adding latency to every remaining script.
+    local fastFingerprintsEnabled=true
+    local function quickFingerprint(entry)
+        if not fastFingerprintsEnabled or not API.bytecode or not API.read then
+            return nil,nil
+        end
+        local started=os.clock()
+        D.c.fastFingerprintCalls+=1
+        local ok,bytes=D.boundedCall(API.bytecode,entry.instance,
+            CFG.quickFingerprintTimeoutSeconds,"Fast bytecode dedup "..entry.id)
+        if os.clock()-started>=CFG.quickFingerprintTimeoutSeconds or not ok then
+            fastFingerprintsEnabled=false
+            D.c.fastFingerprintStoppedDueSlowAPI+=1
+            return nil,nil
+        end
+        if type(bytes)~="string" or #bytes<16
+            or #bytes>CFG.bytecodeCacheMaxSingleBytes then
+            return nil,nil
+        end
+        local key=entry.category..":"..#bytes..":"..D.adler(bytes)
+        local fp={key=key,bytes=bytes}
+        local candidates=D.bytecodeCache[key]
+        if not candidates then return nil,fp end
+        for _,candidate in ipairs(candidates) do
+            if candidate.bytes==bytes then
+                local verified=true
+                for _,file in ipairs(candidate.info.files) do
+                    local v,stored=pcall(API.read,D.root.."/"..file.path)
+                    if not v or type(stored)~="string"
+                        or #stored~=file.bytes or D.adler(stored)~=file.adler32 then
+                        verified=false
+                        break
+                    end
+                end
+                if verified then return candidate,fp end
+            end
+        end
+        return nil,fp
     end
     local function nativePass()
         D.current="Stage 2/3: native decompilation"
@@ -1938,12 +1991,24 @@ function D.collectSources()
                 if not API.decompile then
                     preserveFailure(entry,"decompiler_api_unavailable","native",0)
                 else
-                    local state,err=createWorker(entry,entry.instance,
-                        "native",CFG.nativeTimeoutSeconds)
-                    if state then
-                        active[#active+1]=state
+                    local reusable,fp=nil,nil
+                    if D.bytecodeCacheBytes>0 then
+                        reusable,fp=quickFingerprint(entry)
+                    end
+                    if reusable then
+                        D.exportBytecodeReuse(entry,reusable)
+                        D.c.identicalCodeDeepDecompAvoided+=1
+                        attemptLog(entry,"native","reused_identical_bytecode",nil,0)
+                        entry.instance=nil
                     else
-                        preserveFailure(entry,err,"native",0)
+                        entry.nativeFingerprint=fp
+                        local state,err=createWorker(entry,entry.instance,
+                            "native",CFG.nativeTimeoutSeconds)
+                        if state then
+                            active[#active+1]=state
+                        else
+                            preserveFailure(entry,err,"native",0)
+                        end
                     end
                 end
                 if cursor%25==0 then D.cooperate(false) end
