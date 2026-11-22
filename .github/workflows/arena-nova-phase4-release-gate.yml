@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'roblox-tools/arena-nova-hub-v1.0.lua'
+      - 'roblox-tools/arena-nova-hub-v1.1.lua'
+      - '.github/workflows/arena-nova-phase4-release-gate.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +21,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('roblox-tools/arena-nova-hub-v1.0.lua')
+          p=Path('roblox-tools/arena-nova-hub-v1.1.lua')
           if not p.exists():
               raise SystemExit('Expected Arena NOVA Phase4 hub source has not been published yet')
           s=p.read_text('utf-8-sig')
@@ -32,6 +34,12 @@ jobs:
               'DisplayName',
               'CharacterAdded',
               'GetAttribute',
+              'Catlike',
+              'MaxDistance = 0',
+              'reachModel:PivotTo',
+              'ALL OFF',
+              'RESTORE',
+              'queue_on_teleport',
           ):
               assert expected in s, f'missing approved-feature invariant: {expected}'
           for forbidden in (
@@ -63,5 +71,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-hub-v1.1.lua
           echo ARENA_NOVA_PHASE4_LUAU_COMPILE_PASS
