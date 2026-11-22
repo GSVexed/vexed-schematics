@@ -63,7 +63,7 @@ local D={
     createdDirs={},
     scannedComplete=false,sourceComplete=false,stopReason=nil,
     platformExclusionsComplete=true,
-    sourceSkippedFPS=false,fps=60,slowFrames=0,
+    sourceSkippedFPS=false,fps=60,lowFPSSeconds=0,frameConnection=nil,
     showReport=false,gui=nil,connections={},outputFiles={},
 }
 function D.sensitiveKey(key)
@@ -788,7 +788,7 @@ function D.collectSources()
             D.stopReason="source_attempt_budget";break
         end
         -- Do not add heavy native decompilation when Roblox is struggling.
-        if D.slowFrames>=10 then
+        if D.lowFPSSeconds>=1.5 then
             D.sourceSkippedFPS=true
             D.stopReason="low_fps_protection"
             break
@@ -898,6 +898,19 @@ function D.run()
         D.running=false;D.updateUI()
         return
     end
+    D.frameConnection=game:GetService("RunService").Heartbeat:Connect(function(dt)
+        if not D.running or dt<=0 or dt>1 then return end
+        local instantaneous=math.min(144,1/dt)
+        D.fps=0.88*D.fps+0.12*instantaneous
+        if D.phase=="SOURCE EXTRACTION" then
+            if D.fps<CFG.fpsDecompileFloor then
+                D.lowFPSSeconds+=dt
+                D.c.framesLow+=1
+            else
+                D.lowFPSSeconds=math.max(0,D.lowFPSSeconds-dt)
+            end
+        end
+    end)
     D.mk(CFG.home)
     D.buildPrivacy()
     D.loadCache()
@@ -948,6 +961,10 @@ function D.run()
     end
     D.checkpoint();D.saveCache()
     D.running=false
+    if D.frameConnection then
+        D.frameConnection:Disconnect()
+        D.frameConnection=nil
+    end
     D.updateUI()
     warn("[ARENA NOVA SMART] "..D.phase.." | "..(D.session or "")..
         " | exported="..D.c.sourceExported.." | errors="..D.c.sourceFailures)
