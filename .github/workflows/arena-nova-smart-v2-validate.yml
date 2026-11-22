@@ -1,0 +1,67 @@
+name: ARENA NOVA smart collector v2
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-smart-collector-v2.0.lua'
+      - '.github/workflows/arena-nova-smart-v2-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static invariants, cache boundaries and no gameplay writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools/arena-nova-smart-collector-v2.0.lua')
+          s=p.read_text(encoding='utf-8')
+          for text in [
+            'version="2.0.0"', 'universe=7209131331',
+            'lobbyBudgetSeconds=110','matchBudgetSeconds=38',
+            'function D.rapidScene()', 'function D.enumerate()',
+            'function D.collectSources()', 'function D.runLimited(',
+            'function D.tryCache(', 'function D.saveCache()',
+            'function D.loadCache()', 'function D.checkpoint()',
+            'function D.filterSource(source)','function D.buildPrivacy()',
+            'function D.plausibleSource(', 'function D.exportSource(',
+            'function D.failSource(', 'function D.sourceComplete' if False else 'D.sourceComplete=',
+            'source_results', 'source_cache' if False else 'cache_index.json.txt',
+            'complete_inventory', 'complete_source_pass',
+            'raw_bytecode_exported=false',
+            'source_statuses_are_not_proof_of_server_authority=true',
+          ]:
+            assert text in s, text
+          for prohibited in (
+            ':FireServer(',':InvokeServer(',':Fire(',':Invoke(',
+            'hookfunction(', 'getgc(', 'getconnections(',
+            'sethiddenproperty(', 'setthreadidentity(',
+            'game:HttpGet(', 'request({'):
+            assert prohibited not in s, prohibited
+          assert s.count('function D.collectSources()')==1
+          assert s.count('function D.filterSource(source)')==1
+          print('SMART_V2_STATIC_CHECKS_PASS')
+          PY
+      - name: Install Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/arena-smart-luau.zip
+          mkdir -p /tmp/arena-smart-luau
+          unzip -q /tmp/arena-smart-luau.zip -d /tmp/arena-smart-luau
+          compiler="$(find /tmp/arena-smart-luau -type f -name luau-compile | head -1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile smart heavyweight diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-smart-collector-v2.0.lua
+          echo ARENA_NOVA_SMART_V2_COMPILE_PASS
