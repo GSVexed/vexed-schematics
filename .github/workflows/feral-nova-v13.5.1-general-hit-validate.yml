@@ -1,0 +1,104 @@
+name: FERAL NOVA v13.5.1 General Bite Target and Ghost-Hit Reliability
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.5.1-general-ghost-hit-reliability-potassium.lua'
+      - 'roblox-tools/feral-nova-combat-v16.0.lua'
+      - 'roblox-tools/feral-nova-native-recovery-v13.5.1.lua'
+      - '.github/workflows/feral-nova-v13.5.1-general-hit-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare exact original game modules and verify hit-target parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.5.0-tree-combat-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.5.1-general-ghost-hit-reliability-potassium.lua').read_text()
+          pattern=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          before=dict(re.findall(pattern,old,re.S))
+          after=dict(re.findall(pattern,new,re.S))
+          assert len(before)==len(after)==23,(len(before),len(after))
+          assert set(before)==set(after)
+          changed={name for name in before if before[name]!=after[name]}
+          expected={'feral-nova-combat-v15.0.lua','feral-nova-native-recovery-v13.3.lua'}
+          assert changed==expected,(changed,expected)
+          for name in set(before)-changed:
+              assert before[name]==after[name],name
+          for source,name in [
+              ('feral-nova-combat-v16.0.lua','feral-nova-combat-v15.0.lua'),
+              ('feral-nova-native-recovery-v13.5.1.lua','feral-nova-native-recovery-v13.3.lua')]:
+              assert (root/source).read_text().strip()==after[name].strip(),source
+          combat=after['feral-nova-combat-v15.0.lua']
+          native=after['feral-nova-native-recovery-v13.3.lua']
+          reach=after['feral-nova-reach-v14.0.lua']
+          # The actual native FERAL bite claim scores by body gap minus dot*2,
+          # not by the hub's previous custom target stickiness and distance.
+          assert 'score=gap-dot*2' in combat
+          assert 'stableTargetPenalty=.10' in combat
+          assert 'Players:GetPlayerFromCharacter(model)' in combat
+          assert 'pack=owner:GetAttribute("FeralPack")' in combat
+          assert 'pack=model:GetAttribute("FeralPack")' in combat
+          assert 'C.friendlyTargetsExcluded+=1' in combat
+          assert 'nativeValid=base~=nil and base.valid==true' in combat
+          assert 'restBlockedNow=char:GetAttribute("WolfRest")==true' in combat
+          assert 'C.eligibleGhostSamples+=1' in combat
+          assert 'C.hpCorrelatedFeedback+=1' in combat
+          assert 'C.feedbackKind="NO_HP_DECLINE_OBSERVED"' in combat
+          assert 'Instance.new("TextLabel")' not in combat
+          assert 'CombatAimHint' not in combat
+          assert 'RunService:BindToRenderStep("FERAL_NOVA_BITE_SMOOTH_V156"' in combat
+          assert 'record.h.OutlineColor=DIVE_COLOR' in combat
+          assert 'record.h.OutlineColor=SPIT_COLOR' in combat
+          assert 'tryNativeTreeClaim(char,char:GetAttribute("WolfBiteAt"))' in combat
+          assert 'GENERAL PRE-BITE CONTACT / REST YIELDED' in native
+          assert 'local function nearbyAttackTarget(char,ctx)' in native
+          assert 'pack=otherPlayer:GetAttribute("FeralPack")' in native
+          assert 'generalAttackHoldSeconds=2.2' in native
+          assert 'cobra and 2.4 or N.generalAttackHoldSeconds' in native
+          assert 'N.beforeKingsStrike' in native
+          assert 'TREE COMBAT NEARBY / REST YIELDED' in native
+          assert 'CONE=math.min(original.CONE+48,124)' in reach
+          assert 'MAX_DY=math.min(original.MAX_DY*1.35,4.0)' in reach
+          assert 'desired.biteLook=function(char,forward)' in reach
+          assert 'return gap-.84' in reach
+          assert 'release="13.5.1"' in new
+          assert 'version="13.5.1"' in new
+          assert 'activeRecord.version="feral-nova-v13.5.1"' in new
+          dest=Path('/tmp/feral-1351-modules')
+          dest.mkdir(exist_ok=True)
+          for name,body in after.items():
+              (dest/name).write_text(body+'\n')
+          print('FERAL_V1351_ALL_ANIMAL_NATIVE_TARGET_MATCH_AND_REST_GHOST_GUARD_PRESERVED_23_MODULES')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-luau.zip
+          mkdir -p /tmp/feral-luau
+          unzip -q /tmp/feral-luau.zip -d /tmp/feral-luau
+          compiler="$(find /tmp/feral-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile integrated launcher and all 23 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.1-general-ghost-hit-reliability-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-combat-v16.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v13.5.1.lua
+          for file in /tmp/feral-1351-modules/*.lua; do "$LUAU_COMPILER" --null "$file"; done
+          echo FERAL_V1351_ALL_23_EMBEDDED_MODULES_COMPILE_PASS
