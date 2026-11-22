@@ -1,6 +1,6 @@
--- ARENA NOVA | Core-only hub | v1.3.0
+-- ARENA NOVA | Core + hold-right-click aim | v1.4.0
 -- Client-side UI, outline-only player ESP, names-only tags, weapon reach, passive disaster cues.
--- Focused on lightweight, opt-in client visuals; no gameplay-state modifications.
+-- Client-side visual tools plus optional hold-right-click camera tracking; no server-state modification.
 -- No gameplay remotes, diagnostics, perk actions, decompilation or file writes.
 
 local Players = game:GetService("Players")
@@ -51,14 +51,15 @@ local incomingOptions = environment.__ARENA_NOVA_BOOT_CONFIG
 environment.__ARENA_NOVA_BOOT_CONFIG = nil
 
 local running = true
-local VERSION = "1.3.0"
+local VERSION = "1.4.0"
 local settings = {
     outlines = true,
     names = true,
     reach = true,
     disasters = true,
+    aim = true,
 }
-for _, option in ipairs({ "outlines", "names", "reach", "disasters" }) do
+for _, option in ipairs({ "outlines", "names", "reach", "disasters", "aim" }) do
     local fromTeleport = type(incomingOptions) == "table" and incomingOptions[option]
     local fromPrior = type(lastOptions) == "table" and lastOptions[option]
     if type(fromTeleport) == "boolean" then
@@ -580,6 +581,137 @@ local function startReach()
     end)
 end
 
+-- Hold-right-click camera tracking. Acquisition is by SCREEN-CENTRE distance,
+-- not 3D range; keep the selected target until RMB is released or it disappears.
+-- Runs just after Roblox's camera update, affects local camera only.
+local AIM_BIND = "ArenaNovaAim_" .. tostring(player.UserId)
+local AIM_RESPONSE = 28
+local aimBound = false
+local aimTarget = nil
+local aimHeldLastFrame = false
+
+local function aimPointFor(target)
+    if not target or target == player or target.Parent ~= Players then
+        return nil
+    end
+    local character = target.Character
+    if not character or not character:IsDescendantOf(Workspace) then
+        return nil
+    end
+    local stats = character:FindFirstChild("CombatStats")
+    if stats then
+        local health = stats:GetAttribute("Health")
+        if type(health) == "number" and health <= 0 then
+            return nil
+        end
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health <= 0 then
+        return nil
+    end
+    local head = character:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        return head.Position
+    end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if root and root:IsA("BasePart") then
+        return root.Position + Vector3.new(0, 1.45, 0)
+    end
+    return nil
+end
+
+local function onScreenAimPoint(camera, target)
+    local point = aimPointFor(target)
+    if not point then
+        return nil, nil
+    end
+    local screen, visible = camera:WorldToViewportPoint(point)
+    if not visible or screen.Z <= 0 then
+        return nil, nil
+    end
+    return point, screen
+end
+
+local function closestToCrosshair(camera)
+    local viewport = camera.ViewportSize
+    local cx, cy = viewport.X * 0.5, viewport.Y * 0.5
+    local best, bestDistance = nil, math.huge
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player then
+            local point, screen = onScreenAimPoint(camera, other)
+            if point and screen then
+                local dx, dy = screen.X - cx, screen.Y - cy
+                local distance = dx * dx + dy * dy
+                if distance < bestDistance then
+                    bestDistance = distance
+                    best = other
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function stopAim()
+    if aimBound then
+        pcall(function()
+            RunService:UnbindFromRenderStep(AIM_BIND)
+        end)
+        aimBound = false
+    end
+    aimTarget = nil
+    aimHeldLastFrame = false
+end
+
+local function startAim()
+    if aimBound then
+        return
+    end
+    aimTarget = nil
+    aimHeldLastFrame = false
+    local ok = pcall(function()
+        RunService:BindToRenderStep(AIM_BIND, Enum.RenderPriority.Camera.Value + 1, function(dt)
+            if not running or not settings.aim then
+                return
+            end
+            local held = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+            if not held or UserInputService:GetFocusedTextBox() then
+                aimTarget = nil
+                aimHeldLastFrame = false
+                return
+            end
+            local camera = Workspace.CurrentCamera
+            if not camera then
+                aimTarget = nil
+                aimHeldLastFrame = false
+                return
+            end
+            local point = nil
+            if aimHeldLastFrame and aimTarget then
+                point = onScreenAimPoint(camera, aimTarget)
+            end
+            if not point then
+                aimTarget = closestToCrosshair(camera)
+                if aimTarget then
+                    point = onScreenAimPoint(camera, aimTarget)
+                end
+            end
+            aimHeldLastFrame = true
+            if not point then
+                return
+            end
+            local current = camera.CFrame
+            if (point - current.Position).Magnitude <= 0.05 then
+                return
+            end
+            local desired = CFrame.lookAt(current.Position, point)
+            local alpha = 1 - math.exp(-AIM_RESPONSE * math.clamp(dt, 0, 0.1))
+            camera.CFrame = current:Lerp(desired, alpha)
+        end)
+    end)
+    aimBound = ok
+end
+
 -- UI shell: all working modules have a single-click toggle.
 local ui = create("ScreenGui", playerGui, {
     Name = "ArenaNovaPhase4",
@@ -600,8 +732,8 @@ local palette = {
 }
 local main = create("Frame", ui, {
     Name = "Panel",
-    Size = UDim2.fromOffset(354, 314),
-    Position = UDim2.new(0.5, -177, 0.5, -157),
+    Size = UDim2.fromOffset(354, 368),
+    Position = UDim2.new(0.5, -177, 0.5, -184),
     BackgroundColor3 = palette.panel,
     BorderSizePixel = 0,
     Visible = true,
@@ -653,7 +785,7 @@ makeCorner(hideButton, 7)
 local livePage = create("Frame", main, {
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(14, 62),
-    Size = UDim2.new(1, -28, 0, 215),
+    Size = UDim2.new(1, -28, 0, 270),
     Visible = true,
 })
 local toggleUI = {}
@@ -662,6 +794,7 @@ local definitions = {
     {key = "names", label = "PLAYER NAMETAGS"},
     {key = "reach", label = "WEAPON REACH"},
     {key = "disasters", label = "DISASTER ALERTS"},
+    {key = "aim", label = "RIGHT-CLICK AIM"},
 }
 for index, definition in ipairs(definitions) do
     local row = create("TextButton", livePage, {
@@ -705,7 +838,7 @@ end
 -- no perk manipulation, and no speculative resource or immunity controls.
 local footer = create("Frame", main, {
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(15, 285),
+    Position = UDim2.fromOffset(15, 339),
     Size = UDim2.new(1, -30, 0, 23),
 })
 create("TextLabel", footer, {
@@ -901,6 +1034,12 @@ local function setOption(key, value)
         else
             stopDisasters()
         end
+    elseif key == "aim" then
+        if value then
+            startAim()
+        else
+            stopAim()
+        end
     end
     repaintToggle(key)
 end
@@ -981,6 +1120,7 @@ local function unload()
         return
     end
     running = false
+    stopAim()
     stopDisasters()
     stopReach()
     restoreNativeNames()
@@ -1020,11 +1160,12 @@ if type(teleportQueue) == "function" then
     connect(player.OnTeleport, function(state)
         if running and not didQueue and state == Enum.TeleportState.Started then
             local config = string.format(
-                "{outlines=%s,names=%s,reach=%s,disasters=%s}",
+                "{outlines=%s,names=%s,reach=%s,disasters=%s,aim=%s}",
                 tostring(settings.outlines),
                 tostring(settings.names),
                 tostring(settings.reach),
-                tostring(settings.disasters)
+                tostring(settings.disasters),
+                tostring(settings.aim)
             )
             local loader = [[local env=_G;if type(getgenv)=="function" then local ok,x=pcall(getgenv);if ok and type(x)=="table" then env=x end end;env.__ARENA_NOVA_BOOT_CONFIG=]]
                 .. config
@@ -1058,5 +1199,8 @@ if settings.reach then
 end
 if settings.disasters then
     startDisasters()
+end
+if settings.aim then
+    startAim()
 end
 print("[ARENA NOVA] Core-only v" .. VERSION .. " loaded. Right Shift opens/closes the hub.")
