@@ -866,6 +866,11 @@ function D.summary()
         "Upload folders: " .. (#D.dataParts + 1) .. " | all generated files are plain text data.",
         "Identical source bodies reused: " .. D.c.sourceBodiesReused .. " | immediate-dispatch fallbacks: " .. D.c.dispatchFallbacks,
         "Identical bytecode reconstructions reused: " .. D.c.bytecodeReused,
+        "Rapid scene records: " .. D.c.rapidSceneRecords ..
+            " | directly readable sources: " .. D.c.directSourceSaved,
+        "Deep workers started: " .. D.c.decompilerWorkersStarted ..
+            " | timed out: " .. D.c.workerTimeouts ..
+            " | parallel worker limit: " .. CFG.decompileWorkers,
     }
     if D.sourceAbortReason then lines[#lines + 1] = "Source gap reason: " .. D.sourceAbortReason end
     if D.sourcePhaseStarted then
@@ -1316,6 +1321,7 @@ function D.walk(root, rootFrame)
                 stack[#stack + 1] = {obj = child,frame = node.childFrame,depth = node.depth + 1}
             end
         elseif not D.visited[node.obj] then
+            D.pendingDiscovered = math.max(0,D.pendingDiscovered - 1)
             D.visited[node.obj] = true
             if D.c.objects >= CFG.maxObjects then D.limits.object_count = true; D.stop = true; break end
             local childFrame = D.inspect(node.obj,node.frame)
@@ -1331,6 +1337,7 @@ function D.walk(root, rootFrame)
                                 StarterGui = 5,Workspace = 6,CorePackages = 98,CoreGui = 99}
                             table.sort(children,function(a,b) return (priorities[a.Name] or 50) < (priorities[b.Name] or 50) end)
                         end
+                        D.pendingDiscovered = D.pendingDiscovered + #children
                         node.entered, node.children, node.index, node.childFrame = true,children,1,childFrame
                         stack[#stack + 1] = node
                     else
@@ -1339,13 +1346,12 @@ function D.walk(root, rootFrame)
                     end
                 end
             end
-        else D.c.duplicates = D.c.duplicates + 1 end
-        -- Count discovered pending siblings, not just traversal frames. No guess at the unknown total.
-        local pending = 0
-        for _, frame in ipairs(stack) do
-            pending = pending + (frame.entered and math.max(0,#frame.children - frame.index + 1) or 1)
+        else
+            D.c.duplicates = D.c.duplicates + 1
+            D.pendingDiscovered = math.max(0,D.pendingDiscovered - 1)
         end
-        D.pendingDiscovered = pending
+        -- O(1) discovered-item tracking: expand children once, decrement each
+        -- leaf exactly once. No repeated full-stack summation per visited object.
     end
     return #stack == 0 and not D.stop
 end
@@ -1462,7 +1468,7 @@ function D.inventory()
     end
     D.inventoryComplete = D.walk(game,{path = "",category = "game"})
     if not D.stop then D.supplementalInventory() end
-    D.current = "Inventory saved. Starting game sources, then Roblox platform sources."
+    D.current = "Inventory saved. Capturing all immediately readable source, then deep decompilation."
     D.checkpoint()
 end
 function D.exportSource(entry, body, method)
