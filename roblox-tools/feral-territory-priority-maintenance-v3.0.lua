@@ -436,12 +436,28 @@ local function streamGround(t,c,r)
         okRequest and "accepted" or "failed")
 end
 
+local function applyPosition(a)
+    local c,r=root()
+    if not a or c~=a.character or not r then
+        return false,"Animal changed or died"
+    end
+    local ok,err=pcall(function()
+        c:PivotTo(c:GetPivot()+(a.destination-r.Position))
+        r.AssemblyLinearVelocity=Vector3.zero
+        r.AssemblyAngularVelocity=Vector3.zero
+    end)
+    if not ok then return false,tostring(err) end
+    a.snapCount+=1
+    a.lastSnap=os.clock()
+    return true,nil
+end
+
 local function moveTo(t)
     if not t then return false,"No target selected" end
     local c,r,h=root()
     if not c then return false,"Spawn a living animal first" end
     local pack=me:GetAttribute("FeralPack")
-    if pack==nil then return false,"Join a pack before trying territory maintenance" end
+    if pack==nil then return false,"Join a pack before territory maintenance" end
     if c:GetAttribute("FeralDenRoot") or c:GetAttribute("FeralPinned")
         or c:GetAttribute("FeralFlyLocal")
         or (c:GetAttribute("FeralFly") and c:GetAttribute("FeralFly")~="flutter") then
@@ -455,8 +471,6 @@ local function moveTo(t)
         returnCharacter=c
     end
     local startingDistance=dist2D(r.Position,t.center)
-    -- A no-ground result is a *landing failure*, not evidence the server
-    -- rejected claim or re-scent.
     lastLandingError=nil
     attemptedLandingHex=t.key
     local ground,groundInfo=streamGround(t,c,r)
@@ -468,28 +482,87 @@ local function moveTo(t)
     end
     local clearance=math.max(3,h.HipHeight+r.Size.Y*0.5+1.0)
     local point=ground+Vector3.new(0,clearance,0)
-    attempt={
+    local a={
         key=t.key,pack=pack,originalOwner=owner,originalHold=oldHold,
         originalProgress=type(oldProgress)=="number" and oldProgress or 0,
         lastHold=oldHold,lastProgress=type(oldProgress)=="number" and oldProgress or 0,
-        began=os.clock(),startDist=startingDistance,success=false,
-        evidenceProgress=false,evidenceScent=false,evidenceOwner=false
+        began=os.clock(),startDist=startingDistance,
+        evidenceProgress=false,evidenceScent=false,evidenceOwner=false,
+        destination=point,character=c,lastSnap=0,snapCount=0,
+        snapBacks=0,inTarget=false,lastEvidenceAt=os.clock(),
+        failed=false,kind=owner==pack and "SCENT" or "CLAIM"
     }
-    local delta=point-r.Position
-    local okMove,err=pcall(function()
-        c:PivotTo(c:GetPivot()+delta)
-        r.AssemblyLinearVelocity=Vector3.zero
-        r.AssemblyAngularVelocity=Vector3.zero
-    end)
-    if not okMove then return false,"SNAP failed: "..tostring(err) end
-    event(string.format("SNAP %s from %.0f units (%s)",
+    attempt=a
+    local okMove,err=applyPosition(a)
+    if not okMove then
+        a.failed=true
+        return false,"SNAP failed: "..tostring(err)
+    end
+    event(string.format("SNAP %s from %.0f studs (%s)",
         t.key,startingDistance,groundInfo))
-    return true,string.format("SNAP %s — watching scent / capture",t.key)
+    return true,string.format("SNAP %s — %s; checking real territory state",
+        t.key,a.kind)
 end
+
+-- The live game sometimes corrects a snap-back to the old location.
+-- Only retry while an explicit SNAP or AUTO target is current;
+-- at most 4 placements, spaced >=3 seconds apart, then stop.
+local function keepTarget()
+    local a=attempt
+    if not (a and a.destination and not a.failed and active) then return end
+    local c,r=root()
+    if c~=a.character or not r then
+        a.failed=true
+        lastFailure="Animal changed/died during maintenance"
+        return
+    end
+    local distance=(r.Position-a.destination).Magnitude
+    if distance<125 then
+        a.inTarget=true
+        return
+    end
+    local elapsed=os.clock()-a.lastSnap
+    if elapsed<3 or os.clock()-a.began>45 then return end
+    if a.snapCount>=4 then
+        a.failed=true
+        lastFailure="Server kept correcting position: "..a.key
+        event(lastFailure)
+        return
+    end
+    a.snapBacks+=1
+    totalRetries+=1
+    local okMove,err=applyPosition(a)
+    if not okMove then
+        a.failed=true
+        lastFailure="Snap retry failed: "..tostring(err)
+    else
+        event(string.format("Retry after snap-back %s (%d/4)",
+            a.key,a.snapCount))
+    end
+end
+
 snapB.Activated:Connect(function()
+    if autoBusy then
+        say("AUTO running — stop it before manual SNAP")
+        return
+    end
     release()
-    local okMove,msg=moveTo(target())
-    say(msg)
+    if busySnap then
+        say("Already finding a safe landing")
+        return
+    end
+    busySnap=true
+    local okMove,msg
+    local worked,err=pcall(function()
+        okMove,msg=moveTo(target())
+    end)
+    busySnap=false
+    if worked then
+        say(msg or "No position result")
+    else
+        lastFailure=tostring(err)
+        say("SNAP error: "..tostring(err))
+    end
 end)
 
 local function observe()
