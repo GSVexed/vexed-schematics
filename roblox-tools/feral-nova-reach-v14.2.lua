@@ -137,7 +137,9 @@ function Reach.attach(ctx)
         nextTick=0,
         treeWindowReadCount=0,treeSameTrunkHits=0,
         treeAimPatches=0,treeVerticalPatches=0,
-        treeLastStatus="WAITING",treeClaimServerAccepted="UNVERIFIED"
+        treeLastStatus="WAITING",treeClaimServerAccepted="UNVERIFIED",
+        treeCacheChar=nil,treeCacheRoot=nil,treeCacheTarget=nil,
+        treeCacheAt=-math.huge,treeCacheHits=0
     }
     local function restore()
         if not C.lease then return end
@@ -166,6 +168,21 @@ function Reach.attach(ctx)
         root=root or char:FindFirstChild("HumanoidRootPart")
         if not root then return nil end
         limit=type(limit)=="number" and math.clamp(limit,7,38) or 27
+        local now=os.clock()
+        if C.treeCacheChar==char and C.treeCacheRoot==root
+            and now-C.treeCacheAt<.085 then
+            C.treeCacheHits+=1
+            local previous=C.treeCacheTarget
+            if previous and previous.root and previous.root.Parent
+                and (previous.root.Position-root.Position).Magnitude<=limit then
+                return previous
+            end
+            return nil
+        end
+        C.treeCacheChar=char
+        C.treeCacheRoot=root
+        C.treeCacheAt=now
+        C.treeCacheTarget=nil
         local ownPack=player:GetAttribute("FeralPack")
         local best,bestScore=nil,math.huge
         local function consider(model)
@@ -203,6 +220,7 @@ function Reach.attach(ctx)
             end
         end
         C.treeWindowReadCount+=1
+        C.treeCacheTarget=best
         if best then
             C.treeSameTrunkHits+=1
             C.treeLastStatus=best.certain and "SAME TRUNK VERIFIED"
@@ -351,6 +369,7 @@ function Reach.attach(ctx)
             "rear_half_arc_degrees="..tostring(t and t.CONE),
             "tree_combat_mode=CLIMB_ONLY_WHEN_TARGET_NEARBY",
             "tree_trunk_checks="..C.treeWindowReadCount,
+            "tree_scan_cache_hits="..C.treeCacheHits,
             "tree_target_checks_with_nearby_climber="..C.treeSameTrunkHits,
             "tree_aim_overrides="..C.treeAimPatches,
             "tree_height_allowance_overrides="..C.treeVerticalPatches,
