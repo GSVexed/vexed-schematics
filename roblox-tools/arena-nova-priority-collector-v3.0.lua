@@ -764,6 +764,7 @@ function D.collectSources()
     D.latest="Reusing prior code and prioritising game scripts."
     local completed=0
     local lastCacheSave=os.clock()
+    local nativeAttemptLimit=D.mode=="MATCH" and 2 or CFG.maxNativeAttempts
     for idx,entry in ipairs(D.scriptQueue) do
         if D.stopped then D.stopReason="user_stopped";break end
         -- Circuit breaker: if the executor cannot complete native decompilation,
@@ -783,6 +784,15 @@ function D.collectSources()
         if os.clock()>=D.deadline then
             D.stopReason="time_budget";break
         end
+        if D.c.nativeAttempts>=nativeAttemptLimit then
+            D.stopReason="source_attempt_budget";break
+        end
+        -- Do not add heavy native decompilation when Roblox is struggling.
+        if D.slowFrames>=10 then
+            D.sourceSkippedFPS=true
+            D.stopReason="low_fps_protection"
+            break
+        end
         local cached=D.cache.entries[D.cacheKey(entry)]
         if D.tryCache(entry) then
             completed+=1
@@ -795,6 +805,7 @@ function D.collectSources()
                 reason=cached.failed,place_version=placeVersion})
             completed+=1
         else
+            D.c.nativeAttempts+=1
             local ok,body=pcall(function()return entry.obj.Source end)
             local method="Source_property"
             if not ok or type(body)~="string" or #body==0 then
@@ -840,11 +851,11 @@ function D.collectSources()
             completed+=1
         end
         entry.obj=nil
-        D.latest="Sources "..completed.."/"..#D.scriptQueue..
+        D.latest="Game scripts "..completed.."/"..#D.scriptQueue..
             " | exported "..D.c.sourceExported..
             " | cached "..D.c.cacheHit..
             " | failures "..D.c.sourceFailures
-        if completed%4==0 then
+        if completed%2==0 then
             D.updateUI();task.wait()
         end
         if completed%CFG.sourceCheckpoint==0 or os.clock()-lastCacheSave>=8 then
@@ -855,7 +866,9 @@ function D.collectSources()
         D.c.sourceAttemptCapReached=1
     end
     D.c.sourceDeferred=math.max(0,#D.scriptQueue-completed)
-    D.c.sourceSkippedTime=(D.stopReason=="time_budget") and D.c.sourceDeferred or 0
+    D.c.sourceSkippedTime=(D.stopReason=="time_budget" or
+        D.stopReason=="low_fps_protection" or
+        D.stopReason=="source_attempt_budget") and D.c.sourceDeferred or 0
     D.sourceComplete=completed==#D.scriptQueue and not D.stopped
         and D.stopReason==nil
     D.checkpoint();D.saveCache()
@@ -864,9 +877,9 @@ function D.updateUI()
     if not D.gui or not D.gui.Parent then return end
     if not D.labels then return end
     D.labels.status.Text=D.phase.." / "..D.mode
-    D.labels.count.Text="Objects "..D.c.objects.."  Scripts "..D.c.eligible..
+    D.labels.count.Text="Game objects "..D.c.objects.."  Scripts "..D.c.eligible..
         "  Remotes "..D.c.remotes.."  Sources "..D.c.sourceExported..
-        "  Failures "..D.c.sourceFailures.."  Cache "..D.c.cacheHit
+        "  Cache "..D.c.cacheHit.."  FPS~"..math.floor(D.fps)
     D.labels.current.Text=D.latest
     D.labels.footer.Text="Saved: "..(D.session or "not started")..
         " | elapsed "..math.floor(os.clock()-D.started).."s"
@@ -919,9 +932,13 @@ function D.run()
     elseif D.stopped then
         D.phase="STOPPED - PARTIAL SAVED"
         D.latest="Stopped safely. Capture files have been saved."
-    elseif D.stopReason=="time_budget" or D.stopReason=="inventory_time_budget" then
+    elseif D.stopReason=="time_budget" or D.stopReason=="inventory_time_budget"
+        or D.stopReason=="source_attempt_budget" then
         D.phase="BUDGET REACHED - SAVED"
-        D.latest="Time budget reached. Run again to continue, reusing cached source."
+        D.latest="Bounded scan saved. Reuse local source cache next session."
+    elseif D.stopReason=="low_fps_protection" then
+        D.phase="FPS PROTECTED - SAVED"
+        D.latest="Source work stopped because FPS dropped. Snapshot saved."
     elseif D.stopReason=="decompiler_timeout_circuit_breaker"
         or D.stopReason=="decompiler_failure_circuit_breaker" then
         D.phase="DECOMPILER BLOCKED - SAVED"
