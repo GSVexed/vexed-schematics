@@ -11,9 +11,9 @@ local CFG = {
     rootPlaceId = 72238253016204,
     universeId = 7209131331,
     version = "1.2.0",
-    nativeTimeoutSeconds = 12,
-    bytecodeFallbackTimeoutSeconds = 15,
-    bytecodeReadTimeoutSeconds = 5,
+    nativeTimeoutSeconds = 9,
+    bytecodeFallbackTimeoutSeconds = 9,
+    bytecodeReadTimeoutSeconds = 2,
     maxTemporaryBytecodeBytes = 4194304,
     nativeAdaptiveFailures = 3,
     decompileWorkers = 2,
@@ -2006,8 +2006,11 @@ function D.collectSources()
         end
         return nil
     end
+    -- Recovery is also pipelined, not a second serial decompilation loop.
+    -- Retrieval of raw bytes is bounded, and up to two fallback workers
+    -- can run at once. No bytes are ever written to files.
     local function bytecodePass()
-        D.current="Stage 3/3: retrying failed native decompilation via bytecode"
+        D.current="Stage 3/3: bytecode recovery for native failures"
         D.checkpoint()
         if not API.decompile then
             for _,entry in ipairs(pendingFallback) do
@@ -2015,57 +2018,76 @@ function D.collectSources()
             end
             return
         end
-        for at,entry in ipairs(pendingFallback) do
-            if D.stop or D.sourceAbortReason then return end
-            D.current="Stage 3/3: bytecode recovery "..at.."/"..#pendingFallback
-            D.c.fallbackAttempted+=1
-            local bytes,errorCode=getFallbackBytecode(entry)
-            if not bytes then
-                D.c.fallbackUnavailable+=1
-                attemptLog(entry,"bytecode_fallback","unavailable",errorCode,0)
-                failFinal(entry,errorCode,"bytecode_fallback",entry.nativeFailure)
-            else
-                local reused=tryVerifiedReuse(entry,bytes)
-                if reused then
-                    D.exportBytecodeReuse(entry,reused)
-                    D.c.fallbackExported+=1
-                    attemptLog(entry,"bytecode_fallback","reused_identical_bytecode",nil,0)
-                    entry.instance=nil
+        local active={}
+        D.sourceWorkers=active
+        local cursor=1
+        local limit=math.max(1,math.min(CFG.decompileWorkers,2))
+        local failureStreak=0
+        while (cursor<=#pendingFallback or #active>0) and not D.stop
+            and not D.sourceAbortReason do
+            while cursor<=#pendingFallback and #active<limit
+                and not D.stop and not D.sourceAbortReason do
+                local entry=pendingFallback[cursor]
+                cursor+=1
+                D.c.fallbackAttempted+=1
+                local bytes,errorCode=getFallbackBytecode(entry)
+                if not bytes then
+                    D.c.fallbackUnavailable+=1
+                    attemptLog(entry,"bytecode_fallback","unavailable",errorCode,0)
+                    failFinal(entry,errorCode,"bytecode_fallback",entry.nativeFailure)
                 else
-                    local state,workerError=createWorker(entry,bytes,
-                        "bytecode",CFG.bytecodeFallbackTimeoutSeconds)
-                    if not state then
-                        preserveFailure(entry,workerError,"bytecode",0)
+                    local reused=tryVerifiedReuse(entry,bytes)
+                    if reused then
+                        D.exportBytecodeReuse(entry,reused)
+                        D.c.fallbackExported+=1
+                        attemptLog(entry,"bytecode_fallback","reused_identical_bytecode",nil,0)
+                        entry.instance=nil
+                        failureStreak=0
                     else
-                        local active={state}
-                        D.sourceWorkers=active
-                        while not state.done and not D.stop
-                            and not D.sourceAbortReason
-                            and os.clock()-state.t0<state.timeout do
-                            D.cooperate(true)
+                        if #bytes<=CFG.bytecodeCacheMaxSingleBytes then
+                            entry.fingerprint={key=entry.category..":"..#bytes..":"..D.adler(bytes),
+                                bytes=bytes}
                         end
-                        if D.stop then
-                            state.alive=false
-                            if API.cancel then pcall(API.cancel,state.thread) end
+                        local state,workerError=createWorker(entry,bytes,
+                            "bytecode",CFG.bytecodeFallbackTimeoutSeconds)
+                        if state then
+                            active[#active+1]=state
                         else
-                            local timedOut=not state.done
-                            if not timedOut and #bytes<=CFG.bytecodeCacheMaxSingleBytes then
-                                entry.fingerprint={
-                                    key=entry.category..":"..#bytes..":"..D.adler(bytes),
-                                    bytes=bytes
-                                }
-                            end
-                            workerOutcome(state,timedOut)
+                            preserveFailure(entry,workerError,"bytecode",0)
+                            entry.fingerprint=nil
                         end
-                        D.sourceWorkers={}
                     end
                 end
+                bytes=nil
+                if cursor%12==0 and not D.cooperate(false) then break end
             end
-            -- No raw bytecode is written or retained after this attempt.
-            bytes=nil
-            entry.fingerprint=nil
-            if at%8==0 and not D.stop then D.checkpoint() end
+            local now=os.clock()
+            for n=#active,1,-1 do
+                local state=active[n]
+                if state.done or now-state.t0>=state.timeout then
+                    table.remove(active,n)
+                    local timedOut=not state.done
+                    local success=workerOutcome(state,timedOut)
+                    state.entry.fingerprint=nil
+                    if success then failureStreak=0
+                    elseif timedOut or not state.ok then failureStreak+=1
+                    else failureStreak=0 end
+                end
+            end
+            if failureStreak>=CFG.nativeAdaptiveFailures and limit>1 then
+                limit=1
+                D.c.adaptiveSingleWorker+=1
+            end
+            D.current="Stage 3/3: "..(cursor-1).."/"..#pendingFallback..
+                " recovery attempts, "..#active.." workers active"
+            if not D.stop and not D.sourceAbortReason then D.cooperate(true) end
         end
+        for _,state in ipairs(active) do
+            state.alive=false
+            state.entry.fingerprint=nil
+            if API.cancel then pcall(API.cancel,state.thread) end
+        end
+        D.sourceWorkers={}
     end
 
     nativePass()
