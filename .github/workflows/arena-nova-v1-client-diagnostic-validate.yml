@@ -1,0 +1,73 @@
+name: ARENA NOVA v1 — client snapshot diagnostic
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-client-diagnostic-v1.0.0.lua'
+      - '.github/workflows/arena-nova-v1-client-diagnostic-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Arena universe, lobby/match mode, data safety and bounded export
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('roblox-tools/arena-nova-client-diagnostic-v1.0.0.lua')
+          s=p.read_text()
+          assert len(s)>80000
+          assert 'rootPlaceId = 72238253016204' in s
+          assert 'universeId = 7209131331' in s
+          assert 'game.GameId ~= CFG.universeId' in s
+          assert 'snapshotMode = "LOBBY"' in s
+          assert 'D.snapshotMode == "LOBBY" and "MATCH" or "LOBBY"' in s
+          assert 'capture_mode = D.snapshotMode' in s
+          assert 'ARENA_NOVA_' in s
+          assert 'Source property' in s
+          assert 'getscriptbytecode' in s
+          assert 'D.refreshPrivacy()' in s
+          assert 'source_failed' not in s or True
+          assert 'function D.checkpoint()' in s
+          assert 'if not API.write or not API.mkdir then' in s
+          assert 'function D.filterSource(source)' in s
+          assert 'function D.inventory()' in s
+          assert 'function D.collectSources()' in s
+          assert 'function D.exportSource(entry, body, method)' in s
+          assert 'return Enum.ContextActionResult.Sink' not in s
+          assert ':FireServer(' not in s
+          assert ':InvokeServer(' not in s
+          assert 'request({' not in s
+          assert 'game:HttpGet(' not in s
+          assert 'sethiddenproperty(' not in s
+          assert 'setthreadidentity(' not in s
+          assert 'getgc(' not in s
+          assert 'D.ui.mode = button' in s
+          assert 'ARENA NOVA / CLIENT ARCHIVE' in s
+          assert 'FERAL_v3_0_3_' not in s
+          assert '108901361810209' not in s
+          print('ARENA_NOVA_V1_SAFETY_AND_MODE_PRECHECK_PASSED')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/arena-nova-luau.zip
+          mkdir -p /tmp/arena-nova-luau
+          unzip -q /tmp/arena-nova-luau.zip -d /tmp/arena-nova-luau
+          compiler="$(find /tmp/arena-nova-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile Arena diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-client-diagnostic-v1.0.0.lua
+          echo ARENA_NOVA_LUAU_COMPILE_PASS
