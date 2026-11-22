@@ -723,104 +723,148 @@ heartbeat=RunService.Heartbeat:Connect(function()
     if not success then say("Monitor error: "..tostring(err)) end
 end)
 
-local AUTO_TRIGGER_HOLD=0.80 -- Watch until meaningful fading, avoiding constant repeated snaps.
-local function nextFading()
-    local arr={}
+-- Choose the highest-priority actionable hex, excluding recently failed ones.
+-- SCENT mode watches for scent under 85%; PRIORITY does scent then claims.
+local function bestAutoTarget()
+    local now=os.clock()
+    local best=nil
+    local bestScore=-math.huge
     for _,t in ipairs(all) do
-        local h=hold(t.key)
-        if not isNeutral(t.key) and isOwned(t.key)
-            and h~=nil and h<AUTO_TRIGGER_HOLD then
-            table.insert(arr,t)
+        if not isNeutral(t.key) and (retryCooldown[t.key] or 0)<=now then
+            local p=score(t)
+            local valid=(mode=="PRIORITY" and p>0)
+                or (mode=="SCENT" and isOwned(t.key)
+                    and type(hold(t.key))=="number"
+                    and hold(t.key)<SCENT_TRIGGER)
+                or (mode=="CLAIM" and not isOwned(t.key))
+            if valid and p>bestScore then
+                best=t
+                bestScore=p
+            end
         end
     end
-    table.sort(arr,function(a,b)
-        local ha,hb=hold(a.key),hold(b.key)
-        if ha==hb then return a.key<b.key end
-        return ha<hb
-    end)
-    return arr[1]
+    return best
 end
+
 autoB.Activated:Connect(function()
     if auto then
         release()
-        say("AUTO SCENT stopped")
+        say("AUTO stopped by user")
         return
     end
-    if mode~="SCENT" then
-        say("AUTO only operates in SCENT mode")
+    if mode=="ALL" then
+        say("Switch to PRIORITY, SCENT or CLAIM before AUTO")
         return
     end
     if not me:GetAttribute("FeralPack") then
-        say("Join a pack before AUTO SCENT")
+        say("Join a pack before running AUTO")
+        return
+    end
+    if busySnap or autoBusy then
+        say("Another territory attempt is still running")
         return
     end
     auto=true
     autoToken+=1
     local token=autoToken
     autoB.Text="AUTO: ON"
-    say("AUTO SCENT WATCH on — triggers below 80% scent")
+    say("AUTO: restores endangered scent, then captures")
     task.spawn(function()
+        autoBusy=true
+        local myPack=me:GetAttribute("FeralPack")
         while active and auto and token==autoToken do
-            local t=nextFading()
+            if me:GetAttribute("FeralPack")~=myPack then
+                release()
+                say("Pack changed — AUTO stopped")
+                break
+            end
+            local c=root()
+            if not c then
+                release()
+                say("Animal died or despawned — AUTO stopped")
+                break
+            end
+            local t=bestAutoTarget()
             if not t then
-                say("AUTO WATCH: all owned scent >=80% (or unavailable)")
-                task.wait(5)
+                say("AUTO WATCH: healthy or on cooldown; rescan in 6s")
+                task.wait(6)
             else
-            if not isOwned(t.key) then
-                release()
-                say("An owned hex changed owner; automation stopped")
-                break
-            end
-            rebuild()
-            for i,p in ipairs(targets) do
-                if p.key==t.key then index=i selectedKey=t.key break end
-            end
-            local okMove,msg=moveTo(t)
-            say(msg)
-            if not okMove then
-                release()
-                break
-            end
-            local a=attempt
-            local firstRise=false
-            local stalledAt=os.clock()+16
-            local hardStop=os.clock()+100
-            local done=false
-            while active and auto and token==autoToken and os.clock()<hardStop do
-                task.wait(0.5)
-                if not active or not auto or token~=autoToken then break end
-                if not isOwned(a.key) then
-                    release()
-                    say("Lost territory during AUTO; stopped")
-                    break
+                selectedKey=t.key
+                rebuild()
+                for i,p in ipairs(targets) do
+                    if p.key==t.key then index=i break end
                 end
-                local h=hold(a.key)
-                if not h then
-                    release()
-                    say("No scent data — AUTO stopped")
-                    break
-                end
-                if h>=0.985 then
-                    event(a.key.." scent restored to "..math.floor(h*100).."%")
-                    done=true
-                    break
-                end
-                if a.evidenceScent then firstRise=true end
-                if not firstRise and os.clock()>stalledAt then
-                    release()
-                    say("No replicated scent increase — AUTO stopped")
-                    break
+                local okMove,msg
+                local callOK,callErr=pcall(function()
+                    okMove,msg=moveTo(t)
+                end)
+                say(callOK and msg or ("SNAP error: "..tostring(callErr)))
+                if not callOK or not okMove then
+                    retryCooldown[t.key]=os.clock()+75
+                    totalSkipped+=1
+                    lastFailure=callOK and msg or tostring(callErr)
+                    event("Skipped "..t.key..": "..tostring(lastFailure))
+                    task.wait(1)
+                else
+                    local a=attempt
+                    local deadline=os.clock()+(a.kind=="SCENT" and 105 or 90)
+                    local completed=false
+                    local reason=nil
+                    while active and auto and token==autoToken
+                        and os.clock()<deadline do
+                        task.wait(0.5)
+                        if not active or not auto or token~=autoToken then break end
+                        if a.failed then
+                            reason=lastFailure or "Repeated snap-back"
+                            break
+                        end
+                        if me:GetAttribute("FeralPack")~=myPack then
+                            reason="Pack changed"
+                            break
+                        end
+                        if a.kind=="SCENT" then
+                            if value(a.key,"owner")~=myPack then
+                                reason="Owned territory was lost"
+                                break
+                            end
+                            local currentHold=hold(a.key)
+                            if currentHold and currentHold>=SCENT_SUCCESS then
+                                completed=true
+                                break
+                            end
+                            if os.clock()-a.lastEvidenceAt>28 then
+                                reason="No server-replicated scent increase"
+                                break
+                            end
+                        else
+                            if value(a.key,"owner")==myPack then
+                                completed=true
+                                break
+                            end
+                            if os.clock()-a.lastEvidenceAt>28 then
+                                reason="No server-replicated claim progress"
+                                break
+                            end
+                        end
+                    end
+                    if not active or not auto or token~=autoToken then break end
+                    if completed then
+                        totalCompleted+=1
+                        retryCooldown[t.key]=os.clock()+45
+                        event(a.key.." completed: "..a.kind)
+                        say(a.key.." complete — selecting next")
+                    else
+                        retryCooldown[t.key]=os.clock()+90
+                        totalSkipped+=1
+                        lastFailure=reason or ("Timed out: "..t.key)
+                        event("Skipped "..t.key..": "..tostring(lastFailure))
+                        say("Skipped "..t.key..": "..tostring(lastFailure))
+                    end
+                    task.wait(1)
                 end
             end
-            if not auto or not active or token~=autoToken then break end
-            if not done then
-                release()
-                say("Scent did not finish restoring — AUTO stopped")
-                break
-            end
-            task.wait(0.8)
-            end -- owned target available
         end
+        autoBusy=false
     end)
 end)
 
