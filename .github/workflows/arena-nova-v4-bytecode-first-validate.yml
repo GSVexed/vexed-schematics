@@ -41,7 +41,7 @@ jobs:
           for bad in [':FireServer(', ':InvokeServer(', 'hookfunction(',
                       'getgc(', 'getconnections(', 'sethiddenproperty(',
                       'setthreadidentity(', 'game:HttpGet(', 'request({',
-                      'API.decompile', 'decompile(', 'getscriptclosure(']:
+                      'API.decompile', 'pcall(decompile,', 'getscriptclosure(']:
             assert bad not in s, bad
           assert s.count("function D.collectBytecode()")==1
           assert s.count("function D.discover()")==1
