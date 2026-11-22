@@ -1751,12 +1751,20 @@ end
 -- All code already readable through Source is sealed before source workers run.
 -- This is a full-content collector: no game or platform source class is
 -- silently discarded merely because it has a low Arena-specific priority.
+-- Two-stage decompilation is executor-compatible and evidence-labelled.
+-- Stage 1: Source property sweep over every eligible script; no decompiler.
+-- Stage 2: native decompile(instance) for every remaining eligible script.
+-- Stage 3: for native failures only, decompile(raw_bytecode_string), supported
+-- by Potassium's documented API. Raw bytes never leave volatile memory.
+-- A failed native attempt is not a terminal failure until fallback is tried
+-- or the required bytecode is demonstrably unavailable.
 function D.collectSources()
     D.phase="sources"
     D.sourcePhaseStarted=os.clock()
-    D.startupStage,D.startupStep="sources","Readable-source sweep first; then two deep workers."
+    D.startupStage,D.startupStep="sources","Native source first; then bytecode recovery."
     local queue={}
-    D.current="Stage 1/2: saving immediately readable script sources"
+    local pendingFallback={}
+    D.current="Stage 1/3: saving every immediately readable source"
     for _,bucket in ipairs(D.buckets) do
         for _,entry in ipairs(bucket) do
             if not D.cooperate(false) or D.sourceAbortReason then return end
@@ -1765,7 +1773,7 @@ function D.collectSources()
                 D.c.sourceAttempted+=1
                 D.sourceCursor+=1
                 D.exportSource(entry,body,"Source_property")
-                D.c.directSourceSaved+=1
+                if entry.terminal and entry.exportInfo then D.c.directSourceSaved+=1 end
                 entry.instance=nil
             else
                 queue[#queue+1]=entry
@@ -1774,118 +1782,296 @@ function D.collectSources()
     end
     D.fastSourcePassComplete=true
     D.c.sourceQueueCreated=#queue
-    D.current="Readable sources saved. Deep queue has "..#queue.." remaining scripts."
+    D.current="Readable sources saved; native queue: "..#queue
     D.checkpoint()
-    local active={}
-    D.sourceWorkers=active
-    local nextJob=1
-    local timeoutStreak=0
-    local workers=math.max(1,math.min(CFG.decompileWorkers,3))
-    if not API.defer and not API.spawn then
-        D.sourceAbortReason="decompiler_worker_dispatch_unavailable"
-        return
+
+    local function attemptLog(entry,method,outcome,reason,seconds)
+        D.emit("source-attempts/"..entry.category,{
+            id=entry.id,path=D.text(entry.path),method=method,
+            outcome=outcome,reason=reason,
+            seconds=math.floor((seconds or 0)*100)/100,
+            error_details_withheld=true
+        })
     end
-    local function finishFailure(entry,reason,method)
+    local function failFinal(entry,reason,method,firstReason)
+        if entry.terminal then return end
         D.c.sourceFailed+=1
-        D.sourceResult(entry,reason,{method=method or "decompile",error_details_withheld=true})
+        D.c.terminalSourceFailure+=1
+        D.sourceResult(entry,reason,{
+            method=method or "decompile",initial_failure=firstReason,
+            attempts=(method=="bytecode_fallback") and 2 or 1,
+            error_details_withheld=true
+        })
         D.log("source",entry.id,reason)
         entry.instance=nil
     end
-    local function startSource(entry)
-        D.c.sourceAttempted+=1
-        D.c.queuedDecompiles+=1
-        D.sourceCursor+=1
-        if not API.decompile then
-            finishFailure(entry,"source_unavailable_no_decompiler","not_available")
-            return
+    local function classify(body,method)
+        if type(body)~="string" or #body==0 then return "empty_decompiler_result" end
+        local prefix=body:sub(1,1400):lower()
+        if prefix:match("^%s*failed to decompile")
+            or prefix:match("^%s*decompilation failed")
+            or prefix:match("^%s*%-%-+%s*failed to decompile")
+            or prefix:match("^%s*%-%-+%s*decompilation failed")
+            or prefix:match("^%s*%-%-+%s*failed to get script bytecode")
+            or prefix:match("^%s*%-%-+%s*script has no bytecode")
+            or prefix:match("^%s*%-%-%[%[%s*failed to decompile") then
+            D.c.decompilerPlaceholders+=1
+            return "decompiler_failure_placeholder"
         end
-        local fingerprint,reused=D.findBytecodeReuse(entry)
-        if reused then
-            D.exportBytecodeReuse(entry,reused)
-            entry.instance=nil
-            timeoutStreak=0
-            return
+        if prefix:match("^%s*%-%-") then
+            -- A source consisting entirely of comments is not a usable
+            -- reconstruction. Non-comment code after a header is valid.
+            local _,_,hasCode=D.filterSource(body)
+            if not hasCode then return "comment_only_decompiler_result" end
         end
-        if D.stop or D.sourceAbortReason then return end
-        local state={entry=entry,fingerprint=fingerprint,
-            t0=os.clock(),done=false,alive=true,
-            ok=false,body=nil,thread=nil}
+        return nil
+    end
+    local function createWorker(entry,argument,method,timeout)
+        local state={entry=entry,method=method,timeout=timeout,
+            t0=os.clock(),alive=true,done=false,thread=nil,ok=false,body=nil}
         local worker=coroutine.create(function()
             if not state.alive then return end
-            local ok,body=pcall(API.decompile,entry.instance)
-            if state.alive then state.ok,state.body,state.done=ok,body,true end
+            local ok,body=pcall(API.decompile,argument)
+            if state.alive then
+                state.ok,state.body,state.done=ok,body,true
+            end
         end)
         state.thread=worker
-        local dispatch=API.defer or API.spawn
-        local started=pcall(dispatch,worker)
-        if not started and dispatch~=API.spawn and API.spawn then
-            started=pcall(API.spawn,worker)
+        local dispatcher=API.defer or API.spawn
+        local sent=dispatcher and pcall(dispatcher,worker) or false
+        if not sent and dispatcher~=API.spawn and API.spawn then
+            sent=pcall(API.spawn,worker)
         end
-        if not started then
-            D.c.workerDispatchFailures+=1
+        if not sent then
             state.alive=false
-            finishFailure(entry,"decompiler_dispatch_failed")
-            return
+            D.c.workerDispatchFailures+=1
+            return nil,"worker_dispatch_failed"
         end
-        active[#active+1]=state
         D.c.decompilerWorkersStarted+=1
+        return state,nil
     end
-    local function finishWorker(state,timedOut)
+    local function preserveFailure(entry,reason,method,elapsed)
+        attemptLog(entry,method,"failed",reason,elapsed)
+        if method=="native" then
+            D.c.nativeDecompileFailure+=1
+            entry.nativeFailure=reason
+            if API.bytecode then
+                pendingFallback[#pendingFallback+1]=entry
+            else
+                D.c.fallbackUnavailable+=1
+                failFinal(entry,"native_failed_bytecode_api_unavailable","native",reason)
+            end
+        else
+            failFinal(entry,reason,"bytecode_fallback",entry.nativeFailure)
+        end
+    end
+    local function workerOutcome(state,timedOut)
+        local entry,method=state.entry,state.method
+        local elapsed=os.clock()-state.t0
         state.alive=false
-        local entry=state.entry
         if timedOut then
             D.c.workerTimeouts+=1
             local cancelled=false
             if API.cancel then cancelled=pcall(API.cancel,state.thread) end
-            finishFailure(entry,cancelled and "timeout" or "uncancellable_worker")
-            timeoutStreak+=1
-            if not cancelled then
-                D.sourceAbortReason="uncancellable_decompiler_worker"
-            end
-        elseif state.done and state.ok
-            and type(state.body)=="string" and #state.body>0 then
-            D.exportSource(entry,state.body,"decompile")
-            D.cacheBytecode(entry,state.fingerprint)
-            entry.instance=nil
-            timeoutStreak=0
+            preserveFailure(entry,cancelled and "decompiler_timeout"
+                or "uncancellable_decompiler_worker",method,elapsed)
+            if not cancelled then D.sourceAbortReason="uncancellable_decompiler_worker" end
+            return false
+        end
+        local reason=nil
+        if not state.done or not state.ok then
+            reason=D.errorKind(state.body)
         else
-            local reason=state.done and state.ok and "empty_or_invalid_source"
-                or D.errorKind(state.body)
-            finishFailure(entry,reason)
-            timeoutStreak=0
+            reason=classify(state.body,method)
         end
+        if reason then
+            preserveFailure(entry,reason,method,elapsed)
+            return false
+        end
+        D.exportSource(entry,state.body,method=="native" and "decompile"
+            or "decompile_bytecode_fallback")
+        if not entry.terminal or not entry.exportInfo then
+            -- Failed to export even though the decompiler returned a body:
+            -- the definitive failure record is already in source-results.
+            attemptLog(entry,method,"export_rejected","source_rejected_by_export",elapsed)
+            entry.instance=nil
+            return false
+        end
+        attemptLog(entry,method,"exported",nil,elapsed)
+        if method=="native" then D.c.nativeDecompileSuccess+=1
+        else D.c.fallbackExported+=1 end
+        if method=="bytecode" and entry.fingerprint then
+            D.cacheBytecode(entry,entry.fingerprint)
+        end
+        entry.instance=nil
+        return true
     end
-    while (nextJob<=#queue or #active>0) and not D.stop and not D.sourceAbortReason do
-        while nextJob<=#queue and #active<workers and not D.stop
+    local function nativePass()
+        D.current="Stage 2/3: native decompilation"
+        local active={}
+        D.sourceWorkers=active
+        local cursor=1
+        local limit=math.max(1,math.min(CFG.decompileWorkers,3))
+        local consecutiveUnusual=0
+        while (cursor<=#queue or #active>0) and not D.stop
             and not D.sourceAbortReason do
-            local entry=queue[nextJob]
-            nextJob+=1
-            D.current="Stage 2/2 deep decomp: "..(nextJob-1).."/"..#queue..
-                " queued, "..#active.." workers active"
-            startSource(entry)
-            if nextJob%24==0 and not D.cooperate(false) then break end
+            while cursor<=#queue and #active<limit and not D.stop do
+                local entry=queue[cursor]
+                cursor+=1
+                D.c.sourceAttempted+=1
+                D.c.queuedDecompiles+=1
+                D.sourceCursor+=1
+                if not API.decompile then
+                    preserveFailure(entry,"decompiler_api_unavailable","native",0)
+                else
+                    local state,err=createWorker(entry,entry.instance,
+                        "native",CFG.nativeTimeoutSeconds)
+                    if state then
+                        active[#active+1]=state
+                    else
+                        preserveFailure(entry,err,"native",0)
+                    end
+                end
+                if cursor%25==0 then D.cooperate(false) end
+            end
+            local now=os.clock()
+            for at=#active,1,-1 do
+                local state=active[at]
+                if state.done or now-state.t0>=state.timeout then
+                    table.remove(active,at)
+                    local timedOut=not state.done
+                    local success=workerOutcome(state,timedOut)
+                    if success then consecutiveUnusual=0
+                    elseif timedOut or not state.ok then
+                        consecutiveUnusual+=1
+                    else consecutiveUnusual=0 end
+                end
+            end
+            if consecutiveUnusual>=CFG.nativeAdaptiveFailures and limit>1 then
+                limit=1
+                D.c.adaptiveSingleWorker+=1
+                D.notice="Repeated native decompiler issues: switched to one worker for stability."
+            end
+            D.current="Stage 2/3: "..(cursor-1).."/"..#queue..
+                " native, "..#active.." active, "..#pendingFallback.." queued for recovery"
+            if not D.stop and not D.sourceAbortReason then D.cooperate(true) end
         end
-        local now=os.clock()
-        for i=#active,1,-1 do
-            local state=active[i]
-            if state.done or now-state.t0>=CFG.sourceTimeoutSeconds then
-                table.remove(active,i)
-                finishWorker(state,not state.done)
+        for _,state in ipairs(active) do
+            state.alive=false
+            if API.cancel then pcall(API.cancel,state.thread) end
+        end
+        D.sourceWorkers={}
+    end
+
+    -- Store bytecode only in volatile memory while attempting the fallback.
+    -- Potassium documents decompile(target) accepting a bytecode string.
+    -- Reconstructed source is still subject to the existing privacy filter.
+    local function getFallbackBytecode(entry)
+        if not API.bytecode then return nil,"bytecode_api_unavailable" end
+        local ok,bytes=D.boundedCall(API.bytecode,entry.instance,
+            CFG.bytecodeReadTimeoutSeconds,"Bytecode fallback for source "..entry.id)
+        if not ok then
+            D.c.bytecodeReadErrors+=1
+            return nil,bytes=="timeout" and "bytecode_read_timeout"
+                or D.errorKind(bytes)
+        end
+        if type(bytes)~="string" or #bytes==0 then
+            D.c.bytecodeReadErrors+=1
+            return nil,"bytecode_empty_or_unavailable"
+        end
+        if #bytes>CFG.maxTemporaryBytecodeBytes then
+            return nil,"bytecode_too_large_for_safe_fallback"
+        end
+        return bytes,nil
+    end
+    local function tryVerifiedReuse(entry,bytes)
+        if not API.read or #bytes>CFG.bytecodeCacheMaxSingleBytes then return nil end
+        local key=entry.category..":"..#bytes..":"..D.adler(bytes)
+        local candidates=D.bytecodeCache[key]
+        if candidates then
+            for _,candidate in ipairs(candidates) do
+                if candidate.bytes==bytes then
+                    local verified=true
+                    for _,file in ipairs(candidate.info.files) do
+                        local ok,stored=pcall(API.read,D.root.."/"..file.path)
+                        if not ok or type(stored)~="string" or #stored~=file.bytes
+                            or D.adler(stored)~=file.adler32 then
+                            verified=false
+                            break
+                        end
+                    end
+                    if verified then return candidate end
+                end
             end
         end
-        if timeoutStreak>=CFG.maxConsecutiveTimeouts then
-            D.sourceAbortReason="repeated_decompiler_timeouts"
+        return nil
+    end
+    local function bytecodePass()
+        D.current="Stage 3/3: retrying failed native decompilation via bytecode"
+        D.checkpoint()
+        if not API.decompile then
+            for _,entry in ipairs(pendingFallback) do
+                failFinal(entry,"decompiler_api_unavailable","bytecode_fallback",entry.nativeFailure)
+            end
+            return
         end
-        if not D.stop and not D.sourceAbortReason then D.cooperate(true) end
+        for at,entry in ipairs(pendingFallback) do
+            if D.stop or D.sourceAbortReason then return end
+            D.current="Stage 3/3: bytecode recovery "..at.."/"..#pendingFallback
+            D.c.fallbackAttempted+=1
+            local bytes,errorCode=getFallbackBytecode(entry)
+            if not bytes then
+                D.c.fallbackUnavailable+=1
+                attemptLog(entry,"bytecode_fallback","unavailable",errorCode,0)
+                failFinal(entry,errorCode,"bytecode_fallback",entry.nativeFailure)
+            else
+                local reused=tryVerifiedReuse(entry,bytes)
+                if reused then
+                    D.exportBytecodeReuse(entry,reused)
+                    D.c.fallbackExported+=1
+                    attemptLog(entry,"bytecode_fallback","reused_identical_bytecode",nil,0)
+                    entry.instance=nil
+                else
+                    local state,workerError=createWorker(entry,bytes,
+                        "bytecode",CFG.bytecodeFallbackTimeoutSeconds)
+                    if not state then
+                        preserveFailure(entry,workerError,"bytecode",0)
+                    else
+                        local active={state}
+                        D.sourceWorkers=active
+                        while not state.done and not D.stop
+                            and not D.sourceAbortReason
+                            and os.clock()-state.t0<state.timeout do
+                            D.cooperate(true)
+                        end
+                        if D.stop then
+                            state.alive=false
+                            if API.cancel then pcall(API.cancel,state.thread) end
+                        else
+                            local timedOut=not state.done
+                            if not timedOut and #bytes<=CFG.bytecodeCacheMaxSingleBytes then
+                                entry.fingerprint={
+                                    key=entry.category..":"..#bytes..":"..D.adler(bytes),
+                                    bytes=bytes
+                                }
+                            end
+                            workerOutcome(state,timedOut)
+                        end
+                        D.sourceWorkers={}
+                    end
+                end
+            end
+            -- No raw bytecode is written or retained after this attempt.
+            bytes=nil
+            entry.fingerprint=nil
+            if at%8==0 and not D.stop then D.checkpoint() end
+        end
     end
-    for _,state in ipairs(active) do
-        state.alive=false
-        if API.cancel then pcall(API.cancel,state.thread) end
-    end
-    D.sourceWorkers={}
-    if not D.stop and not D.sourceAbortReason and nextJob>#queue then
-        D.sourcePassComplete=true
-    end
+
+    nativePass()
+    if not D.stop and not D.sourceAbortReason then bytecodePass() end
+    D.sourcePassComplete=not D.stop and not D.sourceAbortReason
+        and (D.sourceTerminal or 0)>=D.c.eligible
 end
 function D.finalizePending(reason)
     for _, entry in ipairs(D.scripts) do
