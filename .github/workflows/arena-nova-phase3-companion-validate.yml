@@ -1,0 +1,59 @@
+name: ARENA NOVA Phase 3 read-only companion validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-companion-phase3-v0.1.lua'
+      - '.github/workflows/arena-nova-phase3-companion-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert only read-only replicated state presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('roblox-tools/arena-nova-companion-phase3-v0.1.lua').read_text()
+          for needed in ('game.GameId ~= 7209131331', 'local function predictedStamina',
+                         'local function statusStages', 'local function refresh',
+                         'local function unload', 'Text = "ARENA NOVA"',
+                         'Enum.KeyCode.F7', 'GetServerTimeNow',
+                         'StaminaAnchor', 'GetAttribute("Status")'):
+              if needed == 'GetAttribute("Status")':
+                  assert 'attrNumber(stats, "Status")' in source
+              else:
+                  assert needed in source, needed
+          for forbidden in (':FireServer(', ':InvokeServer(', ':SetAttribute(',
+                            ':PivotTo(', '.CFrame = ', '.WalkSpeed = ',
+                            'hookfunction(', 'getconnections(', 'setreadonly(',
+                            'writefile(', 'request({', 'decompile(',
+                            'getscriptbytecode('):
+              assert forbidden not in source, forbidden
+          print('ARENA_PHASE3_READONLY_STATIC_PASS')
+          PY
+      - name: Install official Luau syntax compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/arena-luau.zip
+          mkdir -p /tmp/arena-luau
+          unzip -q /tmp/arena-luau.zip -d /tmp/arena-luau
+          compiler="$(find /tmp/arena-luau -type f -name luau-compile | head -1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile entire Arena companion
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-companion-phase3-v0.1.lua
+          echo ARENA_PHASE3_LUAU_COMPILE_PASS
