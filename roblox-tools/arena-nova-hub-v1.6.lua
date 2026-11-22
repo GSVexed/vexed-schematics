@@ -894,7 +894,10 @@ local function startAim()
             end
             local point = nil
             if aimHeldLastFrame and aimTarget then
-                point = onScreenAimPoint(camera, aimTarget)
+                -- Preserve target lock during the hold even when a long lead
+                -- shifts the visible target away from the viewport centre.
+                local _, trackedPoint = aimBodyPart(aimTarget)
+                point = trackedPoint
             end
             if not point then
                 aimTarget = closestToCrosshair(camera)
