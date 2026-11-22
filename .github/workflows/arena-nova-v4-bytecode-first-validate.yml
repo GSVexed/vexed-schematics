@@ -1,0 +1,66 @@
+name: ARENA NOVA v4 bytecode-first collector
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-bytecode-first-v4.0.lua'
+      - '.github/workflows/arena-nova-v4-bytecode-first-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static bytecode collection and no-decompile checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("roblox-tools/arena-nova-bytecode-first-v4.0.lua").read_text()
+          for term in [
+            'version="4.0.0"', "universe=7209131331",
+            "lobbyBudget=50", "matchBudget=18",
+            'maxAttemptsLobby=350', "maxAttemptsMatch=80",
+            'function D.discover()', "function D.collectBytecode()",
+            "function D.checkpoint()", "function D.flush(",
+            'getscriptbytecode', 'local function storeBytecode(',
+            'local relative="bytecode/B"',
+            "function D.refresh()", "manifest.json.txt",
+            "cache-index.json.txt", "binary_bytecode_not_privacy_scrubbed=true",
+            'status="prior_failure_not_retried"', "D.lowFPSTime>1.1",
+            'D.stopReason="bytecode_getter_too_slow"',
+            "platformSkipped", "D.privateRoots", "bytecode_results",
+            "D.fpsConnection:Disconnect()", 'format_guess=format',
+            "server_only_source_unavailable=true",
+            'no_in_game_decompile=true',
+          ]: assert term in s, term
+          for bad in [':FireServer(', ':InvokeServer(', 'hookfunction(',
+                      'getgc(', 'getconnections(', 'sethiddenproperty(',
+                      'setthreadidentity(', 'game:HttpGet(', 'request({',
+                      'API.decompile', 'decompile(', 'getscriptclosure(']:
+            assert bad not in s, bad
+          assert s.count("function D.collectBytecode()")==1
+          assert s.count("function D.discover()")==1
+          print("ARENA_NOVA_V4_BYTECODE_COLLECTION_STATIC_PASS")
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/arena-luau-v4.zip
+          mkdir -p /tmp/arena-luau-v4
+          unzip -q /tmp/arena-luau-v4.zip -d /tmp/arena-luau-v4
+          compiler="$(find /tmp/arena-luau-v4 -type f -name luau-compile | head -1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile entire bytecode-first collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-bytecode-first-v4.0.lua
+          echo ARENA_NOVA_V4_BYTECODE_COMPILE_PASS
