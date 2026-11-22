@@ -2481,7 +2481,9 @@ function Combat.attach(ctx)
                     gap=gap,reach=reach,margin=margin,valid=valid,
                     nativeValid=nativeValid,boostedOnly=boostedOnly,
                     angle=angle,cone=cone,vertical=vertical,
-                    maxVertical=maxVertical}
+                    maxVertical=maxVertical,
+                    heightDelta=difference.Y,
+                    turnSide=flatForward:Cross(direction).Y<0 and "R" or "L"}
             end
         end
         for _,other in ipairs(Players:GetPlayers()) do
@@ -2705,8 +2707,9 @@ function Combat.attach(ctx)
         centerDot.BackgroundColor3=shade
         circle.BackgroundColor3=shade
         hint.TextColor3=shade
-        hint.Text=string.format("%s\n%.1f studs • turn %.0f° • height %.1f",
-            status,best.dist,best.angle,best.vertical)
+        hint.Text=string.format("%s\n%.1f studs • %s %.0f° • height %+.1f",
+            status,best.dist,best.turnSide or "?",best.angle,
+            best.heightDelta or 0)
     end
 
     -- The previous 0.14-second scan painted the GUI only ~7 times/s,
@@ -2770,12 +2773,17 @@ function Combat.attach(ctx)
         circle.Position=UDim2.fromOffset(smoothPosition.X,smoothPosition.Y)
         circle.BackgroundTransparency=outside and .94 or .83
         stroke.Transparency=outside and .2 or 0
-        local hintX=math.clamp(smoothPosition.X,142,viewport.X-142)
+        local width=math.min(280,math.max(95,viewport.X-26))
+        hint.Size=UDim2.fromOffset(width,42)
+        local half=width*.5+3
+        local hintX=math.clamp(smoothPosition.X,half,
+            math.max(half,viewport.X-half))
         local hintY=smoothPosition.Y+16
         if hintY+42>viewport.Y-8 then
             hintY=smoothPosition.Y-58
         end
-        hint.Position=UDim2.fromOffset(hintX,math.clamp(hintY,8,viewport.Y-50))
+        hint.Position=UDim2.fromOffset(hintX,math.clamp(hintY,8,
+            math.max(8,viewport.Y-50)))
         circle.Visible=true
         -- The user wants ONLY ESP colours for Cobra ability range.
         -- Keep the small bite dot on Cobra, not the rectangular text box.
