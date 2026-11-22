@@ -1,0 +1,81 @@
+name: ARENA NOVA v3 game-priority collector
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/arena-nova-priority-collector-v3.0.lua'
+      - '.github/workflows/arena-nova-priority-v3-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify platform isolation, source limits, local cache and no gameplay writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('roblox-tools/arena-nova-priority-collector-v3.0.lua').read_text()
+          checks=[
+            'version="3.0.0"',
+            'universe=7209131331',
+            'lobbyBudgetSeconds=48',
+            'matchBudgetSeconds=16',
+            'maxNativeAttempts=48',
+            'function D.rapidScene()',
+            'function D.enumerate()',
+            'function D.collectSources()',
+            'function D.summarizeExcluded(',
+            'PLATFORM_ROOTS[n]',
+            'if obj==game then',
+            'SERVICE_PRIORITY',
+            'local frame=stack[#stack]',
+            'function D.loadCache()',
+            'ARENA_NOVA_SMART_V2/cache_index.json.txt',
+            'function D.exportCachedSource(',
+            'if D.c.nativeAttempts>=nativeAttemptLimit then',
+            'D.stopReason="source_attempt_budget"',
+            'D.stopReason="low_fps_protection"',
+            'D.fps<CFG.fpsDecompileFloor',
+            'D.frameConnection:Disconnect()',
+            'raw_bytecode_exported=false',
+            'function D.filterSource(source)',
+            'function D.buildPrivacy()',
+            'function D.saveCache()',
+            'function D.checkpoint()',
+            'complete_inventory=D.scannedComplete',
+            'platform_source_decompilation=false',
+            'source_statuses_are_not_proof_of_server_authority=true',
+          ]
+          for x in checks: assert x in s,x
+          for bad in [':FireServer(',':InvokeServer(', 'hookfunction(',
+                      'getgc(', 'getconnections(', 'sethiddenproperty(',
+                      'setthreadidentity(', 'game:HttpGet(', 'request({']:
+            assert bad not in s,bad
+          assert s.count('function D.collectSources()')==1
+          assert s.count('function D.enumerate()')==1
+          assert s.count('function D.exportCachedSource(')==1
+          print('ARENA_V3_STATIC_ISOLATION_QA_PASS')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/arena-luau-v3.zip
+          mkdir -p /tmp/arena-luau-v3
+          unzip -q /tmp/arena-luau-v3.zip -d /tmp/arena-luau-v3
+          compiler="$(find /tmp/arena-luau-v3 -type f -name luau-compile | head -1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile complete Arena v3 collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/arena-nova-priority-collector-v3.0.lua
+          echo ARENA_NOVA_V3_LUAU_COMPILE_PASS
