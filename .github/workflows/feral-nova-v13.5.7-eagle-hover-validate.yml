@@ -1,0 +1,88 @@
+name: FERAL NOVA v13.5.7 Eagle Talon Hover Fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-native-recovery-v13.5.7.lua'
+      - 'roblox-tools/feral-nova-eagle-actions-v13.5.7.lua'
+      - 'roblox-tools/feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua'
+      - '.github/workflows/feral-nova-v13.5.7-eagle-hover-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check only Eagle/recovery module changes, safe input pass-through, and lock guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          root=Path('roblox-tools')
+          old=(root/'feral-nova-v13.5.6-eagle-mobile-recovery-experimental-potassium.lua').read_text()
+          new=(root/'feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua').read_text()
+          rx=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          a=dict(re.findall(rx,old,re.S));b=dict(re.findall(rx,new,re.S))
+          assert len(a)==len(b)==23,(len(a),len(b))
+          assert a.keys()==b.keys()
+          assert {k for k in a if a[k]!=b[k]}=={
+            'feral-nova-native-recovery-v13.3.lua',
+            'feral-nova-eagle-actions-v12.0.lua'
+          }
+          native=(root/'feral-nova-native-recovery-v13.5.7.lua').read_text().strip()
+          eagle=(root/'feral-nova-eagle-actions-v13.5.7.lua').read_text().strip()
+          assert b['feral-nova-native-recovery-v13.3.lua'].strip()==native
+          assert b['feral-nova-eagle-actions-v12.0.lua'].strip()==eagle
+          assert 'function N.beforeEagleTalon(reason,fromNative)' in native
+          assert 'FERAL_HUB_EAGLE_TALON_YIELD_V1357' in native
+          assert 'Enum.ContextActionResult.Pass' in native
+          assert 'EAGLE F TALON PRE-INPUT / REST RELEASED' in native
+          assert 'EAGLE NATIVE TALON PRESS / REST RELEASED' in native
+          assert 'N.eagleTalonRestReleases+=1' in native
+          assert 'or char:GetAttribute("FeralDiveLocal")==true' in native
+          assert 'char:GetAttribute("FeralTalonLock")~=nil' in native
+          assert 'CAS:UnbindAction("FERAL_HUB_EAGLE_TALON_YIELD_V1357")' in native
+          assert 'FERAL_HUB_FIRST_BITE_YIELD_V1353' in native
+          assert 'movingRestCadenceSeconds=5' in native
+          assert 'conditionMotionRates' in native
+          assert 'FeralInjury' in native and 'FeralBleed' in native and 'FeralVenomAmt' in native
+          assert 'nativeTalonLockRetryBlocks' in eagle
+          assert 'nativeTalonLockCooldownBlocks' in eagle
+          assert 'char:FindFirstChild("FeralClamp")' in eagle
+          assert 'remote:FireServer("latch",row.prey,rel,"drag")' in eagle
+          assert 'if os.clock()-E.lastDragAt<5 then' in eagle
+          assert 'if not permitted or mode~="drag" then' in eagle
+          assert 'elder_prey_native_retries=' in eagle
+          assert 'nonelder_prey_native_retries=' in eagle
+          assert 'version="13.5.7"' in new
+          assert 'release="13.5.7"' in new
+          assert 'activeRecord.version="feral-nova-v13.5.7"' in new
+          folder=Path('/tmp/feral-1357-modules');folder.mkdir(exist_ok=True)
+          for name,body in b.items():(folder/name).write_text(body+'\n')
+          print('FERAL_V1357_ONLY_EAGLE_AND_NATIVE_RECOVERY_MODIFIED')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-1357-luau.zip
+          mkdir -p /tmp/feral-1357-luau
+          unzip -q /tmp/feral-1357-luau.zip -d /tmp/feral-1357-luau
+          compiler="$(find /tmp/feral-1357-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile launcher and all 23 modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-native-recovery-v13.5.7.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-eagle-actions-v13.5.7.lua
+          for f in /tmp/feral-1357-modules/*.lua; do "$LUAU_COMPILER" --null "$f"; done
+          echo FERAL_V1357_ALL_MODULES_COMPILE_PASS
