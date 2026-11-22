@@ -9,7 +9,7 @@ local CFG={
     recordChunkBytes=192*1024, maxSourceBytes=3*1024*1024,
     lobbyBudgetSeconds=110, matchBudgetSeconds=38,
     decompileTimeout=4.0, fallbackTimeout=2.5, bytecodeTimeout=0.8,
-    metadataSlice=200, rapidLimit=2400, sourceCheckpoint=5,
+    metadataSlice=300, rapidLimit=1200, sourceCheckpoint=5,
     maxFileBytes=3*1024*1024,
 }
 if game.PlaceId~=CFG.rootPlace and game.GameId~=CFG.universe then
@@ -262,6 +262,25 @@ function D.buildPrivacy()
     D.names[P.Name]=true
     D.names[P.DisplayName]=true
     D.names[tostring(P.UserId)]=true
+    -- New players can join while a long inventory is underway.
+    Players.PlayerAdded:Connect(function(other)
+        if other~=P then
+            D.privateRoots[other]=true
+            D.names[other.Name]=true
+            D.names[other.DisplayName]=true
+            D.names[tostring(other.UserId)]=true
+            other.CharacterAdded:Connect(function(character)
+                D.privateRoots[character]=true
+            end)
+        end
+    end)
+    for _,other in ipairs(Players:GetPlayers()) do
+        if other~=P then
+            other.CharacterAdded:Connect(function(character)
+                D.privateRoots[character]=true
+            end)
+        end
+    end
 end
 local FOCUS={"arena","round","map","combat","damage","weapon","inventory",
 "loot","pickup","drop","health","stamina","sprint","movement","surviv",
@@ -329,7 +348,8 @@ end
 function D.enumerate()
     D.phase="FULL INVENTORY"
     D.latest="Inventorying all accessible game objects and client scripts."
-    local roots=game:GetChildren()
+    -- Parent-frame traversal proves ancestry; avoid walking parent chain
+    -- per object (a major performance cost in the inherited collector).
     local queue={{game,"game",0,0,"game"}}
     local head=1
     local id=0
@@ -339,7 +359,7 @@ function D.enumerate()
         local frame=queue[head]
         queue[head]=false;head+=1
         local obj,path,parent,depth,root=frame[1],frame[2],frame[3],frame[4],frame[5]
-        if not D.visited[obj] and not D.private(obj) then
+        if not D.visited[obj] and obj~=D.gui and not D.privateRoots[obj] then
             D.visited[obj]=true
             local ok,class=pcall(function()return obj.ClassName end)
             if ok then
@@ -381,17 +401,18 @@ function D.enumerate()
                         else D.logErr("source_candidate_limit",path) end
                     end
                 end
-                if obj:IsA("ValueBase") and not D.sensitiveKey(name) then
+                local isValue=class:sub(-5)=="Value"
+                if isValue and not D.sensitiveKey(name) then
                     local vok,val=pcall(function()return obj.Value end)
                     if vok then
                         D.c.values+=1
                         D.record("values",{id=id,path=path,value=D.safeValue(val,name)})
                     end
                 end
-                if focus or remote or script or obj:IsA("Tool") then
+                if focus or remote or script or class=="Tool" then
                     D.c.details+=1
                     local extra={}
-                    if obj:IsA("Tool") then
+                    if class=="Tool" then
                         pcall(function()extra.toolTip=D.safeString(obj.ToolTip,"tooltip")end)
                         pcall(function()extra.requiresHandle=obj.RequiresHandle end)
                     end
@@ -426,12 +447,21 @@ function D.enumerate()
                 if depth<CFG.maxDepth then
                     local cok,kids=pcall(function()return obj:GetChildren()end)
                     if cok and type(kids)=="table" then
+                        local siblingCounts={}
                         for _,kid in ipairs(kids) do
-                            if not D.privateRoots[kid] then
-                                local n=kid.Name
+                            local n=kid.Name
+                            local low=n:lower():gsub("[^%w]","")
+                            local privateBranch=(low=="playerdata" or low=="userdata"
+                                or low=="profiles" or low=="authdata"
+                                or low=="privatemessages" or low=="directmessages")
+                            if not D.privateRoots[kid] and kid~=D.gui and not privateBranch then
                                 local safe=D.safeString(n,"name")
-                                -- Mark sibling duplicates by local ordinal.
-                                queue[#queue+1]={kid,path.."/"..safe,id,depth+1,
+                                local key=safe.."|"..kid.ClassName
+                                local ordinal=(siblingCounts[key] or 0)+1
+                                siblingCounts[key]=ordinal
+                                local segment=safe
+                                if ordinal>1 then segment=safe.."~"..ordinal end
+                                queue[#queue+1]={kid,path.."/"..segment,id,depth+1,
                                     depth==0 and safe or root}
                             else D.c.privacySkipped+=1 end
                         end
@@ -784,6 +814,7 @@ end
 local ui=element("ScreenGui",{Name="ArenaNovaSmartV20",ResetOnSpawn=false,
     IgnoreGuiInset=true,DisplayOrder=750},PG)
 D.gui=ui
+ui.Destroying:Connect(function() D.stopped=true end)
 local panel=element("Frame",{
     BackgroundColor3=Color3.fromRGB(18,24,37),BorderSizePixel=0,
     Size=UDim2.fromOffset(600,318),Position=UDim2.fromScale(0.5,0.17),
