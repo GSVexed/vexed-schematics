@@ -632,8 +632,8 @@ gui.DisplayOrder=360
 gui.Parent=pg
 local frame=Instance.new("Frame")
 frame.Name="Panel"
-frame.Position=UDim2.new(1,-426,0,58)
-frame.Size=UDim2.fromOffset(410,555)
+frame.Position=UDim2.new(1,-426,0,20)
+frame.Size=UDim2.fromOffset(410,656)
 frame.BackgroundColor3=Color3.fromRGB(18,26,35)
 frame.BorderSizePixel=0
 frame.Parent=gui
@@ -838,6 +838,7 @@ end
 local function stop()
     if not active then return end
     sessionLogEvent("session","Controller unloading; final snapshot export")
+    sessionLastSample=-math.huge
     pcall(sessionCapture,0.016)
     pcall(saveSession,false)
     active=false
@@ -2119,6 +2120,42 @@ local hoverDepthButton=button("Depth","DEPTH: 8",195,436,203,
 L.Hover=label("SubsurfaceStatus",518,24)
 L.Hover.Text="SUBSURFACE OFF • not verified invisible/server-eligible"
 L.Hover.TextColor3=Color3.fromRGB(230,189,143)
+-- Session file export is local only. The game does not upload anything to
+-- ChatGPT. Users can send the file after playing for source-grounded refinement.
+local saveReportButton=button("SaveReport","SAVE REPORT",12,548,159,
+    Color3.fromRGB(39,104,107))
+local copyReportButton=button("CopyReport","COPY JSON",181,548,217,
+    Color3.fromRGB(66,78,111))
+L.Session=label("SessionReport",587,22)
+L.Session.Text="RECORDER ON • autosave every 45s when file writing works"
+L.Session.TextColor3=Color3.fromRGB(145,225,202)
+L.SessionHelp=label("SessionHelp",615,25)
+L.SessionHelp.Text="No automatic uploads • send saved JSON text file here afterward"
+L.SessionHelp.TextColor3=Color3.fromRGB(181,194,209)
+saveReportButton.Activated:Connect(function()
+    sessionLogEvent("user_action","SAVE REPORT clicked")
+    local ok,message=saveSession(true)
+    say(if ok then "SESSION EXPORTED • check your executor workspace / clipboard"
+        else "REPORT EXPORT FAILED: "..tostring(message))
+    L.Session.Text=sessionSanitize(message)
+end)
+copyReportButton.Activated:Connect(function()
+    sessionLogEvent("user_action","COPY JSON clicked")
+    local json,reason=getSessionJSON()
+    if not json then
+        L.Session.Text="JSON ERROR: "..sessionSanitize(reason)
+        return
+    end
+    if type(setclipboard)=="function" then
+        local copied=pcall(setclipboard,json)
+        L.Session.Text=if copied then
+            "FULL JSON COPIED • paste into a text file to upload"
+            else "Clipboard rejected JSON • use SAVE REPORT"
+    else
+        print("[FERAL Territory Rush] JSON REPORT: "..json)
+        L.Session.Text="NO CLIPBOARD • full JSON printed in executor console"
+    end
+end)
 hoverButton.Activated:Connect(function()
     if undergroundRequested then
         undergroundRequested=false
@@ -2215,11 +2252,24 @@ careConnection=RunService.Heartbeat:Connect(function()
             and hoverButton.Text~="SUBSURFACE: OFF" then
             hoverButton.Text="SUBSURFACE: OFF"
         end
+        if L.Session and L.Session.Parent then
+            if not sessionSaved and sessionLastFileError
+                and sessionTotalSamples>2 then
+                L.Session.Text="RECORDER ON • file autosave unavailable; COPY JSON works"
+            elseif not sessionSaved then
+                L.Session.Text="RECORDER ON • "..tostring(sessionTotalSamples)
+                    .." snapshots / "..tostring(sessionTotalEvents).." events"
+            end
+        end
     end
 end)
 
 env.FERAL_TERRITORY_RUSH_V4={
     stop=stop,report=report,
+    sessionReport=makeSessionPayload,
+    sessionJSON=getSessionJSON,
+    saveSession=function() return saveSession(true) end,
+    sessionFilename=SESSION_FILENAME,
     startAuto=function()
         if not auto then toggleTerritoryAuto() end
     end,
