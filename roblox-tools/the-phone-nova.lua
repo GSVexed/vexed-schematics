@@ -1,6 +1,6 @@
--- THE PHONE NOVA | STABLE POTASSIUM LAUNCHER
+-- THE PHONE NOVA V2 | STABLE POTASSIUM LAUNCHER
 -- Targets lobby and match place IDs in the same experience.
-local sourceUrl="https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/the-phone-nova-hub-v1.0.lua"
+local sourceUrl="https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/the-phone-nova-hub-v2.0.lua"
 local scriptSource=game:HttpGet(sourceUrl)
 local chunk,compileError=loadstring(scriptSource)
 if not chunk then
