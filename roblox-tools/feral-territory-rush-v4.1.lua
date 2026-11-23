@@ -469,12 +469,16 @@ end)
 local function safePoint(t,c)
     -- Search the entire target hex, not just 10 points near its centre.
     -- Remote map chunks often are not streamed when this probe first runs.
-    local candidate={t.landing,t.center}
-    local radii={25,50,75,95,108}
+    local focus=t.landing or t.center
+    local candidate={focus}
+    if focus~=t.center then table.insert(candidate,t.center) end
+    -- Named claim spots are the game's radius centres. A hex centre may be
+    -- outside the named spot's valid claim circle.
+    local radii={12,25,40,60,78}
     for _,radius in ipairs(radii) do
         for direction=0,15 do
             local angle=direction*math.pi/8
-            table.insert(candidate,t.center+Vector2.new(
+            table.insert(candidate,focus+Vector2.new(
                 math.cos(angle)*radius,math.sin(angle)*radius))
         end
     end
@@ -484,10 +488,10 @@ local function safePoint(t,c)
     params.IgnoreWater=false
     local stats={sampled=0,hits=0,water=0,steep=0}
     local last=landingCache[t.key]
-    if typeof(last)=="Vector3" then
+    if typeof(last)=="Vector3" and not otherPlayerNearby(last,0) then
         local ray=WS:Raycast(Vector3.new(last.X,2300,last.Z),Vector3.new(0,-4500,0),params)
         if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>=0.35
-            and (Vector2.new(last.X,last.Z)-t.center).Magnitude<115 then
+            and (Vector2.new(last.X,last.Z)-focus).Magnitude<108 then
             return ray.Position,stats
         end
         landingCache[t.key]=nil
@@ -497,7 +501,8 @@ local function safePoint(t,c)
             local i,j=cfg.hexAt(p.X,p.Y)
             local check=type(cfg.hexKey)=="function" and cfg.hexKey(i,j)
                 or ("H"..tostring(i).."_"..tostring(j))
-            if check==t.key and (p-t.center).Magnitude<115 then
+            if check==t.key and (p-focus).Magnitude<108
+                and not otherPlayerNearby(Vector3.new(p.X,0,p.Y),0) then
                 stats.sampled+=1
                 local ray=WS:Raycast(Vector3.new(p.X,2300,p.Y),
                     Vector3.new(0,-4500,0),params)
@@ -576,6 +581,9 @@ local function moveTo(t)
         or (c:GetAttribute("FeralFly") and c:GetAttribute("FeralFly")~="flutter") then
         return false,"Land and exit pinned/den modes before SNAP"
     end
+    if otherPlayerNearby(Vector3.new(t.landing.X,0,t.landing.Y),0) then
+        return false,"PLAYER AVOID: other player at the requested claim spot"
+    end
     local owner=value(t.key,"owner")
     local oldHold=hold(t.key)
     local oldProgress=value(t.key,"prog")
@@ -597,6 +605,9 @@ local function moveTo(t)
     end
     local clearance=math.max(3,h.HipHeight+r.Size.Y*0.5+1.0)
     local point=ground+Vector3.new(0,clearance,0)
+    if otherPlayerNearby(point,0) then
+        return false,"PLAYER AVOID: someone approached while the ground was loading"
+    end
     local a={
         key=t.key,pack=pack,originalOwner=owner,originalHold=oldHold,
         originalProgress=type(oldProgress)=="number" and oldProgress or 0,
@@ -605,18 +616,45 @@ local function moveTo(t)
         evidenceProgress=false,evidenceScent=false,evidenceOwner=false,
         destination=point,character=c,lastSnap=0,snapCount=0,
         snapBacks=0,inTarget=false,lastEvidenceAt=os.clock(),
+        origin=r.Position,travelType="PENDING",lastWalkAt=0,
         failed=false,kind=owner==pack and "SCENT" or "CLAIM"
     }
     attempt=a
+    local distance=(point-r.Position).Magnitude
+    if distance<=safeWalkRadius then
+        a.travelType="WALK"
+        h:MoveTo(point)
+        a.lastWalkAt=os.clock()
+        event(string.format("WALK %s (%.0f studs)",t.key,distance))
+        return true,"WALK "..t.key.." • waiting for genuine claim progress"
+    end
+    local now=os.clock()
+    if travelStyle=="WALK" then
+        attempt=nil
+        return false,"WALK ONLY: the next territory needs long-distance travel"
+    end
+    if now<snapLockUntil then
+        attempt=nil
+        return false,string.format("SERVER SNAP COOLDOWN %.0fs",snapLockUntil-now)
+    end
+    if now-lastSnapAttemptAt<4.5 or now<visibilityHoldUntil then
+        attempt=nil
+        return false,"SNAP WAIT: anti-loop or nearby-player cooldown"
+    end
+    if currentPlayerThreat() then
+        attempt=nil
+        return false,"SNAP WAIT: another player can see your current location"
+    end
+    a.travelType="SNAP"
+    lastSnapAttemptAt=now
     local okMove,err=applyPosition(a)
     if not okMove then
         a.failed=true
-        return false,"SNAP failed: "..tostring(err)
+        return false,"ONE SNAP failed: "..tostring(err)
     end
-    event(string.format("SNAP %s from %.0f studs (%s)",
+    event(string.format("ONE SNAP %s from %.0f studs (%s)",
         t.key,startingDistance,groundInfo))
-    return true,string.format("SNAP %s — %s; checking real territory state",
-        t.key,a.kind)
+    return true,string.format("ONE SNAP %s • waiting for accepted server state",t.key)
 end
 
 -- The live game sometimes corrects a snap-back to the old location.
@@ -625,35 +663,43 @@ end
 local function keepTarget()
     local a=attempt
     if not (a and a.destination and not a.failed and active) then return end
-    local c,r=root()
+    local c,r,h=root()
     if c~=a.character or not r then
         a.failed=true
         lastFailure="Animal changed/died during maintenance"
         return
     end
+    local now=os.clock()
     local distance=(r.Position-a.destination).Magnitude
-    if distance<125 then
+    if a.travelType=="WALK" then
+        if distance<23 then
+            a.inTarget=true
+            return
+        end
+        if now-a.began>26 then
+            a.failed=true
+            lastFailure="WALK path failed to reach safe claim position"
+            return
+        end
+        if now-a.lastWalkAt>3.5 then
+            a.lastWalkAt=now
+            h:MoveTo(a.destination)
+        end
+        return
+    end
+    if a.travelType~="SNAP" or now-a.lastSnap<1.1 then return end
+    if distance<50 then
         a.inTarget=true
         return
     end
-    local elapsed=os.clock()-a.lastSnap
-    if elapsed<1.6 or os.clock()-a.began>35 then return end
-    if a.snapCount>=3 then
-        a.failed=true
-        lastFailure="Server kept correcting position: "..a.key
-        event(lastFailure)
-        return
-    end
+    -- No snap retries at all. If the server moves the character back,
+    -- temporarily ban all long-distance snaps, with escalating cooldown.
+    a.failed=true
     a.snapBacks+=1
     totalRetries+=1
-    local okMove,err=applyPosition(a)
-    if not okMove then
-        a.failed=true
-        lastFailure="Snap retry failed: "..tostring(err)
-    else
-        event(string.format("Retry after snap-back %s (%d/3)",
-            a.key,a.snapCount))
-    end
+    local seconds=restrictSnaps("SERVER REJECTED TELEPORT "..a.key)
+    retryCooldown[a.key]=now+math.max(90,seconds)
+    event(lastFailure)
 end
 
 snapB.Activated:Connect(function()
