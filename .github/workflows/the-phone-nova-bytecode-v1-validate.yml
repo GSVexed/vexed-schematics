@@ -1,0 +1,60 @@
+name: THE PHONE NOVA v1 - Read-only client bytecode capture
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/the-phone-nova-bytecode-first-v1.0.lua'
+      - '.github/workflows/the-phone-nova-bytecode-v1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-and-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate collector scope and safeguards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('roblox-tools/the-phone-nova-bytecode-first-v1.0.lua').read_text('utf-8-sig')
+          for t in ('universe=10775041696','place=138199295184592',
+            'THE_PHONE_NOVA_CAPTURE_V1','mode="LOBBY",running=false',
+            'D.collectBytecode','getscriptbytecode','no_in_game_decompile=true',
+            'emit("objects",info)','emit("scripts",','emit("remotes",',
+            'session','cache','storeBytecode','D.checkpoint()',
+            'scope_truncated','bytecode_export_complete','fps_guard',
+            'privacySkipped','playerdata=true','credentials=true','apiTimeout',
+            'STOP & SAVE','COPY REPORT','MODE: LOBBY','server_only_source_unavailable=true'):
+              if t=='session': continue
+              assert t in s, 'Missing collector requirement '+t
+          assert 'HttpService:PostAsync' not in s
+          assert 'HttpService:RequestAsync' not in s
+          assert 'game:HttpGet(' not in s
+          assert 'decompile(' not in s.split('local CFG=',1)[1].replace('No decompile()','')
+          assert 'FireServer(' not in s and 'InvokeServer(' not in s
+          assert 'getgc(' not in s and 'hookfunction(' not in s
+          assert 'getscriptclosure(' not in s
+          assert 'server_only_source_unavailable=true' in s
+          print('THE_PHONE_NOVA_CAPTURE_STATIC_PASS')
+          PY
+      - name: Install Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/the-phone-luau.zip
+          mkdir -p /tmp/the-phone-luau
+          unzip -q /tmp/the-phone-luau.zip -d /tmp/the-phone-luau
+          compiler="$(find /tmp/the-phone-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile THE PHONE collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova-bytecode-first-v1.0.lua
+          echo THE_PHONE_NOVA_LUAU_COMPILE_PASS
