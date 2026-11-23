@@ -373,14 +373,14 @@ local function ensureVisual(rec)
     if rec.highlight and rec.highlight.Parent ~= rec.character then removeVisuals(rec) end
     if not rec.highlight then
         rec.highlight = create("Highlight", {
-            Name = "NOVAOutline_v02", Adornee = rec.character,
+            Name = "NOVAOutline_v04", Adornee = rec.character,
             FillTransparency = 1, OutlineTransparency = 0,
             DepthMode = Enum.HighlightDepthMode.Occluded
         }, rec.character)
     end
     if not rec.billboard then
         rec.billboard = create("BillboardGui", {
-            Name = "NOVATag_v02", Adornee = rec.head or rec.root,
+            Name = "NOVATag_v04", Adornee = rec.head or rec.root,
             Size = UDim2.fromOffset(188, 38),
             StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0),
             AlwaysOnTop = config.ThroughWalls,
@@ -438,7 +438,7 @@ local function updateVisuals()
 end
 
 local gui = create("ScreenGui", {
-    Name = "EmpireClash_NOVA_Phase8_v02", ResetOnSpawn = false,
+    Name = "EmpireClash_NOVA_Phase8_v04", ResetOnSpawn = false,
     IgnoreGuiInset = true, DisplayOrder = 125,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 }, playerGui)
@@ -456,7 +456,7 @@ local titleBar = create("Frame", {
 }, panel)
 text(titleBar, "EMPIRE CLASH  /  NOVA", UDim2.fromOffset(16, 9),
     UDim2.fromOffset(282, 22), 17, COLORS.white, true)
-text(titleBar, "PHASE 8   •   COMBAT ENGINE FOUNDATION",
+text(titleBar, "PHASE 8   •   COMBAT CORE v0.4",
     UDim2.fromOffset(17, 34), UDim2.fromOffset(296, 16), 10, COLORS.secondary, true)
 local close = press(titleBar, "×", UDim2.fromOffset(305, 11), UDim2.fromOffset(26, 27))
 close.TextSize = 19
@@ -952,12 +952,18 @@ ownConnection(RunService.RenderStepped, function(dt)
         cardData.Text = string.format("%s  |  %d HP  |  %d st  |  %s",
             selected.region, math.floor(selected.health + 0.5),
             math.floor(selected.distance + 0.5),
-            selected.clear == true and "CLEAR PATH" or "BLOCKED / UNKNOWN")
+            selected.clear == true and "LOCAL CLEAR" or "BLOCKED / UNKNOWN")
     else
         aimMarker.Visible = false
         targetCard.Visible = false
     end
     if panel.Visible then
+        -- The experimental callback may auto-disable after local failures.
+        -- Keep the displayed button state synchronised with the actual mode.
+        if state.lastRenderedExperimental ~= config.ExperimentalSilentAim then
+            state.lastRenderedExperimental = config.ExperimentalSilentAim
+            for _, refresh in ipairs(rows) do refresh() end
+        end
         local accuracyStr = state.weaponAccuracy and (" | accuracy stat " .. tostring(state.weaponAccuracy)) or ""
         local modeStatus = config.ExperimentalSilentAim
             and "EXPERIMENTAL SHOT CORRECTION: ON"
