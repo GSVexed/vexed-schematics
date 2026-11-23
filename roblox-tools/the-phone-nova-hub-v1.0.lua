@@ -39,7 +39,7 @@ local state={
     notify=true,beacon=false,compact=false,
     place=(game.PlaceId==LOBBY_PLACE and "LOBBY") or
         (game.PlaceId==MATCH_PLACE and "MATCH") or "OTHER",
-    lines={},lastEvent="",lastPhase="",lastMap="",lastStatus="READY",
+    lines={},logDirty=true,lastEvent="",lastPhase="",lastMap="",lastStatus="READY",
     lastSnapshot=nil,localEventAt=0,noticeUntil=0,noticeText="",
     beaconGui=nil,beaconPart=nil,connections={}
 }
@@ -63,6 +63,7 @@ local function addLog(message)
     local stamp=os.date("!%H:%M:%S")
     table.insert(state.lines,1,stamp.."  "..tostring(message))
     while #state.lines>22 do table.remove(state.lines)end
+    state.logDirty=true
 end
 local function toast(message)
     state.noticeText=message
@@ -269,6 +270,8 @@ local logBody=create("Frame",{
 local copyLog=button(logPage,"COPY SESSION EVENTS",0,248,217,32,C.dim)
 local clearLog=button(logPage,"CLEAR LOG",226,248,222,32,C.dim)
 local function updateLog()
+    if not state.logDirty then return end
+    state.logDirty=false
     for _,child in ipairs(logBody:GetChildren()) do
         if child:IsA("TextLabel") then child:Destroy() end
     end
@@ -311,7 +314,7 @@ local function changeTab(name)
         rec.page.Visible=key==name
         rec.tab.BackgroundColor3=key==name and Color3.fromRGB(31,96,120) or C.dim
     end
-    if name=="LOG" then updateLog()end
+    if name=="LOG" then state.logDirty=true;updateLog()end
 end
 for name,rec in pairs(pages) do connect(rec.tab.Activated,function()changeTab(name)end)end
 changeTab("OVERVIEW")
