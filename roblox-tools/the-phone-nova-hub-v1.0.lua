@@ -422,7 +422,7 @@ local function updateBeacon()
             Adornee=obj,AlwaysOnTop=true,Size=UDim2.fromOffset(160,43),
             StudsOffsetWorldSpace=Vector3.new(0,3,0),
             Enabled=true,MaxDistance=500
-        },gui)
+        },playerGui)
         local text=label(state.beaconGui,"PHONE",0,0,160,43,13,C.mint,true)
         text.Name="MarkerText"
         text.TextXAlignment=Enum.TextXAlignment.Center
@@ -444,13 +444,14 @@ local function tick()
     local map=tostring(attr(workspace,"CurrentMap","--"))
     local event=tostring(attr(workspace,"EventName",""))
     local active=attr(workspace,"EventActive",false)==true
-    local eventLabel=event~="" and event or "No active challenge detected"
-    if event~=state.lastEvent then
+    local displayEvent=active and event or ""
+    local eventLabel=displayEvent~="" and displayEvent or "No active challenge detected"
+    if displayEvent~=state.lastEvent then
         local before=state.lastEvent
-        state.lastEvent=event
-        if event~="" then
+        state.lastEvent=displayEvent
+        if displayEvent~="" then
             state.localEventAt=os.clock()
-            if state.notify then toast("EVENT: "..event) else addLog("Event: "..event)end
+            if state.notify then toast("EVENT: "..displayEvent) else addLog("Event: "..displayEvent)end
         elseif before~="" then addLog("Challenge cleared: "..before) end
     end
     if phase~=state.lastPhase then
@@ -482,7 +483,7 @@ local function tick()
     currentPlayer.Text=(afk and "AFK" or "ACTIVE")..
         "  |  Speed: "..textVal(speed)..
         (holder~="" and "  |  Booth" or "")
-    local guide=getGuide(event)
+    local guide=getGuide(displayEvent)
     eventTitle.Text=guide and guide.name or (active and eventLabel:upper() or "NO EVENT")
     tipLabel.Text=guide and guide.tip or
         (active and "This challenge is detected, but no verified event-specific helper is configured yet."
