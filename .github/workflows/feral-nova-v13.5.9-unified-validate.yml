@@ -1,0 +1,78 @@
+name: FERAL NOVA v13.5.9 - Unified Territory Hub
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.5.9-unified-territory-potassium.lua'
+      - 'roblox-tools/feral-nova-unified.lua'
+      - '.github/workflows/feral-nova-v13.5.9-unified-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert unchanged 23-module gameplay baseline and single GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          root=Path('roblox-tools')
+          original=(root/'feral-nova-v13.5.8-dual-ui-potassium.lua').read_text('utf-8-sig')
+          unified=(root/'feral-nova-v13.5.9-unified-territory-potassium.lua').read_text('utf-8-sig')
+          loader=(root/'feral-nova-unified.lua').read_text('utf-8-sig')
+          original_rush=(root/'feral-territory-rush-v4.2.2.lua').read_text('utf-8-sig')
+          module_rx=r'\["([^"]+\.lua)"\]=\[==========\[\n(.*?)\n\]==========\]'
+          base=dict(re.findall(module_rx,original,re.S))
+          integrated=dict(re.findall(module_rx,unified,re.S))
+          assert len(base)==len(integrated)==23,(len(base),len(integrated))
+          assert base==integrated,'The 23 original core module bodies must stay byte-identical'
+          matches=re.findall(r'local TERRITORY_SOURCE=\[==========\[\n(.*?)\n\]==========\]',unified,re.S)
+          assert len(matches)==1, 'Missing or duplicate embedded Territory Rush module'
+          territory=matches[0]
+          for important in ('makeSessionPayload','sessionCapture','saveSession(true)',
+            'beginUnderground','exitUnderground','careTick','toggleTerritoryAuto',
+            'serverClaimProgress','value(a.key,"owner")==myPack'):
+              assert important in territory, f'Territory feature was dropped: {important}'
+          assert 'terr:SetAttribute(' not in territory
+          assert 'Territory:FireServer(' not in territory
+          assert 'Instance.new(if unified then "Frame" else "ScreenGui")' in territory
+          assert 'if not unified then\nterritoryHotkeyConnection' in territory
+          assert 'if unified and type(unified.closeLayer)' in territory
+          assert 'gui.Parent=unified.layer' in territory
+          assert 'Name="IntegratedTerritoryTab"' in unified
+          assert 'Name="TerritoryTabButton"' in unified
+          assert 'gui.Destroying:Connect(cleanup)' in unified
+          assert 'local TERRITORY_SOURCE=' in unified
+          assert 'startTerritory()' in unified
+          assert 'game:HttpGet(' not in unified, 'Unified payload must not fetch an extra UI'
+          assert 'feral-nova-v13.5.9-unified-territory-potassium.lua' in loader
+          assert 'feral-territory-rush-v4.2.2.lua' not in loader
+          assert '13.5.9' in unified
+          Path('/tmp/feral-territory-unified.lua').write_text(territory)
+          print('FERAL_UNIFIED_V1359_STATIC_PASS | preserved_core_modules=23 | territory_embedded=yes')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-unified-luau.zip
+          mkdir -p /tmp/feral-unified-luau
+          unzip -q /tmp/feral-unified-luau.zip -d /tmp/feral-unified-luau
+          compiler="$(find /tmp/feral-unified-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile the self-contained unified source, territory module, and stable loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.9-unified-territory-potassium.lua
+          "$LUAU_COMPILER" --null /tmp/feral-territory-unified.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-unified.lua
+          echo FERAL_UNIFIED_V1359_LUAU_COMPILE_PASS
