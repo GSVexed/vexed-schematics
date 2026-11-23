@@ -272,7 +272,7 @@ local stopBtn=btn(extras,"STOP ALL HELPERS",248,12,230,36,Color3.fromRGB(103,47,
 local logTitle=txt(extras,"SESSION ACTIVITY",12,57,460,20,11,P.muted,true)
 local sessionText=txt(extras,"No activity recorded yet.",12,79,462,111,11,P.white)
 sessionText.TextYAlignment=Enum.TextYAlignment.Top
-local helpText=txt(extras,"Right Ctrl / Right Shift: toggle  •  X: hide  •  —: minimise",12,195,460,26,11,P.blue)
+local helpText=txt(extras,"Right Ctrl/Shift: toggle • F8: panic OFF • X: hide",12,195,460,26,11,P.blue)
 local footer=make("Frame",{BackgroundColor3=P.panel,BorderSizePixel=0,
     Position=UDim2.fromOffset(13,446),Size=UDim2.fromOffset(488,36)},content)
 corners(footer,7)
@@ -384,6 +384,30 @@ local function disableAll()
     log("All gameplay helpers OFF")
 end
 track(stopBtn.Activated,disableAll)
+track(UIS.InputBegan,function(input)
+    if input.KeyCode==Enum.KeyCode.F8 and not UIS:GetFocusedTextBox() then
+        disableAll()
+    end
+end)
+-- Optional executor-supported persistence across lobby -> match teleports.
+-- If no queue API exists, the user can run the stable launcher again.
+local teleportQueue=nil
+pcall(function()
+    teleportQueue=queue_on_teleport or queueonteleport
+    if type(teleportQueue)~="function" and type(syn)=="table" then
+        teleportQueue=syn.queue_on_teleport
+    end
+end)
+if type(teleportQueue)=="function" then
+    track(plr.OnTeleport,function(teleportState)
+        if teleportState==Enum.TeleportState.Started then
+            guarded("queue teleport",function()
+                teleportQueue('loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/the-phone-nova.lua"))()')
+            end)
+        end
+    end)
+    log("Teleport queue available; lobby-to-match reinjection supported")
+end
 
 -- Routes and remote handlers use only client-visible game information.
 local function attemptDuel()
