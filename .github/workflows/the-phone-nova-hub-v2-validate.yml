@@ -44,6 +44,9 @@ jobs:
               'HttpService:PostAsync(', 'HttpService:RequestAsync('
           ]:
               assert denied not in s, f'disallowed v2 operation: {denied}'
+          loader=Path('roblox-tools/the-phone-nova.lua').read_text()
+          assert 'the-phone-nova-hub-v2.0.lua' in loader, 'stable launcher does not point to v2'
+          assert loader.count('game:HttpGet(')==1 and loader.count('loadstring(')==1
           print('THE_PHONE_NOVA_V2_STATIC_PASS')
           PY
       - name: Download Luau compiler
