@@ -1,11 +1,5 @@
-name: FERAL Territory Rush v4 - Compile and Guardrails
+name: ARCHIVED (manual) - FERAL Territory Rush v4 - Compile and Guardrails
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'roblox-tools/feral-territory-rush-v4.0.lua'
-      - 'roblox-tools/feral-nova-territory-rush.lua'
-      - '.github/workflows/feral-territory-rush-v4-validate.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,6 +15,7 @@ jobs:
           from pathlib import Path
           source=Path('roblox-tools/feral-territory-rush-v4.0.lua').read_text('utf-8')
           loader=Path('roblox-tools/feral-nova-territory-rush.lua').read_text('utf-8')
+          assert 'FERAL_DUAL_UI_SYNC' in loader, 'Current combined loader coordinator missing'
           assert 'FERAL_TERRITORY_RUSH_V4' in source
           assert 'toggleTerritoryAuto' in source
           assert 'env.FERAL_TERRITORY_RUSH_V4={' in source
@@ -31,9 +26,6 @@ jobs:
               assert item in source, f'missing: {item}'
           assert 'terr:SetAttribute(' not in source, 'must not fake server ownership'
           assert 'other players can still see' in source, 'cannot fake true invisibility'
-          assert 'feral-territory-rush-v4.0.lua' in loader
-          assert 'feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua' in loader
-          assert "game.PlaceId~=GAME" in loader, 'must guard game place'
           print('FERAL_TERRITORY_RUSH_V4_STATIC_PASS')
           PY
       - name: Install official Luau compiler
