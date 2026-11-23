@@ -28,7 +28,9 @@ jobs:
             'session','cache','storeBytecode','D.checkpoint()',
             'scope_truncated','bytecode_export_complete','fps_guard',
             'privacySkipped','playerdata=true','credentials=true','apiTimeout',
-            'STOP & SAVE','COPY REPORT','MODE: LOBBY','server_only_source_unavailable=true'):
+            'STOP & SAVE','COPY REPORT','CLOSE PANEL','D.startQueued=true',
+            'if D.running or D.startQueued then','D.gui:Destroy()',
+            'MODE: LOBBY','server_only_source_unavailable=true'):
               if t=='session': continue
               assert t in s, 'Missing collector requirement '+t
           assert 'HttpService:PostAsync' not in s
