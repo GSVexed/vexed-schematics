@@ -1,0 +1,62 @@
+name: THE PHONE NOVA v1 - Hub release validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/the-phone-nova-hub-v1.0.lua'
+      - 'roblox-tools/the-phone-nova.lua'
+      - '.github/workflows/the-phone-nova-hub-v1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate game-aware features and network guardrails
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('roblox-tools/the-phone-nova-hub-v1.0.lua').read_text(encoding='utf-8')
+          loader=Path('roblox-tools/the-phone-nova.lua').read_text(encoding='utf-8')
+          for marker in [
+             '10775041696', '138199295184592', '120688878033226',
+             'Enum.KeyCode.RightShift','local function visible(on)',
+             'CLOSE', 'Name="CompactEvent"', 'workspace:GetServerTimeNow()',
+             'local function snapshot()', 'ThePhoneNovaPhoneMarker',
+             'EventActive','EventName','CurrentMap','ServerWalkSpeed',
+             'PhoneLocked','MatchState','EndsAt','tipLabel.Text',
+             'BOMB EVENT', 'THIN ICE', 'HELLFIRE',
+             'local function stop()', 'state.alive=false',
+             'clearBeacon()', 'playerGui', 'no_gameplay_remotes_called=true'
+          ]:
+              if marker=='CLOSE': continue
+              assert marker in s, 'Missing required feature: '+marker
+          for forbidden in ['FireServer(', 'InvokeServer(', 'getgc(', 'hookfunction(',
+                            'decompile(', 'getscriptbytecode(', 'game:HttpGet(',
+                            'HttpService:PostAsync', 'HttpService:RequestAsync']:
+              assert forbidden not in s, 'Found forbidden side effect: '+forbidden
+          assert loader.count('game:HttpGet(')==1
+          assert loader.count('loadstring(')==1
+          assert 'the-phone-nova-hub-v1.0.lua' in loader
+          print('THE_PHONE_HUB_STATIC_VALIDATION_PASS')
+          PY
+      - name: Download Luau 0.747 compiler
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile both hub and stable launcher
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova-hub-v1.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova.lua
+          echo THE_PHONE_HUB_V1_COMPILE_PASS
