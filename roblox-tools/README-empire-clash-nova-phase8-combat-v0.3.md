@@ -10,7 +10,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/project-empire-clash-nova/roblox-tools/empire-clash-nova-phase8-combat-v0.3.lua"))()
 ```
 
-The GitHub path is real and this file was fetched back for static QA. The loader and gameplay have **not** been executed in Roblox. This release does not require further collector runs or in-game diagnostic submissions to be delivered.
+The GitHub path is real, the file was fetched back for static QA, and the official Luau compiler successfully compiled the source in GitHub Actions. The launcher and gameplay have **not** been executed in Roblox. This release does not require further collector runs or in-game diagnostic submissions to be delivered.
 
 ## What was newly implemented for Phase 8C
 
@@ -61,9 +61,10 @@ This is **not** an anti-cheat bypass. It does not disable integrity checks, remo
 
 ## What was verified offline
 
+- **Official Luau compiler PASS:** GitHub Actions run [45272156015](https://github.com/GSVexed/vexed-schematics/actions/runs/45272156015) on 2026-11-23 completed successfully. The compiler and project-specific source-invariant job steps both succeeded; this was an offline compilation, not game execution.
 - The v0.3 Lua source and README were committed to the public project development branch and fetched back.
 - Static source assertions check the universe guard, actual opt-in UI control, exact native service resolution, dispatcher gating, one native-call relay, camera-preserving aim geometry, disabled-by-default behaviour, original-argument forwarding and no check-disabling mechanism.
-- Delimiter/string/comment parsing and exact-version/source-URL checks were performed. **This is not equivalent to Luau compilation or live runtime testing**.
+- Delimiter/string/comment parsing and exact-version/source-URL checks were performed, followed by **successful offline Luau compilation**. This is **not equivalent to live runtime testing or server-accepted shot validation**.
 - Phase 7 recovered code is kept private; no decompiled proprietary source or recovered private keys have been placed in this public script.
 
 ## Project milestone status
@@ -75,7 +76,7 @@ This is **not** an anti-cheat bypass. It does not disable integrity checks, remo
 | 8C — Native shot-correction experiment | Implemented, opt-in; server acceptance unverified |
 | 8D — Confirmed active Silent Aim | **Not verifiable without authorised live outcome evidence** |
 | 8E — Integrated ESP and UX | Implemented in source; no live QA |
-| 8F — Offline static code checks | Performed; not a substitute for in-game/performance QA |
+| 8F — Offline syntax compilation and source checks | Passed official Luau compilation and invariants; in-game/performance QA not performed |
 
 **No additional in-game diagnostics are required as a condition of delivery.** The user's request to stop repeated game collectors/diagnostic sessions is honoured. The project's strong Silent Aim goal remains unverified, and the release must never be represented as guaranteed working or undetectable.
 
