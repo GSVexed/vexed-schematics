@@ -443,7 +443,8 @@ local function attach(name,handler)
             end
             task.wait(0.35)
         end
-        if S.alive then log("Remote not found: "..name) end
+        -- Lobby does not contain match-only RemoteEvents; that is expected.
+        if S.alive and S.mode=="MATCH" then log("Remote not found: "..name) end
     end)
 end
 attach("DuelButton",function(allowed)
