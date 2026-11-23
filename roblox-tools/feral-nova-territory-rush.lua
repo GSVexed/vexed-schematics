@@ -1,4 +1,4 @@
--- FERAL NOVA | Territory Rush + Subsurface + Auto Survival stable one-line launcher
+-- FERAL NOVA | Territory Rush + Subsurface + Auto Survival + Session Recorder stable launcher
 -- The original Renaissance hub and territory controller remain separate,
 -- so an addon failure does not silently replace the working main hub.
 local GAME=108901361810209
@@ -25,4 +25,4 @@ end
 if type(env.FERAL_NOVA_PRIME_ACTIVE)~="table" then
     launch("feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua")
 end
-launch("feral-territory-rush-v4.1.lua")
+launch("feral-territory-rush-v4.2.lua")
