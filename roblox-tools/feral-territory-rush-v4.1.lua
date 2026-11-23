@@ -317,8 +317,8 @@ gui.DisplayOrder=360
 gui.Parent=pg
 local frame=Instance.new("Frame")
 frame.Name="Panel"
-frame.Position=UDim2.new(1,-426,0,78)
-frame.Size=UDim2.fromOffset(410,422)
+frame.Position=UDim2.new(1,-426,0,58)
+frame.Size=UDim2.fromOffset(410,503)
 frame.BackgroundColor3=Color3.fromRGB(18,26,35)
 frame.BorderSizePixel=0
 frame.Parent=gui
@@ -389,6 +389,7 @@ local function stop()
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
     if careConnection then careConnection:Disconnect() careConnection=nil end
     careEnabled=false
+    visibilityHoldUntil=0
     if gui then gui:Destroy() gui=nil end
     movementToken+=1
     attempt=nil
@@ -1084,7 +1085,7 @@ L.Care=label("Care",347,23)
 L.Care.Text="CARE OFF • native E feeding only when FeedCan permits"
 L.Care.TextColor3=Color3.fromRGB(164,220,197)
 L.Stealth=label("Stealth",373,22)
-L.Stealth.Text="SERVER VISIBILITY: NORMAL  |  SNAP BACKOFF ACTIVE"
+L.Stealth.Text="NO SERVER INVISIBILITY • safe landing + anti-snap-back"
 L.Stealth.TextColor3=Color3.fromRGB(167,187,206)
 local UIS=game:GetService("UserInputService")
 local virtualInput=nil
@@ -1433,6 +1434,39 @@ thresholdButton.Activated:Connect(function()
     thresholdButton.Text=string.format("%s: %d/%d",careProfilesNames[careProfileIndex],
         limits.hunger,limits.thirst)
 end)
+
+-- Player-avoidance controls are intentionally separate from auto survival.
+-- These are choices about *where and when to move*, not server invisibility.
+local avoidButton=button("Avoid","AVOID PLAYERS: ON",12,402,143,Color3.fromRGB(44,105,99))
+local radiusButton=button("Radius","RADIUS: 300",162,402,111,Color3.fromRGB(56,81,111))
+local travelButton=button("Travel","SNAP: ADAPTIVE",280,402,118,Color3.fromRGB(83,70,101))
+L.Avoidance=label("Avoidance",440,22)
+L.Avoidance.Text="All other players • 300 studs • streaming-limited"
+L.Avoidance.TextColor3=Color3.fromRGB(173,223,201)
+L.Travel=label("Travel",465,24)
+L.Travel.Text="ONE SNAP MAX • cooldown on rejected position"
+L.Travel.TextColor3=Color3.fromRGB(201,207,226)
+avoidButton.Activated:Connect(function()
+    avoidPlayers=not avoidPlayers
+    avoidButton.Text=if avoidPlayers then "AVOID PLAYERS: ON" else "AVOID PLAYERS: OFF"
+    if not avoidPlayers then visibilityHoldUntil=0 end
+    say(if avoidPlayers then "Player avoidance enabled"
+        else "WARNING: player avoidance disabled")
+end)
+radiusButton.Activated:Connect(function()
+    avoidRadiusIndex=avoidRadiusIndex%#avoidRadii+1
+    radiusButton.Text="RADIUS: "..tostring(avoidRadius())
+    say("Avoidance now "..avoidRadius().." studs from replicated players")
+end)
+travelButton.Activated:Connect(function()
+    travelStyle=if travelStyle=="ADAPTIVE" then "WALK" else "ADAPTIVE"
+    travelButton.Text=if travelStyle=="ADAPTIVE" then "SNAP: ADAPTIVE" else "WALK ONLY"
+    if travelStyle=="WALK" then
+        snapLockUntil=math.max(snapLockUntil,os.clock()+5)
+    end
+    say(if travelStyle=="WALK" then "WALK ONLY: no automatic long teleports"
+        else "ADAPTIVE: single teleport only when safe")
+end)
 local lastCareUiUpdate=-math.huge
 careConnection=RunService.Heartbeat:Connect(function()
     local ok,err=pcall(careTick)
@@ -1441,6 +1475,18 @@ careConnection=RunService.Heartbeat:Connect(function()
         lastCareUiUpdate=os.clock()
         if L.Care and L.Care.Parent then
             L.Care.Text=string.format("%s  |  %s",careEnabled and "ON" or "OFF",careMessage)
+        end
+        if L.Avoidance and L.Avoidance.Parent then
+            local nearest=lastThreatDistance<math.huge
+                and string.format("%.0f",lastThreatDistance) or "not streamed"
+            L.Avoidance.Text=(if avoidPlayers then "PLAYER AVOID ON  •  "
+                else "PLAYER AVOID OFF  •  ")..nearest.." studs nearby"
+        end
+        if L.Travel and L.Travel.Parent then
+            local pause=math.max(0,math.ceil(snapLockUntil-os.clock()))
+            L.Travel.Text=(if travelStyle=="WALK" then "WALK ONLY" else "ONE SNAP MAX")
+                .."  •  corrections "..snapCorrectionCount
+                .."  •  global pause "..pause.."s"
         end
     end
 end)
@@ -1451,6 +1497,22 @@ env.FERAL_TERRITORY_RUSH_V4={
         if not auto then toggleTerritoryAuto() end
     end,
     stopAuto=release,
+    setAvoidance=function(on,radius)
+        avoidPlayers=on==true
+        if type(radius)=="number" then
+            local best=1
+            for i,r in ipairs(avoidRadii) do
+                if math.abs(r-radius)<math.abs(avoidRadii[best]-radius) then best=i end
+            end
+            avoidRadiusIndex=best
+        end
+        avoidButton.Text=if avoidPlayers then "AVOID PLAYERS: ON" else "AVOID PLAYERS: OFF"
+        radiusButton.Text="RADIUS: "..tostring(avoidRadius())
+    end,
+    setWalkOnly=function(on)
+        travelStyle=if on then "WALK" else "ADAPTIVE"
+        travelButton.Text=if on then "WALK ONLY" else "SNAP: ADAPTIVE"
+    end,
     setCare=function(on)
         careEnabled=on==true
         careButton.Text=if careEnabled then "AUTO CARE: ON" else "AUTO CARE: OFF"
