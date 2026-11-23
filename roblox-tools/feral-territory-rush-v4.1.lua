@@ -216,7 +216,8 @@ end
 local function territoryNeedsAvoidance()
     -- Ignore nearby players only while the user deliberately enables the
     -- subsurface experiment. If the trial fails, revert to normal avoidance.
-    return not undergroundRequested or undergroundRefused
+    return not (undergroundRequested and not undergroundRefused
+        and travelStyle=="ADAPTIVE")
 end
 local function avoidRadius()
     return avoidRadii[avoidRadiusIndex]
@@ -790,7 +791,8 @@ local function moveTo(t)
         failed=false,kind=owner==pack and "SCENT" or "CLAIM"
     }
     attempt=a
-    if undergroundRequested and not undergroundRefused then
+    if undergroundRequested and not undergroundRefused
+        and travelStyle=="ADAPTIVE" then
         local now=os.clock()
         if now<snapLockUntil or now-lastSnapAttemptAt<4.5 then
             attempt=nil
@@ -1127,8 +1129,7 @@ local function bestAutoTarget()
     local best=nil
     local bestScore=-math.huge
     local _,ownRoot=root()
-    local longTravelAllowed=(travelStyle=="ADAPTIVE"
-        or (undergroundRequested and not undergroundRefused))
+    local longTravelAllowed=travelStyle=="ADAPTIVE"
         and now>=snapLockUntil
     for _,t in ipairs(all) do
         local spot=t.landing
@@ -1775,6 +1776,14 @@ travelButton.Activated:Connect(function()
     travelButton.Text=if travelStyle=="ADAPTIVE" then "SNAP: ADAPTIVE" else "WALK ONLY"
     if travelStyle=="WALK" then
         snapLockUntil=math.max(snapLockUntil,os.clock()+5)
+        if undergroundState then
+            exitUnderground(true,"WALK ONLY: returning to normal grounded movement")
+            if attempt and attempt.travelType=="UNDERGROUND" then
+                attempt.failed=true
+                lastFailure="WALK ONLY cancelled underground relocation"
+            end
+        end
+        undergroundStatus="PAUSED • WALK ONLY selected"
     end
     say(if travelStyle=="WALK" then "WALK ONLY: no automatic long teleports"
         else "ADAPTIVE: single teleport only when safe")
@@ -1909,6 +1918,13 @@ env.FERAL_TERRITORY_RUSH_V4={
     setWalkOnly=function(on)
         travelStyle=if on then "WALK" else "ADAPTIVE"
         travelButton.Text=if on then "WALK ONLY" else "SNAP: ADAPTIVE"
+        if on and undergroundState then
+            exitUnderground(true,"WALK ONLY selected")
+            if attempt and attempt.travelType=="UNDERGROUND" then
+                attempt.failed=true
+                lastFailure="WALK ONLY cancelled underground"
+            end
+        end
     end,
     setSubsurface=function(on)
         if not on then
