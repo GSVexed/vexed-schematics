@@ -614,7 +614,8 @@ local function safePoint(t,c)
     params.IgnoreWater=false
     local stats={sampled=0,hits=0,water=0,steep=0}
     local last=landingCache[t.key]
-    if typeof(last)=="Vector3" and not otherPlayerNearby(last,0) then
+    if typeof(last)=="Vector3"
+        and (not territoryNeedsAvoidance() or not otherPlayerNearby(last,0)) then
         local ray=WS:Raycast(Vector3.new(last.X,2300,last.Z),Vector3.new(0,-4500,0),params)
         if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>=0.35
             and (Vector2.new(last.X,last.Z)-focus).Magnitude<108 then
@@ -628,7 +629,8 @@ local function safePoint(t,c)
             local check=type(cfg.hexKey)=="function" and cfg.hexKey(i,j)
                 or ("H"..tostring(i).."_"..tostring(j))
             if check==t.key and (p-focus).Magnitude<108
-                and not otherPlayerNearby(Vector3.new(p.X,0,p.Y),0) then
+                and (not territoryNeedsAvoidance()
+                    or not otherPlayerNearby(Vector3.new(p.X,0,p.Y),0)) then
                 stats.sampled+=1
                 local ray=WS:Raycast(Vector3.new(p.X,2300,p.Y),
                     Vector3.new(0,-4500,0),params)
@@ -697,6 +699,7 @@ local function moveTo(t)
     if not t then return false,"No target selected" end
     movementToken+=1
     local thisMovement=movementToken
+    exitUnderground(true,"Switching claim spot")
     attempt=nil
     local c,r,h=root()
     if not c then return false,"Spawn a living animal first" end
@@ -707,7 +710,8 @@ local function moveTo(t)
         or (c:GetAttribute("FeralFly") and c:GetAttribute("FeralFly")~="flutter") then
         return false,"Land and exit pinned/den modes before SNAP"
     end
-    if otherPlayerNearby(Vector3.new(t.landing.X,0,t.landing.Y),0) then
+    if territoryNeedsAvoidance()
+        and otherPlayerNearby(Vector3.new(t.landing.X,0,t.landing.Y),0) then
         return false,"PLAYER AVOID: other player at the requested claim spot"
     end
     local owner=value(t.key,"owner")
@@ -731,7 +735,7 @@ local function moveTo(t)
     end
     local clearance=math.max(3,h.HipHeight+r.Size.Y*0.5+1.0)
     local point=ground+Vector3.new(0,clearance,0)
-    if otherPlayerNearby(point,0) then
+    if territoryNeedsAvoidance() and otherPlayerNearby(point,0) then
         return false,"PLAYER AVOID: someone approached while the ground was loading"
     end
     local a={
@@ -747,6 +751,24 @@ local function moveTo(t)
     }
     attempt=a
     local distance=(point-r.Position).Magnitude
+    if undergroundRequested and not undergroundRefused then
+        local now=os.clock()
+        if now<snapLockUntil or now-lastSnapAttemptAt<4.5 then
+            attempt=nil
+            return false,"SUBSURFACE COOLDOWN: wait for position acceptance"
+        end
+        lastSnapAttemptAt=now
+        local accepted,reason=beginUnderground(a,ground,point)
+        if not accepted then
+            undergroundRequested=false
+            undergroundRefused=true
+            restrictSnaps("Subsurface positioning failed")
+            a.failed=true
+            return false,"SUBSURFACE FAILED: "..tostring(reason)
+        end
+        event("SUBSURFACE TRIAL "..t.key.." • verifying real server claim state")
+        return true,"SUBSURFACE TRIAL "..t.key.." • verification pending"
+    end
     if distance<=safeWalkRadius then
         a.travelType="WALK"
         h:MoveTo(point)
@@ -797,6 +819,22 @@ local function keepTarget()
     end
     local now=os.clock()
     local distance=(r.Position-a.destination).Magnitude
+    if a.travelType=="UNDERGROUND" then
+        if now-a.lastSnap<1.4 then return end
+        local offset=r.Position-a.destination
+        local flat=Vector2.new(offset.X,offset.Z).Magnitude
+        if offset.Y < -15 then
+            failUnderground(a,"HOVER ALTITUDE LOST: falling below safe depth")
+        elseif flat>65 or offset.Y>8 then
+            failUnderground(a,"SERVER CORRECTION: subsurface position rejected")
+        elseif now-a.began>12 and not a.evidenceProgress
+            and not a.evidenceScent and not a.evidenceOwner then
+            failUnderground(a,"NO CLAIM PROGRESS: underground eligibility unverified")
+        else
+            a.inTarget=flat<15 and math.abs(offset.Y)<5
+        end
+        return
+    end
     if a.travelType=="WALK" then
         if distance<23 then
             a.inTarget=true
@@ -862,6 +900,11 @@ local function observe()
     local state=value(a.key,"state")
     if owner==a.pack and a.originalOwner~=a.pack and not a.evidenceOwner then
         a.evidenceOwner=true
+        if a.travelType=="UNDERGROUND" then
+            undergroundConfirmed=true
+            undergroundSuccesses+=1
+            undergroundStatus="SERVER OWNERSHIP CHANGE while below surface"
+        end
         claimedCount+=1
         changedCount+=1
         event(a.key.." claimed by pack after SNAP")
@@ -871,6 +914,11 @@ local function observe()
         a.lastEvidenceAt=os.clock()
         if not a.evidenceScent then
             a.evidenceScent=true
+            if a.travelType=="UNDERGROUND" then
+                undergroundConfirmed=true
+                undergroundSuccesses+=1
+                undergroundStatus="SERVER SCENT INCREASE while below surface"
+            end
             reScentCount+=1
             changedCount+=1
             event(a.key.." scent rose after SNAP")
@@ -881,6 +929,11 @@ local function observe()
         a.lastEvidenceAt=os.clock()
         if not a.evidenceProgress then
             a.evidenceProgress=true
+            if a.travelType=="UNDERGROUND" then
+                undergroundConfirmed=true
+                undergroundSuccesses+=1
+                undergroundStatus="SERVER CLAIM PROGRESS while below surface"
+            end
             changedCount+=1
             event(a.key.." claim progressed after SNAP")
         end
