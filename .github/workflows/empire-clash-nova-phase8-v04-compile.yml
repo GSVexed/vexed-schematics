@@ -1,0 +1,85 @@
+name: Empire Clash NOVA Phase 8 v0.4 reliability validation
+on:
+  push:
+    branches: [project-empire-clash-nova]
+    paths:
+      - 'roblox-tools/empire-clash-nova-phase8-combat-v0.4.lua'
+      - 'roblox-tools/README-empire-clash-nova-phase8-combat-v0.4.md'
+      - '.github/workflows/empire-clash-nova-phase8-v04-compile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/luau-nova.zip
+          mkdir -p /tmp/luau-nova
+          unzip -q /tmp/luau-nova.zip -d /tmp/luau-nova
+          compiler="$(find /tmp/luau-nova -type f -name luau-compile | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile phase 8 source (no Roblox runtime execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/empire-clash-nova-phase8-combat-v0.4.lua
+          echo EC_NOVA_PHASE8_LUAU_COMPILE_PASS
+      - name: Verify source invariants and explicit risk flags
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('roblox-tools/empire-clash-nova-phase8-combat-v0.4.lua').read_text()
+          expected=[
+            'local VERSION = "0.4.0"',
+            'game.GameId ~= UNIVERSE',
+            'option("Experimental shot correction"',
+            'local enable = not config.ExperimentalSilentAim',
+            'local function correctedRay(tool, ray)',
+            'local function getFireGun()',
+            'Knit.GetService("DamageService")',
+            'if self ~= entry.signal or not entry.callback then',
+            'Ray.new(ray.Origin, unit * ray.Direction.Magnitude)',
+            'if angle > config.MaxAngularCorrection then',
+            'clearPath(selection.character, selection.point)',
+            'return original(self, table.unpack(args, 1, args.n))',
+            'state.hookState = "OFF"',
+            'silent_aim_server_verified = false',
+            'anti_cheat_safety_verified = false',
+            'Enum.KeyCode.RightShift',
+            'applyExperimentalMode(false)',
+          ]
+          for token in expected:
+              assert token in s,token
+          assert 'DamageService.FireGun:Fire(' not in s
+          assert 'ReconcilePoseWindow:Fire(' not in s
+          assert 'HonestyService.PlatformAcknowledgement:Fire(' not in s
+          for required in [
+            'local function regionPoint(rec, visualPreview)',
+            'local function estimatedPoint(part, rec, visualPreview)',
+            'findTarget(reticle, false)',
+            'local humanoid = character and character:FindFirstChildOfClass("Humanoid")',
+            'if not native or not cam then return nil, "NO_NATIVE_RETICLE" end',
+            'state.errorStreak >= 3',
+            'state.skipsNoReticle += 1',
+            'local desired = inRange and ((config.Outline and index <= 28)',
+            'uncalibrated_prediction_preview_only = true',
+          ]:
+              assert required in s,required
+          assert 'no firing-ray or anti-cheat modifications' not in s
+          assert s.count('option("Experimental shot correction"') == 1
+          assert s.count('local function correctedRay(') == 1
+          print('EC_NOVA_PHASE8_SCOPE_CHECK_PASS')
+          PY
