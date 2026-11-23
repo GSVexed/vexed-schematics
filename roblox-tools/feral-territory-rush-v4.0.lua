@@ -801,6 +801,11 @@ local function bestAutoTarget()
 end
 
 local function toggleTerritoryAuto()
+    if careMode then
+        careResumeAuto=true
+        say("AUTO queued until "..careMode.." care is finished")
+        return
+    end
     if auto then
         release()
         say("AUTO stopped by user")
@@ -1019,12 +1024,12 @@ local function bestNPCFood(position)
     return best
 end
 local function waterLandmark(position)
-    local spotsData=spotsData and (spotsData[WS:GetAttribute("FeralBiome") or biome]
+    local mapSpots=spotsData and (spotsData[WS:GetAttribute("FeralBiome") or biome]
         or spotsData.WolfValley)
     local best=nil
     local bestDistance=math.huge
-    if type(spotsData)=="table" then
-        for _,spot in ipairs(spotsData) do
+    if type(mapSpots)=="table" then
+        for _,spot in ipairs(mapSpots) do
             local name=string.lower(tostring(spot.name or spot.key or ""))
             if typeof(spot.pos)=="Vector2"
                 and (name:find("water",1,true) or name:find("lake",1,true)
@@ -1085,16 +1090,17 @@ local function stopCareMode(message,resume)
     careLastNeedValue=nil
     carePendingAttempts=0
     careMessage=message or "CARE WAITING"
-    if resume and careResumeAuto and not auto and active
-        and me:GetAttribute("FeralPack") then
-        careResumeAuto=false
+    local shouldResume=resume and careResumeAuto and not auto and active
+        and me:GetAttribute("FeralPack")~=nil
+    careResumeAuto=false
+    if shouldResume then
         if not autoBusy then
             toggleTerritoryAuto()
         else
             task.defer(function()
                 for _=1,20 do
                     if not active or not careEnabled then return end
-                    if not autoBusy then
+                    if not autoBusy and not careMode then
                         toggleTerritoryAuto()
                         return
                     end
@@ -1106,6 +1112,10 @@ local function stopCareMode(message,resume)
 end
 local function nextCareMode(hunger,thirst,hp)
     local lim=careProfiles[careProfileIndex]
+    -- Emergency thirst/food comes before optional HP rest. Ordinary low HP
+    -- pauses risky NPC hunting until recovery improves.
+    if thirst and thirst<20 then return "DRINK" end
+    if hunger and hunger<20 and hp>=0.20 then return "EAT" end
     if hp<lim.hp then return "RECOVER" end
     if thirst and thirst<lim.thirst then return "DRINK" end
     if hunger and hunger<lim.hunger then return "EAT" end
@@ -1223,6 +1233,13 @@ local function careTick()
         end
         careMessage="CARE: "..nextMode.." • TERRITORY INTERRUPTED"
     end
+    local critical=nextCareMode(hunger,thirst,hp)
+    if critical=="DRINK" and careMode~="DRINK" and thirst and thirst<20 then
+        careMode="DRINK"
+        careStartedAt=now
+        carePendingAttempts=0
+        careLastNeedValue=thirst
+    end
     local targetNeed=if careMode=="DRINK" then thirst
         else if careMode=="EAT" then hunger else hp
     local lim=careProfiles[careProfileIndex]
@@ -1277,11 +1294,15 @@ thresholdButton.Activated:Connect(function()
     thresholdButton.Text=string.format("%s: %d/%d",careProfilesNames[careProfileIndex],
         limits.hunger,limits.thirst)
 end)
+local lastCareUiUpdate=-math.huge
 careConnection=RunService.Heartbeat:Connect(function()
     local ok,err=pcall(careTick)
     if not ok then careMessage="CARE LOOP ERROR: "..tostring(err):sub(1,75) end
-    if L.Care and L.Care.Parent then
-        L.Care.Text=string.format("%s  |  %s",careEnabled and "ON" or "OFF",careMessage)
+    if os.clock()-lastCareUiUpdate>=0.25 then
+        lastCareUiUpdate=os.clock()
+        if L.Care and L.Care.Parent then
+            L.Care.Text=string.format("%s  |  %s",careEnabled and "ON" or "OFF",careMessage)
+        end
     end
 end)
 
