@@ -72,7 +72,7 @@ local S={
     escape={active=false,variant="",startedAt=0,progress=0,lastTap=0},
     taken={breakout=false,breakStarted=0,breakProgress=0,lastTap=0,pathIndex=1,lastPathAt=0,routeLastDist=math.huge,routeStuckAt=0},
     thin={active=false,lastFreeze=0,starts=0},
-    moon={active=false,started=false,cfg=nil,flag=nil,lastMove=0,lastJump=0,lastSpeed=0,routeStuckAt=0},
+    moon={active=false,started=false,me=false,cfg=nil,flag=nil,lastMove=0,lastJump=0,lastSpeed=0,routeStuckAt=0},
     tickAt=0,renderAt=0,lastUi=0
 }
 local function track(signal,cb)
@@ -272,7 +272,7 @@ local stopBtn=btn(extras,"STOP ALL HELPERS",248,12,230,36,Color3.fromRGB(103,47,
 local logTitle=txt(extras,"SESSION ACTIVITY",12,57,460,20,11,P.muted,true)
 local sessionText=txt(extras,"No activity recorded yet.",12,79,462,111,11,P.white)
 sessionText.TextYAlignment=Enum.TextYAlignment.Top
-local helpText=txt(extras,"Right Shift: hide/reopen  •  X: hide  •  —: minimise",12,195,460,26,11,P.blue)
+local helpText=txt(extras,"Right Ctrl / Right Shift: toggle  •  X: hide  •  —: minimise",12,195,460,26,11,P.blue)
 local footer=make("Frame",{BackgroundColor3=P.panel,BorderSizePixel=0,
     Position=UDim2.fromOffset(13,446),Size=UDim2.fromOffset(488,36)},content)
 corners(footer,7)
@@ -308,7 +308,9 @@ track(minButton.Activated,function()
     minButton.Text=S.mini and "+" or "—"
 end)
 track(UIS.InputBegan,function(input,processed)
-    if input.KeyCode==Enum.KeyCode.RightShift and not UIS:GetFocusedTextBox() then
+    if (input.KeyCode==Enum.KeyCode.RightControl or
+        (input.KeyCode==Enum.KeyCode.RightShift and not S.moon.started))
+       and not UIS:GetFocusedTextBox() then
         S.visible=not S.visible
         updateVisible()
     end
@@ -620,15 +622,20 @@ end
 attach("MoonRaceFX",function(kind,a,b,c)
     local m=S.moon
     if kind=="intro" then
-        m.active=true;m.started=false;m.cfg=nil;m.flag=nil
+        m.active=true;m.started=false;m.me=false;m.cfg=nil;m.flag=nil
         log("MOON RACE: intro")
     elseif kind=="ready" then
         m.active=true;m.started=false;m.flag=b
         m.cfg=type(c)=="table" and c or nil
+        local current=character()
+        local root=current and current:FindFirstChild("HumanoidRootPart")
+        m.me=(typeof(a)=="Vector3" and root~=nil and
+            (Vector3.new(root.Position.X,0,root.Position.Z)-
+             Vector3.new(a.X,0,a.Z)).Magnitude<60)
         m.lastSpeed=0
         log("MOON RACE: config and finish location received")
     elseif kind=="go" then
-        m.active=true;m.started=true
+        m.active=true;m.started=m.me==true
         m.routeStuckAt=0
         log("MOON RACE: started")
     elseif kind=="left" or kind=="end" or kind=="done" then
@@ -791,9 +798,8 @@ local lastWalk=0
 local function speedUpdate()
     if not (S.enabled.speed and alive()) then return end
     if S.moon.active or S.taken.routeStuckAt>0 then return end
-    if getAttr(plr,"PhoneLocked",false) or getAttr(workspace,"EventActive",false) then
-        return
-    end
+    if getAttr(workspace,"EventActive",false) and
+       not getAttr(plr,"PhoneLocked",false) then return end
     local h,c=humanoid()
     local base=getAttr(c,"ServerWalkSpeed",nil)
     if not (h and type(base)=="number" and base>0 and h.SeatPart==nil) then return end
@@ -891,4 +897,4 @@ log("THE PHONE NOVA "..VERSION.." loaded; RightShift toggles panel")
 if S.mode=="LOBBY" then
     log("Lobby detected; gameplay controls arm after match teleport")
 end
-warn("[PHONE NOVA] "..VERSION.." ready | RightShift toggle | one-action server requests | diagnostics via TOOLS")
+warn("[PHONE NOVA] "..VERSION.." ready | RightControl / RightShift toggle | action requests | diagnostics via TOOLS")
