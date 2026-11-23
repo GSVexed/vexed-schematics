@@ -1348,7 +1348,8 @@ local function bestNPCFood(position)
             and model:GetAttribute("FeralDead")~=true then
             local npcRoot=model:FindFirstChild("HumanoidRootPart")
             local npcHum=model:FindFirstChildOfClass("Humanoid")
-            if npcRoot and npcHum and npcHum.Health>0 then
+            if npcRoot and npcHum and npcHum.Health>0
+                and not otherPlayerNearby(npcRoot.Position,0) then
                 local d=(npcRoot.Position-position).Magnitude
                 if d<230 and d<dist then
                     dist=d
@@ -1368,6 +1369,8 @@ local function waterLandmark(position)
         for _,spot in ipairs(mapSpots) do
             local name=string.lower(tostring(spot.name or spot.key or ""))
             if typeof(spot.pos)=="Vector2"
+                and not otherPlayerNearby(Vector3.new(
+                    spot.pos.X,position.Y,spot.pos.Y),0)
                 and (name:find("water",1,true) or name:find("lake",1,true)
                     or name:find("pond",1,true) or name:find("falls",1,true)
                     or name:find("spring",1,true) or name:find("river",1,true)) then
@@ -1397,7 +1400,8 @@ local function safeWaterEdge(target,char)
             local z=target.center.Y+math.sin(angle)*r
             local ray=WS:Raycast(Vector3.new(x,2300,z),
                 Vector3.new(0,-4500,0),params)
-            if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>0.40 then
+            if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>0.40
+                and not otherPlayerNearby(ray.Position,0) then
                 local near=WS:Raycast(Vector3.new(x+6,2300,z),
                     Vector3.new(0,-4500,0),params)
                 local score=r
@@ -1411,6 +1415,63 @@ local function safeWaterEdge(target,char)
     end
     return chosen
 end
+
+local function safeCareSnap(groundGoal,char,rootPart,hum,purpose)
+    local now=os.clock()
+    if now<snapLockUntil or now-lastSnapAttemptAt<5
+        or now-careLastSnapAt<55 then
+        return false,"Global correction / survival snap cooldown"
+    end
+    if otherPlayerNearby(groundGoal,0) then
+        return false,"Other player in the destination avoidance radius"
+    end
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={char}
+    params.IgnoreWater=false
+    local ray=WS:Raycast(Vector3.new(groundGoal.X,groundGoal.Y+150,groundGoal.Z),
+        Vector3.new(0,-450,0),params)
+    if not ray or ray.Material==Enum.Material.Water or ray.Normal.Y<0.35
+        or otherPlayerNearby(ray.Position,0) then
+        return false,"Ground not safe at secluded destination"
+    end
+    local surface=ray.Position
+        +Vector3.new(0,math.max(3,hum.HipHeight+rootPart.Size.Y/2+1),0)
+    lastSnapAttemptAt=now
+    careLastSnapAt=now
+    if undergroundState then
+        exitUnderground(true,"Surface exit for "..purpose)
+    end
+    local ok,err=pcall(function()
+        char:PivotTo(char:GetPivot()+(surface-rootPart.Position))
+        rootPart.AssemblyLinearVelocity=Vector3.zero
+        rootPart.AssemblyAngularVelocity=Vector3.zero
+    end)
+    if not ok then
+        restrictSnaps("Care movement could not be applied")
+        return false,tostring(err)
+    end
+    careSnapPending={character=char,where=surface,began=os.clock(),
+        purpose=purpose}
+    return true,"Single secluded "..purpose.." travel attempted"
+end
+
+local function watchCareSnap()
+    local pending=careSnapPending
+    if not pending then return end
+    if os.clock()-pending.began<1.7 then return end
+    careSnapPending=nil
+    local c,r=root()
+    if c~=pending.character or not r then return end
+    local dx=r.Position.X-pending.where.X
+    local dz=r.Position.Z-pending.where.Z
+    local horizontal=math.sqrt(dx*dx+dz*dz)
+    if horizontal>65 then
+        restrictSnaps("CARE POSITION CORRECTED: "..pending.purpose)
+        careMessage="SERVER REJECTED "..pending.purpose.." MOVE • no looping"
+    end
+end
+
 local function careStats()
     local char,r,hum=root()
     if not char then return nil end
@@ -1461,6 +1522,10 @@ local function tryCareAction(mode,char,rootPart,hum,hunger,thirst,hp)
     local now=os.clock()
     if now<careNextAction then return end
     careNextAction=now+1.5
+    if careSnapPending then
+        careMessage="WAITING FOR SERVER POSITION CHECK • "..careSnapPending.purpose
+        return
+    end
     local can=char:GetAttribute("FeedCan")
     local need=if mode=="DRINK" then thirst else hunger
     if mode=="RECOVER" then
@@ -1490,7 +1555,12 @@ local function tryCareAction(mode,char,rootPart,hum,hunger,thirst,hp)
             return
         end
         local target=npc.root
-        if npc.distance>8 then
+        if npc.distance>95 then
+            local approach=target.Position-target.CFrame.LookVector*16
+            local ok,reason=safeCareSnap(approach,char,rootPart,hum,"HUNT")
+            careMessage=if ok then "HUNT • "..reason
+                else "HUNT SAFE MOVE: "..tostring(reason)
+        elseif npc.distance>8 then
             hum:MoveTo(target.Position)
             careMessage=string.format("HUNT • APPROACHING NPC %.0f STUDS",npc.distance)
         else
@@ -1516,15 +1586,11 @@ local function tryCareAction(mode,char,rootPart,hum,hunger,thirst,hp)
             local edge=safeWaterEdge(water,char)
             if edge then hum:MoveTo(edge+Vector3.new(0,2,0)) end
         elseif now-careLastSnapAt>55 then
-            careLastSnapAt=now
             local destination=safeWaterEdge(water,char)
             if destination then
-                local at=destination+Vector3.new(0,math.max(3,hum.HipHeight+rootPart.Size.Y*.5+1),0)
-                local ok=pcall(function()
-                    char:PivotTo(char:GetPivot()+(at-rootPart.Position))
-                end)
-                careMessage=if ok then "WATER • ONE GROUND-SAFE SNAP ATTEMPT"
-                    else "WATER • SNAP FAILED / NO SPAM"
+                local ok,reason=safeCareSnap(destination,char,rootPart,hum,"DRINK")
+                careMessage=if ok then "WATER • "..reason
+                    else "WATER SAFE MOVE: "..tostring(reason)
             else
                 careMessage="WATER TERRAIN NOT LOADED / MOVEMENT PAUSED"
                 task.spawn(function()
@@ -1544,6 +1610,7 @@ local function careTick()
     local now=os.clock()
     if now-lastCareTick<0.7 then return end
     lastCareTick=now
+    watchCareSnap()
     local char,rootPart,hum,hunger,thirst,hp=careStats()
     if not char then
         careMessage="SPAWN ANIMAL TO ENABLE CARE"
@@ -1561,6 +1628,12 @@ local function careTick()
         carePendingAttempts=0
         careLastNeedValue=if nextMode=="DRINK" then thirst
             else if nextMode=="EAT" then hunger else hp
+        if undergroundState then
+            exitUnderground(true,"Surfacing for survival care")
+            if attempt then attempt.failed=true end
+            movementToken+=1
+            attempt=nil
+        end
         if auto then
             careResumeAuto=true
             release()
