@@ -61,7 +61,7 @@ This is **not** an anti-cheat bypass. It does not disable integrity checks, remo
 
 ## What was verified offline
 
-- **Official Luau compiler PASS:** GitHub Actions run [45272156015](https://github.com/GSVexed/vexed-schematics/actions/runs/45272156015) on 2026-11-23 completed successfully. The compiler and project-specific source-invariant job steps both succeeded; this was an offline compilation, not game execution.
+- **Official Luau compiler PASS:** GitHub Actions run [45272418733](https://github.com/GSVexed/vexed-schematics/actions/runs/45272418733) on 2026-11-23 completed successfully on the latest v0.3 Lua source commit `d5c65e3ed4a5b4e3b6a11dd4ff1369a120e7aa99`. The compiler and project-specific source-invariant job steps both succeeded; this was offline compilation, not game execution.
 - The v0.3 Lua source and README were committed to the public project development branch and fetched back.
 - Static source assertions check the universe guard, actual opt-in UI control, exact native service resolution, dispatcher gating, one native-call relay, camera-preserving aim geometry, disabled-by-default behaviour, original-argument forwarding and no check-disabling mechanism.
 - Delimiter/string/comment parsing and exact-version/source-URL checks were performed, followed by **successful offline Luau compilation**. This is **not equivalent to live runtime testing or server-accepted shot validation**.
