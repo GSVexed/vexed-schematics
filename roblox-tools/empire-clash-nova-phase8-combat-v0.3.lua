@@ -1,7 +1,8 @@
 -- EMPIRE CLASH NOVA | Phase 8 Combat Foundation v0.2.0
 -- Original, locally rendered targeting / aim-intent / ESP implementation.
--- IMPORTANT: Active silent aim is NOT implemented or verified in this build.
--- No network modification, damage manipulation or anti-cheat bypass.
+-- IMPORTANT: Optional shot-direction correction is experimental and UNVERIFIED.
+-- Native firearm requests may be rejected by server or detected by moderators.
+-- No extra shots, fabricated damage, integrity-check bypass or ban guarantee.
 -- Research basis: private 2026-11-23 Runespire client shooting audit.
 
 local VERSION = "0.3.0"
@@ -503,8 +504,12 @@ heading("SILENT AIM  •  EXPERIMENTAL / UNVERIFIED")
 option("Experimental shot correction", function()
     return config.ExperimentalSilentAim and "ON (RISK)" or "OFF"
 end, function()
-    config.ExperimentalSilentAim = applyExperimentalMode(not config.ExperimentalSilentAim)
-        and not config.ExperimentalSilentAim or false
+    local enable = not config.ExperimentalSilentAim
+    if applyExperimentalMode(enable) then
+        config.ExperimentalSilentAim = enable
+    else
+        config.ExperimentalSilentAim = false
+    end
 end)
 option("Maximum correction angle", function()
     return tostring(config.MaxAngularCorrection) .. " deg"
@@ -561,7 +566,7 @@ option("Queue across map travel", function() return config.AutoQueue and "ON" or
     switch("AutoQueue")
 end)
 
-local status = text(panel, "TARGET ENGINE: READY  |  SILENT AIM: NOT ACTIVE",
+local status = text(panel, "TARGET ENGINE: READY  |  EXPERIMENT OFF",
     UDim2.fromOffset(16, 392), UDim2.fromOffset(313, 50), 11, COLORS.secondary)
 status.TextWrapped = true
 status.TextYAlignment = Enum.TextYAlignment.Top
@@ -659,7 +664,7 @@ local function getDiagnostics()
         silent_aim_enabled = config.ExperimentalSilentAim,
         shot_hook_state = state.hookState,
         shot_requests_seen = state.shotRequestsSeen,
-        corrected_shots_sent = state.correctedShots,
+        correction_proposals_submitted = state.correctedShots,
         generic_hit_feedback = state.genericHitFeedback,
         skipped_no_target = state.skippedNoTarget,
         skipped_obstructed = state.skippedObstructed,
@@ -911,7 +916,7 @@ ownConnection(RunService.RenderStepped, function(dt)
     if panel.Visible then
         local accuracyStr = state.weaponAccuracy and (" | accuracy stat " .. tostring(state.weaponAccuracy)) or ""
         status.Text = (config.ExperimentalSilentAim and "EXPERIMENTAL: ON" or "EXPERIMENTAL: OFF") ..
-            " | SERVER UNVERIFIED\\n" ..
+            " | SERVER UNVERIFIED\n" ..
             (state.nativeReticle and "Reticle estimate" or "Reticle fallback") ..
             " • " .. state.weaponName .. accuracyStr ..
             " • " .. tostring(state.fps) .. " FPS | corrected " ..
