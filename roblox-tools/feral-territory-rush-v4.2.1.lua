@@ -657,6 +657,30 @@ gui.IgnoreGuiInset=true
 gui.DisplayOrder=750
 gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
 gui.Parent=pg
+local hotkeyInput=game:GetService("UserInputService")
+local territoryHotkeyConnection=nil
+local dragInputConnection=nil
+local viewportConnection=nil
+local function setTerritoryPanelVisible(visible)
+    if active and gui and gui.Parent then
+        gui.Enabled=visible==true
+        return true
+    end
+    return false
+end
+local function toggleTerritoryPanel()
+    if active and gui and gui.Parent then
+        gui.Enabled=not gui.Enabled
+        return gui.Enabled
+    end
+    return false
+end
+territoryHotkeyConnection=hotkeyInput.InputBegan:Connect(function(input,processed)
+    if not active or processed or hotkeyInput:GetFocusedTextBox() then return end
+    if input.KeyCode==Enum.KeyCode.F7 then
+        toggleTerritoryPanel()
+    end
+end)
 local frame=Instance.new("Frame")
 frame.Name="Panel"
 frame.Position=UDim2.new(0,20,0,94)
@@ -679,7 +703,7 @@ end
 fitTerritoryPanel()
 local territoryCamera=WS.CurrentCamera
 if territoryCamera then
-    territoryCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitTerritoryPanel)
+    viewportConnection=territoryCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitTerritoryPanel)
 end
 -- Drag the header, not the control rows; keeps every button clickable.
 local dragStart,dragPosition,dragging=nil,nil,false
@@ -699,8 +723,8 @@ frame.InputEnded:Connect(function(input)
         dragging=false
     end
 end)
-game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if dragging and dragStart and dragPosition
+dragInputConnection=hotkeyInput.InputChanged:Connect(function(input)
+    if active and dragging and dragStart and dragPosition
         and input.UserInputType==Enum.UserInputType.MouseMovement then
         local delta=input.Position-dragStart
         frame.Position=UDim2.new(
@@ -728,7 +752,7 @@ local function label(name,y,sz)
     L[name]=l
     return l
 end
-label("Title",10,24).Text="FERAL  |  TERRITORY + RECORDER v4.2"
+label("Title",10,24).Text="FERAL  |  TERRITORY + RECORDER  [F7]"
 L.Title.Font=Enum.Font.GothamBold
 L.Title.TextSize=14
 label("Counts",42)
@@ -914,6 +938,9 @@ local function stop()
     pcall(saveSession,false)
     active=false
     release()
+    if territoryHotkeyConnection then territoryHotkeyConnection:Disconnect() territoryHotkeyConnection=nil end
+    if dragInputConnection then dragInputConnection:Disconnect() dragInputConnection=nil end
+    if viewportConnection then viewportConnection:Disconnect() viewportConnection=nil end
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
     if careConnection then careConnection:Disconnect() careConnection=nil end
     if hoverWatchConnection then hoverWatchConnection:Disconnect() hoverWatchConnection=nil end
@@ -928,7 +955,11 @@ local function stop()
         env.FERAL_TERRITORY_RUSH_V4=nil
     end
 end
-closeB.Activated:Connect(stop)
+-- X behaves like the F7 hotkey: hide the panel, keep the recorder and
+-- territory controllers active. Full unload remains available via API.stop.
+closeB.Activated:Connect(function()
+    setTerritoryPanelVisible(false)
+end)
 
 local function choose(i)
     movementToken+=1
@@ -2337,6 +2368,9 @@ end)
 
 env.FERAL_TERRITORY_RUSH_V4={
     stop=stop,report=report,
+    setPanelVisible=setTerritoryPanelVisible,
+    togglePanel=toggleTerritoryPanel,
+    panelHotkey="F7",
     sessionReport=makeSessionPayload,
     sessionJSON=getSessionJSON,
     saveSession=function() return saveSession(true) end,
