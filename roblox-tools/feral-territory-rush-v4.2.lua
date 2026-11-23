@@ -183,6 +183,7 @@ local careCooldownUntil=0
 local careProfiles={{hunger=35,thirst=35,hp=0.40},{hunger=55,thirst=55,hp=0.55},{hunger=20,thirst=20,hp=0.30}}
 local careProfileIndex=1
 local careMessage="CARE OFF"
+local inputUnavailable=false
 -- Avoid all other replicated players, including members of your own pack.
 -- A client may be unaware of unstreamed players: concealment is NOT guaranteed.
 local avoidPlayers=true
@@ -609,10 +610,18 @@ end
 local function say(s)
     lastStatus=s
     if L.Status then L.Status.Text=s end
+    -- "PLAYER AVOID" UI messages may contain another player's DisplayName.
+    -- Keep the useful reason but NEVER save their name in our session file.
+    if string.find(tostring(s),"PLAYER AVOID",1,true) then
+        recordStatus("PLAYER AVOID: an opponent is inside the configured radius")
+    else
+        recordStatus(s)
+    end
 end
 local function event(s)
     table.insert(sampleLog,1,string.format("%.1f: %s",os.clock(),s))
     if #sampleLog>18 then table.remove(sampleLog) end
+    sessionLogEvent("territory",s)
 end
 
 gui=Instance.new("ScreenGui")
@@ -828,6 +837,9 @@ local function release()
 end
 local function stop()
     if not active then return end
+    sessionLogEvent("session","Controller unloading; final snapshot export")
+    pcall(sessionCapture,0.016)
+    pcall(saveSession,false)
     active=false
     release()
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
@@ -1398,11 +1410,17 @@ local function update()
         L.Evidence.TextColor3=Color3.fromRGB(213,222,239)
     end
 end
-heartbeat=RunService.Heartbeat:Connect(function()
-    if not active or os.clock()<nextUpdate then return end
+heartbeat=RunService.Heartbeat:Connect(function(dt)
+    if not active then return end
+    local ok,err=pcall(sessionCapture,dt)
+    if not ok then
+        sessionLastFileError="Sampler error: "..sessionSanitize(err)
+    end
+    sessionAutosave()
+    if os.clock()<nextUpdate then return end
     nextUpdate=os.clock()+0.22
-    local success,err=pcall(update)
-    if not success then say("Monitor error: "..tostring(err)) end
+    local success,updateErr=pcall(update)
+    if not success then say("Monitor error: "..tostring(updateErr)) end
 end)
 
 -- Choose the highest-priority actionable hex, excluding recently failed ones.
@@ -1612,7 +1630,7 @@ L.Stealth.TextColor3=Color3.fromRGB(167,187,206)
 local UIS=game:GetService("UserInputService")
 local virtualInput=nil
 pcall(function()virtualInput=game:GetService("VirtualInputManager")end)
-local inputUnavailable=false
+inputUnavailable=false
 local function sendKeyE()
     if UIS:GetFocusedTextBox() or me:GetAttribute("FeralMenuOpen")==true then
         return false
@@ -1623,7 +1641,10 @@ local function sendKeyE()
             task.wait(.07)
             virtualInput:SendKeyEvent(false,Enum.KeyCode.E,false,game)
         end)
-        if ok then return true end
+        if ok then
+            sessionLogEvent("feed_input","Native E key attempted")
+            return true
+        end
     end
     if type(keypress)=="function" and type(keyrelease)=="function" then
         local ok=pcall(function()
@@ -1631,9 +1652,13 @@ local function sendKeyE()
             task.wait(.07)
             keyrelease(0x45)
         end)
-        if ok then return true end
+        if ok then
+            sessionLogEvent("feed_input","Native E fallback key attempted")
+            return true
+        end
     end
     inputUnavailable=true
+    sessionLogEvent("feed_input","Native E input unavailable")
     return false
 end
 local function sendNativeBite()
@@ -1648,12 +1673,19 @@ local function sendNativeBite()
             task.wait(.06)
             virtualInput:SendMouseButtonEvent(x,y,0,false,game,0)
         end)
-        if ok then return true end
+        if ok then
+            sessionLogEvent("hunt_input","Native attack click attempted")
+            return true
+        end
     end
     if type(mouse1click)=="function" then
-        return pcall(mouse1click)
+        local clicked=pcall(mouse1click)
+        sessionLogEvent("hunt_input",
+            if clicked then "Fallback attack click attempted" else "Attack fallback failed")
+        return clicked
     end
     inputUnavailable=true
+    sessionLogEvent("hunt_input","Native attack input unavailable")
     return false
 end
 local function packFriend(model)
@@ -1779,6 +1811,7 @@ local function safeCareSnap(groundGoal,char,rootPart,hum,purpose)
     end
     careSnapPending={character=char,where=surface,began=os.clock(),
         purpose=purpose}
+    sessionLogEvent("survival_move",purpose..": single ground-safe move attempted")
     return true,"Single secluded "..purpose.." travel attempted"
 end
 
@@ -1794,6 +1827,7 @@ local function watchCareSnap()
     local horizontal=math.sqrt(dx*dx+dz*dz)
     if horizontal>65 then
         restrictSnaps("CARE POSITION CORRECTED: "..pending.purpose)
+        sessionLogEvent("server_correction","Care move corrected: "..pending.purpose)
         careMessage="SERVER REJECTED "..pending.purpose.." MOVE • no looping"
     end
 end
@@ -1951,6 +1985,7 @@ local function careTick()
             return
         end
         careMode=nextMode
+        sessionLogEvent("care","Care started: "..nextMode)
         careStartedAt=now
         carePendingAttempts=0
         careLastNeedValue=if nextMode=="DRINK" then thirst
@@ -1984,6 +2019,7 @@ local function careTick()
         else if careMode=="EAT" then hunger and hunger>=lim.hunger+15
         else hp>=math.min(0.95,lim.hp+0.20)
     if recovered then
+        sessionLogEvent("care","Care goal verified: "..tostring(careMode))
         stopCareMode("CARE COMPLETE • RESUMING TERRITORIES",true)
         return
     end
@@ -1993,11 +2029,13 @@ local function careTick()
         carePendingAttempts=0
     end
     if now-careStartedAt>45 then
+        sessionLogEvent("care","Care timeout without accepted resource increase: "..tostring(careMode))
         careCooldownUntil=now+25
         stopCareMode("CARE UNCONFIRMED • PAUSED 25 SEC",true)
         return
     end
     if carePendingAttempts>=12 then
+        sessionLogEvent("care","Care capped after 12 unconfirmed inputs")
         careCooldownUntil=now+25
         stopCareMode("INPUTS UNCONFIRMED • STOPPED RETRIES",true)
         return
