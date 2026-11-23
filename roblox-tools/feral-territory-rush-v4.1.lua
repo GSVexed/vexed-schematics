@@ -787,6 +787,10 @@ local function report()
         claimChanges=claimedCount,scentChanges=reScentCount,
         autoEnabled=auto,totalSnapRetries=totalRetries,
         totalSkipped=totalSkipped,totalCompleted=totalCompleted,
+        avoidanceEnabled=avoidPlayers,avoidRadius=avoidRadius(),
+        travelStyle=travelStyle,nearestOtherDistance=lastThreatDistance,
+        snapCorrections=snapCorrectionCount,
+        snapLockSeconds=math.max(0,math.ceil(snapLockUntil-os.clock())),
         claimed=claimCompletions,averageClaimSeconds=if claimCompletions>0 then claimDuration/claimCompletions else nil,
         currentSnaps=a and a.snapCount or 0,
         snapFailed=a and a.failed or false,
@@ -891,8 +895,14 @@ local function bestAutoTarget()
     local now=os.clock()
     local best=nil
     local bestScore=-math.huge
+    local _,ownRoot=root()
+    local longTravelAllowed=travelStyle=="ADAPTIVE" and now>=snapLockUntil
     for _,t in ipairs(all) do
-        if not isNeutral(t.key) and (retryCooldown[t.key] or 0)<=now then
+        local spot=t.landing
+        local nearby=otherPlayerNearby(Vector3.new(spot.X,0,spot.Y),0)
+        local closeEnough=ownRoot and dist2D(ownRoot.Position,spot)<safeWalkRadius-10
+        if not isNeutral(t.key) and (retryCooldown[t.key] or 0)<=now
+            and not nearby and (longTravelAllowed or closeEnough) then
             local p=score(t)
             local valid=(mode=="PRIORITY" and p>0)
                 or (mode=="SCENT" and isOwned(t.key)
@@ -951,10 +961,17 @@ local function toggleTerritoryAuto()
                 say("Animal died or despawned — AUTO stopped")
                 break
             end
+            local threatened,nearDist,nearby=currentPlayerThreat()
+            if threatened or os.clock()<visibilityHoldUntil then
+                local who=nearby and nearby.DisplayName or (lastThreatName or "player")
+                local range=nearDist<math.huge and string.format("%.0f",nearDist) or "?"
+                say("PLAYER AVOID: "..who.." "..range.." studs • holding position")
+                task.wait(1)
+            else
             local t=bestAutoTarget()
             if not t then
-                say("AUTO WATCH: all claimed/healthy or cooling down; rescan in 2s")
-                task.wait(2)
+                say("SAFE WATCH: no unoccupied nearby hex / snap cooling down")
+                task.wait(1.3)
             else
                 selectedKey=t.key
                 rebuild()
@@ -982,7 +999,13 @@ local function toggleTerritoryAuto()
                         task.wait(0.18)
                         if not active or not auto or token~=autoToken then break end
                         if a.failed then
-                            reason=lastFailure or "Repeated snap-back"
+                            reason=lastFailure or "Movement correction"
+                            break
+                        end
+                        local _,ownPart=root()
+                        if ownPart and otherPlayerNearby(ownPart.Position,0) then
+                            visibilityHoldUntil=os.clock()+7
+                            reason="Other player entered your avoidance radius"
                             break
                         end
                         if me:GetAttribute("FeralPack")~=myPack then
@@ -1022,18 +1045,26 @@ local function toggleTerritoryAuto()
                             claimDuration+=os.clock()-a.began
                         end
                         retryCooldown[t.key]=os.clock()+8
+                        if a.travelType=="SNAP" then
+                            -- A replicated ownership/scent success confirms a
+                            -- meaningful territory action, not an immunity to
+                            -- later server position corrections.
+                            snapCorrectionStreak=0
+                        end
                         event(a.key.." completed: "..a.kind)
                         say(a.key.." complete — selecting next")
                     else
-                        retryCooldown[t.key]=os.clock()+45
+                        retryCooldown[t.key]=os.clock()+
+                            (a.failed and 125 or 45)
                         totalSkipped+=1
                         lastFailure=reason or ("Timed out: "..t.key)
                         event("Skipped "..t.key..": "..tostring(lastFailure))
                         say("Skipped "..t.key..": "..tostring(lastFailure))
                     end
-                    task.wait(1)
+                    task.wait(0.25)
                 end
             end
+            end -- player visibility gate
         end
         autoBusy=false
     end)
