@@ -269,6 +269,288 @@ local function restrictSnaps(reason)
     return cool
 end
 
+
+-- SESSION FLIGHT RECORDER: retained ring buffers, zero external uploads.
+-- Captures actual replicated game state, not invented server action outcomes.
+-- Does not collect usernames, chat, job IDs, account secrets or network tokens.
+local SESSION_SCHEMA=1
+local SESSION_STARTED=os.clock()
+local SESSION_UNIX=os.time()
+local SESSION_FILENAME="FERAL_TERRITORY_RUSH_V42_SESSION_"..tostring(SESSION_UNIX)..".json.txt"
+local SESSION_EVENT_CAP=360
+local SESSION_SAMPLE_CAP=600
+local SESSION_HEX_CAP=700
+local SESSION_SAMPLE_INTERVAL=2.0
+local SESSION_HEX_INTERVAL=3.5
+local SESSION_AUTOSAVE_INTERVAL=45.0
+local sessionLog={events={},samples={},hexChanges={}}
+local sessionHexPrevious={}
+local sessionEventCounts={}
+local sessionLastSample=0
+local sessionLastHexScan=0
+local sessionLastAutoSave=0
+local sessionPreviousStatus=nil
+local sessionStatus="SESSION RECORDING • private local buffer"
+local sessionSaved=false
+local sessionTotalEvents=0
+local sessionTotalSamples=0
+local sessionTotalHexChanges=0
+local sessionAutoSaved=0
+local sessionLastFileError=nil
+local sessionFps=nil
+local sessionLastSampleHeartbeat=0
+local sessionExporting=false
+local function roundSession(n,dp)
+    if type(n)~="number" or n~=n or math.abs(n)>1e9 then return nil end
+    local pow=10^(dp or 1)
+    return math.floor(n*pow+0.5)/pow
+end
+local function sessionAppend(list,row,maxSize)
+    table.insert(list,row)
+    if #list>maxSize then
+        table.remove(list,1)
+    end
+end
+local function sessionSanitize(message)
+    return tostring(message or ""):gsub("[%c]"," "):sub(1,180)
+end
+local function sessionLogEvent(kind,message)
+    kind=type(kind)=="string" and kind or "event"
+    local safe=sessionSanitize(message)
+    sessionTotalEvents+=1
+    sessionEventCounts[kind]=(sessionEventCounts[kind] or 0)+1
+    sessionAppend(sessionLog.events,{
+        elapsed=roundSession(os.clock()-SESSION_STARTED,2),
+        type=kind,message=safe,
+    },SESSION_EVENT_CAP)
+end
+local function recordStatus(message)
+    local safe=sessionSanitize(message)
+    if safe~=sessionPreviousStatus then
+        sessionPreviousStatus=safe
+        sessionLogEvent("status",safe)
+    end
+end
+local function sessionHexPoll()
+    local now=os.clock()
+    if now-sessionLastHexScan<SESSION_HEX_INTERVAL then return end
+    sessionLastHexScan=now
+    for _,hex in ipairs(all) do
+        local key=hex.key
+        local owner=value(key,"owner")
+        local by=value(key,"by")
+        local state=value(key,"state")
+        local prog=roundSession(value(key,"prog"),3)
+        local scent=roundSession(hold(key),3)
+        -- Only store pack relationships: never persist ownership strings.
+        local row={
+            key=key,
+            packOwns=owner~=nil and owner==me:GetAttribute("FeralPack"),
+            otherOwns=owner~=nil and owner~=me:GetAttribute("FeralPack"),
+            claimByPack=by~=nil and by==me:GetAttribute("FeralPack"),
+            state=type(state)=="string" and state:sub(1,26) or nil,
+            claimProgress=prog,scent=scent,
+        }
+        local old=sessionHexPrevious[key]
+        local changed=not old
+            or old.packOwns~=row.packOwns
+            or old.otherOwns~=row.otherOwns
+            or old.claimByPack~=row.claimByPack
+            or old.state~=row.state
+            or old.claimProgress~=row.claimProgress
+            or old.scent~=row.scent
+        if changed then
+            sessionHexPrevious[key]=row
+            sessionTotalHexChanges+=1
+            sessionAppend(sessionLog.hexChanges,{
+                elapsed=roundSession(now-SESSION_STARTED,2),
+                key=key,packOwns=row.packOwns,
+                otherOwns=row.otherOwns,claimByPack=row.claimByPack,
+                state=row.state,claimProgress=row.claimProgress,
+                scent=row.scent,
+            },SESSION_HEX_CAP)
+        end
+    end
+end
+local function sessionCapture(dt)
+    if not active then return end
+    local now=os.clock()
+    if type(dt)=="number" and dt>0.001 and dt<0.5 then
+        local immediate=1/dt
+        sessionFps=if sessionFps then sessionFps*0.90+immediate*0.10
+            else immediate
+    end
+    if now-sessionLastSample<SESSION_SAMPLE_INTERVAL then
+        return
+    end
+    sessionLastSample=now
+    local c,r,h=root()
+    local a=attempt
+    local k=a and a.key or selectedKey
+    local otherDist=nil
+    local nearbyCount=0
+    if r then
+        local distance=nearestPlayerAt(r.Position)
+        if distance<1e8 then otherDist=roundSession(distance,1) end
+        for _,other in ipairs(Players:GetPlayers()) do
+            if other~=me then
+                local char=other.Character
+                local part=char and char:FindFirstChild("HumanoidRootPart")
+                if part and part:IsA("BasePart") then
+                    local horizontal=Vector2.new(part.Position.X-r.Position.X,
+                        part.Position.Z-r.Position.Z).Magnitude
+                    if horizontal<avoidRadius() then nearbyCount+=1 end
+                end
+            end
+        end
+    end
+    local pos=if r then {
+        x=roundSession(r.Position.X,1),
+        y=roundSession(r.Position.Y,1),
+        z=roundSession(r.Position.Z,1),
+    } else nil
+    local surfaceOffset=nil
+    local hoverError=nil
+    if undergroundState and r then
+        surfaceOffset=roundSession(r.Position.Y-undergroundState.surfacePoint.Y,2)
+        hoverError=roundSession((r.Position-undergroundState.position).Magnitude,2)
+    end
+    local charHunger=c and c:GetAttribute("Hunger")
+    local charThirst=c and c:GetAttribute("Thirst")
+    local rawFeed=c and c:GetAttribute("FeedCan")
+    local state=k and value(k,"state") or nil
+    local row={
+        elapsed=roundSession(now-SESSION_STARTED,2),
+        mode=mode,auto=auto,careEnabled=careEnabled,
+        careMode=careMode,careStatus=sessionSanitize(careMessage),
+        selectedHex=selectedKey,attemptHex=a and a.key,
+        attemptKind=a and a.kind,attemptTravel=a and a.travelType,
+        attemptAge=a and roundSession(now-a.began,1),
+        attemptRetries=a and a.snapCount,
+        attemptFailed=a and a.failed,
+        serverOwnerIsPack=k and isOwned(k),
+        serverClaimProgress=k and roundSession(value(k,"prog"),3),
+        serverScent=k and roundSession(hold(k),3),
+        serverClaimState=type(state)=="string" and state:sub(1,26) or nil,
+        position=pos,
+        speed=r and roundSession(r.AssemblyLinearVelocity.Magnitude,1),
+        fps=roundSession(sessionFps,1),
+        hpPercent=h and h.MaxHealth>0 and
+            roundSession(h.Health/h.MaxHealth*100,1) or nil,
+        hunger=roundSession(charHunger,1),
+        thirst=roundSession(charThirst,1),
+        feedCan=rawFeed=="eat" and "eat" or (rawFeed=="drink" and "drink" or nil),
+        nearestPlayerStuds=otherDist,nearbyPlayerCount=nearbyCount,
+        avoidRadius=avoidRadius(),avoidEnabled=avoidPlayers,
+        undergroundRequested=undergroundRequested,
+        undergroundActive=undergroundState~=nil,
+        undergroundVerified=undergroundConfirmed,
+        hoverDepth=undergroundDepth(),surfaceOffset=surfaceOffset,
+        hoverPositionError=hoverError,
+        snapCooldown=roundSession(math.max(0,snapLockUntil-now),1),
+        totalServerCorrections=snapCorrectionCount,
+        careInputUnavailable=inputUnavailable,
+    }
+    sessionTotalSamples+=1
+    sessionAppend(sessionLog.samples,row,SESSION_SAMPLE_CAP)
+    sessionHexPoll()
+end
+
+local function makeSessionPayload()
+    local stats=countTypes()
+    return {
+        schema="feral-territory-rush-session-v"..tostring(SESSION_SCHEMA),
+        version="4.2.0",
+        sessionStartUnix=SESSION_UNIX,
+        elapsedSeconds=roundSession(os.clock()-SESSION_STARTED,2),
+        source="client-observed and replicated FERAL game attributes",
+        validation="NOT proof of server invisibility or hover claim success",
+        privacy="No other player names, identifiers, chat, credentials or uploads",
+        caps={events=SESSION_EVENT_CAP,samples=SESSION_SAMPLE_CAP,
+            hexChanges=SESSION_HEX_CAP},
+        totals={events=sessionTotalEvents,samples=sessionTotalSamples,
+            hexChanges=sessionTotalHexChanges,autoSaved=sessionAutoSaved,
+            categories=sessionEventCounts,
+            owned=stats.owned,claimable=stats.eligible,
+            attemptedSnaps=totalRetries,completed=totalCompleted,
+            claims=claimCompletions,scents=reScentCount,
+            undergroundAttempts=undergroundAttempts,
+            undergroundFailures=undergroundFailures,
+            undergroundProgressSignals=undergroundSuccesses,
+            serverCorrectionCount=snapCorrectionCount},
+        finalState={mode=mode,auto=auto,careEnabled=careEnabled,
+            careMode=careMode,careStatus=sessionSanitize(careMessage),
+            lastStatus=sessionSanitize(lastStatus),
+            lastFailure=sessionSanitize(lastFailure),
+            undergroundRequested=undergroundRequested,
+            undergroundConfirmed=undergroundConfirmed,
+            undergroundRefused=undergroundRefused,
+            undergroundStatus=sessionSanitize(undergroundStatus),
+            avoidanceRadius=avoidRadius(),travelStyle=travelStyle},
+        events=sessionLog.events,
+        samples=sessionLog.samples,
+        hexChanges=sessionLog.hexChanges,
+        note="Send this JSON text file to ChatGPT to investigate FERAL territory behaviour."
+    }
+end
+local function getSessionJSON()
+    local ok,json=pcall(function()
+        return HttpService:JSONEncode(makeSessionPayload())
+    end)
+    return ok and json or nil,if ok then nil else tostring(json)
+end
+local function saveSession(includeClipboard)
+    if sessionExporting then return false,"Report export already running" end
+    sessionExporting=true
+    local json,err=getSessionJSON()
+    if not json then
+        sessionExporting=false
+        sessionLastFileError=tostring(err)
+        return false,"JSON export failed: "..tostring(err)
+    end
+    local saved=false
+    if type(writefile)=="function" then
+        local ok,reason=pcall(writefile,SESSION_FILENAME,json)
+        saved=ok
+        if not ok then sessionLastFileError=tostring(reason) end
+    else
+        sessionLastFileError="Executor writefile unavailable"
+    end
+    local copied=false
+    if includeClipboard and type(setclipboard)=="function" then
+        copied=pcall(setclipboard,json)
+    end
+    sessionExporting=false
+    if saved then
+        sessionSaved=true
+        sessionStatus="SAVED "..SESSION_FILENAME..
+            (copied and " • JSON ALSO COPIED" or "")
+        return true,sessionStatus
+    end
+    if copied then
+        sessionStatus="JSON COPIED • paste into a text file and upload here"
+        return true,sessionStatus
+    end
+    if includeClipboard then
+        -- Console fallback, never automatically prints the full dataset.
+        print("[FERAL Territory Rush] JSON REPORT: "..json)
+        sessionStatus="REPORT PRINTED TO CONSOLE (save its JSON as text)"
+        return true,sessionStatus
+    end
+    sessionStatus="Local autosave unavailable (use SAVE REPORT button)"
+    return false,sessionStatus
+end
+local function sessionAutosave()
+    local now=os.clock()
+    if now-sessionLastAutoSave<SESSION_AUTOSAVE_INTERVAL then return end
+    sessionLastAutoSave=now
+    if type(writefile)=="function" then
+        local ok=saveSession(false)
+        if ok then sessionAutoSaved+=1 end
+    end
+end
+sessionLogEvent("session","Started v4.2 local-only session recorder")
+
 local function score(t)
     local h=hold(t.key)
     if isOwned(t.key) then
