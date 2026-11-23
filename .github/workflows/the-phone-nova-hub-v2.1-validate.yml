@@ -1,0 +1,82 @@
+name: THE PHONE NOVA v2.1 - Session handoff validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/the-phone-nova-hub-v2.1.lua'
+      - 'roblox-tools/the-phone-nova-teleport-v2.1.lua'
+      - 'roblox-tools/the-phone-nova.lua'
+      - '.github/workflows/the-phone-nova-hub-v2.1-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify session-only handoff and data contracts
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          hub=Path('roblox-tools/the-phone-nova-hub-v2.1.lua').read_text()
+          bridge=Path('roblox-tools/the-phone-nova-teleport-v2.1.lua').read_text()
+          loader=Path('roblox-tools/the-phone-nova.lua').read_text()
+          for marker in [
+            'local VERSION="2.1.0"', 'THE_PHONE_NOVA_V21_HANDOFF',
+            'THE_PHONE_NOVA_V21_RESTORE',
+            'Teleport:SetTeleportSetting(HANDOFF_KEY,handoff)',
+            'Teleport:SetTeleportSetting(HANDOFF_KEY,nil)',
+            'pcall(teleportQueue,BOOTSTRAP)',
+            'Enum.TeleportState.Started', 'Teleport.TeleportInitFailed',
+            'schema=1,pending=true,universe=UNIVERSE',
+            'settings=choices', 'ui={tab=S.tab,visible=S.visible,mini=S.mini',
+            'sourcePlace=game.PlaceId,sourceJob=game.JobId',
+            'choices[key]=S.enabled[key]==true',
+            'for key in pairs(SWITCH)', 'SWITCH[key]=restored.settings[key]',
+            'showTab(S.tab)', 'S.sessionId', 'S.transferred',
+            'RightControl', 'RightShift', 'Enum.KeyCode.F8',
+            'DuelShoot', 'BombTap', 'ThinIceStart', 'EscapeTap',
+            'MoonRaceFX', 'TakenFX', 'base*1.03',
+          ]:
+              assert marker in hub, 'Missing handoff feature in hub: '+marker
+          for marker in [
+            'game.GameId~=UNIVERSE', 'game.PlaceId~=LOBBY',
+            'game.PlaceId~=MATCH', 'payload.pending~=true',
+            'payload.universe~=UNIVERSE', 'MAX_AGE=1200',
+            'Teleport:GetTeleportSetting(KEY)',
+            'Teleport:SetTeleportSetting(KEY,nil)',
+            'env[RESTORE_KEY]=payload',
+            'if type(env[RESTORE_KEY])=="table" then return end',
+            'payload.sourceJob==game.JobId and payload.sourcePlace==game.PlaceId',
+            'the-phone-nova.lua'
+          ]:
+              assert marker in bridge, 'Missing safety gate in bridge: '+marker
+          assert 'the-phone-nova-hub-v2.1.lua' in loader
+          assert 'the-phone-nova-teleport-v2.1.lua' in hub
+          assert loader.count('game:HttpGet(')==1
+          assert loader.count('loadstring(')==1
+          for denied in ['writefile(', 'readfile(', 'AdminGift',
+                         'hookmetamethod(', 'game:Shutdown(', 'TeleportService:Teleport(']:
+              assert denied not in hub, 'Unexpected session persistence side effect: '+denied
+          print('THE_PHONE_NOVA_V21_SESSION_HANDOFF_STATIC_PASS')
+          PY
+      - name: Download official Luau compiler
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile hub, one-shot bootstrap, and launcher
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova-hub-v2.1.lua
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova-teleport-v2.1.lua
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova.lua
+          echo THE_PHONE_NOVA_V21_ALL_COMPILE_PASS
