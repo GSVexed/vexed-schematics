@@ -915,11 +915,16 @@ ownConnection(RunService.RenderStepped, function(dt)
     end
     if panel.Visible then
         local accuracyStr = state.weaponAccuracy and (" | accuracy stat " .. tostring(state.weaponAccuracy)) or ""
-        status.Text = (config.ExperimentalSilentAim and "EXPERIMENTAL: ON" or "EXPERIMENTAL: OFF") ..
-            " | SERVER UNVERIFIED\n" ..
+        local modeStatus = config.ExperimentalSilentAim
+            and "EXPERIMENTAL SHOT CORRECTION: ON"
+            or "EXPERIMENTAL SHOT CORRECTION: OFF"
+        if state.hookError and not config.ExperimentalSilentAim then
+            modeStatus = "SHOT CORRECTION UNAVAILABLE: " .. tostring(state.hookError)
+        end
+        status.Text = modeStatus .. " | SERVER UNVERIFIED\n" ..
             (state.nativeReticle and "Reticle estimate" or "Reticle fallback") ..
             " • " .. state.weaponName .. accuracyStr ..
-            " • " .. tostring(state.fps) .. " FPS | corrected " ..
+            " • " .. tostring(state.fps) .. " FPS | proposed " ..
             tostring(state.correctedShots)
     end
 end)
