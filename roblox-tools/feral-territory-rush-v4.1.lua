@@ -196,6 +196,27 @@ local snapCorrectionCount=0
 local lastThreatDistance=math.huge
 local lastThreatName=nil
 local safeWalkRadius=155
+-- User-requested subsurface territory hold. Experimental: neither true
+-- replication invisibility nor server territory eligibility is guaranteed.
+local undergroundRequested=false
+local undergroundDepths={5,8,12}
+local undergroundDepthIndex=2
+local undergroundRefused=false
+local undergroundConfirmed=nil
+local undergroundState=nil
+local undergroundFailures=0
+local undergroundAttempts=0
+local undergroundSuccesses=0
+local undergroundStatus="OFF • server visibility cannot be guaranteed"
+local careSnapPending=nil
+local function undergroundDepth()
+    return undergroundDepths[undergroundDepthIndex]
+end
+local function territoryNeedsAvoidance()
+    -- Ignore nearby players only while the user deliberately enables the
+    -- subsurface experiment. If the trial fails, revert to normal avoidance.
+    return not undergroundRequested or undergroundRefused
+end
 local function avoidRadius()
     return avoidRadii[avoidRadiusIndex]
 end
@@ -377,7 +398,110 @@ local worstB=button("Worst","WORST SCENT",84,274,105,Color3.fromRGB(85,68,110))
 local copyB=button("Copy","COPY RESULT",195,274,114,Color3.fromRGB(54,90,95))
 local reloadB=button("Rescan","RESCAN",315,274,83,Color3.fromRGB(75,76,90))
 
+
+local function exitUnderground(rescue,why)
+    local state=undergroundState
+    if not state then return end
+    undergroundState=nil
+    if state.align then
+        state.align.Enabled=false
+        state.align:Destroy()
+    end
+    if state.attachment then state.attachment:Destroy() end
+    local c,r=root()
+    if rescue and c==state.character and r and state.surfacePoint then
+        local here=r.Position
+        local spot=state.surfacePoint
+        local dx=here.X-spot.X
+        local dz=here.Z-spot.Z
+        -- Never fight a server correction that returned the player far away.
+        -- One surface rescue when still near this spot, no repeated teleports.
+        if dx*dx+dz*dz<6400 and
+            here.Y<spot.Y+3 and here.Y>spot.Y-35 then
+            pcall(function()
+                c:PivotTo(c:GetPivot()+(spot-here))
+                r.AssemblyLinearVelocity=Vector3.zero
+            end)
+        end
+    end
+    for part,prior in pairs(state.collisions or {}) do
+        if part.Parent then
+            pcall(function() part.CanCollide=prior end)
+        end
+    end
+    undergroundStatus=why or "Surface restored"
+end
+
+local function beginUnderground(a,ground,surfacePoint)
+    local c,r,h=root()
+    if not c or c~=a.character or not r then
+        return false,"The current animal is not available"
+    end
+    if undergroundState then exitUnderground(true,"Switching territory") end
+    local y=ground.Y-undergroundDepth()
+    local destination=Vector3.new(ground.X,y,ground.Z)
+    local state={character=c,root=r,surfacePoint=surfacePoint,
+        position=destination,collisions={},started=os.clock()}
+    local success,err=pcall(function()
+        for _,instance in ipairs(c:GetDescendants()) do
+            if instance:IsA("BasePart") then
+                state.collisions[instance]=instance.CanCollide
+                instance.CanCollide=false
+            end
+        end
+        local attachment=Instance.new("Attachment")
+        attachment.Name="FeralRushSubsurfaceHold"
+        attachment.Parent=r
+        state.attachment=attachment
+        local align=Instance.new("AlignPosition")
+        align.Name="FeralRushSubsurfaceHold"
+        align.Mode=Enum.PositionAlignmentMode.OneAttachment
+        align.Attachment0=attachment
+        align.Position=destination
+        align.MaxForce=math.clamp(r.AssemblyMass*WS.Gravity*35,300000,20000000)
+        align.MaxVelocity=65
+        align.Responsiveness=65
+        align.RigidityEnabled=false
+        align.ReactionForceEnabled=false
+        align.ApplyAtCenterOfMass=true
+        align.Parent=r
+        state.align=align
+        -- Only one initial relocation. The constraint maintains altitude
+        -- rather than repeatedly PivotTo-ing against server corrections.
+        c:PivotTo(c:GetPivot()+(destination-r.Position))
+        r.AssemblyLinearVelocity=Vector3.zero
+        r.AssemblyAngularVelocity=Vector3.zero
+    end)
+    if not success then
+        undergroundState=state
+        exitUnderground(true,"Underground setup rejected: "..tostring(err):sub(1,80))
+        return false,tostring(err)
+    end
+    undergroundState=state
+    a.destination=destination
+    a.surfacePoint=surfacePoint
+    a.travelType="UNDERGROUND"
+    a.lastSnap=os.clock()
+    a.snapCount+=1
+    undergroundAttempts+=1
+    undergroundStatus="UNDERGROUND TRIAL • waiting for real claim progress"
+    return true,nil
+end
+
+local function failUnderground(a,reason)
+    a.failed=true
+    undergroundFailures+=1
+    undergroundRefused=true
+    undergroundConfirmed=false
+    undergroundRequested=false
+    local seconds=restrictSnaps(reason)
+    retryCooldown[a.key]=os.clock()+math.max(105,seconds)
+    exitUnderground(true,"DISABLED: "..reason)
+    event("SUBSURFACE DISABLED: "..reason)
+end
+
 local function release()
+    if undergroundState then exitUnderground(true,"AUTO off; surface rescue attempted") end
     auto=false
     autoToken+=1
     autoB.Text="AUTO: OFF"
@@ -459,6 +583,7 @@ returnB.Activated:Connect(function()
     release()
     movementToken+=1
     attempt=nil
+    exitUnderground(true,"Return to surface")
     local moved=pcall(function()
         c:PivotTo(c:GetPivot()+(returnCFrame.Position-r.Position))
         r.AssemblyLinearVelocity=Vector3.zero
