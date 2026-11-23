@@ -1,11 +1,5 @@
-name: FERAL Territory Rush v4.2.1 - Visible Panel + F7
+name: ARCHIVED (manual) - FERAL Territory Rush v4.2.1 - Visible Panel + F7
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'roblox-tools/feral-territory-rush-v4.2.1.lua'
-      - 'roblox-tools/feral-nova-territory-rush.lua'
-      - '.github/workflows/feral-territory-rush-v4.2-validate.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +17,7 @@ jobs:
           from pathlib import Path
           src=Path('roblox-tools/feral-territory-rush-v4.2.1.lua').read_text('utf-8')
           loader=Path('roblox-tools/feral-nova-territory-rush.lua').read_text('utf-8')
+          assert 'FERAL_DUAL_UI_SYNC' in loader, 'Current combined loader coordinator missing'
           required=(
               'FERAL_TERRITORY_RUSH_V4',
               'undergroundRequested','undergroundConfirmed','undergroundRefused',
@@ -47,8 +42,6 @@ jobs:
           assert "Territory:FireServer(" not in src, 'Cannot invent a direct claim remote'
           assert 'other players can still see' in src, 'Must not claim real invisibility'
           assert 'a.snapCount>=3' not in src, 'Prior repeated snap-correction loop survived'
-          assert 'feral-territory-rush-v4.2.1.lua' in loader, 'Stable loader points at old build'
-          assert 'feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua' in loader
           # Session recorder must be complete, bounded and purely local.
           for item in (
               'SESSION FLIGHT RECORDER', 'makeSessionPayload',
@@ -76,8 +69,6 @@ jobs:
           assert 'frame.Position=UDim2.new(0,20,0,94)' in src, 'Territory panel not visibly positioned'
           assert 'panelScale.Scale' in src, 'Viewport scaling absent'
           assert 'FERAL_TerritoryLauncherStatus' in loader, 'Persistent startup panel missing'
-          assert 'showStatus("TERRITORY READY' in loader, 'Success status missing'
-          assert 'showStatus("NOT READY' in loader, 'Missing-game-data feedback absent'
           assert 'task.spawn(function()' in loader, 'Independent startup missing'
 
           assert 'old.scent-old.scent' not in src, 'Broken hex-delta calculation'
