@@ -506,7 +506,12 @@ local function failUnderground(a,reason)
 end
 
 local function release()
-    if undergroundState then exitUnderground(true,"AUTO off; surface rescue attempted") end
+    if undergroundState then
+        exitUnderground(true,"AUTO off; surface rescue attempted")
+        if attempt and attempt.travelType=="UNDERGROUND" then
+            attempt=nil
+        end
+    end
     auto=false
     autoToken+=1
     autoB.Text="AUTO: OFF"
@@ -518,6 +523,7 @@ local function stop()
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
     if careConnection then careConnection:Disconnect() careConnection=nil end
     if hoverWatchConnection then hoverWatchConnection:Disconnect() hoverWatchConnection=nil end
+    careSnapPending=nil
     careEnabled=false
     visibilityHoldUntil=0
     if gui then gui:Destroy() gui=nil end
@@ -1492,6 +1498,7 @@ local function stopCareMode(message,resume)
     careLastNeedValue=nil
     carePendingAttempts=0
     careMessage=message or "CARE WAITING"
+    careSnapPending=nil
     local shouldResume=resume and careResumeAuto and not auto and active
         and me:GetAttribute("FeralPack")~=nil
     careResumeAuto=false
@@ -1865,6 +1872,10 @@ env.FERAL_TERRITORY_RUSH_V4={
             undergroundRequested=false
             if undergroundState then
                 exitUnderground(true,"Subsurface stopped")
+                if attempt and attempt.travelType=="UNDERGROUND" then
+                    attempt.failed=true
+                    lastFailure="Subsurface stopped by command"
+                end
             end
         else
             undergroundRequested=true
