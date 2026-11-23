@@ -339,7 +339,7 @@ gui.Parent=pg
 local frame=Instance.new("Frame")
 frame.Name="Panel"
 frame.Position=UDim2.new(1,-426,0,58)
-frame.Size=UDim2.fromOffset(410,503)
+frame.Size=UDim2.fromOffset(410,555)
 frame.BackgroundColor3=Color3.fromRGB(18,26,35)
 frame.BorderSizePixel=0
 frame.Parent=gui
@@ -1636,10 +1636,10 @@ end)
 local avoidButton=button("Avoid","AVOID PLAYERS: ON",12,402,143,Color3.fromRGB(44,105,99))
 local radiusButton=button("Radius","RADIUS: 300",162,402,111,Color3.fromRGB(56,81,111))
 local travelButton=button("Travel","SNAP: ADAPTIVE",280,402,118,Color3.fromRGB(83,70,101))
-L.Avoidance=label("Avoidance",440,22)
+L.Avoidance=label("Avoidance",470,22)
 L.Avoidance.Text="All other players • 300 studs • streaming-limited"
 L.Avoidance.TextColor3=Color3.fromRGB(173,223,201)
-L.Travel=label("Travel",465,24)
+L.Travel=label("Travel",493,24)
 L.Travel.Text="ONE SNAP MAX • cooldown on rejected position"
 L.Travel.TextColor3=Color3.fromRGB(201,207,226)
 avoidButton.Activated:Connect(function()
@@ -1663,6 +1663,48 @@ travelButton.Activated:Connect(function()
     say(if travelStyle=="WALK" then "WALK ONLY: no automatic long teleports"
         else "ADAPTIVE: single teleport only when safe")
 end)
+
+-- Explicit experimental opt-in. We never label local collision hiding as
+-- server invisibility; this mode remains subject to server claim eligibility.
+local hoverButton=button("Subsurface","SUBSURFACE: OFF",12,436,177,
+    Color3.fromRGB(75,73,112))
+local hoverDepthButton=button("Depth","DEPTH: 8",195,436,203,
+    Color3.fromRGB(54,80,98))
+L.Hover=label("SubsurfaceStatus",518,24)
+L.Hover.Text="SUBSURFACE OFF • not verified invisible/server-eligible"
+L.Hover.TextColor3=Color3.fromRGB(230,189,143)
+hoverButton.Activated:Connect(function()
+    if undergroundRequested then
+        undergroundRequested=false
+        if undergroundState then
+            exitUnderground(true,"SUBSURFACE OFF • surface rescue attempted")
+            if attempt and attempt.travelType=="UNDERGROUND" then
+                attempt.failed=true
+                lastFailure="Underground trial disabled by user"
+            end
+        end
+    else
+        undergroundRequested=true
+        -- The automatic refusal following a failed probe may be reset only
+        -- by an explicit user click; global snap cooldown still applies.
+        undergroundRefused=false
+        undergroundConfirmed=nil
+        undergroundStatus="ON • attempting bounded hold; claim unverified"
+    end
+    hoverButton.Text=if undergroundRequested then "SUBSURFACE: TRIAL"
+        else "SUBSURFACE: OFF"
+    say(if undergroundRequested then
+        "UNDERGROUND TRIAL: may be server rejected or still visible to players"
+        else "SUBSURFACE disabled; above-ground territory rules restored")
+end)
+hoverDepthButton.Activated:Connect(function()
+    if undergroundState then
+        say("Exit subsurface mode before changing hover depth")
+        return
+    end
+    undergroundDepthIndex=undergroundDepthIndex%#undergroundDepths+1
+    hoverDepthButton.Text="DEPTH: "..tostring(undergroundDepth())
+end)
 local lastCareUiUpdate=-math.huge
 careConnection=RunService.Heartbeat:Connect(function()
     local ok,err=pcall(careTick)
@@ -1683,6 +1725,15 @@ careConnection=RunService.Heartbeat:Connect(function()
             L.Travel.Text=(if travelStyle=="WALK" then "WALK ONLY" else "ONE SNAP MAX")
                 .."  •  corrections "..snapCorrectionCount
                 .."  •  global pause "..pause.."s"
+        end
+        if L.Hover and L.Hover.Parent then
+            L.Hover.Text=undergroundStatus
+            L.Hover.TextColor3=if undergroundConfirmed then
+                Color3.fromRGB(142,221,165) else Color3.fromRGB(230,189,143)
+        end
+        if hoverButton and hoverButton.Parent and not undergroundRequested
+            and hoverButton.Text~="SUBSURFACE: OFF" then
+            hoverButton.Text="SUBSURFACE: OFF"
         end
     end
 end)
@@ -1708,6 +1759,21 @@ env.FERAL_TERRITORY_RUSH_V4={
     setWalkOnly=function(on)
         travelStyle=if on then "WALK" else "ADAPTIVE"
         travelButton.Text=if on then "WALK ONLY" else "SNAP: ADAPTIVE"
+    end,
+    setSubsurface=function(on)
+        if not on then
+            undergroundRequested=false
+            if undergroundState then
+                exitUnderground(true,"Subsurface stopped")
+            end
+        else
+            undergroundRequested=true
+            undergroundRefused=false
+            undergroundConfirmed=nil
+            undergroundStatus="ON • awaiting real claim proof"
+        end
+        hoverButton.Text=if undergroundRequested then "SUBSURFACE: TRIAL"
+            else "SUBSURFACE: OFF"
     end,
     setCare=function(on)
         careEnabled=on==true
