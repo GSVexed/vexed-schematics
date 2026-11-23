@@ -767,6 +767,30 @@ D.refs.mode=button("Mode","MODE: LOBBY",14,128)
 local start=button("Start","START CAPTURE",153,172,Color3.fromRGB(28,119,101))
 local stop=button("Stop","STOP & SAVE",336,110,Color3.fromRGB(164,65,77))
 local copy=button("Copy","COPY REPORT",456,120)
+-- Visible close control: safe after a capture has finished and the final
+-- manifest/cache checkpoints have been written to the executor workspace.
+-- Closing this GUI never deletes the saved output directory.
+local closePanel=elem("TextButton",{
+    Name="ClosePanel",Text="CLOSE PANEL",
+    Size=UDim2.fromOffset(131,30),
+    Position=UDim2.fromOffset(445,11),
+    BorderSizePixel=0,
+    Font=Enum.Font.GothamBold,TextSize=11,
+    TextColor3=Color3.fromRGB(255,241,246),
+    BackgroundColor3=Color3.fromRGB(116,62,81)
+},panel)
+elem("UICorner",{CornerRadius=UDim.new(0,6)},closePanel)
+closePanel.Activated:Connect(function()
+    if D.running or D.startQueued then
+        D.current="Capture still running: wait for COMPLETE or use STOP & SAVE."
+        D.refresh()
+        return
+    end
+    -- Completed capture data is already on disk. This only removes the panel.
+    if D.fpsConnection then D.fpsConnection:Disconnect();D.fpsConnection=nil end
+    if D.gui and D.gui.Parent then D.gui:Destroy() end
+    warn("[THE PHONE NOVA] Panel closed. Saved capture files were not removed.")
+end)
 D.refs.mode.Activated:Connect(function()
     if not D.running and not D.root then
         D.mode=D.mode=="LOBBY" and "MATCH" or "LOBBY"
@@ -774,8 +798,12 @@ D.refs.mode.Activated:Connect(function()
     end
 end)
 start.Activated:Connect(function()
-    if not D.running and not D.root then
-        task.defer(function()D.run()end)
+    if not D.running and not D.startQueued and not D.root then
+        D.startQueued=true
+        task.defer(function()
+            D.startQueued=false
+            D.run()
+        end)
     end
 end)
 stop.Activated:Connect(function()
