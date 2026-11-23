@@ -24,7 +24,7 @@ local world=RS:WaitForChild("FeralWorld",12)
 local module=world and world:FindFirstChild("TerritoryConfig")
 local namesModule=world and world:FindFirstChild("MapSpots")
 local terr=RS:WaitForChild("FeralTerritory",12)
-local pg=me:FindFirstChildOfClass("PlayerGui")
+local pg=me:WaitForChild("PlayerGui",15)
 if not (module and terr and pg) then
     warn("[FERAL Territory Probe v2] Territory data or PlayerGui unavailable. Spawn first.")
     return
@@ -654,15 +654,60 @@ gui=Instance.new("ScreenGui")
 gui.Name="FERAL_TerritoryRushV4"
 gui.ResetOnSpawn=false
 gui.IgnoreGuiInset=true
-gui.DisplayOrder=360
+gui.DisplayOrder=750
+gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
 gui.Parent=pg
 local frame=Instance.new("Frame")
 frame.Name="Panel"
-frame.Position=UDim2.new(1,-426,0,20)
+frame.Position=UDim2.new(0,20,0,94)
 frame.Size=UDim2.fromOffset(410,656)
 frame.BackgroundColor3=Color3.fromRGB(18,26,35)
 frame.BorderSizePixel=0
+frame.Active=true
 frame.Parent=gui
+local panelScale=Instance.new("UIScale")
+panelScale.Name="FitToViewport"
+panelScale.Parent=frame
+local function fitTerritoryPanel()
+    local cam=WS.CurrentCamera
+    if not cam then return end
+    local viewport=cam.ViewportSize
+    local sx=(viewport.X-40)/430
+    local sy=(viewport.Y-130)/656
+    panelScale.Scale=math.clamp(math.min(sx,sy,1),0.49,1)
+end
+fitTerritoryPanel()
+local territoryCamera=WS.CurrentCamera
+if territoryCamera then
+    territoryCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitTerritoryPanel)
+end
+-- Drag the header, not the control rows; keeps every button clickable.
+local dragStart,dragPosition,dragging=nil,nil,false
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.MouseButton1 then
+        local cursor=game:GetService("UserInputService"):GetMouseLocation()
+        local top=frame.AbsolutePosition.Y
+        if cursor.Y-top<39 then
+            dragging=true
+            dragStart=input.Position
+            dragPosition=frame.Position
+        end
+    end
+end)
+frame.InputEnded:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.MouseButton1 then
+        dragging=false
+    end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if dragging and dragStart and dragPosition
+        and input.UserInputType==Enum.UserInputType.MouseMovement then
+        local delta=input.Position-dragStart
+        frame.Position=UDim2.new(
+            dragPosition.X.Scale,dragPosition.X.Offset+delta.X,
+            dragPosition.Y.Scale,dragPosition.Y.Offset+delta.Y)
+    end
+end)
 Instance.new("UICorner",frame).CornerRadius=UDim.new(0,10)
 local border=Instance.new("UIStroke",frame)
 border.Color=Color3.fromRGB(67,87,108)
