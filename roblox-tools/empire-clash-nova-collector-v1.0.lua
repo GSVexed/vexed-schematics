@@ -99,7 +99,10 @@ local SENSITIVE={
     password=true,passwd=true,secret=true,cookie=true,
     authentication=true,credential=true,apikey=true,authtoken=true,
     accesstoken=true,refreshtoken=true,privatekey=true,
-    webhook=true,sessionid=true,roblosecurity=true
+    webhook=true,sessionid=true,roblosecurity=true,
+    userid=true,owneruserid=true,ownerid=true,playerid=true,
+    username=true,displayname=true,accountage=true,
+    discordid=true,privatechat=true
 }
 local SAFE_STRING_FIELDS={
     faction=true,kingdom=true,team=true,classname=true,classtype=true,
@@ -110,12 +113,13 @@ local SAFE_STRING_FIELDS={
 local function clean(s)
     s=tostring(s or "?")
     if #s>120 then s=s:sub(1,120) end
-    for pattern in pairs(D.privateNames) do
-        if #pattern>=3 and s:find(pattern,1,true) then
-            s=s:gsub(pattern,"[private-name]")
-        elseif #pattern>0 and s==pattern then
-            s="[private-name]"
-        end
+    if D.privateNames[s] then
+        s="[private-name]"
+    else
+        -- A token lookup avoids quadratic work on populated 700-player maps.
+        s=s:gsub("[%w_]+",function(token)
+            return D.privateNames[token] and "[private-name]" or token
+        end)
     end
     if SENSITIVE[s:lower():gsub("[^%w]","")] then return "[sensitive]" end
     if s:find("[%c]") then s=s:gsub("[%c]","_") end
@@ -432,17 +436,33 @@ function D.discover()
                                 local rok,v=pcall(function()return node.Value end)
                                 local valueKey=node.Name:lower():gsub("[^%w]","")
                                 if rok and type(v)~="userdata" then
-                                    D.c.values+=1
-                                    emit("values",{path=item.path,class=cls,
-                                        value=(type(v)=="string" and #v<=64
-                                           and SAFE_STRING_FIELDS[valueKey] and clean(v))
-                                           or (type(v)=="number" or type(v)=="boolean")
-                                             and v or nil)})
+                                    local safeValue=nil
+                                    if type(v)=="number" and v==v and math.abs(v)<1e10 then
+                                        safeValue=v
+                                    elseif type(v)=="boolean" then safeValue=v
+                                    elseif type(v)=="string" and #v<=64
+                                        and SAFE_STRING_FIELDS[valueKey] then
+                                        safeValue=clean(v)
+                                    end
+                                    if safeValue~=nil then
+                                        D.c.values+=1
+                                        emit("values",{path=item.path,class=cls,value=safeValue})
+                                    end
                                 end
                             end
                             if item.depth<55 then
                                 local childrenOK,children=pcall(function()return node:GetChildren()end)
                                 if childrenOK and type(children)=="table" then
+                                    -- The scene can exceed its bounded scan cap. Visit
+                                    -- likely objective folders before generic terrain.
+                                    if scope.name=="Workspace" then
+                                        table.sort(children,function(a,b)
+                                            local pa=priority(a.Name,scope.name)
+                                            local pb=priority(b.Name,scope.name)
+                                            if pa==pb then return a.Name>b.Name end
+                                            return pa<pb
+                                        end)
+                                    end
                                     local counts={}
                                     for i=#children,1,-1 do
                                         local child=children[i]
