@@ -967,6 +967,13 @@ local function report()
         autoEnabled=auto,totalSnapRetries=totalRetries,
         totalSkipped=totalSkipped,totalCompleted=totalCompleted,
         avoidanceEnabled=avoidPlayers,avoidRadius=avoidRadius(),
+        subsurfaceRequested=undergroundRequested,
+        subsurfaceVerified=undergroundConfirmed,
+        subsurfaceRefused=undergroundRefused,
+        subsurfaceAttempts=undergroundAttempts,
+        subsurfaceFailures=undergroundFailures,
+        subsurfaceProgressSignals=undergroundSuccesses,
+        subsurfaceStatus=undergroundStatus,
         travelStyle=travelStyle,nearestOtherDistance=lastThreatDistance,
         snapCorrections=snapCorrectionCount,
         snapLockSeconds=math.max(0,math.ceil(snapLockUntil-os.clock())),
@@ -987,11 +994,14 @@ copyB.Activated:Connect(function()
         "observedClaimProgress","observedOwnerChange","changesObserved",
         "claimChanges","scentChanges","autoEnabled","attemptedLandingHex",
         "landingError","totalSnapRetries","totalSkipped","totalCompleted",
-        "currentSnaps","snapFailed","lastFailure","lastStatus"
+        "currentSnaps","snapFailed","lastFailure","lastStatus",
+        "subsurfaceRequested","subsurfaceVerified","subsurfaceRefused",
+        "subsurfaceAttempts","subsurfaceFailures","subsurfaceProgressSignals",
+        "subsurfaceStatus","avoidanceEnabled","avoidRadius","travelStyle"
     }) do
         table.insert(v,key.."="..tostring(p[key]))
     end
-    local result="[FERAL TERRITORY RUSH V4.0] "..table.concat(v," | ")
+    local result="[FERAL TERRITORY RUSH V4.1] "..table.concat(v," | ")
     if type(setclipboard)=="function" then
         local success=pcall(setclipboard,result)
         say(success and "Copied! Paste results into ChatGPT" or "Copy failed; printed in console")
@@ -1075,10 +1085,13 @@ local function bestAutoTarget()
     local best=nil
     local bestScore=-math.huge
     local _,ownRoot=root()
-    local longTravelAllowed=travelStyle=="ADAPTIVE" and now>=snapLockUntil
+    local longTravelAllowed=(travelStyle=="ADAPTIVE"
+        or (undergroundRequested and not undergroundRefused))
+        and now>=snapLockUntil
     for _,t in ipairs(all) do
         local spot=t.landing
-        local nearby=otherPlayerNearby(Vector3.new(spot.X,0,spot.Y),0)
+        local nearby=territoryNeedsAvoidance()
+            and otherPlayerNearby(Vector3.new(spot.X,0,spot.Y),0)
         local closeEnough=ownRoot and dist2D(ownRoot.Position,spot)<safeWalkRadius-10
         if not isNeutral(t.key) and (retryCooldown[t.key] or 0)<=now
             and not nearby and (longTravelAllowed or closeEnough) then
@@ -1140,8 +1153,12 @@ local function toggleTerritoryAuto()
                 say("Animal died or despawned — AUTO stopped")
                 break
             end
-            local threatened,nearDist,nearby=currentPlayerThreat()
-            if threatened or os.clock()<visibilityHoldUntil then
+            local threatened,nearDist,nearby=false,math.huge,nil
+            if territoryNeedsAvoidance() then
+                threatened,nearDist,nearby=currentPlayerThreat()
+            end
+            if threatened or (territoryNeedsAvoidance()
+                and os.clock()<visibilityHoldUntil) then
                 local who=nearby and nearby.DisplayName or (lastThreatName or "player")
                 local range=nearDist<math.huge and string.format("%.0f",nearDist) or "?"
                 say("PLAYER AVOID: "..who.." "..range.." studs • holding position")
@@ -1182,7 +1199,8 @@ local function toggleTerritoryAuto()
                             break
                         end
                         local _,ownPart=root()
-                        if ownPart and otherPlayerNearby(ownPart.Position,0) then
+                        if ownPart and territoryNeedsAvoidance()
+                            and otherPlayerNearby(ownPart.Position,0) then
                             visibilityHoldUntil=os.clock()+7
                             reason="Other player entered your avoidance radius"
                             break
@@ -1713,5 +1731,5 @@ env.FERAL_TERRITORY_RUSH_V4={
     end
 }
 update()
-print(string.format("[FERAL Territory RUSH v4.0] Hexes: %d, eligible: %d. Default PRIORITY mode; Auto checks actual _hold and ownership.",#all,countTypes().eligible))
-print("[FERAL Territory RUSH v4.0] Live character movement, bounded retries, server territory observation.")
+print(string.format("[FERAL Territory RUSH v4.1] Hexes: %d, eligible: %d. Default PRIORITY mode; Auto checks actual _hold and ownership.",#all,countTypes().eligible))
+print("[FERAL Territory RUSH v4.1] Live character movement, bounded retries, server territory observation.")
