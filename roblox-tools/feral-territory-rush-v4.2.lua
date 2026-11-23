@@ -278,9 +278,9 @@ local SESSION_SCHEMA=1
 local SESSION_STARTED=os.clock()
 local SESSION_UNIX=os.time()
 local SESSION_FILENAME="FERAL_TERRITORY_RUSH_V42_SESSION_"..tostring(SESSION_UNIX)..".json.txt"
-local SESSION_EVENT_CAP=360
-local SESSION_SAMPLE_CAP=600
-local SESSION_HEX_CAP=700
+local SESSION_EVENT_CAP=650
+local SESSION_SAMPLE_CAP=1800
+local SESSION_HEX_CAP=1000
 local SESSION_SAMPLE_INTERVAL=2.0
 local SESSION_HEX_INTERVAL=3.5
 local SESSION_AUTOSAVE_INTERVAL=45.0
@@ -313,7 +313,27 @@ local function sessionAppend(list,row,maxSize)
     end
 end
 local function sessionSanitize(message)
-    return tostring(message or ""):gsub("[%c]"," "):sub(1,180)
+    local raw=tostring(message or ""):gsub("[%c]"," "):sub(1,180)
+    -- Also scrub any unexpected display name included in future status
+    -- messages, using plain-string matching (names aren't Lua patterns).
+    local function scrub(text,needle)
+        if type(needle)~="string" or #needle<3 then return text end
+        local start=1
+        while true do
+            local at=string.find(text,needle,start,true)
+            if not at then break end
+            text=text:sub(1,at-1).."[other player]"..text:sub(at+#needle)
+            start=at+#"[other player]"
+        end
+        return text
+    end
+    for _,other in ipairs(Players:GetPlayers()) do
+        if other~=me then
+            raw=scrub(raw,other.Name)
+            raw=scrub(raw,other.DisplayName)
+        end
+    end
+    return raw
 end
 local function sessionLogEvent(kind,message)
     kind=type(kind)=="string" and kind or "event"
@@ -358,8 +378,14 @@ local function sessionHexPoll()
             or old.otherOwns~=row.otherOwns
             or old.claimByPack~=row.claimByPack
             or old.state~=row.state
-            or old.claimProgress~=row.claimProgress
-            or old.scent~=row.scent
+            or (old.claimProgress==nil)~=(row.claimProgress==nil)
+            or (old.scent==nil)~=(row.scent==nil)
+            -- Progress can matter at 1%, but tiny scent drift from all
+            -- hexes would otherwise overwhelm the history ring within minutes.
+            or (old.claimProgress and row.claimProgress
+                and math.abs(row.claimProgress-old.claimProgress)>=0.012)
+            or (old.scent and row.scent
+                and math.abs(row.scent-old.scent)>=0.025)
         if changed then
             sessionHexPrevious[key]=row
             sessionTotalHexChanges+=1
