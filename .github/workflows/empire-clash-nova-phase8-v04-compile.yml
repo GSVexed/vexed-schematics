@@ -51,7 +51,7 @@ jobs:
             'local function getFireGun()',
             'Knit.GetService("DamageService")',
             'if self ~= entry.signal or not entry.callback then',
-            'Ray.new(ray.Origin, unit * ray.Direction.Magnitude)',
+            'Ray.new(ray.Origin, unit * magnitude)',
             'if angle > config.MaxAngularCorrection then',
             'clearPath(selection.character, selection.point)',
             'return original(self, table.unpack(args, 1, args.n))',
