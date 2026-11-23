@@ -24,7 +24,7 @@ jobs:
           assert 'FERAL_TERRITORY_RUSH_V4' in source
           assert 'toggleTerritoryAuto' in source
           assert 'env.FERAL_TERRITORY_RUSH_V4={' in source
-          for item in ('AutoCare','careButton','careTick','careHuntEnabled','bestNPCFood',
+          for item in ('AUTO CARE','careButton','careTick','careHuntEnabled','bestNPCFood',
                        'safeWaterEdge','Hunger','Thirst','FeedCan','sendKeyE','sendNativeBite',
                        'SCENT_TRIGGER','landingCache','retryCooldown','lastEvidenceAt',
                        'value(a.key,"owner")==myPack','careProfiles','careConnection'):
