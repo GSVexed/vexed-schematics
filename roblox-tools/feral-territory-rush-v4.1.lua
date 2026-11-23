@@ -1,0 +1,1400 @@
+-- FERAL TERRITORY RUSH v4.1: SMART CLAIM + AUTO SURVIVAL
+-- Claims verified by replicated game state; client cannot conceal teleports from other players.
+-- Reads FeralTerritory.Hexes and per-hex attributes. Does not modify territory attrs.
+-- Moves the actual animal. Automatic retries are bounded; success requires replicated territory state.
+local Players=game:GetService("Players")
+local RS=game:GetService("ReplicatedStorage")
+local WS=game:GetService("Workspace")
+local RunService=game:GetService("RunService")
+local me=Players.LocalPlayer
+if not me or game.PlaceId~=108901361810209 then
+    warn("[FERAL Territory Probe v2] Expected FERAL Animal Survival.")
+    return
+end
+local env=(type(getgenv)=="function" and getgenv()) or _G
+for _,name in ipairs({"FERAL_POSITION_CLAIM_PROBE","FERAL_TERRITORY_MAINTENANCE_V2","FERAL_TERRITORY_MAINTENANCE_V3","FERAL_TERRITORY_RUSH_V4","FERAL_RADIUS_EXPERIMENT"}) do
+    local old=env[name]
+    if type(old)=="table" and type(old.stop)=="function" then
+        pcall(old.stop)
+    end
+end
+
+local world=RS:WaitForChild("FeralWorld",12)
+local module=world and world:FindFirstChild("TerritoryConfig")
+local namesModule=world and world:FindFirstChild("MapSpots")
+local terr=RS:WaitForChild("FeralTerritory",12)
+local pg=me:FindFirstChildOfClass("PlayerGui")
+if not (module and terr and pg) then
+    warn("[FERAL Territory Probe v2] Territory data or PlayerGui unavailable. Spawn first.")
+    return
+end
+local ok,cfg=pcall(require,module)
+if not ok or type(cfg)~="table" or type(cfg.parseHexes)~="function"
+    or type(cfg.hexCenter)~="function" or type(cfg.hexAt)~="function" then
+    warn("[FERAL Territory Probe v2] Native territory geometry is unavailable.")
+    return
+end
+local spotsData=nil
+if namesModule then
+    local good,result=pcall(require,namesModule)
+    if good and type(result)=="table" then spotsData=result end
+end
+local hexString=terr:GetAttribute("Hexes")
+if type(hexString)~="string" or hexString=="" then
+    local untilTime=os.clock()+10
+    repeat
+        task.wait(0.3)
+        hexString=terr:GetAttribute("Hexes")
+    until (type(hexString)=="string" and hexString~="") or os.clock()>=untilTime
+end
+if type(hexString)~="string" or hexString=="" then
+    warn("[FERAL Territory Probe v2] No server-replicated Hexes list received.")
+    return
+end
+local raw=cfg.parseHexes(hexString)
+local all={}
+local byKey={}
+for _,entry in ipairs(raw) do
+    if type(entry.i)=="number" and type(entry.j)=="number"
+        and type(entry.key)=="string" then
+        local center=cfg.hexCenter(entry.i,entry.j)
+        if typeof(center)=="Vector2" then
+            local t={key=entry.key,center=center,landing=center,name=entry.key}
+            table.insert(all,t)
+            byKey[t.key]=t
+        end
+    end
+end
+if #all==0 then
+    warn("[FERAL Territory Probe v2] Hex list is empty.")
+    return
+end
+
+local biome=WS:GetAttribute("FeralBiome") or "WolfValley"
+local landmarks=spotsData and (spotsData[biome] or spotsData.WolfValley)
+if type(landmarks)=="table" then
+    for _,spot in ipairs(landmarks) do
+        if typeof(spot.pos)=="Vector2" then
+            local i,j=cfg.hexAt(spot.pos.X,spot.pos.Y)
+            local key=type(cfg.hexKey)=="function" and cfg.hexKey(i,j)
+                or ("H"..tostring(i).."_"..tostring(j))
+            local t=byKey[key]
+            if t and not t.hasLandmark then
+                t.hasLandmark=true
+                t.landing=spot.pos
+                t.name=spot.name or spot.key or key
+            end
+        end
+    end
+end
+
+local function root()
+    local c=me.Character
+    local r=c and c:FindFirstChild("HumanoidRootPart")
+    local h=c and c:FindFirstChildOfClass("Humanoid")
+    if c and r and h and h.Health>0 and not r.Anchored then
+        return c,r,h
+    end
+end
+local function dist2D(p,pos)
+    return math.sqrt((p.X-pos.X)^2+(p.Z-pos.Y)^2)
+end
+local function value(key,suffix)
+    return terr:GetAttribute(key.."_"..suffix)
+end
+local function isNeutral(key)
+    return value(key,"neutral")==true
+end
+local function hold(key)
+    local v=value(key,"hold")
+    if type(v)=="number" and v==v then return math.clamp(v,0,1) end
+    return nil
+end
+local function isOwned(key)
+    local pack=me:GetAttribute("FeralPack")
+    return pack~=nil and value(key,"owner")==pack
+end
+local function countTypes()
+    local pack=me:GetAttribute("FeralPack")
+    local n={total=#all,eligible=0,owned=0,fading=0,remaining=0,neutral=0}
+    for _,t in ipairs(all) do
+        if isNeutral(t.key) then
+            n.neutral+=1
+        else
+            n.eligible+=1
+            if pack~=nil and value(t.key,"owner")==pack then
+                n.owned+=1
+                local h=hold(t.key)
+                if h~=nil and h<0.985 then n.fading+=1 end
+            else
+                n.remaining+=1
+            end
+        end
+    end
+    return n
+end
+
+local mode="PRIORITY" -- Restore urgent pack scent, then capture other territory.
+local SCENT_TRIGGER=0.85
+local SCENT_SUCCESS=0.97
+local retryCooldown={}
+local landingCache={}
+local claimCompletions=0
+local claimDuration=0
+local totalRetries,totalSkipped,totalCompleted=0,0,0
+local lastFailure=nil
+local autoBusy=false
+local busySnap=false
+local movementToken=0
+local targets={}
+local index=1
+local selectedKey=nil
+local active=true
+local auto=false
+local autoToken=0
+local lastStatus="PRIORITY: restore scent under 85%, then claim"
+local changedCount=0
+local claimedCount=0
+local reScentCount=0
+local sampleLog={}
+local attempt=nil
+local lastLandingError=nil
+local attemptedLandingHex=nil
+local returnCFrame=nil
+local returnCharacter=nil
+local heartbeat=nil
+local nextUpdate=0
+local gui=nil
+local L={}
+local careConnection=nil
+local careEnabled=false
+local careBusy=false
+local careMode=nil
+local careResumeAuto=false
+local careHuntEnabled=true
+local careNextAction=0
+local careLastSnapAt=-math.huge
+local careAnchorChar=nil
+local careLastNeedValue=nil
+local careStartedAt=0
+local carePendingAttempts=0
+local careCooldownUntil=0
+local careProfiles={{hunger=35,thirst=35,hp=0.40},{hunger=55,thirst=55,hp=0.55},{hunger=20,thirst=20,hp=0.30}}
+local careProfileIndex=1
+local careMessage="CARE OFF"
+-- Avoid all other replicated players, including members of your own pack.
+-- A client may be unaware of unstreamed players: concealment is NOT guaranteed.
+local avoidPlayers=true
+local avoidRadii={120,200,300,450}
+local avoidRadiusIndex=3
+local travelStyle="ADAPTIVE" -- "WALK" never teleports
+local visibilityHoldUntil=0
+local lastSnapAttemptAt=-math.huge
+local snapLockUntil=0
+local snapCorrectionStreak=0
+local snapCorrectionCount=0
+local lastThreatDistance=math.huge
+local lastThreatName=nil
+local safeWalkRadius=155
+local function avoidRadius()
+    return avoidRadii[avoidRadiusIndex]
+end
+local function nearestPlayerAt(position)
+    local nearest=math.huge
+    local seen=nil
+    for _,other in ipairs(Players:GetPlayers()) do
+        if other~=me then
+            local character=other.Character
+            local body=character and character:FindFirstChild("HumanoidRootPart")
+            local hum=character and character:FindFirstChildOfClass("Humanoid")
+            if body and body:IsA("BasePart") and (not hum or hum.Health>0) then
+                local dx=body.Position.X-position.X
+                local dz=body.Position.Z-position.Z
+                local distance=math.sqrt(dx*dx+dz*dz)
+                if distance<nearest then
+                    nearest=distance
+                    seen=other
+                end
+            end
+        end
+    end
+    return nearest,seen
+end
+local function otherPlayerNearby(position,extra)
+    if not avoidPlayers then return false,math.huge,nil end
+    local distance,other=nearestPlayerAt(position)
+    return distance<avoidRadius()+(extra or 0),distance,other
+end
+local function currentPlayerThreat()
+    local _,body=root()
+    if not body then return false end
+    local threatened,distance,other=otherPlayerNearby(body.Position,0)
+    lastThreatDistance=distance
+    lastThreatName=other and other.DisplayName or nil
+    if threatened then
+        visibilityHoldUntil=math.max(visibilityHoldUntil,os.clock()+6)
+    end
+    return threatened,distance,other
+end
+local function restrictSnaps(reason)
+    snapCorrectionCount+=1
+    snapCorrectionStreak=math.min(5,snapCorrectionStreak+1)
+    local cool=math.min(360,45*2^(snapCorrectionStreak-1))
+    snapLockUntil=math.max(snapLockUntil,os.clock()+cool)
+    lastFailure=(reason or "Server corrected teleport").." — no repeat snap for "..cool.."s"
+    return cool
+end
+
+local function score(t)
+    local h=hold(t.key)
+    if isOwned(t.key) then
+        if h==nil then return -1 end
+        if h<0.35 then return 300+(1-h)*100 end
+        if h<SCENT_TRIGGER then return 200+(1-h)*100 end
+        return -100
+    end
+    local progress=value(t.key,"prog")
+    if value(t.key,"by")==me:GetAttribute("FeralPack")
+        and type(progress)=="number" and progress>0 then
+        return 420+math.clamp(progress,0,1)*60
+    end
+    local owner=value(t.key,"owner")
+    return if owner==nil then 100 else 80
+end
+local function rebuild()
+    local prior=selectedKey
+    local result={}
+    for _,t in ipairs(all) do
+        if not isNeutral(t.key)
+            and (mode=="ALL" or (mode=="SCENT" and isOwned(t.key))
+            or (mode=="CLAIM" and not isOwned(t.key))
+            or (mode=="PRIORITY" and score(t)>0)) then
+            table.insert(result,t)
+        end
+    end
+    if mode=="SCENT" or mode=="PRIORITY" then
+        table.sort(result,function(a,b)
+            local ha,hb=score(a),score(b)
+            if ha==hb then return a.key<b.key end
+            return ha>hb
+        end)
+    elseif mode=="CLAIM" then
+        table.sort(result,function(a,b)
+            local sa,sb=score(a),score(b)
+            if sa~=sb then return sa>sb end
+            return a.key<b.key
+        end)
+    else
+        table.sort(result,function(a,b) return a.key<b.key end)
+    end
+    targets=result
+    index=1
+    if prior then
+        for i,t in ipairs(targets) do
+            if t.key==prior then index=i break end
+        end
+    end
+    selectedKey=targets[index] and targets[index].key or nil
+end
+rebuild()
+local function target()
+    return targets[index]
+end
+local function say(s)
+    lastStatus=s
+    if L.Status then L.Status.Text=s end
+end
+local function event(s)
+    table.insert(sampleLog,1,string.format("%.1f: %s",os.clock(),s))
+    if #sampleLog>18 then table.remove(sampleLog) end
+end
+
+gui=Instance.new("ScreenGui")
+gui.Name="FERAL_TerritoryRushV4"
+gui.ResetOnSpawn=false
+gui.IgnoreGuiInset=true
+gui.DisplayOrder=360
+gui.Parent=pg
+local frame=Instance.new("Frame")
+frame.Name="Panel"
+frame.Position=UDim2.new(1,-426,0,78)
+frame.Size=UDim2.fromOffset(410,422)
+frame.BackgroundColor3=Color3.fromRGB(18,26,35)
+frame.BorderSizePixel=0
+frame.Parent=gui
+Instance.new("UICorner",frame).CornerRadius=UDim.new(0,10)
+local border=Instance.new("UIStroke",frame)
+border.Color=Color3.fromRGB(67,87,108)
+border.Thickness=1
+local function label(name,y,sz)
+    local l=Instance.new("TextLabel")
+    l.Name=name
+    l.Size=UDim2.fromOffset(384,sz or 21)
+    l.Position=UDim2.fromOffset(12,y)
+    l.BackgroundTransparency=1
+    l.Text=""
+    l.TextColor3=Color3.fromRGB(224,235,245)
+    l.Font=Enum.Font.Gotham
+    l.TextSize=12
+    l.TextXAlignment=Enum.TextXAlignment.Left
+    l.TextTruncate=Enum.TextTruncate.AtEnd
+    l.Parent=frame
+    L[name]=l
+    return l
+end
+label("Title",10,24).Text="FERAL  |  TERRITORY RUSH + CARE v4"
+L.Title.Font=Enum.Font.GothamBold
+L.Title.TextSize=14
+label("Counts",42)
+label("Selected",69)
+label("Owner",96)
+label("Distance",123)
+label("Telemetry",150)
+label("Evidence",177)
+label("Status",207,23).TextColor3=Color3.fromRGB(250,198,120)
+local function button(n,s,x,y,w,color)
+    local b=Instance.new("TextButton")
+    b.Name=n
+    b.Text=s
+    b.Font=Enum.Font.GothamBold
+    b.TextSize=11
+    b.TextColor3=Color3.fromRGB(253,253,253)
+    b.BackgroundColor3=color
+    b.Size=UDim2.fromOffset(w,29)
+    b.Position=UDim2.fromOffset(x,y)
+    b.Parent=frame
+    Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
+    return b
+end
+local modeB=button("Mode","MODE: PRIORITY",12,242,103,Color3.fromRGB(56,81,111))
+local prevB=button("Prev","<",121,242,29,Color3.fromRGB(57,79,101))
+local nextB=button("Next",">",155,242,29,Color3.fromRGB(57,79,101))
+local snapB=button("Snap","SNAP",190,242,60,Color3.fromRGB(42,109,128))
+local autoB=button("Auto","AUTO: OFF",256,242,98,Color3.fromRGB(44,104,89))
+local closeB=button("Close","X",360,242,38,Color3.fromRGB(119,61,72))
+local returnB=button("Return","RETURN",12,274,66,Color3.fromRGB(90,70,108))
+local worstB=button("Worst","WORST SCENT",84,274,105,Color3.fromRGB(85,68,110))
+local copyB=button("Copy","COPY RESULT",195,274,114,Color3.fromRGB(54,90,95))
+local reloadB=button("Rescan","RESCAN",315,274,83,Color3.fromRGB(75,76,90))
+
+local function release()
+    auto=false
+    autoToken+=1
+    autoB.Text="AUTO: OFF"
+end
+local function stop()
+    if not active then return end
+    active=false
+    release()
+    if heartbeat then heartbeat:Disconnect() heartbeat=nil end
+    if careConnection then careConnection:Disconnect() careConnection=nil end
+    careEnabled=false
+    if gui then gui:Destroy() gui=nil end
+    movementToken+=1
+    attempt=nil
+    if env.FERAL_TERRITORY_RUSH_V4
+        and env.FERAL_TERRITORY_RUSH_V4.stop==stop then
+        env.FERAL_TERRITORY_RUSH_V4=nil
+    end
+end
+closeB.Activated:Connect(stop)
+
+local function choose(i)
+    movementToken+=1
+    attempt=nil
+    if #targets==0 then
+        selectedKey=nil
+        say("No targets in "..mode.." mode")
+        return
+    end
+    index=((i-1)%#targets)+1
+    selectedKey=targets[index].key
+    say("Selected "..selectedKey)
+end
+prevB.Activated:Connect(function()
+    release()
+    choose(index-1)
+end)
+nextB.Activated:Connect(function()
+    release()
+    choose(index+1)
+end)
+modeB.Activated:Connect(function()
+    release()
+    if mode=="PRIORITY" then mode="SCENT"
+    elseif mode=="SCENT" then mode="CLAIM"
+    elseif mode=="CLAIM" then mode="ALL"
+    else mode="PRIORITY" end
+    movementToken+=1
+    attempt=nil
+    selectedKey=nil
+    rebuild()
+    modeB.Text="MODE: "..mode
+    say("Mode changed to "..mode)
+end)
+worstB.Activated:Connect(function()
+    release()
+    mode="SCENT"
+    modeB.Text="MODE: SCENT"
+    movementToken+=1
+    attempt=nil
+    selectedKey=nil
+    rebuild()
+    say(target() and "Selected lowest-scent owned hex" or "No owned hexes found")
+end)
+reloadB.Activated:Connect(function()
+    release()
+    movementToken+=1
+    attempt=nil
+    rebuild()
+    say("Targets updated from replicated territory state")
+end)
+returnB.Activated:Connect(function()
+    local c,r=root()
+    if not (c and r and c==returnCharacter and returnCFrame) then
+        say("No saved return position for current animal")
+        return
+    end
+    release()
+    movementToken+=1
+    attempt=nil
+    local moved=pcall(function()
+        c:PivotTo(c:GetPivot()+(returnCFrame.Position-r.Position))
+        r.AssemblyLinearVelocity=Vector3.zero
+        r.AssemblyAngularVelocity=Vector3.zero
+    end)
+    say(moved and "RETURN attempted (not guaranteed server-accepted)" or "Return failed")
+end)
+
+local function safePoint(t,c)
+    -- Search the entire target hex, not just 10 points near its centre.
+    -- Remote map chunks often are not streamed when this probe first runs.
+    local candidate={t.landing,t.center}
+    local radii={25,50,75,95,108}
+    for _,radius in ipairs(radii) do
+        for direction=0,15 do
+            local angle=direction*math.pi/8
+            table.insert(candidate,t.center+Vector2.new(
+                math.cos(angle)*radius,math.sin(angle)*radius))
+        end
+    end
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={c}
+    params.IgnoreWater=false
+    local stats={sampled=0,hits=0,water=0,steep=0}
+    local last=landingCache[t.key]
+    if typeof(last)=="Vector3" then
+        local ray=WS:Raycast(Vector3.new(last.X,2300,last.Z),Vector3.new(0,-4500,0),params)
+        if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>=0.35
+            and (Vector2.new(last.X,last.Z)-t.center).Magnitude<115 then
+            return ray.Position,stats
+        end
+        landingCache[t.key]=nil
+    end
+    for _,p in ipairs(candidate) do
+        if typeof(p)=="Vector2" then
+            local i,j=cfg.hexAt(p.X,p.Y)
+            local check=type(cfg.hexKey)=="function" and cfg.hexKey(i,j)
+                or ("H"..tostring(i).."_"..tostring(j))
+            if check==t.key and (p-t.center).Magnitude<115 then
+                stats.sampled+=1
+                local ray=WS:Raycast(Vector3.new(p.X,2300,p.Y),
+                    Vector3.new(0,-4500,0),params)
+                if ray then
+                    stats.hits+=1
+                    if ray.Material==Enum.Material.Water then
+                        stats.water+=1
+                    elseif ray.Normal.Y<0.35 then
+                        stats.steep+=1
+                    else
+                        landingCache[t.key]=ray.Position
+                        return ray.Position,stats
+                    end
+                end
+            end
+        end
+    end
+    return nil,stats
+end
+
+local function streamGround(t,c,r)
+    local ground,stats=safePoint(t,c)
+    if ground then return ground,"loaded" end
+    say("Ground not loaded; requesting map streaming for "..t.key)
+    local okRequest,requestErr=pcall(function()
+        -- Do not gate on type(WS.RequestStreamAroundAsync): native methods can
+        -- be exposed differently by executors. The call itself is protected.
+        WS:RequestStreamAroundAsync(Vector3.new(
+            t.center.X,math.max(30,r.Position.Y),t.center.Y))
+    end)
+    if not active then return nil,"Probe closed" end
+    -- Allow a delayed chunk response before declaring the hex unreachable.
+    for pass=1,8 do
+        ground,stats=safePoint(t,c)
+        if ground then
+            return ground,string.format("streamed after pass %d",pass)
+        end
+        if pass<8 then task.wait(0.36) end
+        if not active then return nil,"Probe closed" end
+    end
+    local why=stats.hits==0 and "no terrain/parts loaded"
+        or stats.water==stats.hits and "only water detected"
+        or "no walkable land detected"
+    return nil,string.format("%s (%d rays; %d hits; stream request %s)",
+        why,stats.sampled,stats.hits,
+        okRequest and "accepted" or "failed")
+end
+
+local function applyPosition(a)
+    local c,r=root()
+    if not a or c~=a.character or not r then
+        return false,"Animal changed or died"
+    end
+    local ok,err=pcall(function()
+        c:PivotTo(c:GetPivot()+(a.destination-r.Position))
+        r.AssemblyLinearVelocity=Vector3.zero
+        r.AssemblyAngularVelocity=Vector3.zero
+    end)
+    if not ok then return false,tostring(err) end
+    a.snapCount+=1
+    a.lastSnap=os.clock()
+    return true,nil
+end
+
+local function moveTo(t)
+    if not t then return false,"No target selected" end
+    movementToken+=1
+    local thisMovement=movementToken
+    attempt=nil
+    local c,r,h=root()
+    if not c then return false,"Spawn a living animal first" end
+    local pack=me:GetAttribute("FeralPack")
+    if pack==nil then return false,"Join a pack before territory maintenance" end
+    if c:GetAttribute("FeralDenRoot") or c:GetAttribute("FeralPinned")
+        or c:GetAttribute("FeralFlyLocal")
+        or (c:GetAttribute("FeralFly") and c:GetAttribute("FeralFly")~="flutter") then
+        return false,"Land and exit pinned/den modes before SNAP"
+    end
+    local owner=value(t.key,"owner")
+    local oldHold=hold(t.key)
+    local oldProgress=value(t.key,"prog")
+    if not returnCFrame or returnCharacter~=c then
+        returnCFrame=r.CFrame
+        returnCharacter=c
+    end
+    local startingDistance=dist2D(r.Position,t.center)
+    lastLandingError=nil
+    attemptedLandingHex=t.key
+    local ground,groundInfo=streamGround(t,c,r)
+    if not active or movementToken~=thisMovement then
+        return false,"Movement canceled"
+    end
+    if not ground then
+        lastLandingError="No safe landing: "..t.key.." — "..groundInfo
+        event(lastLandingError)
+        return false,lastLandingError
+    end
+    local clearance=math.max(3,h.HipHeight+r.Size.Y*0.5+1.0)
+    local point=ground+Vector3.new(0,clearance,0)
+    local a={
+        key=t.key,pack=pack,originalOwner=owner,originalHold=oldHold,
+        originalProgress=type(oldProgress)=="number" and oldProgress or 0,
+        lastHold=oldHold,lastProgress=type(oldProgress)=="number" and oldProgress or 0,
+        began=os.clock(),startDist=startingDistance,
+        evidenceProgress=false,evidenceScent=false,evidenceOwner=false,
+        destination=point,character=c,lastSnap=0,snapCount=0,
+        snapBacks=0,inTarget=false,lastEvidenceAt=os.clock(),
+        failed=false,kind=owner==pack and "SCENT" or "CLAIM"
+    }
+    attempt=a
+    local okMove,err=applyPosition(a)
+    if not okMove then
+        a.failed=true
+        return false,"SNAP failed: "..tostring(err)
+    end
+    event(string.format("SNAP %s from %.0f studs (%s)",
+        t.key,startingDistance,groundInfo))
+    return true,string.format("SNAP %s — %s; checking real territory state",
+        t.key,a.kind)
+end
+
+-- The live game sometimes corrects a snap-back to the old location.
+-- Only retry while an explicit SNAP or AUTO target is current;
+-- at most 4 placements, spaced >=3 seconds apart, then stop.
+local function keepTarget()
+    local a=attempt
+    if not (a and a.destination and not a.failed and active) then return end
+    local c,r=root()
+    if c~=a.character or not r then
+        a.failed=true
+        lastFailure="Animal changed/died during maintenance"
+        return
+    end
+    local distance=(r.Position-a.destination).Magnitude
+    if distance<125 then
+        a.inTarget=true
+        return
+    end
+    local elapsed=os.clock()-a.lastSnap
+    if elapsed<1.6 or os.clock()-a.began>35 then return end
+    if a.snapCount>=3 then
+        a.failed=true
+        lastFailure="Server kept correcting position: "..a.key
+        event(lastFailure)
+        return
+    end
+    a.snapBacks+=1
+    totalRetries+=1
+    local okMove,err=applyPosition(a)
+    if not okMove then
+        a.failed=true
+        lastFailure="Snap retry failed: "..tostring(err)
+    else
+        event(string.format("Retry after snap-back %s (%d/3)",
+            a.key,a.snapCount))
+    end
+end
+
+snapB.Activated:Connect(function()
+    if autoBusy then
+        say("AUTO running — stop it before manual SNAP")
+        return
+    end
+    release()
+    if busySnap then
+        say("Already finding a safe landing")
+        return
+    end
+    busySnap=true
+    local okMove,msg
+    local worked,err=pcall(function()
+        okMove,msg=moveTo(target())
+    end)
+    busySnap=false
+    if worked then
+        say(msg or "No position result")
+    else
+        lastFailure=tostring(err)
+        say("SNAP error: "..tostring(err))
+    end
+end)
+
+local function observe()
+    if not attempt then return end
+    local a=attempt
+    local nowHold=hold(a.key)
+    local nowProg=value(a.key,"prog")
+    local owner=value(a.key,"owner")
+    local by=value(a.key,"by")
+    local state=value(a.key,"state")
+    if owner==a.pack and a.originalOwner~=a.pack and not a.evidenceOwner then
+        a.evidenceOwner=true
+        claimedCount+=1
+        changedCount+=1
+        event(a.key.." claimed by pack after SNAP")
+    end
+    if owner==a.pack and nowHold~=nil
+        and a.lastHold~=nil and nowHold>a.lastHold+0.001 then
+        a.lastEvidenceAt=os.clock()
+        if not a.evidenceScent then
+            a.evidenceScent=true
+            reScentCount+=1
+            changedCount+=1
+            event(a.key.." scent rose after SNAP")
+        end
+    end
+    if by==a.pack and state=="claim" and type(nowProg)=="number"
+        and nowProg>a.lastProgress+0.001 then
+        a.lastEvidenceAt=os.clock()
+        if not a.evidenceProgress then
+            a.evidenceProgress=true
+            changedCount+=1
+            event(a.key.." claim progressed after SNAP")
+        end
+    end
+    a.lastHold=nowHold
+    if type(nowProg)=="number" then a.lastProgress=nowProg end
+    keepTarget()
+end
+
+local function report()
+    local n=countTypes()
+    local t=target()
+    local _,r=root()
+    local a=attempt
+    return {
+        version="4.1.0",mode=mode,biome=biome,
+        hexCount=n.total,claimable=n.eligible,neutral=n.neutral,
+        owned=n.owned,fading=n.fading,other=n.remaining,
+        selected=t and t.key,
+        selectedHold=t and hold(t.key),
+        selectedOwnerIsPack=t and isOwned(t.key),
+        selectedDistance=t and r and math.floor(dist2D(r.Position,t.center)),
+        attemptedLandingHex=attemptedLandingHex,
+        landingError=lastLandingError,
+        testKey=a and a.key,testAge=a and math.floor(os.clock()-a.began),
+        observedScentRise=a and a.evidenceScent or false,
+        observedClaimProgress=a and a.evidenceProgress or false,
+        observedOwnerChange=a and a.evidenceOwner or false,
+        changesObserved=changedCount,
+        claimChanges=claimedCount,scentChanges=reScentCount,
+        autoEnabled=auto,totalSnapRetries=totalRetries,
+        totalSkipped=totalSkipped,totalCompleted=totalCompleted,
+        claimed=claimCompletions,averageClaimSeconds=if claimCompletions>0 then claimDuration/claimCompletions else nil,
+        currentSnaps=a and a.snapCount or 0,
+        snapFailed=a and a.failed or false,
+        lastFailure=lastFailure,lastStatus=lastStatus,
+        events=sampleLog
+    }
+end
+copyB.Activated:Connect(function()
+    local p=report()
+    local v={}
+    for _,key in ipairs({
+        "version","mode","biome","hexCount","claimable","neutral",
+        "owned","fading","other","selected","selectedHold","selectedOwnerIsPack",
+        "selectedDistance","testKey","testAge","observedScentRise",
+        "observedClaimProgress","observedOwnerChange","changesObserved",
+        "claimChanges","scentChanges","autoEnabled","attemptedLandingHex",
+        "landingError","totalSnapRetries","totalSkipped","totalCompleted",
+        "currentSnaps","snapFailed","lastFailure","lastStatus"
+    }) do
+        table.insert(v,key.."="..tostring(p[key]))
+    end
+    local result="[FERAL TERRITORY RUSH V4.0] "..table.concat(v," | ")
+    if type(setclipboard)=="function" then
+        local success=pcall(setclipboard,result)
+        say(success and "Copied! Paste results into ChatGPT" or "Copy failed; printed in console")
+    else
+        say("Clipboard unavailable; printed in console")
+    end
+    print(result)
+end)
+
+local function update()
+    observe()
+    local counts=countTypes()
+    local t=target()
+    L.Counts.Text=string.format(
+        "Server hexes: %d | Eligible: %d | Pack: %d | Fading: %d",
+        counts.total,counts.eligible,counts.owned,counts.fading)
+    if not t then
+        L.Selected.Text="Mode "..mode..": no eligible targets"
+        L.Owner.Text="Try MODE: ALL or join a pack"
+        L.Distance.Text=""
+        L.Telemetry.Text=""
+        L.Evidence.Text=""
+        return
+    end
+    local _,r=root()
+    local h=hold(t.key)
+    local progress=value(t.key,"prog")
+    local state=value(t.key,"state")
+    local isMine=isOwned(t.key)
+    local own=value(t.key,"owner")
+    local dist=r and dist2D(r.Position,t.center)
+    L.Selected.Text=string.format("%s %d/%d: %s (%s)",
+        mode,index,#targets,t.name,t.key)
+    L.Owner.Text=string.format("%s | Scent: %s",
+        isMine and "YOUR PACK - RE-SCENT ALLOWED"
+            or (own and "OTHER PACK - CAPTURE POSSIBLE" or "UNCLAIMED - CAPTURE"),
+        h and string.format("%.1f%%",h*100) or "unknown")
+    L.Distance.Text="Hex-center distance: "..(dist and string.format("%.0f",dist) or "not spawned")
+        .." | Old radius: 120"
+    L.Telemetry.Text=string.format("State: %s | Claim: %s | Tries: %s",
+        tostring(state or "idle"),
+        type(progress)=="number" and string.format("%.1f%%",progress*100)
+            or "unknown",
+        attempt and tostring(attempt.snapCount) or "-")
+    if attempt and attempt.key==t.key then
+        if attempt.failed then
+            L.Evidence.Text="SNAP FAILED: "..tostring(lastFailure)
+            L.Evidence.TextColor3=Color3.fromRGB(251,149,132)
+        elseif attempt.evidenceScent then
+            L.Evidence.Text="REPLICATED SCENT INCREASE OBSERVED"
+            L.Evidence.TextColor3=Color3.fromRGB(133,243,177)
+        elseif attempt.evidenceOwner then
+            L.Evidence.Text="OWNERSHIP CHANGED TO YOUR PACK"
+            L.Evidence.TextColor3=Color3.fromRGB(133,243,177)
+        elseif attempt.evidenceProgress then
+            L.Evidence.Text="REPLICATED CLAIM PROGRESS OBSERVED"
+            L.Evidence.TextColor3=Color3.fromRGB(133,243,177)
+        else
+            L.Evidence.Text="At target? Watch replicated scent/claim changes"
+            L.Evidence.TextColor3=Color3.fromRGB(247,195,119)
+        end
+    else
+        L.Evidence.Text=lastLandingError and attemptedLandingHex==t.key
+            and lastLandingError
+            or (isMine and "Owned hexes are valid RE-SCENT targets"
+            or "SNAP tests server-recognised position")
+        L.Evidence.TextColor3=Color3.fromRGB(213,222,239)
+    end
+end
+heartbeat=RunService.Heartbeat:Connect(function()
+    if not active or os.clock()<nextUpdate then return end
+    nextUpdate=os.clock()+0.22
+    local success,err=pcall(update)
+    if not success then say("Monitor error: "..tostring(err)) end
+end)
+
+-- Choose the highest-priority actionable hex, excluding recently failed ones.
+-- SCENT mode watches for scent under 85%; PRIORITY does scent then claims.
+local function bestAutoTarget()
+    local now=os.clock()
+    local best=nil
+    local bestScore=-math.huge
+    for _,t in ipairs(all) do
+        if not isNeutral(t.key) and (retryCooldown[t.key] or 0)<=now then
+            local p=score(t)
+            local valid=(mode=="PRIORITY" and p>0)
+                or (mode=="SCENT" and isOwned(t.key)
+                    and type(hold(t.key))=="number"
+                    and hold(t.key)<SCENT_TRIGGER)
+                or (mode=="CLAIM" and not isOwned(t.key))
+            if valid and p>bestScore then
+                best=t
+                bestScore=p
+            end
+        end
+    end
+    return best
+end
+
+local function toggleTerritoryAuto()
+    if careMode then
+        careResumeAuto=true
+        say("AUTO queued until "..careMode.." care is finished")
+        return
+    end
+    if auto then
+        release()
+        say("AUTO stopped by user")
+        return
+    end
+    if mode=="ALL" then
+        say("Switch to PRIORITY, SCENT or CLAIM before AUTO")
+        return
+    end
+    if not me:GetAttribute("FeralPack") then
+        say("Join a pack before running AUTO")
+        return
+    end
+    if busySnap or autoBusy then
+        say("Another territory attempt is still running")
+        return
+    end
+    auto=true
+    autoToken+=1
+    local token=autoToken
+    autoB.Text="AUTO: ON"
+    say("AUTO: restores endangered scent, then captures")
+    task.spawn(function()
+        autoBusy=true
+        local myPack=me:GetAttribute("FeralPack")
+        while active and auto and token==autoToken do
+            if me:GetAttribute("FeralPack")~=myPack then
+                release()
+                say("Pack changed — AUTO stopped")
+                break
+            end
+            local c=root()
+            if not c then
+                release()
+                say("Animal died or despawned — AUTO stopped")
+                break
+            end
+            local t=bestAutoTarget()
+            if not t then
+                say("AUTO WATCH: all claimed/healthy or cooling down; rescan in 2s")
+                task.wait(2)
+            else
+                selectedKey=t.key
+                rebuild()
+                for i,p in ipairs(targets) do
+                    if p.key==t.key then index=i break end
+                end
+                local okMove,msg
+                local callOK,callErr=pcall(function()
+                    okMove,msg=moveTo(t)
+                end)
+                say(callOK and msg or ("SNAP error: "..tostring(callErr)))
+                if not callOK or not okMove then
+                    retryCooldown[t.key]=os.clock()+35
+                    totalSkipped+=1
+                    lastFailure=callOK and msg or tostring(callErr)
+                    event("Skipped "..t.key..": "..tostring(lastFailure))
+                    task.wait(1)
+                else
+                    local a=attempt
+                    local deadline=os.clock()+(a.kind=="SCENT" and 105 or 90)
+                    local completed=false
+                    local reason=nil
+                    while active and auto and token==autoToken
+                        and os.clock()<deadline do
+                        task.wait(0.18)
+                        if not active or not auto or token~=autoToken then break end
+                        if a.failed then
+                            reason=lastFailure or "Repeated snap-back"
+                            break
+                        end
+                        if me:GetAttribute("FeralPack")~=myPack then
+                            reason="Pack changed"
+                            break
+                        end
+                        if a.kind=="SCENT" then
+                            if value(a.key,"owner")~=myPack then
+                                reason="Owned territory was lost"
+                                break
+                            end
+                            local currentHold=hold(a.key)
+                            if currentHold and currentHold>=SCENT_SUCCESS then
+                                completed=true
+                                break
+                            end
+                            if os.clock()-a.lastEvidenceAt>40 then
+                                reason="No server-replicated scent increase"
+                                break
+                            end
+                        else
+                            if value(a.key,"owner")==myPack then
+                                completed=true
+                                break
+                            end
+                            if os.clock()-a.lastEvidenceAt>28 then
+                                reason="No server-replicated claim progress"
+                                break
+                            end
+                        end
+                    end
+                    if not active or not auto or token~=autoToken then break end
+                    if completed then
+                        totalCompleted+=1
+                        if a.kind=="CLAIM" then
+                            claimCompletions+=1
+                            claimDuration+=os.clock()-a.began
+                        end
+                        retryCooldown[t.key]=os.clock()+8
+                        event(a.key.." completed: "..a.kind)
+                        say(a.key.." complete — selecting next")
+                    else
+                        retryCooldown[t.key]=os.clock()+45
+                        totalSkipped+=1
+                        lastFailure=reason or ("Timed out: "..t.key)
+                        event("Skipped "..t.key..": "..tostring(lastFailure))
+                        say("Skipped "..t.key..": "..tostring(lastFailure))
+                    end
+                    task.wait(1)
+                end
+            end
+        end
+        autoBusy=false
+    end)
+end
+autoB.Activated:Connect(toggleTerritoryAuto)
+
+
+-- Integrated survival lane. Gameplay events still use the game's own
+-- controls: native E to feed/drink, real NPC pursuit/attack where eligible.
+-- No client-side Hunger/Thirst/Health attribute edits or fake rewards.
+-- No genuine global invisibility is available from the captured client code:
+-- other players can still see server-replicated movement or teleportation.
+local careButton=button("Care","AUTO CARE: OFF",12,307,127,Color3.fromRGB(43,105,101))
+local huntButton=button("Hunt","HUNT: ON",145,307,104,Color3.fromRGB(64,92,116))
+local thresholdButton=button("Threshold","LIMITS: 35/35",255,307,143,Color3.fromRGB(72,78,108))
+L.Care=label("Care",347,23)
+L.Care.Text="CARE OFF • native E feeding only when FeedCan permits"
+L.Care.TextColor3=Color3.fromRGB(164,220,197)
+L.Stealth=label("Stealth",373,22)
+L.Stealth.Text="SERVER VISIBILITY: NORMAL  |  SNAP BACKOFF ACTIVE"
+L.Stealth.TextColor3=Color3.fromRGB(167,187,206)
+local UIS=game:GetService("UserInputService")
+local virtualInput=nil
+pcall(function()virtualInput=game:GetService("VirtualInputManager")end)
+local inputUnavailable=false
+local function sendKeyE()
+    if UIS:GetFocusedTextBox() or me:GetAttribute("FeralMenuOpen")==true then
+        return false
+    end
+    if virtualInput then
+        local ok=pcall(function()
+            virtualInput:SendKeyEvent(true,Enum.KeyCode.E,false,game)
+            task.wait(.07)
+            virtualInput:SendKeyEvent(false,Enum.KeyCode.E,false,game)
+        end)
+        if ok then return true end
+    end
+    if type(keypress)=="function" and type(keyrelease)=="function" then
+        local ok=pcall(function()
+            keypress(0x45)
+            task.wait(.07)
+            keyrelease(0x45)
+        end)
+        if ok then return true end
+    end
+    inputUnavailable=true
+    return false
+end
+local function sendNativeBite()
+    if UIS:GetFocusedTextBox() or me:GetAttribute("FeralMenuOpen")==true then
+        return false
+    end
+    if virtualInput then
+        local pos=UIS:GetMouseLocation()
+        local x,y=pos.X,pos.Y
+        local ok=pcall(function()
+            virtualInput:SendMouseButtonEvent(x,y,0,true,game,0)
+            task.wait(.06)
+            virtualInput:SendMouseButtonEvent(x,y,0,false,game,0)
+        end)
+        if ok then return true end
+    end
+    if type(mouse1click)=="function" then
+        return pcall(mouse1click)
+    end
+    inputUnavailable=true
+    return false
+end
+local function packFriend(model)
+    local owner=Players:GetPlayerFromCharacter(model)
+    local pack=owner and owner:GetAttribute("FeralPack") or model:GetAttribute("FeralPack")
+    local mine=me:GetAttribute("FeralPack")
+    return pack~=nil and mine~=nil and pack==mine
+end
+local function bestNPCFood(position)
+    local folder=WS:FindFirstChild("FeralNPCs")
+    if not folder then return nil end
+    local best,dist=nil,math.huge
+    local checked=0
+    for _,model in ipairs(folder:GetChildren()) do
+        checked+=1
+        if checked>80 then break end
+        if model:IsA("Model") and not packFriend(model)
+            and model:GetAttribute("FeralDead")~=true then
+            local npcRoot=model:FindFirstChild("HumanoidRootPart")
+            local npcHum=model:FindFirstChildOfClass("Humanoid")
+            if npcRoot and npcHum and npcHum.Health>0 then
+                local d=(npcRoot.Position-position).Magnitude
+                if d<230 and d<dist then
+                    dist=d
+                    best={root=npcRoot,model=model,distance=d}
+                end
+            end
+        end
+    end
+    return best
+end
+local function waterLandmark(position)
+    local mapSpots=spotsData and (spotsData[WS:GetAttribute("FeralBiome") or biome]
+        or spotsData.WolfValley)
+    local best=nil
+    local bestDistance=math.huge
+    if type(mapSpots)=="table" then
+        for _,spot in ipairs(mapSpots) do
+            local name=string.lower(tostring(spot.name or spot.key or ""))
+            if typeof(spot.pos)=="Vector2"
+                and (name:find("water",1,true) or name:find("lake",1,true)
+                    or name:find("pond",1,true) or name:find("falls",1,true)
+                    or name:find("spring",1,true) or name:find("river",1,true)) then
+                local d=(Vector2.new(position.X,position.Z)-spot.pos).Magnitude
+                if d<bestDistance then
+                    bestDistance=d
+                    best={name=spot.name or spot.key or "Water",
+                        center=spot.pos,distance=d}
+                end
+            end
+        end
+    end
+    return best
+end
+local function safeWaterEdge(target,char)
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={char}
+    params.IgnoreWater=false
+    local chosen=nil
+    local bestScore=math.huge
+    local radii={10,20,30,40}
+    for _,r in ipairs(radii) do
+        for i=0,11 do
+            local angle=i*math.pi/6
+            local x=target.center.X+math.cos(angle)*r
+            local z=target.center.Y+math.sin(angle)*r
+            local ray=WS:Raycast(Vector3.new(x,2300,z),
+                Vector3.new(0,-4500,0),params)
+            if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>0.40 then
+                local near=WS:Raycast(Vector3.new(x+6,2300,z),
+                    Vector3.new(0,-4500,0),params)
+                local score=r
+                if near and near.Material==Enum.Material.Water then score-=15 end
+                if score<bestScore then
+                    bestScore=score
+                    chosen=ray.Position
+                end
+            end
+        end
+    end
+    return chosen
+end
+local function careStats()
+    local char,r,hum=root()
+    if not char then return nil end
+    local hunger=char:GetAttribute("Hunger")
+    local thirst=char:GetAttribute("Thirst")
+    return char,r,hum,
+        type(hunger)=="number" and hunger or nil,
+        type(thirst)=="number" and thirst or nil,
+        hum.MaxHealth>0 and hum.Health/hum.MaxHealth or 0
+end
+local function stopCareMode(message,resume)
+    careMode=nil
+    careLastNeedValue=nil
+    carePendingAttempts=0
+    careMessage=message or "CARE WAITING"
+    local shouldResume=resume and careResumeAuto and not auto and active
+        and me:GetAttribute("FeralPack")~=nil
+    careResumeAuto=false
+    if shouldResume then
+        if not autoBusy then
+            toggleTerritoryAuto()
+        else
+            task.defer(function()
+                for _=1,20 do
+                    if not active or not careEnabled then return end
+                    if not autoBusy and not careMode then
+                        toggleTerritoryAuto()
+                        return
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+    end
+end
+local function nextCareMode(hunger,thirst,hp)
+    local lim=careProfiles[careProfileIndex]
+    -- Emergency thirst/food comes before optional HP rest. Ordinary low HP
+    -- pauses risky NPC hunting until recovery improves.
+    if thirst and thirst<20 then return "DRINK" end
+    if hunger and hunger<20 and hp>=0.20 then return "EAT" end
+    if hp<lim.hp then return "RECOVER" end
+    if thirst and thirst<lim.thirst then return "DRINK" end
+    if hunger and hunger<lim.hunger then return "EAT" end
+    return nil
+end
+local function tryCareAction(mode,char,rootPart,hum,hunger,thirst,hp)
+    local now=os.clock()
+    if now<careNextAction then return end
+    careNextAction=now+1.5
+    local can=char:GetAttribute("FeedCan")
+    local need=if mode=="DRINK" then thirst else hunger
+    if mode=="RECOVER" then
+        careMessage="LOW HP • TERRITORY PAUSED FOR RECOVERY"
+        return
+    end
+    if can==string.lower(mode) or
+        (mode=="EAT" and can=="eat") or
+        (mode=="DRINK" and can=="drink") then
+        local ok=sendKeyE()
+        if ok then
+            careMessage=mode.." • NATIVE E REQUESTED / VERIFYING NEEDS"
+            carePendingAttempts+=1
+        else
+            careMessage=mode.." • INPUT UNAVAILABLE / NEEDS MANUAL E"
+        end
+        return
+    end
+    if mode=="EAT" then
+        if not careHuntEnabled then
+            careMessage="HUNT DISABLED • FIND FOOD MANUALLY"
+            return
+        end
+        local npc=bestNPCFood(rootPart.Position)
+        if not npc then
+            careMessage="NO REPLICATED NPC PREY NEARBY"
+            return
+        end
+        local target=npc.root
+        if npc.distance>8 then
+            hum:MoveTo(target.Position)
+            careMessage=string.format("HUNT • APPROACHING NPC %.0f STUDS",npc.distance)
+        else
+            local face=Vector3.new(target.Position.X,rootPart.Position.Y,target.Position.Z)
+            if (face-rootPart.Position).Magnitude>1 then
+                pcall(function()
+                    char:PivotTo(CFrame.lookAt(rootPart.Position,face))
+                end)
+            end
+            careMessage=if sendNativeBite() then "HUNT • NATIVE ATTACK INPUT"
+                else "HUNT • ATTACK INPUT UNAVAILABLE"
+            carePendingAttempts+=1
+        end
+    else
+        local water=waterLandmark(rootPart.Position)
+        if not water then
+            careMessage="NO VALID WATER LANDMARK FOR THIS BIOME"
+            return
+        end
+        local horizontal=(Vector2.new(rootPart.Position.X,rootPart.Position.Z)-water.center).Magnitude
+        if horizontal<110 then
+            careMessage="WATER NEARBY • APPROACH WATER EDGE / NATIVE E"
+            local edge=safeWaterEdge(water,char)
+            if edge then hum:MoveTo(edge+Vector3.new(0,2,0)) end
+        elseif now-careLastSnapAt>55 then
+            careLastSnapAt=now
+            local destination=safeWaterEdge(water,char)
+            if destination then
+                local at=destination+Vector3.new(0,math.max(3,hum.HipHeight+rootPart.Size.Y*.5+1),0)
+                local ok=pcall(function()
+                    char:PivotTo(char:GetPivot()+(at-rootPart.Position))
+                end)
+                careMessage=if ok then "WATER • ONE GROUND-SAFE SNAP ATTEMPT"
+                    else "WATER • SNAP FAILED / NO SPAM"
+            else
+                careMessage="WATER TERRAIN NOT LOADED / MOVEMENT PAUSED"
+                task.spawn(function()
+                    pcall(function()
+                        WS:RequestStreamAroundAsync(Vector3.new(water.center.X,rootPart.Position.Y,water.center.Y))
+                    end)
+                end)
+            end
+        else
+            careMessage="WATER • WAITING FOR SAFE ROUTE / SNAP COOLDOWN"
+        end
+    end
+end
+local lastCareTick=0
+local function careTick()
+    if not active or not careEnabled then return end
+    local now=os.clock()
+    if now-lastCareTick<0.7 then return end
+    lastCareTick=now
+    local char,rootPart,hum,hunger,thirst,hp=careStats()
+    if not char then
+        careMessage="SPAWN ANIMAL TO ENABLE CARE"
+        return
+    end
+    local nextMode=nextCareMode(hunger,thirst,hp)
+    if not careMode then
+        if not nextMode or now<careCooldownUntil then
+            careMessage=if not nextMode then "NEEDS ABOVE THRESHOLDS"
+                else "CARE COOLDOWN / NO REPETITIVE INPUT"
+            return
+        end
+        careMode=nextMode
+        careStartedAt=now
+        carePendingAttempts=0
+        careLastNeedValue=if nextMode=="DRINK" then thirst
+            else if nextMode=="EAT" then hunger else hp
+        if auto then
+            careResumeAuto=true
+            release()
+            movementToken+=1
+            attempt=nil
+        end
+        careMessage="CARE: "..nextMode.." • TERRITORY INTERRUPTED"
+    end
+    local critical=nextCareMode(hunger,thirst,hp)
+    if critical=="DRINK" and careMode~="DRINK" and thirst and thirst<20 then
+        careMode="DRINK"
+        careStartedAt=now
+        carePendingAttempts=0
+        careLastNeedValue=thirst
+    end
+    local targetNeed=if careMode=="DRINK" then thirst
+        else if careMode=="EAT" then hunger else hp
+    local lim=careProfiles[careProfileIndex]
+    local recovered=if careMode=="DRINK" then
+        thirst and thirst>=lim.thirst+15
+        else if careMode=="EAT" then hunger and hunger>=lim.hunger+15
+        else hp>=math.min(0.95,lim.hp+0.20)
+    if recovered then
+        stopCareMode("CARE COMPLETE • RESUMING TERRITORIES",true)
+        return
+    end
+    if targetNeed and careLastNeedValue and targetNeed>careLastNeedValue+0.5 then
+        careLastNeedValue=targetNeed
+        careStartedAt=now
+        carePendingAttempts=0
+    end
+    if now-careStartedAt>45 then
+        careCooldownUntil=now+25
+        stopCareMode("CARE UNCONFIRMED • PAUSED 25 SEC",true)
+        return
+    end
+    if carePendingAttempts>=12 then
+        careCooldownUntil=now+25
+        stopCareMode("INPUTS UNCONFIRMED • STOPPED RETRIES",true)
+        return
+    end
+    if careBusy then return end
+    careBusy=true
+    task.spawn(function()
+        local ok,err=pcall(tryCareAction,careMode,char,rootPart,hum,hunger,thirst,hp)
+        if not ok then careMessage="CARE ERROR: "..tostring(err):sub(1,80) end
+        careBusy=false
+    end)
+end
+local careProfilesNames={"NORMAL","EARLY","CRITICAL"}
+careButton.Activated:Connect(function()
+    careEnabled=not careEnabled
+    careButton.Text=if careEnabled then "AUTO CARE: ON" else "AUTO CARE: OFF"
+    if not careEnabled then
+        stopCareMode("AUTO CARE DISABLED",true)
+    else
+        careMessage="WATCHING HUNGER, THIRST AND HP"
+    end
+end)
+huntButton.Activated:Connect(function()
+    careHuntEnabled=not careHuntEnabled
+    huntButton.Text=if careHuntEnabled then "HUNT: ON" else "HUNT: OFF"
+end)
+thresholdButton.Activated:Connect(function()
+    careProfileIndex=careProfileIndex%#careProfiles+1
+    local limits=careProfiles[careProfileIndex]
+    thresholdButton.Text=string.format("%s: %d/%d",careProfilesNames[careProfileIndex],
+        limits.hunger,limits.thirst)
+end)
+local lastCareUiUpdate=-math.huge
+careConnection=RunService.Heartbeat:Connect(function()
+    local ok,err=pcall(careTick)
+    if not ok then careMessage="CARE LOOP ERROR: "..tostring(err):sub(1,75) end
+    if os.clock()-lastCareUiUpdate>=0.25 then
+        lastCareUiUpdate=os.clock()
+        if L.Care and L.Care.Parent then
+            L.Care.Text=string.format("%s  |  %s",careEnabled and "ON" or "OFF",careMessage)
+        end
+    end
+end)
+
+env.FERAL_TERRITORY_RUSH_V4={
+    stop=stop,report=report,
+    startAuto=function()
+        if not auto then toggleTerritoryAuto() end
+    end,
+    stopAuto=release,
+    setCare=function(on)
+        careEnabled=on==true
+        careButton.Text=if careEnabled then "AUTO CARE: ON" else "AUTO CARE: OFF"
+    end,
+    careReport=function()
+        return {active=careEnabled,mode=careMode,message=careMessage,
+            hunt=careHuntEnabled,profile=careProfilesNames[careProfileIndex],
+            inputUnavailable=inputUnavailable}
+    end,
+    selectMode=function(m)
+        if m=="PRIORITY" or m=="SCENT" or m=="CLAIM" or m=="ALL" then
+            release()
+            mode=m
+            modeB.Text="MODE: "..mode
+            selectedKey=nil
+            rebuild()
+            return true
+        end
+        return false
+    end
+}
+update()
+print(string.format("[FERAL Territory RUSH v4.0] Hexes: %d, eligible: %d. Default PRIORITY mode; Auto checks actual _hold and ownership.",#all,countTypes().eligible))
+print("[FERAL Territory RUSH v4.0] Live character movement, bounded retries, server territory observation.")
