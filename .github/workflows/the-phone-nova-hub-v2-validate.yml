@@ -1,0 +1,64 @@
+name: THE PHONE NOVA v2 - Precision Hub validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/the-phone-nova-hub-v2.0.lua'
+      - 'roblox-tools/the-phone-nova.lua'
+      - '.github/workflows/the-phone-nova-hub-v2-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static game guard, UI and feature verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('roblox-tools/the-phone-nova-hub-v2.0.lua').read_text()
+          for needle in [
+            '10775041696','138199295184592','120688878033226',
+            'Enum.KeyCode.RightShift','ThePhoneNovaHubV2','COPY DIAGNOSTICS',
+            'STOP ALL HELPERS','Name="CompactHUD"', 'S.counters.duel',
+            'S.counters.bomb','S.counters.escape','S.counters.taken',
+            'S.counters.moon','S.counters.thin',
+            'type(mousemoverel)=="function"','type(setclipboard)=="function"',
+            'S.enabled.speed', 'base*1.03','S.enabled.thin','S.enabled.moonBoost',
+            'S.enabled.moonPath','S.enabled.takenPath','S.enabled.aim',
+            'QuickDrawBell','DuelButton','DuelShoot','BombHold','BombTap',
+            'ThinIceStart','EscapeFX','EscapeTap','TakenTap','TakenFX',
+            'MoonRaceFX','LocalWalk','ServerWalkSpeed','UnbindFromRenderStep("ThinIceBalance")',
+            'RightShift','local function cleanup()','S.alive=false',
+            'server_outcomes_unverified=true'
+          ]:
+              assert needle in s, f'missing v2 essential: {needle}'
+          for denied in [
+              'AdminGift','AdminPanel',':Teleport(',':PivotTo(',
+              'getgc(', 'getscriptbytecode(', 'decompile(', 'hookmetamethod(',
+              'HttpService:PostAsync(', 'HttpService:RequestAsync('
+          ]:
+              assert denied not in s, f'disallowed v2 operation: {denied}'
+          print('THE_PHONE_NOVA_V2_STATIC_PASS')
+          PY
+      - name: Download Luau compiler
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip -o /tmp/luau.zip
+          mkdir -p /tmp/luau
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          compiler="$(find /tmp/luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile complete Luau source
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova-hub-v2.0.lua
+          "$LUAU_COMPILER" --null roblox-tools/the-phone-nova.lua
+          echo 'THE_PHONE_NOVA_V2_COMPILE_PASS'
