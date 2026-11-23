@@ -410,7 +410,8 @@ local function attach(name,handler)
             if r and r:IsA("RemoteEvent") then
                 S.remote[name]=r
                 track(r.OnClientEvent,function(...)
-                    guarded(name,function()handler(...)end)
+                    local args=table.pack(...)
+                    guarded(name,function()handler(table.unpack(args,1,args.n))end)
                 end)
                 return
             end
