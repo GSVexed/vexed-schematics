@@ -204,6 +204,7 @@ local undergroundDepthIndex=2
 local undergroundRefused=false
 local undergroundConfirmed=nil
 local undergroundState=nil
+local hoverWatchConnection=nil
 local undergroundFailures=0
 local undergroundAttempts=0
 local undergroundSuccesses=0
@@ -363,7 +364,7 @@ local function label(name,y,sz)
     L[name]=l
     return l
 end
-label("Title",10,24).Text="FERAL  |  TERRITORY RUSH + CARE v4"
+label("Title",10,24).Text="FERAL  |  TERRITORY + SUBSURFACE v4.1"
 L.Title.Font=Enum.Font.GothamBold
 L.Title.TextSize=14
 label("Counts",42)
@@ -404,10 +405,14 @@ local function exitUnderground(rescue,why)
     if not state then return end
     undergroundState=nil
     if state.align then
-        state.align.Enabled=false
-        state.align:Destroy()
+        pcall(function()
+            state.align.Enabled=false
+            state.align:Destroy()
+        end)
     end
-    if state.attachment then state.attachment:Destroy() end
+    if state.attachment then
+        pcall(function() state.attachment:Destroy() end)
+    end
     local c,r=root()
     if rescue and c==state.character and r and state.surfacePoint then
         local here=r.Position
@@ -512,6 +517,7 @@ local function stop()
     release()
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
     if careConnection then careConnection:Disconnect() careConnection=nil end
+    if hoverWatchConnection then hoverWatchConnection:Disconnect() hoverWatchConnection=nil end
     careEnabled=false
     visibilityHoldUntil=0
     if gui then gui:Destroy() gui=nil end
@@ -593,8 +599,8 @@ returnB.Activated:Connect(function()
 end)
 
 local function safePoint(t,c)
-    -- Search the entire target hex, not just 10 points near its centre.
-    -- Remote map chunks often are not streamed when this probe first runs.
+    -- Probe the named claim circle; other hex areas may not count.
+    -- Remote terrain can be unstreamed when the probe first runs.
     local focus=t.landing or t.center
     local candidate={focus}
     if focus~=t.center then table.insert(candidate,t.center) end
@@ -805,9 +811,8 @@ local function moveTo(t)
     return true,string.format("ONE SNAP %s • waiting for accepted server state",t.key)
 end
 
--- The live game sometimes corrects a snap-back to the old location.
--- Only retry while an explicit SNAP or AUTO target is current;
--- at most 4 placements, spaced >=3 seconds apart, then stop.
+-- The game can correct client positions: never resend the same snap.
+-- A failed hold or underground probe is disabled with escalating cooldown.
 local function keepTarget()
     local a=attempt
     if not (a and a.destination and not a.failed and active) then return end
@@ -1777,6 +1782,28 @@ hoverDepthButton.Activated:Connect(function()
     end
     undergroundDepthIndex=undergroundDepthIndex%#undergroundDepths+1
     hoverDepthButton.Text="DEPTH: "..tostring(undergroundDepth())
+end)
+local hoverWatchLast=0
+hoverWatchConnection=RunService.Heartbeat:Connect(function()
+    local state=undergroundState
+    if not state or not active or os.clock()-hoverWatchLast<0.15 then return end
+    hoverWatchLast=os.clock()
+    local c,r=root()
+    if not c or c~=state.character or not r then
+        undergroundRequested=false
+        undergroundRefused=true
+        exitUnderground(false,"HOVER ABORTED: animal changed")
+        return
+    end
+    if r.Position.Y<state.position.Y-14 then
+        if attempt and attempt.travelType=="UNDERGROUND" then
+            failUnderground(attempt,"EMERGENCY: losing underground hover altitude")
+        else
+            undergroundRequested=false
+            undergroundRefused=true
+            exitUnderground(true,"EMERGENCY SURFACE RESCUE")
+        end
+    end
 end)
 local lastCareUiUpdate=-math.huge
 careConnection=RunService.Heartbeat:Connect(function()
