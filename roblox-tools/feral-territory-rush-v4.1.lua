@@ -442,9 +442,35 @@ local function beginUnderground(a,ground,surfacePoint)
     if not c or c~=a.character or not r then
         return false,"The current animal is not available"
     end
-    if undergroundState then exitUnderground(true,"Switching territory") end
     local y=ground.Y-undergroundDepth()
     local destination=Vector3.new(ground.X,y,ground.Z)
+    local existing=undergroundState
+    if existing and existing.character==c and existing.align and existing.align.Parent then
+        -- Reuse the already-held collision-free character and physics
+        -- constraint; only one transition to the next underground spot.
+        local changed,why=pcall(function()
+            existing.position=destination
+            existing.surfacePoint=surfacePoint
+            existing.started=os.clock()
+            existing.align.Position=destination
+            c:PivotTo(c:GetPivot()+(destination-r.Position))
+            r.AssemblyLinearVelocity=Vector3.zero
+            r.AssemblyAngularVelocity=Vector3.zero
+        end)
+        if changed then
+            a.destination=destination
+            a.surfacePoint=surfacePoint
+            a.travelType="UNDERGROUND"
+            a.lastSnap=os.clock()
+            a.snapCount+=1
+            undergroundAttempts+=1
+            undergroundStatus="UNDERGROUND TRANSFER • awaiting new claim evidence"
+            return true,nil
+        end
+        exitUnderground(true,"Subsurface transfer failed: "..tostring(why))
+        return false,tostring(why)
+    end
+    if undergroundState then exitUnderground(true,"Different animal / stale hover") end
     local state={character=c,root=r,surfacePoint=surfacePoint,
         position=destination,collisions={},started=os.clock()}
     local success,err=pcall(function()
@@ -711,7 +737,9 @@ local function moveTo(t)
     if not t then return false,"No target selected" end
     movementToken+=1
     local thisMovement=movementToken
-    exitUnderground(true,"Switching claim spot")
+    -- Keep an accepted underground hold active while the next terrain chunk
+    -- loads. It can be moved directly below the next territory without
+    -- needlessly surfacing between successful claims.
     attempt=nil
     local c,r,h=root()
     if not c then return false,"Spawn a living animal first" end
@@ -762,7 +790,6 @@ local function moveTo(t)
         failed=false,kind=owner==pack and "SCENT" or "CLAIM"
     }
     attempt=a
-    local distance=(point-r.Position).Magnitude
     if undergroundRequested and not undergroundRefused then
         local now=os.clock()
         if now<snapLockUntil or now-lastSnapAttemptAt<4.5 then
@@ -781,6 +808,10 @@ local function moveTo(t)
         event("SUBSURFACE TRIAL "..t.key.." • verifying real server claim state")
         return true,"SUBSURFACE TRIAL "..t.key.." • verification pending"
     end
+    if undergroundState then
+        exitUnderground(true,"Switching from underground to surface travel")
+    end
+    local distance=(point-r.Position).Magnitude
     if distance<=safeWalkRadius then
         a.travelType="WALK"
         h:MoveTo(point)
@@ -1802,7 +1833,19 @@ hoverWatchConnection=RunService.Heartbeat:Connect(function()
         exitUnderground(false,"HOVER ABORTED: animal changed")
         return
     end
-    if r.Position.Y<state.position.Y-14 then
+    local delta=r.Position-state.position
+    local horizontal=Vector2.new(delta.X,delta.Z).Magnitude
+    if os.clock()-state.started>0.9
+        and (horizontal>75 or delta.Y>10) then
+        if attempt and attempt.travelType=="UNDERGROUND" then
+            failUnderground(attempt,"SERVER REJECTED: position corrected; stopping hover")
+        else
+            undergroundRequested=false
+            undergroundRefused=true
+            restrictSnaps("Subsurface location corrected")
+            exitUnderground(false,"SUBSURFACE REJECTED • no repeated pull")
+        end
+    elseif r.Position.Y<state.position.Y-14 then
         if attempt and attempt.travelType=="UNDERGROUND" then
             failUnderground(attempt,"EMERGENCY: losing underground hover altitude")
         else
