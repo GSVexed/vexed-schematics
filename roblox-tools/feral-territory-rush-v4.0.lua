@@ -166,6 +166,22 @@ local heartbeat=nil
 local nextUpdate=0
 local gui=nil
 local L={}
+local careConnection=nil
+local careEnabled=false
+local careBusy=false
+local careMode=nil
+local careResumeAuto=false
+local careHuntEnabled=true
+local careNextAction=0
+local careLastSnapAt=-math.huge
+local careAnchorChar=nil
+local careLastNeedValue=nil
+local careStartedAt=0
+local carePendingAttempts=0
+local careCooldownUntil=0
+local careProfiles={{hunger=35,thirst=35,hp=0.40},{hunger=55,thirst=55,hp=0.55},{hunger=20,thirst=20,hp=0.30}}
+local careProfileIndex=1
+local careMessage="CARE OFF"
 
 local function score(t)
     local h=hold(t.key)
@@ -239,8 +255,8 @@ gui.DisplayOrder=360
 gui.Parent=pg
 local frame=Instance.new("Frame")
 frame.Name="Panel"
-frame.Position=UDim2.new(1,-426,0,105)
-frame.Size=UDim2.fromOffset(410,316)
+frame.Position=UDim2.new(1,-426,0,78)
+frame.Size=UDim2.fromOffset(410,422)
 frame.BackgroundColor3=Color3.fromRGB(18,26,35)
 frame.BorderSizePixel=0
 frame.Parent=gui
@@ -309,6 +325,8 @@ local function stop()
     active=false
     release()
     if heartbeat then heartbeat:Disconnect() heartbeat=nil end
+    if careConnection then careConnection:Disconnect() careConnection=nil end
+    careEnabled=false
     if gui then gui:Destroy() gui=nil end
     movementToken+=1
     attempt=nil
@@ -782,7 +800,7 @@ local function bestAutoTarget()
     return best
 end
 
-autoB.Activated:Connect(function()
+local function toggleTerritoryAuto()
     if auto then
         release()
         say("AUTO stopped by user")
@@ -906,10 +924,382 @@ autoB.Activated:Connect(function()
         end
         autoBusy=false
     end)
+end
+autoB.Activated:Connect(toggleTerritoryAuto)
+
+
+-- Integrated survival lane. Gameplay events still use the game's own
+-- controls: native E to feed/drink, real NPC pursuit/attack where eligible.
+-- No client-side Hunger/Thirst/Health attribute edits or fake rewards.
+-- No genuine global invisibility is available from the captured client code:
+-- other players can still see server-replicated movement or teleportation.
+local careButton=button("Care","AUTO CARE: OFF",12,307,127,Color3.fromRGB(43,105,101))
+local huntButton=button("Hunt","HUNT: ON",145,307,104,Color3.fromRGB(64,92,116))
+local thresholdButton=button("Threshold","LIMITS: 35/35",255,307,143,Color3.fromRGB(72,78,108))
+L.Care=label("Care",347,23)
+L.Care.Text="CARE OFF • native E feeding only when FeedCan permits"
+L.Care.TextColor3=Color3.fromRGB(164,220,197)
+L.Stealth=label("Stealth",373,22)
+L.Stealth.Text="SERVER VISIBILITY: NORMAL  |  SNAP BACKOFF ACTIVE"
+L.Stealth.TextColor3=Color3.fromRGB(167,187,206)
+local UIS=game:GetService("UserInputService")
+local virtualInput=nil
+pcall(function()virtualInput=game:GetService("VirtualInputManager")end)
+local inputUnavailable=false
+local function sendKeyE()
+    if UIS:GetFocusedTextBox() or me:GetAttribute("FeralMenuOpen")==true then
+        return false
+    end
+    if virtualInput then
+        local ok=pcall(function()
+            virtualInput:SendKeyEvent(true,Enum.KeyCode.E,false,game)
+            task.wait(.07)
+            virtualInput:SendKeyEvent(false,Enum.KeyCode.E,false,game)
+        end)
+        if ok then return true end
+    end
+    if type(keypress)=="function" and type(keyrelease)=="function" then
+        local ok=pcall(function()
+            keypress(0x45)
+            task.wait(.07)
+            keyrelease(0x45)
+        end)
+        if ok then return true end
+    end
+    inputUnavailable=true
+    return false
+end
+local function sendNativeBite()
+    if UIS:GetFocusedTextBox() or me:GetAttribute("FeralMenuOpen")==true then
+        return false
+    end
+    if virtualInput then
+        local pos=UIS:GetMouseLocation()
+        local x,y=pos.X,pos.Y
+        local ok=pcall(function()
+            virtualInput:SendMouseButtonEvent(x,y,0,true,game,0)
+            task.wait(.06)
+            virtualInput:SendMouseButtonEvent(x,y,0,false,game,0)
+        end)
+        if ok then return true end
+    end
+    if type(mouse1click)=="function" then
+        return pcall(mouse1click)
+    end
+    inputUnavailable=true
+    return false
+end
+local function packFriend(model)
+    local owner=Players:GetPlayerFromCharacter(model)
+    local pack=owner and owner:GetAttribute("FeralPack") or model:GetAttribute("FeralPack")
+    local mine=me:GetAttribute("FeralPack")
+    return pack~=nil and mine~=nil and pack==mine
+end
+local function bestNPCFood(position)
+    local folder=WS:FindFirstChild("FeralNPCs")
+    if not folder then return nil end
+    local best,dist=nil,math.huge
+    local checked=0
+    for _,model in ipairs(folder:GetChildren()) do
+        checked+=1
+        if checked>80 then break end
+        if model:IsA("Model") and not packFriend(model)
+            and model:GetAttribute("FeralDead")~=true then
+            local npcRoot=model:FindFirstChild("HumanoidRootPart")
+            local npcHum=model:FindFirstChildOfClass("Humanoid")
+            if npcRoot and npcHum and npcHum.Health>0 then
+                local d=(npcRoot.Position-position).Magnitude
+                if d<230 and d<dist then
+                    dist=d
+                    best={root=npcRoot,model=model,distance=d}
+                end
+            end
+        end
+    end
+    return best
+end
+local function waterLandmark(position)
+    local spotsData=spotsData and (spotsData[WS:GetAttribute("FeralBiome") or biome]
+        or spotsData.WolfValley)
+    local best=nil
+    local bestDistance=math.huge
+    if type(spotsData)=="table" then
+        for _,spot in ipairs(spotsData) do
+            local name=string.lower(tostring(spot.name or spot.key or ""))
+            if typeof(spot.pos)=="Vector2"
+                and (name:find("water",1,true) or name:find("lake",1,true)
+                    or name:find("pond",1,true) or name:find("falls",1,true)
+                    or name:find("spring",1,true) or name:find("river",1,true)) then
+                local d=(Vector2.new(position.X,position.Z)-spot.pos).Magnitude
+                if d<bestDistance then
+                    bestDistance=d
+                    best={name=spot.name or spot.key or "Water",
+                        center=spot.pos,distance=d}
+                end
+            end
+        end
+    end
+    return best
+end
+local function safeWaterEdge(target,char)
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={char}
+    params.IgnoreWater=false
+    local chosen=nil
+    local bestScore=math.huge
+    local radii={10,20,30,40}
+    for _,r in ipairs(radii) do
+        for i=0,11 do
+            local angle=i*math.pi/6
+            local x=target.center.X+math.cos(angle)*r
+            local z=target.center.Y+math.sin(angle)*r
+            local ray=WS:Raycast(Vector3.new(x,2300,z),
+                Vector3.new(0,-4500,0),params)
+            if ray and ray.Material~=Enum.Material.Water and ray.Normal.Y>0.40 then
+                local near=WS:Raycast(Vector3.new(x+6,2300,z),
+                    Vector3.new(0,-4500,0),params)
+                local score=r
+                if near and near.Material==Enum.Material.Water then score-=15 end
+                if score<bestScore then
+                    bestScore=score
+                    chosen=ray.Position
+                end
+            end
+        end
+    end
+    return chosen
+end
+local function careStats()
+    local char,r,hum=root()
+    if not char then return nil end
+    local hunger=char:GetAttribute("Hunger")
+    local thirst=char:GetAttribute("Thirst")
+    return char,r,hum,
+        type(hunger)=="number" and hunger or nil,
+        type(thirst)=="number" and thirst or nil,
+        hum.MaxHealth>0 and hum.Health/hum.MaxHealth or 0
+end
+local function stopCareMode(message,resume)
+    careMode=nil
+    careLastNeedValue=nil
+    carePendingAttempts=0
+    careMessage=message or "CARE WAITING"
+    if resume and careResumeAuto and not auto and active
+        and me:GetAttribute("FeralPack") then
+        careResumeAuto=false
+        if not autoBusy then
+            toggleTerritoryAuto()
+        else
+            task.defer(function()
+                for _=1,20 do
+                    if not active or not careEnabled then return end
+                    if not autoBusy then
+                        toggleTerritoryAuto()
+                        return
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+    end
+end
+local function nextCareMode(hunger,thirst,hp)
+    local lim=careProfiles[careProfileIndex]
+    if hp<lim.hp then return "RECOVER" end
+    if thirst and thirst<lim.thirst then return "DRINK" end
+    if hunger and hunger<lim.hunger then return "EAT" end
+    return nil
+end
+local function tryCareAction(mode,char,rootPart,hum,hunger,thirst,hp)
+    local now=os.clock()
+    if now<careNextAction then return end
+    careNextAction=now+1.5
+    local can=char:GetAttribute("FeedCan")
+    local need=if mode=="DRINK" then thirst else hunger
+    if mode=="RECOVER" then
+        careMessage="LOW HP • TERRITORY PAUSED FOR RECOVERY"
+        return
+    end
+    if can==string.lower(mode) or
+        (mode=="EAT" and can=="eat") or
+        (mode=="DRINK" and can=="drink") then
+        local ok=sendKeyE()
+        if ok then
+            careMessage=mode.." • NATIVE E REQUESTED / VERIFYING NEEDS"
+            carePendingAttempts+=1
+        else
+            careMessage=mode.." • INPUT UNAVAILABLE / NEEDS MANUAL E"
+        end
+        return
+    end
+    if mode=="EAT" then
+        if not careHuntEnabled then
+            careMessage="HUNT DISABLED • FIND FOOD MANUALLY"
+            return
+        end
+        local npc=bestNPCFood(rootPart.Position)
+        if not npc then
+            careMessage="NO REPLICATED NPC PREY NEARBY"
+            return
+        end
+        local target=npc.root
+        if npc.distance>8 then
+            hum:MoveTo(target.Position)
+            careMessage=string.format("HUNT • APPROACHING NPC %.0f STUDS",npc.distance)
+        else
+            local face=Vector3.new(target.Position.X,rootPart.Position.Y,target.Position.Z)
+            if (face-rootPart.Position).Magnitude>1 then
+                pcall(function()
+                    char:PivotTo(CFrame.lookAt(rootPart.Position,face))
+                end)
+            end
+            careMessage=if sendNativeBite() then "HUNT • NATIVE ATTACK INPUT"
+                else "HUNT • ATTACK INPUT UNAVAILABLE"
+            carePendingAttempts+=1
+        end
+    else
+        local water=waterLandmark(rootPart.Position)
+        if not water then
+            careMessage="NO VALID WATER LANDMARK FOR THIS BIOME"
+            return
+        end
+        local horizontal=(Vector2.new(rootPart.Position.X,rootPart.Position.Z)-water.center).Magnitude
+        if horizontal<110 then
+            careMessage="WATER NEARBY • APPROACH WATER EDGE / NATIVE E"
+            local edge=safeWaterEdge(water,char)
+            if edge then hum:MoveTo(edge+Vector3.new(0,2,0)) end
+        elseif now-careLastSnapAt>55 then
+            careLastSnapAt=now
+            local destination=safeWaterEdge(water,char)
+            if destination then
+                local at=destination+Vector3.new(0,math.max(3,hum.HipHeight+rootPart.Size.Y*.5+1),0)
+                local ok=pcall(function()
+                    char:PivotTo(char:GetPivot()+(at-rootPart.Position))
+                end)
+                careMessage=if ok then "WATER • ONE GROUND-SAFE SNAP ATTEMPT"
+                    else "WATER • SNAP FAILED / NO SPAM"
+            else
+                careMessage="WATER TERRAIN NOT LOADED / MOVEMENT PAUSED"
+                task.spawn(function()
+                    pcall(function()
+                        WS:RequestStreamAroundAsync(Vector3.new(water.center.X,rootPart.Position.Y,water.center.Y))
+                    end)
+                end)
+            end
+        else
+            careMessage="WATER • WAITING FOR SAFE ROUTE / SNAP COOLDOWN"
+        end
+    end
+end
+local lastCareTick=0
+local function careTick()
+    if not active or not careEnabled then return end
+    local now=os.clock()
+    if now-lastCareTick<0.7 then return end
+    lastCareTick=now
+    local char,rootPart,hum,hunger,thirst,hp=careStats()
+    if not char then
+        careMessage="SPAWN ANIMAL TO ENABLE CARE"
+        return
+    end
+    local nextMode=nextCareMode(hunger,thirst,hp)
+    if not careMode then
+        if not nextMode or now<careCooldownUntil then
+            careMessage=if not nextMode then "NEEDS ABOVE THRESHOLDS"
+                else "CARE COOLDOWN / NO REPETITIVE INPUT"
+            return
+        end
+        careMode=nextMode
+        careStartedAt=now
+        carePendingAttempts=0
+        careLastNeedValue=if nextMode=="DRINK" then thirst
+            else if nextMode=="EAT" then hunger else hp
+        if auto then
+            careResumeAuto=true
+            release()
+            movementToken+=1
+            attempt=nil
+        end
+        careMessage="CARE: "..nextMode.." • TERRITORY INTERRUPTED"
+    end
+    local targetNeed=if careMode=="DRINK" then thirst
+        else if careMode=="EAT" then hunger else hp
+    local lim=careProfiles[careProfileIndex]
+    local recovered=if careMode=="DRINK" then
+        thirst and thirst>=lim.thirst+15
+        else if careMode=="EAT" then hunger and hunger>=lim.hunger+15
+        else hp>=math.min(0.95,lim.hp+0.20)
+    if recovered then
+        stopCareMode("CARE COMPLETE • RESUMING TERRITORIES",true)
+        return
+    end
+    if targetNeed and careLastNeedValue and targetNeed>careLastNeedValue+0.5 then
+        careLastNeedValue=targetNeed
+        careStartedAt=now
+        carePendingAttempts=0
+    end
+    if now-careStartedAt>45 then
+        careCooldownUntil=now+25
+        stopCareMode("CARE UNCONFIRMED • PAUSED 25 SEC",true)
+        return
+    end
+    if carePendingAttempts>=12 then
+        careCooldownUntil=now+25
+        stopCareMode("INPUTS UNCONFIRMED • STOPPED RETRIES",true)
+        return
+    end
+    if careBusy then return end
+    careBusy=true
+    task.spawn(function()
+        local ok,err=pcall(tryCareAction,careMode,char,rootPart,hum,hunger,thirst,hp)
+        if not ok then careMessage="CARE ERROR: "..tostring(err):sub(1,80) end
+        careBusy=false
+    end)
+end
+local careProfilesNames={"NORMAL","EARLY","CRITICAL"}
+careButton.Activated:Connect(function()
+    careEnabled=not careEnabled
+    careButton.Text=if careEnabled then "AUTO CARE: ON" else "AUTO CARE: OFF"
+    if not careEnabled then
+        stopCareMode("AUTO CARE DISABLED",true)
+    else
+        careMessage="WATCHING HUNGER, THIRST AND HP"
+    end
+end)
+huntButton.Activated:Connect(function()
+    careHuntEnabled=not careHuntEnabled
+    huntButton.Text=if careHuntEnabled then "HUNT: ON" else "HUNT: OFF"
+end)
+thresholdButton.Activated:Connect(function()
+    careProfileIndex=careProfileIndex%#careProfiles+1
+    local limits=careProfiles[careProfileIndex]
+    thresholdButton.Text=string.format("%s: %d/%d",careProfilesNames[careProfileIndex],
+        limits.hunger,limits.thirst)
+end)
+careConnection=RunService.Heartbeat:Connect(function()
+    local ok,err=pcall(careTick)
+    if not ok then careMessage="CARE LOOP ERROR: "..tostring(err):sub(1,75) end
+    if L.Care and L.Care.Parent then
+        L.Care.Text=string.format("%s  |  %s",careEnabled and "ON" or "OFF",careMessage)
+    end
 end)
 
 env.FERAL_TERRITORY_RUSH_V4={
     stop=stop,report=report,
+    startAuto=function()
+        if not auto then toggleTerritoryAuto() end
+    end,
+    stopAuto=release,
+    setCare=function(on)
+        careEnabled=on==true
+        careButton.Text=if careEnabled then "AUTO CARE: ON" else "AUTO CARE: OFF"
+    end,
+    careReport=function()
+        return {active=careEnabled,mode=careMode,message=careMessage,
+            hunt=careHuntEnabled,profile=careProfilesNames[careProfileIndex],
+            inputUnavailable=inputUnavailable}
+    end,
     selectMode=function(m)
         if m=="PRIORITY" or m=="SCENT" or m=="CLAIM" or m=="ALL" then
             release()
