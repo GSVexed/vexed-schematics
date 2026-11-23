@@ -1,0 +1,83 @@
+name: FERAL Dual UI v4.2.2 - RightShift and Side-by-Side
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'roblox-tools/feral-nova-v13.5.8-dual-ui-potassium.lua'
+      - 'roblox-tools/feral-territory-rush-v4.2.2.lua'
+      - 'roblox-tools/feral-nova-territory-rush-v4.2.2-launcher.lua'
+      - 'roblox-tools/feral-nova-territory-rush.lua'
+      - '.github/workflows/feral-dual-ui-v4.2.2-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shared right-shift lifecycle and source parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          d=Path('roblox-tools')
+          main=(d/'feral-nova-v13.5.8-dual-ui-potassium.lua').read_text('utf-8-sig')
+          territory=(d/'feral-territory-rush-v4.2.2.lua').read_text('utf-8-sig')
+          stable=(d/'feral-nova-territory-rush.lua').read_text('utf-8-sig')
+          versioned=(d/'feral-nova-territory-rush-v4.2.2-launcher.lua').read_text('utf-8-sig')
+          assert stable==versioned, 'Stable combined loader is not identical to versioned release'
+          assert 'Enum.KeyCode.RightShift' in main, 'Native main RightShift missing'
+          assert 'Enum.KeyCode.RightShift' in territory, 'Territory RightShift missing'
+          assert 'Enum.KeyCode.F7' not in territory, 'Old F7 territory shortcut remained'
+          assert 'FERAL_DUAL_UI_SYNC' in main and 'FERAL_DUAL_UI_SYNC' in territory
+          for token in ('ctx.feralMenu','activeRecord.setMenuVisible',
+                        'activeRecord.isMenuVisible', 'activeRecord.menuShell',
+                        'coordinator.onMainVisibility','coordinator.scaleFor'):
+              assert token in main, f'Main menu sync missing: {token}'
+          for token in ('toggleTerritoryPanel','setTerritoryPanelVisible',
+                        'panelHotkey="RightShift"', 'setBothVisible(false)',
+                        'panelFrame=frame','panelScale=panelScale',
+                        'sharedCoordinator.onTerritoryReady',
+                        'SESSION_FLIGHT_RECORDER' ):
+              # Recorder header is intentionally a descriptive comment.
+              if token == 'SESSION_FLIGHT_RECORDER':
+                  assert 'SESSION FLIGHT RECORDER' in territory, 'Recorder not preserved'
+              else:
+                  assert token in territory, f'Territory sync missing: {token}'
+          for token in ('manager.scaleFor','manager.layout','manager.onMainVisibility',
+                        'manager.onTerritoryHotkey','manager.setBothVisible',
+                        'feral-nova-v13.5.8-dual-ui-potassium.lua',
+                        'feral-territory-rush-v4.2.2.lua',
+                        'startTerritory()','startMain()',
+                        'main.menuShell.Position','frame.Position',
+                        'statusGui.Enabled=not desireVisible'):
+              assert token in stable, f'Combined loader missing: {token}'
+          assert 'main.setMenuVisible(desireVisible)' in stable
+          assert 'terr.setPanelVisible(desireVisible)' in stable
+          assert 'feral-nova-v13.5.7-eagle-talon-hover-fix-experimental-potassium.lua' not in stable, 'Old hub still launched'
+          assert 'loadstring(source)' in stable, 'Hosted-source runtime loader missing'
+          print('FERAL_DUAL_UI_V422_STATIC_PASS')
+          PY
+      - name: Install official Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 90 'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' -o /tmp/feral-dual-luau.zip
+          mkdir -p /tmp/feral-dual-luau
+          unzip -q /tmp/feral-dual-luau.zip -d /tmp/feral-dual-luau
+          compiler="$(find /tmp/feral-dual-luau -type f -name luau-compile | head -n 1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile both panels and both launchers
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-v13.5.8-dual-ui-potassium.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-territory-rush-v4.2.2.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-territory-rush-v4.2.2-launcher.lua
+          "$LUAU_COMPILER" --null roblox-tools/feral-nova-territory-rush.lua
+          echo FERAL_DUAL_UI_V422_LUAU_COMPILE_PASS
