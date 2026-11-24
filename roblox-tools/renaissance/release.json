@@ -1,34 +1,43 @@
 {
-  "version": "15.1.0",
+  "version": "15.2.0",
   "date": "2026-11-24",
-  "source_commit": "552965031659c52e36bf8bda436d0d07d348abd6",
-  "bundle_sha256": "7c289fd74de07c86537476e1c7fa760f3422ff8d305737bb5e19ab3e546cb093",
+  "source_commit": "21da4732f05897c7225fde2ffd6ea81d02be6b1b",
+  "bundle_sha256": "435265c032d1c200157e2004021ab491dc7c317317c5792e0070c2b1fffc8ceb",
   "game_baseline": 2412,
   "retained_features": 21,
   "removed_features_reintroduced": 0,
+  "approved_interaction_improvements": [
+    "manual native feeding repair",
+    "bounded native water-cub rescue attempt"
+  ],
   "regressions": {
-    "total": 73,
-    "passed": 73,
+    "total": 99,
+    "passed": 99,
     "failed": 0
   },
-  "source_ci_run": 45456403524,
+  "compiled_files": 17,
+  "module_count": 13,
+  "source_ci_run": 45494741846,
   "source_ci_status": "success",
-  "compiled_files": 14,
-  "module_count": 10,
   "potassium_staging_run": null,
   "potassium_runtime_run": null,
-  "potassium_connection_attempt": 45455307175,
+  "prior_candidate_stage_commit": "dcb171443acd288d2f6801fc42dec00a045699a3",
+  "prior_candidate_stage_run": 45491692470,
+  "final_source_validation_attempt": 45494910381,
+  "transport_liveness_attempt": 45495900596,
   "potassium_validation": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED",
+  "final_source_native_interfaces": "unconfirmed",
   "gameplay_acceptance": "unverified",
   "rollback_commit": "158474ba80c0d613c3427399f24059341369acc8",
-  "previous_renaissance_commit": "59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600",
+  "previous_renaissance_commit": "552965031659c52e36bf8bda436d0d07d348abd6",
   "clean_v14_hash_unchanged": true,
-  "previous_renaissance_hash_unchanged": true,
+  "previous_renaissance_hashes_unchanged": true,
   "source_parity": true,
   "limitations": [
-    "Live native input isolation has not been confirmed in the current executor session.",
-    "Native pin, clamp, cooldown, venom and post-Rest guards may still prohibit ordinary bites.",
-    "Extra accepted bite range and real sustained 4x condition clearance are unverified.",
-    "Missing executor introspection reports PARTIAL during an active minigame."
+    "The current paired executor accepts scripts but returns no matching result even for the transport-only print check.",
+    "An earlier 15.2 candidate passed actual hidden staging; it does not validate the final native lookup implementation.",
+    "Live feeding progress, post-Rest bite improvement, reduced ghost-hit frequency and water-cub carry acceptance are unverified.",
+    "The G rescue action preserves native eligibility and does not enable universal swimming/submerged pickup.",
+    "Extra accepted reach, sustained stamina and real continuous 4x condition recovery remain unverified."
   ]
 }

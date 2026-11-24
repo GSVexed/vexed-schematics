@@ -2,7 +2,24 @@
 
 ## Version 15.2.0 follow-up
 
-The new source passes 99 local service-boundary regressions, compilation, embedded parity and rollback checks. Published CI and a scoped stage-only executor check are pending. Earlier executor results below do not establish compatibility or gameplay efficacy for 15.2.
+Final source 21da4732f05897c7225fde2ffd6ea81d02be6b1b passes all 99 regressions, compilation, deterministic packaging and preserved rollback hashes in published source CI run 45494741846. This is automated service-boundary evidence, not private-server efficacy.
+
+Earlier candidate dcb171443acd288d2f6801fc42dec00a045699a3 executed through Potassium in FERAL place version 2412 during private runner run 45491692470. All 13 modules loaded; hidden UI/rendering, green/yellow/red colour samples, player-only tracking checks, cleanup and preservation of the existing active handle passed. An own animal was available. Native function readiness did not pass. The exact sanitized result is live-v152-initial-stage.json.
+
+Private run 45492217319 confirmed the inspection capabilities and target scripts were present. Its heap lists contained 944,824 to 2,306,709 entries, mostly not functions in the inspected prefix. The old budget had not reached the needed functions. This led to the shared function-only fallback and callback-first lookup. A further static check removed the dependency on the unretained cancelFeed prototype; guarded original-toggle cancellation is tested separately.
+
+The final pinned source was requested in private run 45494910381. Potassium acknowledged the request but no exact result was returned. A final single-print transport check in run 45495900596 was also acknowledged without its marker. Current status is **MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED**. The intermediate helper's syntax error was corrected before that final transport run. Probes then stopped.
+
+| Evidence | Boundary |
+|---|---|
+| 99 local and published source regressions | Final-source implementation passes the simulated native contract |
+| Actual hidden staging/colours | Passed on earlier candidate dcb1714 only |
+| Final native callback lookup, feed state and bite retry | Unconfirmed in the current live executor route |
+| Hunger/thirst progress, reduced ghost-hit frequency and cub pickup | Unverified gameplay outcomes |
+| Universal swimming/submerged pickup | Not established; native restrictions retained |
+| Existing active hub during successful staging | Retained; validation issued no native gameplay requests |
+
+live-v152-status.json and release.json distinguish these facts. Earlier 15.0/15.1 executor successes below do not validate the final 15.2 native lookup. No credential, unrelated console payload or private capture was exported.
 
 ## Version 15.1.0 follow-up
 

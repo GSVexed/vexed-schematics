@@ -1,0 +1,43 @@
+{
+  "version": "15.2.0",
+  "date": "2026-11-24",
+  "final_source_commit": "21da4732f05897c7225fde2ffd6ea81d02be6b1b",
+  "initial_candidate_stage": {
+    "source_commit": "dcb171443acd288d2f6801fc42dec00a045699a3",
+    "run": 45491692470,
+    "stage_passed": true,
+    "native_input_ready": false,
+    "active_hub_retained": true,
+    "native_gameplay_requests": 0
+  },
+  "capability_investigation": {
+    "run": 45492217319,
+    "target_scripts_present": true,
+    "inspection_capabilities_present": true,
+    "heap_entries_observed": [
+      944824,
+      944827,
+      2306709
+    ],
+    "finding": "Most raw entries are not functions; the original lookup had not reached the required functions."
+  },
+  "final_source_stage": {
+    "run": 45494910381,
+    "tool_acknowledged": true,
+    "exact_console_result": false,
+    "stage_passed": null,
+    "native_input_ready": null
+  },
+  "final_transport": {
+    "run": 45495900596,
+    "probe": "single fixed print only",
+    "tool_acknowledged": true,
+    "exact_console_result": false,
+    "gameplay_requests": 0
+  },
+  "current_status": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED",
+  "live_gameplay_results": "unverified",
+  "credential_exported": false,
+  "raw_console_exported": false,
+  "earlier_candidate_does_not_validate_final_source": true
+}

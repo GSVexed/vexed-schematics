@@ -1,0 +1,31 @@
+{
+  "existing_handle_retained": true,
+  "schemas": {
+    "carry": true,
+    "feeding_state": false,
+    "predicted_impact": true,
+    "water_permission": true
+  },
+  "own_animal_available": true,
+  "native_functions": {
+    "toggleFeed": false,
+    "cancelFeed": false,
+    "grabPress": false,
+    "tryBite": false
+  },
+  "modules": 13,
+  "place_version": 2412,
+  "status": "STAGE_COMPATIBILITY_PASSED",
+  "source_commit": "dcb171443acd288d2f6801fc42dec00a045699a3",
+  "ok": true,
+  "cleanup": true,
+  "phase": "render",
+  "hidden": true,
+  "gameplay_efficacy": "unverified",
+  "version": "15.2.0",
+  "gameplay_requests": 0,
+  "health_colours": true,
+  "version_match": true,
+  "schema": 152,
+  "player_only_tracker": true
+}

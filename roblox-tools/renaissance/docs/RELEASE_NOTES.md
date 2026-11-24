@@ -1,6 +1,6 @@
 # Renaissance 15.2.0 — release record
 
-Candidate status: local compilation and all 99 service-boundary regressions pass. Published CI and new executor validation are pending. The stable launcher still pins 15.1.0; release.json records the currently released pin until promotion.
+Released source: [21da4732f05897c7225fde2ffd6ea81d02be6b1b](https://github.com/GSVexed/vexed-schematics/blob/21da4732f05897c7225fde2ffd6ea81d02be6b1b/roblox-tools/feral-renaissance-v15.2.0.lua). The launcher pins that immutable source. Compilation, all 99 service-boundary regressions, deterministic packaging and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45494741846). The finalized loader was also locally checked before promotion.
 
 ## Changes
 
@@ -23,11 +23,11 @@ The 21 retained feature records, four tabs, Right Shift, saved settings and perm
 | Local compile | 13 modules, 2 fixtures, versioned bundle and launcher pass |
 | Local regressions | 99/99 pass |
 | Embedded source parity / rollback hashes | Pass |
-| Published source CI | Pending |
-| New actual executor compatibility | Pending |
+| Published source CI | 99/99 pass; deterministic bundle passes |
+| Actual executor staging | Earlier candidate passed; final native lookup remains unconfirmed |
 | New gameplay efficacy | Unverified |
 
-The fixtures follow the captured native client contract. They are not a private-server test. Previous 15.0/15.1 evidence is retained under its original version in LIVE_EVIDENCE.md.
+The fixtures follow the captured native client contract. They are not a private-server test. Earlier candidate dcb1714 passed actual Potassium hidden staging and colour checks while retaining the active hub. A later native-function investigation exposed mixed heap enumeration and led to the callback-first lookup fix. The final pinned source request and a print-only transport request received acknowledgements without exact console results. No further broad diagnostics or manual test request was made. Earlier-version results do not establish final-source native compatibility; LIVE_EVIDENCE.md preserves the exact boundaries.
 
 ## Use
 
