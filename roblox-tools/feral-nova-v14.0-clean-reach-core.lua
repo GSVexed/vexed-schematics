@@ -516,6 +516,7 @@ function Engine.new(atlas)
             local display=x.player.DisplayName or x.player.Name
             if #display>22 then display=string.sub(display,1,21).."…" end
             r.name.Text=display
+            r.healthRatio=ratio
             r.info.Text=species.."  •  "..math.floor(x.distance+.5).." studs"
             r.fill.Size=UDim2.fromScale(ratio,1)
             r.fill.BackgroundColor3=ratio>.5 and ctx.palette.green
@@ -6056,7 +6057,7 @@ function Tags.attach(ctx)
                                     closeTags+=1
                                 end
                                 lab.Position=UDim2.fromOffset(x,y)
-                                lab.Text=record.name and record.name.Text or plr.DisplayName
+                                lab.Text=(record.name and record.name.Text or plr.DisplayName)..(type(record.healthRatio)=="number" and ("  "..tostring(math.floor(record.healthRatio*100+.5)).."%") or "")
                                 lab.TextColor3=record.h and record.h.OutlineColor
                                     or Color3.fromRGB(231,247,252)
                                 lab.Visible=true
