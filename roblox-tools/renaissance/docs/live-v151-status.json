@@ -1,0 +1,22 @@
+{
+  "version": "15.1.0",
+  "date": "2026-11-24",
+  "candidate_source_commit": "552965031659c52e36bf8bda436d0d07d348abd6",
+  "private_runner_attempt": 45455307175,
+  "runner_available": true,
+  "potassium_mcp_available": true,
+  "unique_paired_client_matched_running_process": true,
+  "probe": "fixed print-only script",
+  "execute_tool_acknowledged": true,
+  "exact_console_marker_confirmed": false,
+  "status": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED",
+  "new_candidate_live_execution_confirmed": false,
+  "gameplay_requests_in_probe": 0,
+  "new_native_input_isolation": "unverified",
+  "simultaneous_accepted_damage": "unverified",
+  "additional_accepted_range": "unverified",
+  "continuous_4x_condition_recovery": "unverified",
+  "prior_15_0_live_results_do_not_validate_15_1": true,
+  "credential_exported": false,
+  "raw_console_exported": false
+}

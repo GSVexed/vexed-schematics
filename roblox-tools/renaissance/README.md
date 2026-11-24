@@ -10,7 +10,7 @@ CLEAN v14, its clean loader and the complete 15.0.0 bundle remain byte-for-byte 
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-The stable launcher remains on 15.0.0 until the 15.1.0 candidate passes its published CI gate. The new source has passed 73 local regression scenarios and compilation. Its current Potassium request was acknowledged without a matching console result; new live functionality and server-dependent benefits remain unverified.
+The launcher pins immutable source [5529650](https://github.com/GSVexed/vexed-schematics/blob/552965031659c52e36bf8bda436d0d07d348abd6/roblox-tools/feral-renaissance-v15.1.0.lua). Compilation and 73 regressions pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45456403524). The current Potassium request was acknowledged without a matching console result; new live functionality and server-dependent benefits remain unverified.
 
 ## Build and test
 

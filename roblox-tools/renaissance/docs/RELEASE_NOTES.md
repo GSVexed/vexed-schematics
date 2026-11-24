@@ -1,6 +1,6 @@
 # Renaissance 15.1.0 — release record
 
-The candidate has passed local compilation and 73 service-boundary regressions. Published CI is pending. The stable launcher still pins 15.0.0 until promotion; release.json records that currently released pin.
+Released source: [552965031659c52e36bf8bda436d0d07d348abd6](https://github.com/GSVexed/vexed-schematics/blob/552965031659c52e36bf8bda436d0d07d348abd6/roblox-tools/feral-renaissance-v15.1.0.lua). The stable launcher pins that immutable version. Compilation and 73 service-boundary regressions pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45456403524). The finalized loader also passed local compilation and the same suite before promotion.
 
 All 21 retained functions remain present. The compact interface, Right Shift, permanent reach, hollow ESP, simple controls and schema-15 saved settings are preserved. No deliberately removed feature has returned. CLEAN v14, its launcher and the complete 15.0.0 source are unchanged.
 
@@ -22,7 +22,7 @@ All 21 retained functions remain present. The compact interface, Right Shift, pe
 | Local regressions | 73/73 pass |
 | Embedded source parity / deterministic bundle | Pass |
 | CLEAN v14 / 15.0.0 rollback hashes | Unchanged |
-| Published CI | Pending |
+| Published source CI | 73/73 pass; deterministic bundle and rollback checks pass |
 | New actual executor execution | Unconfirmed; MCP acknowledged a fixed script but its marker was not returned |
 | New gameplay results | Unverified |
 
