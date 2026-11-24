@@ -18,7 +18,8 @@ function Policy.new()
         if s.captured then return false, "captured" end
         if mode == "recovery" then
             if self.manualRest then return false, "manual Rest" end
-            if s.feeding then return false, "feeding or drinking" end
+            if s.feeding then return false, "feeding or approaching food/water" end
+            if s.rescuing then return false,"cub rescue input" end
             if s.ability or s.holding then return false, "native action" end
             if s.attackHeld or now < self.attackUntil then return false, "attack has priority" end
             if now < self.actionUntil or s.afkWalking then return false, "action has priority" end

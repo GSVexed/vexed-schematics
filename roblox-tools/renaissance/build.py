@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Deterministically package the ten owned modules; no downloaded code at boot."""
+"""Deterministically package the thirteen owned modules; no downloaded code at boot."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "features", "roblox", "ui", "controller")
-DEST = ROOT.parent / "feral-renaissance-v15.1.0.lua"
+MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "ui", "controller")
+DEST = ROOT.parent / "feral-renaissance-v15.2.0.lua"
 
 BOOT = '''
 local M = {}
@@ -20,7 +20,7 @@ for _, name in ipairs(moduleOrder) do
 end
 for _, pair in ipairs({
     {"core","scope"},{"core","leases"},{"settings","sanitize"},{"policy","new"},
-    {"grab","new"},{"grab_input","new"},{"recovery","new"},{"features","new"},{"roblox","new"},
+    {"grab","new"},{"grab_input","new"},{"recovery","new"},{"feeding","new"},{"combat_input","new"},{"rescue","new"},{"features","new"},{"roblox","new"},
     {"ui","mount"},{"controller","new"},
 }) do
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
@@ -58,13 +58,13 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.1.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.2.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 
 
 def build():
-    chunks = ["-- FERAL Project Renaissance 15.1.0 | v2412 client baseline",
+    chunks = ["-- FERAL Project Renaissance 15.2.0 | v2412 client baseline",
               "-- Gameplay acceptance is unverified unless independently observed.",
               "local options = ...",
               'if type(options) ~= "table" then options = {} end',
@@ -81,7 +81,7 @@ def build():
     chunks.append(BOOT.strip())
     data = ("\n".join(chunks) + "\n").encode()
     DEST.write_bytes(data)
-    record = {"version": "15.1.0", "game_baseline": 2412, "modules": manifest,
+    record = {"version": "15.2.0", "game_baseline": 2412, "modules": manifest,
               "bundle_sha256": hashlib.sha256(data).hexdigest(), "bundle_bytes": len(data),
               "stable_clean_v14_overwritten": False}
     (ROOT / "manifest.json").write_text(json.dumps(record, indent=2) + "\n")

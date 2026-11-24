@@ -1,5 +1,9 @@
 # Live validation record
 
+## Version 15.2.0 follow-up
+
+The new source passes 96 local service-boundary regressions, compilation, embedded parity and rollback checks. Published CI and a scoped stage-only executor check are pending. Earlier executor results below do not establish compatibility or gameplay efficacy for 15.2.
+
 ## Version 15.1.0 follow-up
 
 The following earlier executor results belong to 15.0.0, not the new input/reach/recovery changes.

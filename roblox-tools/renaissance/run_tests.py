@@ -48,6 +48,7 @@ def main():
         "feral-nova-v14.0-clean-reach-core.lua": "7ce435099acf823c0f92a406a8febf0260fb9fcfbdde54d9c4a084f8190ce93c",
         "feral-nova-clean.lua": "d34847e2cb11c822177071e109fc2c8bc9e13e3ce7aa7ade02fd732b192e2952",
         "feral-renaissance-v15.0.0.lua": "bc388ccfdc8bae19e7fe2dca7c24bf2fbd3f97266c205c38544735e81ea3e12f",
+        "feral-renaissance-v15.1.0.lua": "7c289fd74de07c86537476e1c7fa760f3422ff8d305737bb5e19ab3e546cb093",
     }
     for name, digest in stable_hashes.items():
         assert hashlib.sha256((ROOT.parent/name).read_bytes()).hexdigest() == digest, f"rollback changed: {name}"
@@ -66,7 +67,7 @@ def main():
     if result.stderr:
         print(result.stderr)
     match = re.search(r"RENAISSANCE_TEST_RESULT total=(\d+) passed=(\d+) failed=(\d+)", result.stdout)
-    summary = {"version": "15.1.0", "bundle_sha256": manifest["bundle_sha256"],
+    summary = {"version": "15.2.0", "bundle_sha256": manifest["bundle_sha256"],
                "compiled": compiled, "module_parity": True, "rollback_hashes_unchanged": True,
                "regressions": dict(zip(("total","passed","failed"), map(int,match.groups()))) if match else None,
                "runtime_exit_code": result.returncode, "gameplay_success_claimed": False,

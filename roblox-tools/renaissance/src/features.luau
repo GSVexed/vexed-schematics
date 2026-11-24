@@ -53,10 +53,17 @@ function Features.new(Core, bridge, registry)
                 entry(c,"SLACK",c.SLACK+.75,"number"),
                 entry(c,"MAX_DY",math.min(c.MAX_DY*1.50,4.5),"number"),
                 entry(c,"bodyGap",function(part,flat)
+                    local char = part and part.Parent
+                    if char and not bridge:combatEligible(char) then return math.huge end
                     local gap = original.bodyGap(part,flat)
                     return Core.finite(gap) and gap-.90 or gap
                 end,"function"),
             }
+            -- FeralBiteLocal is predictive presentation, not a hit acknowledgement.
+            -- Preserve the native FeralHit response effects; remove premature impacts.
+            if type(c.HIT2) == "table" and type(c.HIT2.PREDICT) == "boolean" then
+                table.insert(plan,entry(c.HIT2,"PREDICT",false,"boolean"))
+            end
             table.insert(plan,entry(c,"coneFor",function(char)
                 local value = desiredCone
                 if type(nativeCone) == "function" then

@@ -1,18 +1,18 @@
 {
-  "version": "15.1.0",
+  "version": "15.2.0",
   "game_baseline": 2412,
   "modules": {
     "core": {
-      "sha256": "11f5bf42999c11308aa36e2de5cf7a7cb041c4aebc7a4f9acbaa627f083914f7",
-      "bytes": 9445
+      "sha256": "4eca3ba4ed0c3f10dd1ef63cca157a6cf1e0b8cab4cd2a7a3c10f4920b7d0311",
+      "bytes": 9462
     },
     "settings": {
       "sha256": "067cb0d41a520a4564126d232703af46774beb2baef171d05cb492b0b3124ac8",
       "bytes": 2610
     },
     "policy": {
-      "sha256": "99a395edd66df00b318dc00cb1ae93f3094eb5bcdf156ff6212865d460dd30ee",
-      "bytes": 3653
+      "sha256": "360cc685381826cf1e86b10adb68450015f4dfe45252d1249227720e58aa9587",
+      "bytes": 3734
     },
     "grab": {
       "sha256": "a911e7d05973717cf4fd9cd97fd6b22120b3fd1a3aa2f1517acf197cd7037d62",
@@ -26,24 +26,36 @@
       "sha256": "fea822a0cc24de099e3b8e580d3d8f61ca24a6489eb8af206dd009e51e48e191",
       "bytes": 4698
     },
+    "feeding": {
+      "sha256": "9dac690ce2a4b2854e74436c9da1fa050201b91af242742934ba07d0cb1228ed",
+      "bytes": 5193
+    },
+    "combat_input": {
+      "sha256": "8f86e05a4dc5b94b793fa09b7f7aec8a8c97217b7abc134a8738f4054f25abbd",
+      "bytes": 1194
+    },
+    "rescue": {
+      "sha256": "b85b845efefe0b06eb86c66bf16aeec77056346bd6d61b88e9481b2a4b615599",
+      "bytes": 2538
+    },
     "features": {
-      "sha256": "28fdb791508d89367ba5f0a5d1c53a1dbb2c785df27a465d32fff102b1434804",
-      "bytes": 12030
+      "sha256": "fbefc750e611238db8b4ec1a1e75e199bf866e0ad561d3170e446652f52cfe28",
+      "bytes": 12520
     },
     "roblox": {
-      "sha256": "7f54573ee70b1ed262acd8d76b4a690fb9b967e960c83063717a18cfa2f70f65",
-      "bytes": 32507
+      "sha256": "06572fc95657b08af5c71e95a0eed5fbaf25cd85709f8099c533b72a017d7366",
+      "bytes": 43808
     },
     "ui": {
-      "sha256": "81a3fe08453d552213b2fb05a6bda20e889c9f60b41b2f49222f77ece051533c",
-      "bytes": 14339
+      "sha256": "cf9d0c753597379fb82143788741dd240a019f117fef0adcccf63e77ee2f638b",
+      "bytes": 14309
     },
     "controller": {
-      "sha256": "797d52e0ec6555a42593da0f9fd1b80ae3ef257f3c846ac9f6cb864ea662712c",
-      "bytes": 26347
+      "sha256": "bacffbe7e1d1306bc7a7d3da6c991b854b67ff04aa39dfd8097aa2270d3dd548",
+      "bytes": 31090
     }
   },
-  "bundle_sha256": "7c289fd74de07c86537476e1c7fa760f3422ff8d305737bb5e19ab3e546cb093",
-  "bundle_bytes": 121167,
+  "bundle_sha256": "782480ea9eb60e6e1b6ab9874ae5a4c066d39bcaf539c3cbfd82da09f9a997ce",
+  "bundle_bytes": 146943,
   "stable_clean_v14_overwritten": false
 }

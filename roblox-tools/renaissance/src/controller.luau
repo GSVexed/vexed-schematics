@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.1.0", tokenIdentity = tokenIdentity,
+    local h = { version = "15.2.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -20,6 +20,9 @@ function Controller.new(M,bridge,options)
     h.grab = M.grab.new()
     h.grabInput = M.grab_input.new(bridge,h.token)
     h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
+    h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
+    h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
+    h.rescue = M.rescue.new(bridge,h.ledger)
     h.settingsAvailable = bridge:io().available ~= false
     function h:save()
         if self.closed then return false end
@@ -74,6 +77,9 @@ function Controller.new(M,bridge,options)
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.grab:reset("animal changed")
         self.grabInput:release()
+        self.feeding:close(now)
+        self.combatInput:cancel()
+        self.rescue:cancel("animal changed")
         self:stopWalk("animal changed")
         self:clearFlight()
         self.features:releaseFlag()
@@ -112,6 +118,41 @@ function Controller.new(M,bridge,options)
         end
         return false
     end
+    function h:isFeedControl(input)
+        local point=input.Position
+        local pg=bridge.player:FindFirstChildOfClass("PlayerGui")
+        if not point or not pg then return false end
+        local ok,objects=pcall(pg.GetGuiObjectsAtPosition,pg,point.X,point.Y)
+        if not ok then return false end
+        for _,object in ipairs(objects) do
+            if not object:IsDescendantOf(self.ui.gui) then
+                local node=object
+                for _=1,4 do
+                    if not node then break end
+                    local text=(node:IsA("TextLabel") or node:IsA("TextButton")) and node.Text or ""
+                    text=string.upper(text):match("^%s*(.-)%s*$")
+                    if text=="EAT" or text=="DRINK" or node.Name=="FeralFeedTap" then return true end
+                    node=node.Parent
+                end
+            end
+        end
+        return false
+    end
+    function h:carryInput(input)
+        if not self.active or self.closed or bridge:grabTextFocused() then return false end
+        local now=bridge.clock()
+        local s=bridge:snapshot(now,true);s.grab=self.grab.active
+        local handled=self.rescue:input(s,now)
+        if handled then
+            self.earlyInputs[input]=now
+            self:physicalInput("other")
+            self.policy:input("action",now)
+            self.recovery:release("cub rescue input",now)
+            self.combatInput:cancel()
+            self:stopWalk("cub rescue input")
+        end
+        return handled
+    end
     function h:preInput(input)
         if self.closed or not self.active or bridge.UserInputService:GetFocusedTextBox() then return end
         local now,key,kind = bridge.clock(),input.KeyCode,input.UserInputType
@@ -127,32 +168,38 @@ function Controller.new(M,bridge,options)
             or (click and self:isRestControl(input)) then
             self.policy:input("rest",now)
             if self.recovery.owned then self.recovery:manual(now) end
+            self.combatInput:cancel();self.feeding:cancel("manual rest control",now);self.rescue:cancel()
             return
         end
         if self.grab.active and (key == Enum.KeyCode.Space or key == Enum.KeyCode.ButtonA or key == Enum.KeyCode.ButtonR2) then
             self.grab:manual()
             return
         end
+        if key == Enum.KeyCode.E or (click or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
+            self.feeding:input(s,now)
+            self.policy:input("action",now)
+            self.recovery:release("manual feeding input",now)
+            self.combatInput:cancel();self.rescue:cancel()
+            return
+        end
         if click then
-            local feedCan = bridge:attribute(s.char,"FeedCan")
-            if feedCan == "eat" or feedCan == "drink" or feedCan == true then
-                self.policy:input("action",now)
-                self.recovery:release("manual feeding input",now)
-                return
-            end
             self.policy:input("attack",now)
             self.recovery:release("attack input",now)
             if kind == Enum.UserInputType.MouseButton1 then
+                self.feeding:attack(s,now);self.rescue:cancel()
                 local tx = { intent = now, lock = self.policy:restLocked(now), generation = s.generation }
                 self.lastIntent = tx
                 table.insert(self.transactions,tx)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
                 self.ledger:event("attack_intent",now,{restLock = tx.lock})
+                self.combatInput:input(s,now)
             end
         elseif key == Enum.KeyCode.E or key == Enum.KeyCode.F or key == Enum.KeyCode.G
             or key == Enum.KeyCode.Q or key == Enum.KeyCode.Space then
             self.policy:input("action",now)
             self.recovery:release("manual native action",now)
+            self.combatInput:cancel()
+            if key ~= Enum.KeyCode.Space then self.rescue:cancel() end
         end
     end
     function h:input(input,processed)
@@ -177,6 +224,8 @@ function Controller.new(M,bridge,options)
         local s = bridge:snapshot(now,false)
         if key == "WolfRest" then self.recovery:echo(s,now)
         elseif key == "WolfBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
+            if not s.alive then return end
+            self.combatInput:cancel()
             self.policy.attackUntil = math.max(self.policy.attackUntil,now+1.1)
             self.recovery:release("native bite marker",now)
             local tx = self.lastIntent
@@ -185,7 +234,13 @@ function Controller.new(M,bridge,options)
                 table.insert(self.transactions,tx)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
             end
-            tx.nativeAt,tx.claimDue = now,now+.27
+            tx.nativeAt,tx.claimDue,tx.classified = now,now+bridge:biteDelay(s.char),false
+            tx.hpBefore={}
+            for _,target in ipairs(bridge.allCandidates or {}) do
+                if target.root.Parent and (target.root.Position-s.root.Position).Magnitude<=45 then
+                    tx.hpBefore[target.char]={hp=target.hum.Health,maxHP=target.hum.MaxHealth}
+                end
+            end
             self.ledger:event("native_bite_marker",now,{requestObserved = false,claimObserved = false})
         end
     end
@@ -193,6 +248,31 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         if kind == "feedback" then
             self.ledger:event("native_hit_feedback",bridge.clock(),{damageAcceptance = "unverified"})
+            if event=="hit" and type(data)=="table" and data.a==bridge.player.Character then
+                for index=#self.transactions,1,-1 do
+                    local tx=self.transactions[index]
+                    if tx.nativeAt and not tx.classified and bridge.clock()-tx.nativeAt<1.8 then
+                        tx.feedback=data;tx.nativeTarget=data.v
+                        self.ledger:event("native_outgoing_hit_reply",bridge.clock(),{safe=data.safe==true,damage=data.dmg})
+                        break
+                    end
+                end
+            end
+            return
+        end
+        if kind=="actions" then
+            if event=="FeedStop" then self.feeding:stopped(data,bridge.clock()) end
+            return
+        end
+        if kind=="biteLocal" then
+            for index=#self.transactions,1,-1 do
+                local tx=self.transactions[index]
+                if tx.nativeAt and not tx.classified and bridge.clock()-tx.nativeAt<1.5 then
+                    tx.nativeTarget=event
+                    self.ledger:event("native_client_bite_candidate",bridge.clock(),{claimObserved=false})
+                    break
+                end
+            end
             return
         end
         local now = bridge:serverNow()
@@ -287,7 +367,7 @@ function Controller.new(M,bridge,options)
     function h:stepCombat(s,now)
         for _,tx in ipairs(self.transactions) do
             if not tx.classified and tx.generation == s.generation then
-                if not tx.nativeAt and now-tx.intent > .45 then
+                if not tx.nativeAt and now-tx.intent > .45 and not self.combatInput.pending then
                     tx.classified = true
                     self.combatStatus = tx.lock and "No native bite marker · recent Rest lock possible" or "No native bite marker observed"
                     self.ledger:event("no_native_bite_marker",now,{recentRest = tx.lock == true})
@@ -295,7 +375,8 @@ function Controller.new(M,bridge,options)
                     tx.sampled = true
                     local target = self.guide and self.guide.target
                     if target then
-                        tx.target,tx.hp,tx.maxHP = target,target.hum.Health,target.hum.MaxHealth
+                        local before=tx.hpBefore and tx.hpBefore[target.char]
+                        tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
                         tx.extendedOnly = self.guide.extended and self.guide.extended.valid
                             and not (self.guide.baseline and self.guide.baseline.valid)
                     end
@@ -303,11 +384,17 @@ function Controller.new(M,bridge,options)
                 elseif tx.nativeAt and tx.sampled and now >= tx.claimDue+.8 then
                     tx.classified = true
                     local target = tx.target
-                    local drop = target and target.hum.Parent and target.hum.MaxHealth == tx.maxHP and target.hum.Health < tx.hp-.05
-                    self.combatStatus = drop and "Target HP fell after native marker · attribution unverified"
+                    local char=tx.nativeTarget or target and target.char
+                    local ok,hum=pcall(function()return char and char:FindFirstChildOfClass("Humanoid")end)
+                    local before=char and tx.hpBefore and tx.hpBefore[char]
+                    local drop=ok and hum and hum.Parent and before and hum.MaxHealth==before.maxHP and hum.Health<before.hp-.05
+                    self.combatStatus = tx.feedback and tx.feedback.safe==true and "Game reply: target protected"
+                        or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
+                        or drop and "Target HP fell after native marker · attribution unverified"
                         or "Native marker observed · no matching HP decline observed"
                     self.ledger:event(drop and "target_hp_decline_correlated" or "no_correlated_hp_decline",now,
-                        {extendedOnly = tx.extendedOnly == true,damageAcceptance = "unverified"})
+                        {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,damageAcceptance = "unverified"})
+                    tx.hpBefore=nil
                 end
             end
         end
@@ -413,6 +500,9 @@ function Controller.new(M,bridge,options)
                 end)
         else self.grab.pending = nil; s.grab,s.afkWalking = self.grab.active,self.walk ~= nil end
         if now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
+        self.feeding:tick(s,now)
+        self.rescue:tick(s,now)
+        self.combatInput:tick(s,now)
         self.features:reconcile(s,now)
         self.recovery.enabled = self.registry.byId.recovery.requested
         self.recovery:tick(s,now)
@@ -466,6 +556,7 @@ function Controller.new(M,bridge,options)
         bridge:bindNative(self)
         bridge.bindCharacter(bridge.player.Character)
         if self.registry.byId.minigame.requested then bridge:nativeGrabController(bridge.clock()) end
+        bridge:nativeWolfActions(bridge.clock())
         self.ready = true
         return self
     end
@@ -484,6 +575,8 @@ function Controller.new(M,bridge,options)
         for _,cleanup in ipairs({
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,
+            function() self.feeding:close(bridge.clock()) end,
+            function() self.combatInput:cancel();self.rescue:cancel() end,
             function() self:stopWalk("shutdown") end,
             function() self:clearFlight() end,
             function() self.features:close() end,

@@ -111,7 +111,7 @@ Core.specs = {
     { "speed", "Movement", "Speed Assistance", "1.15x local land and swimming inputs" },
     { "leap", "Movement", "Jump / Leap Assistance", "1.15x local leap inputs; native exclusions retained" },
     { "esp", "Vision", "Outline ESP", "Hollow outlines for replicated characters" },
-    { "colours", "Vision", "Faction / Health Colours", "Pack hue and independent health cue", permanent = true },
+    { "colours", "Vision", "Faction / Health Colours", "Health-coloured hollow outlines; pack-coloured names", permanent = true },
     { "tags", "Vision", "Name Tags", "Small labels with independent visibility" },
     { "finder", "Vision", "Long-Range Player Finder", "Replicated players; up to 24 results", permanent = true },
     { "menu", "Vision", "Right Shift Menu Toggle", "Single menu; focused text keeps keyboard input", permanent = true },

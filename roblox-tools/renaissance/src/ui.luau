@@ -1,5 +1,13 @@
 -- One compact window and one owner for all hub outlines, tags and the bite dot.
 local UI = {}
+function UI.healthColour(hp,maxHP)
+    if type(hp) ~= "number" or type(maxHP) ~= "number" or hp ~= hp or maxHP ~= maxHP
+        or math.abs(hp) >= 1e12 or math.abs(maxHP) >= 1e12 or maxHP <= 0 then
+        return Color3.fromRGB(151,173,194)
+    end
+    local ratio = math.clamp(hp/maxHP,0,1)
+    return Color3.fromRGB(255*math.min(1,2*(1-ratio)),255*math.min(1,2*ratio),0)
+end
 function UI.mount(hub, bridge, scope)
     local player = bridge.player
     local pg = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui",10)
@@ -55,7 +63,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.1",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.2",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -105,7 +113,7 @@ function UI.mount(hub, bridge, scope)
             row("esp",0); row("tags",57)
             local c = card(123,52)
             text(c,"Tracking range",14,8,270,20,13)
-            text(c,"Replicated players only · up to 24",14,29,320,17,10,palette.sub)
+            text(c,"Real players only · up to 24",14,29,320,17,10,palette.sub)
             local range = button(c,tostring(hub.settings.range) .. " STUDS",350,10,124,30)
             range.Activated:Connect(function()
                 if not hub.active then return end
@@ -121,7 +129,7 @@ function UI.mount(hub, bridge, scope)
                 walls.Text = "Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF")
                 hub:save()
             end)
-            info(232,"FACTION / HEALTH","Teal: same known pack. Red: another known pack. Amber: unknown. Health stays a separate cue.",70)
+            info(232,"HEALTH / PACK","Outlines: green → yellow → red as HP falls. Real players only; name colour shows pack.",70)
             u.finderReadout = info(313,"PLAYER FINDER","Waiting for replicated players.",50)
         else
             local order = u.tab == "Survival"
@@ -160,6 +168,7 @@ function UI.mount(hub, bridge, scope)
     function u:syncTracked(tracked)
         local keep = {}
         for _, target in ipairs(tracked) do
+            if not target.player or bridge.Players:GetPlayerFromCharacter(target.char) ~= target.player then continue end
             local char = target.char
             keep[char] = true
             local record = self.records[char]
@@ -170,16 +179,14 @@ function UI.mount(hub, bridge, scope)
                 highlight.Enabled,highlight.Parent = false,folder
                 local label = text(gui,"",0,0,180,18,11)
                 label.TextXAlignment, label.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
-                local health = text(gui,"",0,0,180,14,9)
-                health.TextXAlignment,health.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
-                record = { highlight = highlight,label = label,health = health }
+                record = { highlight = highlight,label = label }
                 self.records[char] = record
             end
             record.target = target
         end
         for char,record in pairs(self.records) do
             if not keep[char] then
-                record.highlight:Destroy(); record.label:Destroy(); record.health:Destroy()
+                record.highlight:Destroy(); record.label:Destroy()
                 self.records[char] = nil
             end
         end
@@ -198,7 +205,7 @@ function UI.mount(hub, bridge, scope)
             local valid = char.Parent ~= nil and target.root.Parent ~= nil and target.hum.Parent ~= nil and target.hum.Health > 0
             local colour = palette[target.affiliation] or palette.unknown
             record.highlight.FillTransparency = 1
-            record.highlight.OutlineColor = colour
+            record.highlight.OutlineColor = UI.healthColour(target.hum.Health,target.hum.MaxHealth)
             record.highlight.DepthMode = hub.settings.walls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
             record.highlight.Enabled = valid and registry.esp.requested
             local head = char:FindFirstChild("Head")
@@ -206,15 +213,12 @@ function UI.mount(hub, bridge, scope)
                 or target.root.Position+Vector3.new(0,target.root.Size.Y*.6+1,0)
             local projected,onScreen = camera:WorldToViewportPoint(pos)
             local show = valid and registry.tags.requested and onScreen and projected.Z > 0
-            record.label.Visible,record.health.Visible = show,show
+            record.label.Visible = show
             if show then
-                local x,y = projected.X,math.max(35,projected.Y-6)
-                record.label.Position,record.health.Position = UDim2.fromOffset(x,y),UDim2.fromOffset(x,y-20)
-                record.label.Text,record.label.TextColor3 = target.name,colour
-                local ratio = target.hum.MaxHealth > 0 and math.clamp(target.hum.Health/target.hum.MaxHealth,0,1) or nil
-                record.health.Text = ratio and string.format("%s%d%% · %.0f studs",ratio < .3 and "! " or "",ratio*100,target.distance)
-                    or string.format("HP unknown · %.0f studs",target.distance)
-                record.health.TextColor3 = ratio and ratio < .3 and palette.unknown or palette.sub
+                local x,y = projected.X,math.max(20,projected.Y-6)
+                record.label.Position = UDim2.fromOffset(x,y)
+                record.label.Text = target.name
+                record.label.TextColor3 = colour
             end
         end
         local guide = hub.guide
@@ -243,9 +247,10 @@ function UI.mount(hub, bridge, scope)
                 and (feature.state == "PARTIAL" and palette.unknown or Color3.fromRGB(27,111,98)) or palette.off
             rowValue.status.Text = feature.requested and feature.reason ~= "" and feature.reason or feature.detail
         end
-        footer.Text = hub.notice or "Right Shift opens menu"
+        footer.Text = hub.rescue.pending and hub.rescue.status
+            or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu"
         if self.combatReadout then
-            self.combatReadout.Text = hub.combatStatus or "Watching native attacks"
+            self.combatReadout.Text = (hub.combatStatus or "Watching native attacks") .. "\n" .. hub.rescue.status
         end
         if self.finderReadout then
             self.finderReadout.Text = string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range)

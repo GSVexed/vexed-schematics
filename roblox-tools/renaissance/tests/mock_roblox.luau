@@ -129,8 +129,13 @@ function Mock.new()
         if self.Name=="WolfActions" and args[1]=="Rest" and w.nativeRestEcho then
             w.player.Character:SetAttribute("WolfRest",args[2])
         end
+        if self.Name=="WolfActions" and args[1]=="Rest" and args[2]==false then w.nativeRestReleasedAt=w.time end
+        if self.Name=="FeralLunge" and args[1]=="carry" and w.acceptCarry then
+            local clamp=new("ObjectValue");clamp.Name="FeralClamp";clamp.Value=args[2]
+            clamp:SetAttribute("Carry",true);clamp.Parent=w.player.Character
+        end
     end
-    function methods:GetState() return enum.HumanoidStateType.Running end
+    function methods:GetState() return self.NativeState or enum.HumanoidStateType.Running end
     function methods:MoveTo(goal) self.goal=goal end
     function methods:GetGuiObjectsAtPosition() return w.guiHits or {} end
     local root = new("DataModel")
@@ -150,7 +155,7 @@ function Mock.new()
         return {Position=V3.new(origin.X,0,origin.Z),Normal=V3.new(0,1,0),Material=enum.Material.Grass,Instance=self.Terrain}
     end
     function workspace:GetPartBoundsInRadius() return w.parts end
-    local player=new("Player");player.Parent=root;player.Name="LocalPlayer";player.DisplayName="Local"
+    local player=new("Player");player.Parent=root;player.Name="LocalPlayer";player.DisplayName="Local";player.UserId=1
     local pg=new("PlayerGui");pg.Parent=player
     player.CharacterAdded,player.CharacterRemoving,player.Idled=signal(),signal(),signal()
     player:SetAttribute("FeralCombatUntil",0);player:SetAttribute("FeralPack",1);player:SetAttribute("FeralSurvival",0)
@@ -235,9 +240,35 @@ function Mock.new()
         if fn then setfenv(fn,env) end
         return fn,err
     end
+    function w:registerNative(fn,scriptName,name,values)
+        local scripts=player:FindFirstChild("PlayerScripts")
+        if not scripts then scripts=new("PlayerScripts");scripts.Name="PlayerScripts";scripts.Parent=player end
+        local scriptObject=scripts:FindFirstChild(scriptName)
+        if not scriptObject then scriptObject=new("LocalScript");scriptObject.Name=scriptName;scriptObject.Parent=scripts end
+        if not self.nativeRecords then
+            self.nativeRecords,self.nativePool={},{}
+            local originalInfo=debug.info
+            local mockDebug=table.clone(debug)
+            mockDebug.info=function(target,options)
+                local record=self.nativeRecords[target]
+                if not record then return originalInfo(target,options) end
+                local source="Players.LocalPlayer.PlayerScripts."..record.script
+                if options=="sn" then return source,record.name end
+                if options=="n" then return record.name end
+                if options=="s" then return source end
+            end
+            mockDebug.getupvalues=function(target)
+                local record=self.nativeRecords[target]
+                return record and record.values() or {}
+            end
+            env.debug=mockDebug
+            env.getgc=function()return table.clone(self.nativePool)end
+        end
+        self.nativeRecords[fn]={script=scriptName,name=name,values=values}
+        table.insert(self.nativePool,fn)
+        return scriptObject
+    end
     function w:enableNativeGrab()
-        local scripts=new("PlayerScripts");scripts.Name="PlayerScripts";scripts.Parent=player
-        local scriptObject=new("LocalScript");scriptObject.Name="FeralGrabV2UI";scriptObject.Parent=scripts
         local state=nil
         local remote=rs:FindFirstChild("FeralGrabV2")
         local nativePress
@@ -267,27 +298,94 @@ function Mock.new()
             end
         end)
         uis.InputBegan:Connect(function(input,processed)
-            if not processed and input.UserInputType==enum.UserInputType.MouseButton1
+            if not self.nativeActionsEnabled and not processed and input.UserInputType==enum.UserInputType.MouseButton1
                 and player.Character:GetAttribute("FeralPinned")~=true then
                 w.nativeBites=(w.nativeBites or 0)+1
                 player.Character:SetAttribute("WolfBiteAt",w.time+1000)
             end
         end)
-        env.getgc=function()return {nativePress}end
-        local mockDebug=table.clone(debug)
-        local originalInfo=debug.info
-        mockDebug.info=function(fn,options)
-            if fn~=nativePress then return originalInfo(fn,options) end
-            if options=="sn" then return "Players.LocalPlayer.PlayerScripts.FeralGrabV2UI","serverPress" end
-            if options=="n" then return "serverPress" end
-            if options=="s" then return "Players.LocalPlayer.PlayerScripts.FeralGrabV2UI" end
-        end
-        mockDebug.getupvalues=function(fn)
-            if fn==nativePress then return {[1]=state,[2]=w.configs.GrabV2Config,[3]=remote} end
-            return {}
-        end
-        env.debug=mockDebug
+        self:registerNative(nativePress,"FeralGrabV2UI","serverPress",function()
+            return {[1]=state,[2]=w.configs.GrabV2Config,[3]=remote}
+        end)
         self.nativeGrabState=function()return state end
+    end
+    function w:enableNativeActions()
+        self.nativeActionsEnabled=true
+        local remote=rs:FindFirstChild("WolfActions")
+        local localBite=new("BindableEvent");localBite.Name="FeralBiteLocal";localBite.Parent=rs
+        local mode,started=nil,false
+        local function cancelFeed()
+            mode,started=nil,false
+            player.Character:SetAttribute("WolfFeed",false)
+            remote:FireServer("Feed",false)
+        end
+        local function start()
+            if mode then
+                started=true;player.Character:SetAttribute("WolfFeed",mode)
+                remote:FireServer("Feed",mode)
+            end
+        end
+        local function toggleFeed()
+            self.nativeFeedToggles=(self.nativeFeedToggles or 0)+1
+            if mode then cancelFeed();return end
+            local offer=player.Character:GetAttribute("FeedCan")
+            if offer=="eat" or offer=="drink" then mode=offer;started=false;if not self.feedApproach then start() end end
+        end
+        local function doBite()
+            local char=player.Character
+            if char:GetAttribute("WolfRest")==true or self.time-(self.nativeRestReleasedAt or -100)<.7 then return end
+            self.nativeBites=(self.nativeBites or 0)+1
+            self.lastBiteAt=self.time;char:SetAttribute("WolfBiteAt",self.time+1000)
+            remote:FireServer("Bite",self.time+1000)
+            if self.nativeBiteTarget then
+                local target=self.nativeBiteTarget
+                self.nativeClaims=self.nativeClaims or {}
+                table.insert(self.nativeClaims,{at=self.time+.27,char=char,target=target})
+            end
+        end
+        local function tryBite()
+            self.nativeBiteAttempts=(self.nativeBiteAttempts or 0)+1
+            local char=player.Character
+            if char:GetAttribute("FeralPinned")==true or char:FindFirstChild("FeralClamp")
+                or (char:GetAttribute("FeralNoBiteUntil") or 0)>self.time+1000
+                or self.time-(self.lastBiteAt or -100)<.5 or mode then return end
+            doBite()
+        end
+        self:registerNative(doBite,"WolfController","doBite",function()return {player,remote}end)
+        self:registerNative(tryBite,"WolfController","tryBite",function()return {[1]=player,[5]=doBite}end)
+        self:registerNative(toggleFeed,"WolfController","toggleFeed",function()
+            return {[1]=mode,[2]=started,[5]=player,[6]=remote}
+        end)
+        self:registerNative(cancelFeed,"WolfController","cancelFeed",function()return {player,remote}end)
+        cas:BindActionAtPriority("NativeFeed",function(_,inputState)
+            if inputState==enum.UserInputState.Begin then toggleFeed() end
+            return enum.ContextActionResult.Sink
+        end,false,2000,enum.KeyCode.E)
+        uis.InputBegan:Connect(function(input,processed)
+            if not processed and input.UserInputType==enum.UserInputType.MouseButton1 then tryBite() end
+        end)
+        self.finishFeedApproach=start
+        self.nativeFeedMode=function()return mode,started end
+        remote.OnClientEvent:Connect(function(event,reason)
+            if event=="FeedStop" and (reason=="eaten" or reason=="nofood") then
+                mode,started=nil,false;player.Character:SetAttribute("WolfFeed",false)
+            end
+        end)
+    end
+    function w:enableCarry()
+        self:addConfig("Species",{})
+        self:addConfig("AbilityConfig",{})
+        self:addConfig("CarryConfig",{ENABLED=true,MIN_CARRIER_GROWTH=.67,MAX_BABY_GROWTH=.34,REACH=.75,
+            WATER_OK={Otter=true,Alligator=true,Komodo=true},
+            canCarry=function(_,_,carrier,baby)
+                self.carryChecks=(self.carryChecks or 0)+1
+                return carrier:GetAttribute("Growth")>=.67 and baby:GetAttribute("Growth")<.34
+                    and carrier:GetAttribute("Species")==baby:GetAttribute("Species")
+            end})
+        cas:BindActionAtPriority("NativeCarry",function(_,inputState)
+            if inputState==enum.UserInputState.Begin then self.nativeG=(self.nativeG or 0)+1 end
+            return enum.ContextActionResult.Sink
+        end,false,2000,enum.KeyCode.G)
     end
     function w:animal(species,position)
         local char=new("Model");char.Name=species or "Wolf";char.Parent=workspace
@@ -313,8 +411,39 @@ function Mock.new()
         p.Character=char;table.insert(players.list,p)
         return p,char,hum,rootPart
     end
+    function w:npc(pack,position,withLitter)
+        local char,hum,rootPart=self:animal("Wolf",position or V3.new(0,3,-3))
+        local folder=workspace:FindFirstChild("FeralNPCs")
+        if not folder then folder=new("Folder");folder.Name="FeralNPCs";folder.Parent=workspace end
+        char.Parent=folder;char:SetAttribute("FeralNPC",true);char:SetAttribute("FeralPack",pack)
+        char:SetAttribute("Growth",.2);char:SetAttribute("FeralName","Cub")
+        rootPart.Size=V3.new(1,1,1);hum.HipHeight=.2
+        local record
+        if withLitter then
+            local registry=rs:FindFirstChild("FeralLitter")
+            if not registry then registry=new("Folder");registry.Name="FeralLitter";registry.Parent=rs end
+            record=new("Configuration");record.Parent=registry
+            record:SetAttribute("Pack",pack);record:SetAttribute("Alive",true);record:SetAttribute("Name","Cub")
+            local body=new("ObjectValue");body.Name="Body";body.Value=char;body.Parent=record
+        end
+        return char,hum,rootPart,record
+    end
     function w:step(dt)
         self.time+=dt or .05
+        for index=#(self.nativeClaims or {}),1,-1 do
+            local claim=self.nativeClaims[index]
+            if self.time>=claim.at then
+                table.remove(self.nativeClaims,index)
+                self:remote("WolfActions"):FireServer("BiteHit",{t=claim.at+1000,m=claim.target})
+                local hit2=self.configs.CombatConfig.HIT2
+                if hit2 and hit2.PREDICT then self.predictedImpacts=(self.predictedImpacts or 0)+1 end
+                local damage=self.nativeDamage or 0
+                local hum=claim.target:FindFirstChildOfClass("Humanoid");hum.Health-=damage
+                self:remote("FeralHit").OnClientEvent:Fire("hit",{a=claim.char,v=claim.target,dmg=damage,safe=self.nativeSafe==true})
+                self:remote("FeralBiteLocal").Event:Fire(claim.target)
+                self.nativeHitResponses=(self.nativeHitResponses or 0)+1
+            end
+        end
         run.PreAnimation:Fire()
         run.Heartbeat:Fire(dt or .05)
         for _,record in pairs(table.clone(self.renders)) do record.fn(dt or .05) end

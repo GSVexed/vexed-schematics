@@ -182,6 +182,112 @@ function Roblox.new(Core, environment)
         return nil
     end
     function b:isClimbing(char) return self:attribute(char,"FeralClimbLocal") == true end
+    function b:upvalues(fn)
+        local many = type(debug.getupvalues) == "function" and debug.getupvalues
+            or type(getupvalues) == "function" and getupvalues
+        if many then
+            local ok,values = pcall(many,fn)
+            return ok and type(values) == "table" and values or {}
+        end
+        local one = type(debug.getupvalue) == "function" and debug.getupvalue
+            or type(getupvalue) == "function" and getupvalue
+        local values = {}
+        if one then
+            for index = 1,24 do
+                local ok,a,value = pcall(one,fn,index)
+                if not ok then break end
+                if type(a) == "string" and value ~= nil then values[index] = value else values[index] = a end
+            end
+        end
+        return values
+    end
+    function b:nativeWolfActions(now)
+        local scripts = self.player:FindFirstChild("PlayerScripts")
+        local ownScript = scripts and scripts:FindFirstChild("WolfController")
+        if not ownScript then self.wolfActions,self.wolfDiscovery = nil,nil;return nil end
+        if self.wolfActions and self.wolfActions.script ~= ownScript then self.wolfActions,self.wolfDiscovery = nil,nil end
+        local native = self.wolfActions
+        if native and native.tryBite and native.toggleFeed and native.cancelFeed then return native end
+        if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then return native end
+        if type(getgc) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
+        if type(debug.getupvalues) ~= "function" and type(getupvalues) ~= "function"
+            and type(debug.getupvalue) ~= "function" and type(getupvalue) ~= "function" then return native end
+        local function nameOf(fn)
+            if type(fn) ~= "function" then return nil end
+            local ok,source,name = pcall(debug.info,fn,"sn")
+            if not ok or type(source) ~= "string" or not source:find("WolfController",1,true) then return nil end
+            if type(getfenv) == "function" then
+                local valid,env = pcall(getfenv,fn)
+                if valid and type(env) == "table" and env.script ~= nil and env.script ~= ownScript then return nil end
+            end
+            return name
+        end
+        if not self.wolfDiscovery then
+            self.nextWolfDiscovery = now+30
+            local ok,pool = pcall(getgc,false)
+            if not ok or type(pool) ~= "table" then return native end
+            native = native or {script=ownScript}
+            self.wolfActions,self.wolfDiscovery = native,{pool=pool,index=1}
+        end
+        local scan,started,count = self.wolfDiscovery,self.clock(),0
+        local remote = self.ReplicatedStorage:FindFirstChild("WolfActions")
+        while scan.index <= #scan.pool do
+            if count >= 384 or self.clock()-started > .008 then return native end
+            local fn = scan.pool[scan.index];scan.index += 1;count += 1
+            local name = nameOf(fn)
+            if name == "tryBite" or name == "toggleFeed" or name == "cancelFeed" then
+                local playerMatched,remoteMatched = false,false
+                for _,value in pairs(self:upvalues(fn)) do
+                    if value == self.player then playerMatched = true end
+                    if remote and value == remote then remoteMatched = true end
+                    if name == "tryBite" and nameOf(value) == "doBite" then
+                        for _,upvalue in pairs(self:upvalues(value)) do
+                            if remote and upvalue == remote then remoteMatched = true end
+                        end
+                    end
+                end
+                if playerMatched and remoteMatched then native[name] = fn end
+            end
+            if native.tryBite and native.toggleFeed and native.cancelFeed then break end
+        end
+        self.wolfDiscovery = nil
+        return native
+    end
+    function b:nativeFeedState(now)
+        local native = self:nativeWolfActions(now)
+        if not native or not native.toggleFeed then return nil,nil,false end
+        local values = self:upvalues(native.toggleFeed)
+        if values[5] ~= self.player or values[6] ~= self.ReplicatedStorage:FindFirstChild("WolfActions") then return nil,nil,false end
+        local mode = values[1]
+        if mode ~= nil and mode ~= "eat" and mode ~= "drink" then return nil,nil,false end
+        return mode,values[2] == true,true
+    end
+    function b:toggleNativeFeed(now)
+        local native = self:nativeWolfActions(now)
+        return native and native.toggleFeed and pcall(native.toggleFeed) or false
+    end
+    function b:stopNativeFeed(now)
+        local native = self:nativeWolfActions(now)
+        return native and native.cancelFeed and pcall(native.cancelFeed) or false
+    end
+    function b:tryNativeBite(now)
+        local native = self:nativeWolfActions(now)
+        return native and native.tryBite and pcall(native.tryBite) or false
+    end
+    function b:biteDelay(char)
+        local c = self:config("CombatConfig")
+        if c and type(c.hitDelay) == "function" then
+            local ok,delay = pcall(c.hitDelay,char)
+            if ok and Core.finite(delay) and delay >= .03 and delay <= 1 then return delay end
+        end
+        return c and Core.finite(c.HIT_DELAY) and math.clamp(c.HIT_DELAY,.03,1) or .27
+    end
+    function b:restLock(char)
+        local profiles=self:config("AnimProfiles")
+        local profile=profiles and profiles[self:attribute(char,"AnimProfile") or ""]
+        local value=profile and profile.REST_UP_LOCK
+        return Core.finite(value) and math.clamp(value,.05,1.5) or .7
+    end
     function b:io()
         return {
             available = type(readfile) == "function" and type(writefile) == "function",
@@ -242,7 +348,8 @@ function Roblox.new(Core, environment)
             survival = self:attribute(self.player,"FeralSurvival") }
         if not s.alive then return s end
         local feed = self:attribute(char,"WolfFeed")
-        s.feeding = feed == true or feed == "eat" or feed == "drink"
+        s.feedMode = (feed == "eat" or feed == "drink") and feed or nil
+        s.feeding = feed == true or s.feedMode ~= nil
         s.captured = self:attribute(char,"FeralPinned") == true
             or self:attribute(char,"FeralCarried") == true or self:attribute(char,"FeralDragged") == true
         s.pinned = self:attribute(char,"FeralPinned") == true or self:attribute(char,"FeralDragged") == true
@@ -281,55 +388,148 @@ function Roblox.new(Core, environment)
         if type(v) == "string" and v ~= "" and v ~= "0" and v ~= "None" and v ~= "nil" then return v end
         return nil
     end
+    function b:litterRecord(char)
+        local record = self.litterByBody and self.litterByBody[char]
+        local body = record and record.Parent and record:FindFirstChild("Body")
+        if body and body:IsA("ObjectValue") and body.Value == char and self:attribute(record,"Alive") == true then return record end
+        return nil
+    end
+    function b:refreshLitter()
+        local map = {}
+        local folder = self.ReplicatedStorage:FindFirstChild("FeralLitter")
+        if folder then
+            for index,record in ipairs(folder:GetChildren()) do
+                if index > 256 then break end
+                local body = record:FindFirstChild("Body")
+                local char = body and body:IsA("ObjectValue") and body.Value
+                if char and char:IsA("Model") and char.Parent and self:attribute(record,"Alive") == true then map[char] = record end
+            end
+        end
+        self.litterByBody = map
+        return map
+    end
+    function b:packFor(char,owner)
+        local record = self:litterRecord(char)
+        return knownPack(self:attribute(owner,"FeralPack")) or knownPack(self:attribute(char,"FeralPack"))
+            or knownPack(self:attribute(record,"Pack"))
+    end
     function b:affiliation(other, char)
-        local own = knownPack(self:attribute(self.player,"FeralPack")) or knownPack(self:attribute(self.player.Character,"FeralPack"))
-        local theirs = knownPack(self:attribute(other,"FeralPack")) or knownPack(self:attribute(char,"FeralPack"))
+        local own = self:packFor(self.player.Character,self.player)
+        local theirs = self:packFor(char,other or (char and self.Players:GetPlayerFromCharacter(char)))
         return own and theirs and (own == theirs and "same" or "other") or "unknown"
+    end
+    function b:targetBlocker(char,owner)
+        if not char or not char.Parent or self:attribute(char,"FeralDead") == true then return "target unavailable" end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return "target unavailable" end
+        if char:FindFirstChildOfClass("ForceField") then return "protected target" end
+        local safe,now = self:attribute(char,"FeralSafeUntil"),self:serverNow()
+        if Core.finite(safe) and (not now or safe > now) then return "spawn protection" end
+        owner = owner or self.Players:GetPlayerFromCharacter(char)
+        if self:attribute(owner,"FeralTut") == true or self:attribute(owner,"FeralTutorial") == true then return "tutorial protection" end
+        local tutorial = self:attribute(char,"TutorialOwner")
+        if tutorial ~= nil and tutorial ~= self.player.UserId then return "another tutorial target" end
+        if self:attribute(char,"FeralBurrowed") == true then return "burrowed target" end
+        return nil
+    end
+    function b:combatEligible(char)
+        return char ~= self.player.Character and not self:targetBlocker(char)
+            and self:affiliation(nil,char) ~= "same"
     end
     function b:sameTree(a,c)
         if not self:isClimbing(a) or not self:isClimbing(c) then return false end
         local axisA,axisB = self:attribute(a,"FeralClimbAxis"),self:attribute(c,"FeralClimbAxis")
         return typeof(axisA) == "Vector3" and typeof(axisB) == "Vector3" and (axisA-axisB).Magnitude < 5
     end
-    function b:candidates(s, range)
-        local all = {}
+    function b:candidates(s, range,visual)
+        local all,seen = {},{}
         if not s.alive then self.tracked = all; return all end
+        local litter = self:refreshLitter()
         local function add(char,other,npc)
-            if not char or char == s.char or not char.Parent then return end
+            if not char or char == s.char or not char.Parent or seen[char] then return end
+            local owner = self.Players:GetPlayerFromCharacter(char)
+            if owner == self.player then return end
             local root,hum = char:FindFirstChild("HumanoidRootPart"),char:FindFirstChildOfClass("Humanoid")
             if not root or not hum or hum.Health <= 0 then return end
             local delta = root.Position-s.root.Position
             local distance = delta.Magnitude
             if distance > range then return end
-            local safe = self:attribute(char,"FeralSafeUntil")
-            local owner = other or self.Players:GetPlayerFromCharacter(char)
-            local tutorial = owner and (self:attribute(owner,"FeralTutorial") == true)
-            table.insert(all,{ char = char, root = root, hum = hum, player = other, npc = npc,
-                name = other and other.DisplayName or char.Name, distance = distance,
-                affiliation = self:affiliation(other,char), flat = Vector3.new(delta.X,0,delta.Z),
+            local record = litter[char]
+            seen[char] = true
+            table.insert(all,{ char = char, root = root, hum = hum, player = owner, npc = owner == nil,
+                litter = owner == nil and record or nil,
+                name = owner and owner.DisplayName or self:attribute(record,"Name") or self:attribute(char,"FeralName") or char.Name,
+                distance = distance,affiliation = self:affiliation(owner,char), flat = Vector3.new(delta.X,0,delta.Z),
                 sameTree = self:sameTree(s.char,char),
-                protected = char:FindFirstChildOfClass("ForceField") ~= nil or tutorial
-                    or (Core.finite(safe) and s.serverNow ~= nil and safe > s.serverNow) })
+                protected = self:targetBlocker(char,owner) ~= nil })
         end
         for _, other in ipairs(self.Players:GetPlayers()) do
             if other ~= self.player then add(other.Character,other,false) end
         end
-        table.sort(all,function(a,c) return a.distance < c.distance end)
-        local players = {}
-        for i = 1,math.min(24,#all) do players[i] = all[i] end
-        self.tracked, self.replicatedCount = players,#all
         local folder = self.Workspace:FindFirstChild("FeralNPCs")
         if folder then
             for i, char in ipairs(folder:GetChildren()) do
-                if i > 50 then break end
+                if i > 256 then break end
                 if char:IsA("Model") then add(char,nil,true) end
             end
         end
+        for char in pairs(litter) do add(char,nil,true) end
+        table.sort(all,function(a,c) return a.distance < c.distance end)
+        local tracked,players,playerCount,npcCount = {},0,0,0
+        for _,target in ipairs(all) do
+            if target.player then
+                playerCount += 1
+                if players < 24 then table.insert(tracked,target);players += 1 end
+            elseif target.litter or self:packFor(target.char) then
+                npcCount += 1
+            end
+        end
+        if visual ~= false then
+            self.tracked,self.replicatedCount,self.packNPCCount = tracked,playerCount,npcCount
+            self.allCandidates=all
+        end
         return all
+    end
+    function b:carrying(s,target)
+        local clamp=s.char and s.char:FindFirstChild("FeralClamp")
+        local value=clamp and clamp:IsA("ObjectValue") and clamp.Value
+        return value ~= nil and (value==target or value:IsDescendantOf(target)) and self:attribute(clamp,"Carry")==true
+    end
+    function b:carryEligible(s,target)
+        if not s.alive or not target or not target.char.Parent or not target.root.Parent or target.hum.Health<=0
+            or self:attribute(target.char,"FeralCarried")==true or self:attribute(target.char,"FeralDragged")==true
+            or self:affiliation(target.player,target.char)=="other" then return false end
+        local cfg,species,abilities=self:config("CarryConfig"),self:config("Species"),self:config("AbilityConfig")
+        if not cfg or cfg.ENABLED~=true or not Core.finite(cfg.REACH) or type(cfg.canCarry)~="function" or not species or not abilities then return false end
+        local diff=target.root.Position-s.root.Position
+        local reach=1.5+cfg.REACH*(s.root.Size.Z+target.root.Size.Z)
+        local flat=Vector3.new(diff.X,0,diff.Z)
+        local look=s.root.CFrame.LookVector;look=Vector3.new(look.X,0,look.Z)
+        if diff.Magnitude>reach or flat.Magnitude>.1 and look.Magnitude>.1 and look.Unit:Dot(flat.Unit)<.2 then return false end
+        local ok,can=pcall(cfg.canCarry,species,abilities,s.char,target.char)
+        return ok and can==true
+    end
+    function b:waterCub(s)
+        local best
+        for _,target in ipairs(self:candidates(s,35,false)) do
+            if self:carryEligible(s,target) then
+                local swim,_,_,depth=self:water(target.char,target.hum,target.root)
+                if (swim or depth and depth>=-.25) and (not best or target.distance<best.distance) then best=target end
+            end
+        end
+        return best
+    end
+    function b:carryWaterAllowed(s)
+        local swim,under,_,depth=self:water(s.char,s.hum,s.root)
+        if not swim and not under and (not depth or depth<-.25) then return true end
+        local cfg=self:config("CarryConfig")
+        return cfg and type(cfg.WATER_OK)=="table" and cfg.WATER_OK[self:attribute(s.char,"Species")]==true or false
     end
     function b:geometry(values,s,target)
         if not values or not s.alive then return nil end
-        local flat = target.flat
+        if not target.root.Parent or not target.hum.Parent or target.hum.Health <= 0 then return nil end
+        local diff = target.root.Position-s.root.Position
+        local flat = Vector3.new(diff.X,0,diff.Z)
         local fwd = s.root.CFrame.LookVector
         fwd = Vector3.new(fwd.X,0,fwd.Z)
         if fwd.Magnitude < .01 then return nil end
@@ -354,7 +554,7 @@ function Roblox.new(Core, environment)
         local vertical = (s.hum.HipHeight+target.hum.HipHeight)*values.MAX_DY*modifier("dyMult",1)
         return { valid = gap < reach and angle > math.cos(math.rad(cone)) and height < vertical,
             withinBodyRange = gap < reach and height < vertical,
-            gap = gap, reach = reach, angle = angle, distance = target.distance }
+            gap = gap, reach = reach, angle = angle, distance = diff.Magnitude,score = gap-angle*2 }
     end
     function b:occluded(s,target)
         local params = RaycastParams.new()
@@ -368,7 +568,7 @@ function Roblox.new(Core, environment)
         self.reachTarget = nil
         local best,score = nil,math.huge
         for _, target in ipairs(all) do
-            if target.affiliation ~= "same" and target.distance <= 45 then
+            if self:combatEligible(target.char) and target.distance <= 45 then
                 if target.sameTree and (not self.treeTarget or target.distance < self.treeTarget.distance) then self.treeTarget = target end
             end
         end
@@ -376,7 +576,7 @@ function Roblox.new(Core, environment)
         local selectionModel = table.clone(changed)
         selectionModel.biteLook = baseline.biteLook
         for _,target in ipairs(all) do
-            if target.affiliation ~= "same" and not target.protected and target.distance <= 45 then
+            if self:combatEligible(target.char) and target.distance <= 45 then
                 local geometry = self:geometry(selectionModel,s,target)
                 if geometry and geometry.withinBodyRange then
                     local stock = self:geometry(baseline,s,target)
@@ -390,12 +590,11 @@ function Roblox.new(Core, environment)
         end
         self.reachTarget = assisted
         for _, target in ipairs(all) do
-            if target.affiliation ~= "same" and target.distance <= 45 then
+            if self:combatEligible(target.char) and target.distance <= 45 then
                 local base = self:geometry(baseline,s,target)
                 local extended = self:geometry(changed,s,target)
                 if base or extended then
-                    local rank = target.distance + (extended and extended.valid and 0 or 50)
-                        + (base and base.valid and 0 or 2) + (target.protected and 100 or 0)
+                    local rank = (extended and extended.score or math.huge) + (extended and extended.valid and 0 or 1000)
                     if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
                 end
             end
@@ -544,6 +743,9 @@ function Roblox.new(Core, environment)
                 if state == Enum.UserInputState.Begin then hub.ui:toggle() end
                 return Enum.ContextActionResult.Sink
             end
+            if state == Enum.UserInputState.Begin and input.KeyCode == Enum.KeyCode.G and hub:carryInput(input) then
+                return Enum.ContextActionResult.Sink
+            end
             if state == Enum.UserInputState.Begin then hub:preInput(input) end
             return Enum.ContextActionResult.Pass
         end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
@@ -571,13 +773,15 @@ function Roblox.new(Core, environment)
         end)
     end
     function b:bindNative(hub)
-        for _, item in ipairs({{"FeralGrabV2","grab"},{"FeralHit","feedback"}}) do
+        for _, item in ipairs({{"FeralGrabV2","grab"},{"FeralHit","feedback"},{"WolfActions","actions"},
+            {"FeralBiteLocal","biteLocal","BindableEvent"}}) do
             local remote = self.ReplicatedStorage:FindFirstChild(item[1])
             local old = self.remoteConnections[item[1]]
             if old and old.remote ~= remote then old.connection:Disconnect(); self.remoteConnections[item[1]] = nil; old = nil end
-            if remote and remote:IsA("RemoteEvent") and not old then
+            if remote and remote:IsA(item[3] or "RemoteEvent") and not old then
                 local kind = item[2]
-                local c = remote.OnClientEvent:Connect(function(...)
+                local signal = item[3] == "BindableEvent" and remote.Event or remote.OnClientEvent
+                local c = signal:Connect(function(...)
                     if hub.active and not hub.closed then hub:nativeEvent(kind,...) end
                 end)
                 self.remoteConnections[item[1]] = { remote = remote,connection = c }
