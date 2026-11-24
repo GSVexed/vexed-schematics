@@ -58,6 +58,129 @@ function Roblox.new(Core, environment)
         local remote = self.ReplicatedStorage:FindFirstChild(name)
         return remote and remote:IsA("RemoteEvent") or false
     end
+    function b:nativeGrabBound()
+        return self.ContextActionService:GetAllBoundActionInfo().FeralGrabV2Press ~= nil
+    end
+    function b:markGrabPress(session,strike,now)
+        local native = self:nativeGrabController(now)
+        local state = native and native.state()
+        if state and not state.ended and tostring(state.id) == tostring(session)
+            and type(state.strike) == "table" and state.strike.k == strike then
+            state.strike.pressed = true -- an actual submitted input, never a fabricated grade
+        end
+    end
+    function b:grabTextFocused()
+        return self.UserInputService:GetFocusedTextBox() ~= nil
+            or self:attribute(self.player,"FeralMenuOpen") == true
+    end
+    function b:unbindGrabManual(name)
+        self.ContextActionService:UnbindAction(name)
+    end
+    function b:bindGrabManual(name,press)
+        self.ContextActionService:BindActionAtPriority(name,function(_,state)
+            if state == Enum.UserInputState.Begin then press() end
+            return Enum.ContextActionResult.Sink
+        end,false,3000,Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2)
+    end
+    function b:nativeGrabController(now)
+        local scripts = self.player:FindFirstChild("PlayerScripts")
+        local scriptObject = scripts and scripts:FindFirstChild("FeralGrabV2UI")
+        if self.grabController and self.grabController.script == scriptObject and scriptObject.Parent then
+            return self.grabController
+        end
+        self.grabController = nil
+        if not scriptObject then self.grabDiscovery = nil; return nil end
+        if self.grabDiscovery and self.grabDiscovery.script ~= scriptObject then self.grabDiscovery = nil end
+        if not self.grabDiscovery and now < (self.nextGrabDiscovery or 0) then return nil end
+        if type(getgc) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return nil end
+        local many = type(debug.getupvalues) == "function" and debug.getupvalues
+            or type(getupvalues) == "function" and getupvalues
+        local one = type(debug.getupvalue) == "function" and debug.getupvalue
+            or type(getupvalue) == "function" and getupvalue
+        if not many and not one then return nil end
+        local function upvalues(fn)
+            if many then
+                local ok,values = pcall(many,fn)
+                return ok and type(values) == "table" and values or {}
+            end
+            local values = {}
+            for index = 1,12 do
+                local ok,a,c = pcall(one,fn,index)
+                if not ok then break end
+                values[index] = c ~= nil and type(a) == "string" and c or a
+            end
+            return values
+        end
+        local function nativeName(fn)
+            local ok,source,name = pcall(debug.info,fn,"sn")
+            if not ok or type(source) ~= "string" or not string.find(source,"FeralGrabV2UI",1,true) then return nil end
+            if type(getfenv) == "function" then
+                local valid,env = pcall(getfenv,fn)
+                if valid and env.script ~= nil and env.script ~= scriptObject then return nil end
+            end
+            return name
+        end
+        if not self.grabDiscovery then
+            self.nextGrabDiscovery = now+30
+            local ok,pool = pcall(getgc,false)
+            if not ok or type(pool) ~= "table" then return nil end
+            self.grabDiscovery = {script=scriptObject,pool=pool,index=1}
+        end
+        -- Resume after the previous slice; a large GC pool must not repeatedly
+        -- scan only its prefix and never reach the native UI closure.
+        local discovery,started,checked = self.grabDiscovery,self.clock(),0
+        while discovery.index <= #discovery.pool do
+            if checked >= 384 or self.clock()-started > .012 then return nil end
+            local fn = discovery.pool[discovery.index]
+            discovery.index += 1; checked += 1
+            if type(fn) == "function" and nativeName(fn) == "serverPress" then
+                local remote = self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+                local matched = false
+                for _,value in pairs(upvalues(fn)) do
+                    if remote ~= nil and value == remote then matched = true end
+                end
+                if matched then
+                    local native = { press = fn,script = scriptObject }
+                    native.state = function()
+                        for _,value in pairs(upvalues(fn)) do
+                            if type(value) == "table" and value.id ~= nil
+                                and (value.role == "prey" or value.role == "hunter") then
+                                if native.lastState ~= value then native.lastState,native.ownerCharacter = value,self.player.Character end
+                                if native.ownerCharacter ~= self.player.Character then return nil end
+                                return value
+                            end
+                        end
+                        return nil
+                    end
+                    native.bind = function(on)
+                        local cas = self.ContextActionService
+                        if not on then
+                            local info = cas:GetAllBoundActionInfo().FeralGrabV2Press
+                            if info then
+                                native.inputs = info.inputTypes and table.clone(info.inputTypes)
+                                    or {Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2,Enum.UserInputType.MouseButton1}
+                                native.priority = info.priorityLevel or 3000
+                            end
+                            cas:UnbindAction("FeralGrabV2Press")
+                        else
+                            -- v2412 callback prototype 73: Begin calls the
+                            -- original serverPress; every state returns Sink.
+                            cas:BindActionAtPriority("FeralGrabV2Press",function(_,state)
+                                if state == Enum.UserInputState.Begin then fn() end
+                                return Enum.ContextActionResult.Sink
+                            end,false,native.priority or 3000,table.unpack(native.inputs or {
+                                Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2,Enum.UserInputType.MouseButton1}))
+                        end
+                    end
+                    self.grabController = native
+                    self.grabDiscovery = nil
+                    return native
+                end
+            end
+        end
+        self.grabDiscovery = nil
+        return nil
+    end
     function b:isClimbing(char) return self:attribute(char,"FeralClimbLocal") == true end
     function b:io()
         return {
@@ -230,6 +353,7 @@ function Roblox.new(Core, environment)
         local height = math.abs(target.root.Position.Y-s.root.Position.Y)
         local vertical = (s.hum.HipHeight+target.hum.HipHeight)*values.MAX_DY*modifier("dyMult",1)
         return { valid = gap < reach and angle > math.cos(math.rad(cone)) and height < vertical,
+            withinBodyRange = gap < reach and height < vertical,
             gap = gap, reach = reach, angle = angle, distance = target.distance }
     end
     function b:occluded(s,target)
@@ -241,12 +365,30 @@ function Roblox.new(Core, environment)
     end
     function b:select(s, baseline, changed, all)
         self.treeTarget = nil
+        self.reachTarget = nil
         local best,score = nil,math.huge
         for _, target in ipairs(all) do
             if target.affiliation ~= "same" and target.distance <= 45 then
                 if target.sameTree and (not self.treeTarget or target.distance < self.treeTarget.distance) then self.treeTarget = target end
             end
         end
+        local assisted,assistScore = nil,math.huge
+        local selectionModel = table.clone(changed)
+        selectionModel.biteLook = baseline.biteLook
+        for _,target in ipairs(all) do
+            if target.affiliation ~= "same" and not target.protected and target.distance <= 45 then
+                local geometry = self:geometry(selectionModel,s,target)
+                if geometry and geometry.withinBodyRange then
+                    local stock = self:geometry(baseline,s,target)
+                    local rank = target.distance+(target.affiliation == "unknown" and .5 or 0)
+                        -(stock and stock.valid and .75 or 0)
+                    if rank < assistScore and (target.sameTree or not self:occluded(s,target)) then
+                        assisted,assistScore = target,rank
+                    end
+                end
+            end
+        end
+        self.reachTarget = assisted
         for _, target in ipairs(all) do
             if target.affiliation ~= "same" and target.distance <= 45 then
                 local base = self:geometry(baseline,s,target)

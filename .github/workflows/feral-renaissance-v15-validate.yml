@@ -30,7 +30,7 @@ jobs:
             --compiler /tmp/renaissance-luau/luau-compile \
             --output /tmp/renaissance-results.json
       - name: Confirm deterministic bundle and manifest
-        run: git diff --exit-code -- roblox-tools/feral-renaissance-v15.0.0.lua roblox-tools/renaissance/manifest.json
+        run: git diff --exit-code -- roblox-tools/feral-renaissance-v*.lua roblox-tools/renaissance/manifest.json
       - uses: actions/upload-artifact@v4
         with:
           name: renaissance-v15-regression-results

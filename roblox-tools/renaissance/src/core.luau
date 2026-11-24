@@ -1,4 +1,4 @@
--- Renaissance 15.0.0: lifecycle, exclusive reversible leases and feature truth.
+-- Renaissance: lifecycle, exclusive reversible leases and feature truth.
 local Core = {}
 
 function Core.finite(n)

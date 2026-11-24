@@ -55,7 +55,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.1",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -97,9 +97,9 @@ function UI.mount(hub, bridge, scope)
         u.rows,u.combatReadout,u.finderReadout = {},nil,nil
         title.Text = string.upper(u.tab)
         if u.tab == "Combat" then
-            info(0,"BITE REACH  ·  ALWAYS ON","Native targeting with extended client geometry. Extra range is unverified.",78)
+            info(0,"BITE REACH  ·  ALWAYS ON","Wider client range with rear and vertical assistance. Server acceptance unverified.",78)
             row("biteHelper",94)
-            info(161,"RANGE COLOURS","Teal: native geometry. Amber: extended only. Grey: blocked or recovering from Rest.",80)
+            info(161,"RANGE COLOURS","Teal: stock-reference range. Amber: extended only. Grey: blocked or leaving Rest.",80)
             u.combatReadout = info(258,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Vision" then
             row("esp",0); row("tags",57)
@@ -171,7 +171,7 @@ function UI.mount(hub, bridge, scope)
                 local label = text(gui,"",0,0,180,18,11)
                 label.TextXAlignment, label.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
                 local health = text(gui,"",0,0,180,14,9)
-                health.TextXAlignment,health.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,0)
+                health.TextXAlignment,health.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
                 record = { highlight = highlight,label = label,health = health }
                 self.records[char] = record
             end
@@ -208,8 +208,8 @@ function UI.mount(hub, bridge, scope)
             local show = valid and registry.tags.requested and onScreen and projected.Z > 0
             record.label.Visible,record.health.Visible = show,show
             if show then
-                local x,y = projected.X,math.max(20,projected.Y)
-                record.label.Position,record.health.Position = UDim2.fromOffset(x,y),UDim2.fromOffset(x,y+1)
+                local x,y = projected.X,math.max(35,projected.Y-6)
+                record.label.Position,record.health.Position = UDim2.fromOffset(x,y),UDim2.fromOffset(x,y-20)
                 record.label.Text,record.label.TextColor3 = target.name,colour
                 local ratio = target.hum.MaxHealth > 0 and math.clamp(target.hum.Health/target.hum.MaxHealth,0,1) or nil
                 record.health.Text = ratio and string.format("%s%d%% · %.0f studs",ratio < .3 and "! " or "",ratio*100,target.distance)
@@ -237,9 +237,10 @@ function UI.mount(hub, bridge, scope)
         for id,rowValue in pairs(self.rows) do
             local feature = registry[id]
             rowValue.toggle.Text = not feature.requested and "OFF"
-                or feature.applied and (feature.state == "ARMED" and "ARMED" or "ON") or "WAIT"
+                or feature.applied and (feature.state == "PARTIAL" and "PARTIAL"
+                    or feature.state == "ARMED" and "ARMED" or "ON") or "WAIT"
             rowValue.toggle.BackgroundColor3 = feature.requested and feature.applied
-                and Color3.fromRGB(27,111,98) or palette.off
+                and (feature.state == "PARTIAL" and palette.unknown or Color3.fromRGB(27,111,98)) or palette.off
             rowValue.status.Text = feature.requested and feature.reason ~= "" and feature.reason or feature.detail
         end
         footer.Text = hub.notice or "Right Shift opens menu"

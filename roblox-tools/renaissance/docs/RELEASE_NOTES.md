@@ -1,65 +1,55 @@
-# Renaissance 15.0.0 — release record
+# Renaissance 15.1.0 — release record
 
-Released source: 59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600. The separate Renaissance launcher pins that immutable tested source. Existing CLEAN v14 source and launcher remain unchanged.
+The candidate has passed local compilation and 73 service-boundary regressions. Published CI is pending. The stable launcher still pins 15.0.0 until promotion; release.json records that currently released pin.
 
-All 21 approved functions have an explicit implementation and status. The compact four-tab UI, Right Shift, permanent reach, hollow-only outlines and saved settings are preserved. The thirteen deliberate removals remain excluded.
+All 21 retained functions remain present. The compact interface, Right Shift, permanent reach, hollow ESP, simple controls and schema-15 saved settings are preserved. No deliberately removed feature has returned. CLEAN v14, its launcher and the complete 15.0.0 source are unchanged.
 
-The nine-module rewrite fixes false/OFF reconciliation, attach cleanup, duplicate renderers, native Grab V2 res handling, session wire types, duplicate presses, local rate compounding, stale config identity and native-Q double-tap risk.
+## Changes
 
-The local suite and published source CI pass 54 service-boundary scenarios. Each module, both fixtures and the bundle compile with the pinned official Luau compiler. Embedded source parity and exact rollback hashes pass.
+- Health percentage and studs render above the name, with both lines raised above the animal.
+- Ordinary bite clicks no longer cancel scheduled minigame presses. During a verified native session, the native minigame mouse binding is temporarily separated from the bite path; Space/gamepad retain native manual control.
+- Multiple hunters update one fight without clearing its pending strike. Own-character results, enabling mid-session, missed crossings and native bite/end cleanup are handled explicitly.
+- Native closure discovery resumes across bounded slices, including large GC pools. Missing introspection is reported as PARTIAL during an active minigame.
+- Permanent client reach has wider range, cone and height limits, plus a shared eligible rear/same-tree direction. It does not rotate the character or add Bite/BiteHit requests.
+- Injury, bleed and venom deficits may request native Rest during a known combat tag; the HP combat exclusion remains. Attacks and minigames still preempt recovery, and local factors do not compound to 16x.
 
-Actual Potassium validation in place version 2412 passed hidden staging, eight config-schema/readback checks, real saved true/false roundtrips, running heartbeat/render checks, hot reload, exact reach restoration and clean shutdown. The final hub was left active with the user's migrated settings. No active own animal was available for gameplay validation.
-
-## Use
-
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
-
-Right Shift toggles the single compact window. Survival combines recovery and fast effects under one control. Combat has permanent reach and one optional small range marker. Movement and Vision use simple controls. Unavailable requested features display WAIT; local application is separate from gameplay confirmation.
-
-## Acceptance dashboard
+## Validation
 
 | Gate | Result |
 |---|---|
-| All 21 retained records and scope | Implemented; no removed functions returned |
-| Compile, embedded parity, rollback hashes | Passed |
-| Regression suite | 54/54 passed locally and on published source CI |
-| Actual executor source/UI compatibility | Passed |
-| Settings, reload and shutdown | Passed live within the documented checks |
-| Hollow outline/tag behaviour | Passed regressions; live own-animal fixture unavailable |
-| Native/server efficacy | Unresolved; no controlled spawned-animal test available |
-| Right Shift raw sprint polling | Unresolved compatibility limitation |
+| 21 retained functions / 13 exclusions | Preserved |
+| Compile | 10 modules, 2 fixtures, versioned bundle and launcher pass |
+| Local regressions | 73/73 pass |
+| Embedded source parity / deterministic bundle | Pass |
+| CLEAN v14 / 15.0.0 rollback hashes | Unchanged |
+| Published CI | Pending |
+| New actual executor execution | Unconfirmed; MCP acknowledged a fixed script but its marker was not returned |
+| New gameplay results | Unverified |
 
-## Confirmed changes
+The minigame fixture follows the captured v2412 native CAS and serverPress contract. It verifies repeated clicks during a three-hunter session without cancelling timing or duplicating presses. It does not establish accepted live damage or Perfect frequency. The prior 15.0.0 executor checks are kept in LIVE_EVIDENCE.md and do not validate the new code.
 
-- Explicit OFF and ON reconciliation; unavailable is not silently treated as ON.
-- Inactive staged install, complete owner cleanup and unique reload bindings.
-- One Rest owner and lease manager; attacks, feeding and native actions preempt recovery.
-- Deficit-driven Rest; genuine manual Rest retained; no extra Bite/BiteHit requests.
-- Current Grab V2 res grading, original session ID wire types and duplicate/stale protections.
-- Coordinated local 2x HP and 4x condition references, without local 16x compounding.
-- One hollow outline/tag owner, separate affiliation/health cues, smooth small guide.
-- Bounded native climb buffer/retry and temporary surface-only flight permission.
-- AFK manual/danger cancellation, intermediate terrain checks and separate credit evidence.
+## Use and limits
 
-## Remaining limits
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-Universal infinite stamina, continuous real 4x condition recovery, additional accepted bite range, native Perfect frequency, uninterrupted AFK/survival credit and authoritative movement improvements are unverified. The hub cannot certify private server rules from client config.
+Right Shift toggles the single compact window. Recovery and fast effects share one control. The small optional range marker separates stock-reference and extended client eligibility.
 
-Recovery pauses for combat, climb/flight, abilities, feeding, capture and native minigames. Ground movement is allowed. The native default post-Rest bite lock is retained; its effect is shown as a possible blocker, so the first bite after Rest is not guaranteed. The pose mask establishes only local presentation.
+Extra accepted bite range, bites during native capture, sustained infinite stamina, real continuous 4x condition recovery and other server-dependent benefits remain unverified. Native pin, clamp, cooldown, venom and post-Rest restrictions can still prohibit biting. Native Rest's default post-exit lock remains a possible first-bite blocker. A local pose mask does not prove remote invisibility of Rest.
 
-Right Shift remains the requested hotkey. CAS consumption does not hide the key from native IsKeyDown polling. Finder/ESP use only replicated characters, with 24 tracked records and up to the selected 900-stud range.
+Mouse/minigame separation requires getgc, debug.info and supported upvalue access in the executor. Unsupported introspection leaves the native binding intact and displays PARTIAL. Right Shift can still overlap native raw sprint polling. ESP/finder depend on replicated characters and track up to 24 players at the selected 900-stud maximum.
 
 ## Rollback
 
-The original stable clean loader remains unchanged. The exact rollback source is:
+Re-executing either pinned source closes the active Renaissance owner before activation. Avoid manually stacking independent legacy hubs.
+
+Previous Renaissance 15.0.0:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600/roblox-tools/feral-renaissance-v15.0.0.lua"))()
+
+Original CLEAN v14:
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/158474ba80c0d613c3427399f24059341369acc8/roblox-tools/feral-nova-v14.0-clean-reach-core.lua"))()
 
-The loader retires the active Renaissance hub through its compatibility close handle. Do not stack independent old hub versions manually.
+## Records
 
-## Source and evidence
-
-- [Versioned source](https://github.com/GSVexed/vexed-schematics/blob/59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600/roblox-tools/feral-renaissance-v15.0.0.lua)
-- [Source diff from CLEAN baseline](https://github.com/GSVexed/vexed-schematics/compare/158474ba80c0d613c3427399f24059341369acc8...59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600)
-- [Published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45442296264)
-- FEATURE_AUDIT.md, ARCHITECTURE.md, LIVE_EVIDENCE.md and the two sanitized live-result JSON files record the remaining evidence.
+The released source commit, source hash and CI run are recorded in release.json. FEATURE_AUDIT.md lists all 21 feature statuses. ARCHITECTURE.md, V15_1_INPUT_REVIEW.md, LIVE_EVIDENCE.md and test-results.json retain the implementation and evidence detail.

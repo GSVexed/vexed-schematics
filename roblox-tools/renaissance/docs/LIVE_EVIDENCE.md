@@ -1,5 +1,17 @@
 # Live validation record
 
+## Version 15.1.0 follow-up
+
+The following earlier executor results belong to 15.0.0, not the new input/reach/recovery changes.
+
+For 15.1.0, the Windows runner and local Potassium MCP service were accessible. One uniquely listed paired client matched the running Roblox process. A fixed print-only execution call returned an acknowledgement, but its exact console marker was not recovered, including a bounded retry using the acknowledgement's console_cursor. The final attempt is private runner run 45455307175 (24 November 2026). No credential or unrelated console payload was exported.
+
+This is **MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED**, not successful game-side execution. There is no new live confirmation of the native serverPress closure discovery, reversible input lease, simultaneous damage during a minigame, accepted extra range or condition recovery rate. Further repeated broad diagnostics were stopped. The updated source is validated by compilation, deterministic packaging and the 73-scenario service-boundary suite; its CI result is recorded in release.json when promoted.
+
+The native input contract is independently grounded in the v2412 capture, as recorded in V15_1_INPUT_REVIEW.md. The fixtures simulate that verified contract; they are not server-authoritative tests.
+
+## Earlier version 15.0.0 evidence
+
 The Windows runner and existing local Potassium pairing were verified on 24 November 2026. A fixed print-only script was accepted and its exact console marker was returned in private runner run 45437390421.
 
 Candidate 68aec605e46011b33b024102469aeac4a15528bd passed the published compile/regression gate in run 45441514764.

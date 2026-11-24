@@ -42,7 +42,7 @@ local enum = setmetatable({}, {__index=function(t,k)
 end})
 local function kind(v) return type(v)=="table" and v._type or type(v) end
 function Mock.new()
-    local w = { time=10,objects={},calls={},configs={},renders={},bindings={},parts={},
+    local w = { time=10,objects={},calls={},configs={},renders={},bindings={},bindingInfo={},parts={},
         nativeRestEcho=false,localEnvironment={},failure=nil,waterY=nil,blocked=false }
     local methods = {}
     local function new(class)
@@ -194,11 +194,13 @@ function Mock.new()
     function uis:IsMouseButtonPressed(button) return w.held==button end
     function uis:GetMouseLocation() return V2.new(1200,850) end
     local cas={}
-    function cas:BindActionAtPriority(name,fn) w.bindings[name]=fn end
-    function cas:UnbindAction(name) w.bindings[name]=nil end
+    function cas:BindActionAtPriority(name,fn,_,priority,...)
+        w.bindings[name]=fn;w.bindingInfo[name]={inputTypes={...},priorityLevel=priority or 0}
+    end
+    function cas:UnbindAction(name) w.bindings[name]=nil;w.bindingInfo[name]=nil end
     function cas:GetAllBoundActionInfo()
         local result={}
-        for name in pairs(w.bindings) do result[name]={} end
+        for name in pairs(w.bindings) do result[name]=w.bindingInfo[name] or {} end
         if w.nativeShake then result.FeralShakeTaps={} end
         return result
     end
@@ -232,6 +234,60 @@ function Mock.new()
         local fn,err=loadstring(source,name)
         if fn then setfenv(fn,env) end
         return fn,err
+    end
+    function w:enableNativeGrab()
+        local scripts=new("PlayerScripts");scripts.Name="PlayerScripts";scripts.Parent=player
+        local scriptObject=new("LocalScript");scriptObject.Name="FeralGrabV2UI";scriptObject.Parent=scripts
+        local state=nil
+        local remote=rs:FindFirstChild("FeralGrabV2")
+        local nativePress
+        nativePress=function()
+            local strike=state and state.strike
+            if not state or state.ended or not strike or strike.pressed or w.time+1000<strike.t0 then return end
+            strike.pressed=true
+            w.nativeManualPresses=(w.nativeManualPresses or 0)+1
+            remote:FireServer("press",state.id,strike.k,w.time+1000)
+        end
+        local function bind()
+            cas:BindActionAtPriority("FeralGrabV2Press",function(_,inputState)
+                if inputState==enum.UserInputState.Begin then nativePress() end
+                return enum.ContextActionResult.Sink
+            end,false,3000,enum.KeyCode.Space,enum.KeyCode.ButtonA,enum.KeyCode.ButtonR2,enum.UserInputType.MouseButton1)
+        end
+        remote.OnClientEvent:Connect(function(event,data)
+            if event=="begin" then
+                state={id=data.f or data.id,role=data.role or "prey",n=data.n or 1}
+                bind()
+            elseif state and data.f==state.id then
+                if event=="strike" then state.strike=table.clone(data);state.strike.dur=w.configs.GrabV2Config.PASSES/data.spd
+                elseif event=="n" then state.n=data.n
+                elseif event=="bite" then state.strike=nil;state.biteUntil=w.time+.6
+                elseif event=="end" then state.ended=true;cas:UnbindAction("FeralGrabV2Press")
+                elseif event=="res" and state.strike and state.strike.k==data.k then state.strike.myTier=data.tier end
+            end
+        end)
+        uis.InputBegan:Connect(function(input,processed)
+            if not processed and input.UserInputType==enum.UserInputType.MouseButton1
+                and player.Character:GetAttribute("FeralPinned")~=true then
+                w.nativeBites=(w.nativeBites or 0)+1
+                player.Character:SetAttribute("WolfBiteAt",w.time+1000)
+            end
+        end)
+        env.getgc=function()return {nativePress}end
+        local mockDebug=table.clone(debug)
+        local originalInfo=debug.info
+        mockDebug.info=function(fn,options)
+            if fn~=nativePress then return originalInfo(fn,options) end
+            if options=="sn" then return "Players.LocalPlayer.PlayerScripts.FeralGrabV2UI","serverPress" end
+            if options=="n" then return "serverPress" end
+            if options=="s" then return "Players.LocalPlayer.PlayerScripts.FeralGrabV2UI" end
+        end
+        mockDebug.getupvalues=function(fn)
+            if fn==nativePress then return {[1]=state,[2]=w.configs.GrabV2Config,[3]=remote} end
+            return {}
+        end
+        env.debug=mockDebug
+        self.nativeGrabState=function()return state end
     end
     function w:animal(species,position)
         local char=new("Model");char.Name=species or "Wolf";char.Parent=workspace
@@ -268,7 +324,17 @@ function Mock.new()
     end
     function w:input(key,kind,processed)
         local input={KeyCode=key or enum.KeyCode.Unknown,UserInputType=kind or enum.UserInputType.Keyboard,Position=V3.new(1200,850,0)}
-        for _,fn in pairs(table.clone(self.bindings)) do fn("",enum.UserInputState.Begin,input) end
+        local order={}
+        for name,fn in pairs(table.clone(self.bindings))do
+            local info=self.bindingInfo[name] or {inputTypes={},priorityLevel=0}
+            for _,value in ipairs(info.inputTypes)do
+                if value==input.KeyCode or value==input.UserInputType then table.insert(order,{name=name,fn=fn,priority=info.priorityLevel});break end
+            end
+        end
+        table.sort(order,function(a,b)return a.priority>b.priority end)
+        for _,item in ipairs(order)do
+            if item.fn(item.name,enum.UserInputState.Begin,input)==enum.ContextActionResult.Sink then processed=true;break end
+        end
         uis.InputBegan:Fire(input,processed==true)
         return input
     end

@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.0.0", tokenIdentity = tokenIdentity,
+    local h = { version = "15.1.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -18,6 +18,7 @@ function Controller.new(M,bridge,options)
     end
     h.features = M.features.new(Core,bridge,h.registry)
     h.grab = M.grab.new()
+    h.grabInput = M.grab_input.new(bridge,h.token)
     h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
     h.settingsAvailable = bridge:io().available ~= false
     function h:save()
@@ -54,7 +55,7 @@ function Controller.new(M,bridge,options)
         if id == "recovery" and not on then self.recovery.enabled = false; self.recovery:release("OFF",now) end
         if id == "minigame" then
             self.grab.enabled = on == true
-            if not on then self.grab:reset("OFF") end
+            if not on then self.grab:reset("OFF"); self.grabInput:release() end
         end
         if id == "survivalAFK" and not on then self:stopWalk("disabled") end
         if id == "flight" and not on then self:clearFlight() end
@@ -72,6 +73,7 @@ function Controller.new(M,bridge,options)
         self.recovery:release("animal changed",now)
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.grab:reset("animal changed")
+        self.grabInput:release()
         self:stopWalk("animal changed")
         self:clearFlight()
         self.features:releaseFlag()
@@ -127,7 +129,7 @@ function Controller.new(M,bridge,options)
             if self.recovery.owned then self.recovery:manual(now) end
             return
         end
-        if self.grab.active and (click or key == Enum.KeyCode.Space or kind == Enum.UserInputType.Touch) then
+        if self.grab.active and (key == Enum.KeyCode.Space or key == Enum.KeyCode.ButtonA or key == Enum.KeyCode.ButtonR2) then
             self.grab:manual()
             return
         end
@@ -196,12 +198,15 @@ function Controller.new(M,bridge,options)
         local now = bridge:serverNow()
         if not now then return end
         local c = bridge:config("GrabV2Config")
-        local handled = self.grab:event(event,data,now,bridge.generation,c and c.PERFECT or .32,c and c.PASSES or 2.5)
+        local handled = self.grab:event(event,data,now,bridge.generation,c and c.PERFECT or .32,c and c.PASSES or 2.5,
+            {character=bridge.player.Character,bitePause=c and c.BITE_PAUSE or .6})
         if handled then
             self.recovery:release("native minigame",bridge.clock())
             self:stopWalk("native minigame")
             self.ledger:event("native_grab_" .. tostring(event),bridge.clock(),
                 {tier = event == "res" and data.mine == true and data.tier or nil})
+            if event == "begin" then bridge.nextGrabDiscovery = 0 end
+            self.grabInput:update(self.grab,bridge.clock())
         end
     end
     function h:requestFlight()
@@ -247,7 +252,10 @@ function Controller.new(M,bridge,options)
             local f = r.byId[id]
             if not f.requested then r:ack(id,false,"OFF",f.detail)
             elseif id == "minigame" then
-                r:ack(id,bridge:hasRemote("FeralGrabV2"),"ARMED",self.grab.status)
+                local remote = bridge:hasRemote("FeralGrabV2")
+                local state = remote and (self.grab.active and not self.grabInput.lease and "PARTIAL" or "ARMED") or "WAITING"
+                r:ack(id,remote,state,
+                    self.grab.active and (self.grab.status .. " · " .. self.grabInput.status) or self.grab.status)
             elseif id == "escape" then
                 r:ack(id,bridge:hasRemote("FeralLunge"),"ARMED",self.escapeStatus or "watching native capture")
             elseif id == "flight" then
@@ -385,13 +393,25 @@ function Controller.new(M,bridge,options)
         local slow = now >= self.nextSlow
         local s = bridge:snapshot(now,slow and self.registry.byId.flight.requested)
         self.snapshot = s
-        s.grab,s.afkWalking = self.grab.active,self.walk ~= nil
         self.grab.enabled = self.registry.byId.minigame.requested
         local clock = s.serverNow
         if clock then
+            local cfg = self.grab.enabled and bridge:config("GrabV2Config")
+            local native = self.grab.enabled and self.grabInput:controller(now)
+            if native and s.alive then
+                self.grab:syncNative(native.state(),clock,s.generation,cfg and cfg.PERFECT or .32,
+                    cfg and cfg.PASSES or 2.5,now)
+            end
+            if not s.alive and self.grab.active then self.grab:reset("animal unavailable") end
+            s.grab,s.afkWalking = self.grab.active,self.walk ~= nil
+            self.grabInput:update(self.grab,now)
             self.grab:tick(clock,s.generation,s.alive and self.policy:allowed("grab",s,now),
-                function(session,strike,at) return bridge:fire("FeralGrabV2","press",session,strike,at) end)
-        else self.grab.pending = nil end
+                function(session,strike,at)
+                    local sent = bridge:fire("FeralGrabV2","press",session,strike,at)
+                    if sent then bridge:markGrabPress(session,strike,now) end
+                    return sent
+                end)
+        else self.grab.pending = nil; s.grab,s.afkWalking = self.grab.active,self.walk ~= nil end
         if now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
         self.features:reconcile(s,now)
         self.recovery.enabled = self.registry.byId.recovery.requested
@@ -445,6 +465,7 @@ function Controller.new(M,bridge,options)
         bridge:attach(self,self.scope)
         bridge:bindNative(self)
         bridge.bindCharacter(bridge.player.Character)
+        if self.registry.byId.minigame.requested then bridge:nativeGrabController(bridge.clock()) end
         self.ready = true
         return self
     end
@@ -462,6 +483,7 @@ function Controller.new(M,bridge,options)
         self.cleanupErrors = {}
         for _,cleanup in ipairs({
             function() self.recovery:close(bridge.clock()) end,
+            function() self.grabInput:close() end,
             function() self:stopWalk("shutdown") end,
             function() self:clearFlight() end,
             function() self.features:close() end,

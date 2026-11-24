@@ -55,17 +55,19 @@ function Recovery.new(bridge, policy, ledger)
         end
         if self.owned and (not s or self.owned ~= s.char) then self:release("animal changed", now) end
         if not self.enabled then self:release("OFF", now); return end
-        local allowed, reason = policy:allowed("recovery", s, now)
+        local effects = s and (
+            (type(s.injury) == "number" and s.injury > .1)
+            or (type(s.bleed) == "number" and s.bleed > .1)
+            or (type(s.venom) == "number" and s.venom > .1))
+        self.purpose = effects and "effects" or "health"
+        local allowed, reason = policy:allowed("recovery", s, now,self.purpose)
         if not allowed then self:release(reason, now); return end
         if now < self.backoffUntil then self.state = "waiting after action"; return end
         self:echo(s, now)
         if policy.manualRest or now < self.backoffUntil then return end
         -- Request only for an actual deficit. Keeping Rest primed at full
         -- health needlessly exposes the next bite to native Rest timing.
-        local deficit = s.hp < s.maxHP-.35
-            or (type(s.injury) == "number" and s.injury > .1)
-            or (type(s.bleed) == "number" and s.bleed > .1)
-            or (type(s.venom) == "number" and s.venom > .1)
+        local deficit = effects or s.hp < s.maxHP-.35
         if not deficit then self:release("armed; no recovery deficit", now); return end
         if not self.owned then
             -- Stage masking ownership BEFORE requesting native Rest.
@@ -80,7 +82,7 @@ function Recovery.new(bridge, policy, ledger)
                 self.backoffUntil = now+3
                 return
             end
-            ledger:event("native_rest_requested", now, { moving = s.moving })
+            ledger:event("native_rest_requested", now, { moving = s.moving,purpose = self.purpose,combatHPExcluded = s.combat ~= false })
         elseif now >= self.nextRefresh then
             -- Bounded renewal while deficit persists. A request is not an acknowledgement.
             self.nextRefresh = now+5

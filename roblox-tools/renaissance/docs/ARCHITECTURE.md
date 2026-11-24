@@ -1,13 +1,14 @@
-# Renaissance 15.0.0 architecture
+# Renaissance 15.1.0 architecture
 
-The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. This replaces fourteen embedded legacy modules with nine original, independently compiled modules. No raw game bytecode or reconstructed game source is bundled.
+The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. This replaces fourteen embedded legacy modules with ten original, independently compiled modules. No raw game bytecode or reconstructed game source is bundled.
 
 | Owner | Responsibility | Lifecycle |
 |---|---|---|
 | core.luau | Exactly 21 feature records; requested/applied/observed/outcome fields; exclusive patch leases; bounded evidence ledger | One registry, lease map and ledger |
 | settings.luau | Schema 15 validation, CLEAN migration, false values, backup and verified writeback | Reads at stage; writes on user changes |
 | policy.luau | Local priorities, manual Rest sovereignty, attack windows, AFK eligibility | Shared by every controller |
-| grab.luau | Native begin/strike/res/bite/end sessions; deduplication, actual time, own grades | One session per character generation |
+| grab.luau | Native begin/strike/res/bite/n/end sessions; deduplication, actual time, own-character grades, missed-crossing recovery | One session per character generation |
+| grab_input.luau | Reversible separation of native minigame mouse and manual key bindings | One lease per genuine native UI session |
 | recovery.luau | Native Rest, owned pose mask, deficit and recurrence handling | One Rest owner; no HP/status writes |
 | features.luau | All shared client-config edits and own stamina flag | One reversible lease manager |
 | roblox.luau | Services, snapshots, module identity, native observers, terrain queries | One heartbeat, one render binding, one small PreAnimation guard |
@@ -28,13 +29,21 @@ Reach remains permanently requested, even when a compatibility conflict prevents
 
 Combat records intention, WolfBiteAt, a candidate near the expected claim window, native FeralHit feedback and later target HP. In v2412 the marker precedes the native Bite request. The hub does not observe actual outgoing Bite/BiteHit calls and never fabricates them. HP decline is a correlation.
 
-Recovery does not keep Rest primed at full health. Real input releases owned Rest; held attacks prevent rearming. The native post-Rest lock is preserved and reported as a possible blocker. Recovery yields to combat, abilities, climb/flight, capture, minigames and feeding; ground movement alone does not block it. Genuine manual Rest is never masked or cancelled. A pose mask establishes only local presentation.
+Recovery does not keep Rest primed at full health. Real input releases owned Rest; held attacks prevent rearming. The native post-Rest lock is preserved and reported as a possible blocker. HP recovery yields to combat. Condition recovery can request native Rest during a known combat tag when there is an injury, bleed or venom deficit; it still yields to held/recent attacks, abilities, climb/flight, capture, minigames and feeding. Ground movement alone does not block recovery. Unknown combat state blocks both purposes. Genuine manual Rest is never masked or cancelled. A pose mask establishes only local presentation.
 
 The local HP reference is capped at 2x total; injury/bleed/venom references at 4x total. Base rates and Rest multipliers are coordinated to avoid 4x-by-4x local compounding. Private server calculations may ignore all client values.
 
+## Concurrent bites and minigames
+
+The native v2412 FeralGrabV2Press action consumes MouseButton1 at priority 3000 and treats it as an immediate minigame press. During an eligible automatic session, grab_input temporarily removes that action and binds only Space/ButtonA/ButtonR2 to the original native serverPress closure. MouseButton1 can reach the ordinary game bite path. The native closure is discovered only within the own FeralGrabV2UI script, with its actual remote and state upvalues verified. Discovery resumes in bounded slices rather than repeatedly scanning the same prefix.
+
+Automatic presses retain actual native session IDs, strike IDs and current server-clock timestamps. A successful dispatch marks only the matching native UI strike as pressed, preventing duplicate touch/key submissions. It does not create a game grade. Hunter-count changes preserve pending timing; a missed crossing can use a later valid crossing of that same strike. Native UI bite/end cleanup and character generations cancel stale timing.
+
+Disable, shutdown and reload release the owned manual binding and restore the original-equivalent native callback, exact key list and priority only for the same live native session and character. No global hooks, physical rotation, opponent part edits or extra Bite/BiteHit requests are used. Missing executor introspection is reported as PARTIAL during an active session. This input separation cannot promise bites while native pin, cooldown, Rest or other gameplay restrictions prohibit them.
+
 ## Work and data bounds
 
-One heartbeat drives timing and slower tasks. Target selection runs at most about eight times per second. The renderer projects up to 24 players and a small guide. Terrain safety checks run only for requested idle walks. Pose guards read only the current own Rest attribute.
+One heartbeat drives timing, incremental native closure discovery and slower tasks. Target selection runs at most about eight times per second. The renderer projects up to 24 players and a small guide. Terrain safety checks run only for requested idle walks. Pose guards read only the current own Rest attribute.
 
 The ledger retains 160 events and aggregate rate buckets; transaction history retains 32 entries. Rates exclude character, maximum HP, combat, movement and Rest-mode transitions. Missing condition attributes never count as cures. The hub includes no console dump, private capture payload, credential or automatic GitHub upload.
 

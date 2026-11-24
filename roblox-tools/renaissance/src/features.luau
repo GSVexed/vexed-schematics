@@ -34,18 +34,37 @@ function Features.new(Core, bridge, registry)
                 or type(c.bodyGap) ~= "function" then return nil, "CombatConfig schema unavailable" end
             local original = {}
             for k, v in pairs(c) do original[k] = v end
+            -- Keep stock-reference hints conservative even if a native helper
+            -- closes over the shared config table that we are about to tune.
+            if type(c.coneFor) == "function" then
+                local stock = c.coneFor
+                original.coneFor = function(char)
+                    local ok,value = pcall(stock,char)
+                    return ok and Core.finite(value) and math.min(value,original.CONE) or original.CONE
+                end
+            end
             self.originalCombat, self.combat = original, c
+            local nativeCone = c.coneFor
+            local desiredCone = math.max(c.CONE,170)
             local plan = {
-                entry(c,"REACH",math.min(c.REACH*1.19,2.72),"number"),
-                entry(c,"HIT_SCALE",math.min(c.HIT_SCALE*1.14,1.92),"number"),
-                entry(c,"CONE",math.min(c.CONE+24,112),"number"),
-                entry(c,"SLACK",c.SLACK+.25,"number"),
-                entry(c,"MAX_DY",math.min(c.MAX_DY*1.18,3.65),"number"),
+                entry(c,"REACH",math.min(c.REACH*1.50,3.2),"number"),
+                entry(c,"HIT_SCALE",math.min(c.HIT_SCALE*1.30,2.1),"number"),
+                entry(c,"CONE",desiredCone,"number"),
+                entry(c,"SLACK",c.SLACK+.75,"number"),
+                entry(c,"MAX_DY",math.min(c.MAX_DY*1.50,4.5),"number"),
                 entry(c,"bodyGap",function(part,flat)
                     local gap = original.bodyGap(part,flat)
-                    return Core.finite(gap) and gap-.42 or gap
+                    return Core.finite(gap) and gap-.90 or gap
                 end,"function"),
             }
+            table.insert(plan,entry(c,"coneFor",function(char)
+                local value = desiredCone
+                if type(nativeCone) == "function" then
+                    local ok,native = pcall(nativeCone,char)
+                    if ok and Core.finite(native) then value = math.max(value,native) end
+                end
+                return value
+            end))
             -- A single candidate selected from the shared snapshot feeds both
             -- climb aim and the guide; no extra tree scan or hit request.
             table.insert(plan, entry(c,"biteLook",function(char, forward)
@@ -54,9 +73,17 @@ function Features.new(Core, bridge, registry)
                     local ok,value = pcall(original.biteLook,char,forward)
                     if ok and typeof(value) == "Vector3" then native = value end
                 end
-                local target = bridge.treeTarget
-                if bridge:isClimbing(char) and target and target.char and target.sameTree
-                    and target.flat and target.flat.Magnitude > .05 then return target.flat.Unit end
+                local target = bridge.reachTarget
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if target and target.char and target.char.Parent and target.root.Parent and root then
+                    local diff = target.root.Position-root.Position
+                    local flat = Vector3.new(diff.X,0,diff.Z)
+                    local look = Vector3.new(native.X,0,native.Z)
+                    if diff.Magnitude <= 45 and flat.Magnitude > .05
+                        and (target.sameTree or look.Magnitude < .01 or look.Unit:Dot(flat.Unit) < .3) then
+                        return flat.Unit
+                    end
+                end
                 return native
             end))
             table.insert(plan, entry(c,"dyMult",function(char)
@@ -66,9 +93,9 @@ function Features.new(Core, bridge, registry)
                     if ok and Core.finite(value) and value > 0 then native = value end
                 end
                 if bridge:isClimbing(char) and bridge.treeTarget and bridge.treeTarget.sameTree then
-                    return math.min(native*2.15,3.2)
+                    return math.min(native*2.50,3.5)
                 end
-                return native
+                return native*1.35
             end))
             return plan
         elseif id == "stamina" then

@@ -9,7 +9,7 @@ function Policy.new()
         if kind == "action" then self.actionUntil = math.max(self.actionUntil, now+1.3) end
         if kind == "rest" then self.manualIntentUntil = now+.9 end
     end
-    function p:allowed(mode, s, now)
+    function p:allowed(mode, s, now, purpose)
         if not s or not s.alive then return false, "waiting for animal" end
         if s.chat or s.gameMenu then return false, "native menu or text input" end
         if mode == "grab" then return true, "native session" end
@@ -23,7 +23,10 @@ function Policy.new()
             if s.attackHeld or now < self.attackUntil then return false, "attack has priority" end
             if now < self.actionUntil or s.afkWalking then return false, "action has priority" end
             if s.climbing or s.flying or s.underwater then return false, "movement transition" end
-            -- HP recovery outside combat; condition rates remain independently observed.
+            -- Native status recovery is separate from the combat HP exclusion.
+            if s.combat == true and purpose == "effects" then
+                return true,"condition recovery; combat HP remains excluded"
+            end
             if s.combat ~= false then return false, s.combat and "combat" or "combat state unknown" end
             return true, "recovery window"
         end
