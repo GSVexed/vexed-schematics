@@ -12,7 +12,7 @@ CLEAN v14, its clean loader and complete 15.0.0/15.1.0/15.2.0 bundles remain byt
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-The current stable launcher still pins immutable 15.2.0 source [21da473](https://github.com/GSVexed/vexed-schematics/blob/21da4732f05897c7225fde2ffd6ea81d02be6b1b/roblox-tools/feral-renaissance-v15.2.0.lua). The 15.2.1 candidate passes 113 regressions and 17 compile checks locally. The preceding 15.2.0 source passed all 99 scenarios in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45494741846). An earlier candidate passed actual Potassium hidden staging. The final source and a later print-only probe were acknowledged without matching console results, so final native-input compatibility and gameplay efficacy remain unconfirmed.
+The launcher pins immutable source [bdfd2fc](https://github.com/GSVexed/vexed-schematics/blob/bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17/roblox-tools/feral-renaissance-v15.2.1.lua). All 113 service-boundary regressions, 17 compile checks, source parity and rollback checks pass locally. The [published source gate](https://github.com/GSVexed/vexed-schematics/actions/runs/45505688605) passed the same gates. Actual Potassium hidden staging confirmed the exact candidate, all 13 modules, the native pose-attribute roundtrip, cleanup and preservation of the existing active hub. Sustained 2x/4x gameplay rates and the final rendered pose remain unconfirmed.
 
 ## Build and test
 

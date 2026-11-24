@@ -1,0 +1,17 @@
+{
+  "schema": 1521,
+  "source_commit": "bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17",
+  "phase": "candidate-staging",
+  "ok": true,
+  "modules": 13,
+  "staged": true,
+  "native_animator": true,
+  "pose_attribute_roundtrip": true,
+  "cleanup": true,
+  "previous_retained": true,
+  "gameplay_requests": 0,
+  "attributes_written": 1,
+  "run_id": 45505790776,
+  "actual_rendered_pose_confirmed": false,
+  "gameplay_recovery_rates_confirmed": false
+}

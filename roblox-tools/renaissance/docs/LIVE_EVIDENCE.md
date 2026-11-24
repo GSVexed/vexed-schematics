@@ -2,11 +2,13 @@
 
 ## Version 15.2.1 recovery correction
 
-The candidate passes all 113 service-boundary regressions and 17 compile checks locally. The supplied current WolfAnimClient bytecode supports the scoped native blend reset; its fingerprint and instruction range are recorded in V15_2_1_RECOVERY.md. These are implementation and static-contract results. Live sustained HP/condition multipliers and the final rendered pose are not confirmed.
+Exact source bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17 passes all 113 service-boundary regressions and 17 compile checks locally. Published source gate: 45505688605. The supplied current WolfAnimClient bytecode supports the scoped native blend reset; its fingerprint and instruction range are recorded in V15_2_1_RECOVERY.md. These are implementation and static-contract results. Live sustained HP/condition multipliers and the final rendered pose are not confirmed.
 
 Private runner run 45505057539 returned the exact validated passive-observer marker through Potassium. It observed the existing 15.2.0 hub in FERAL 2412 for thirteen samples, without inputs, attribute writes or native gameplay requests. Own HP equalled MaxHealth throughout, with both increasing together during growth; these changes are not regeneration evidence. The recovery reason remained attack priority, while manual Rest and automatic Rest ownership were false. The sample did not record mouse-button state, so it cannot identify which input caused that reason. Independent current-bytecode inspection found the incorrect right-mouse attack gate and grounded its correction.
 
-This confirms the current runner-to-executor route works. It does not validate the candidate's live pose correction or sustained recovery rates. The source/compile checks and exact candidate staging are tracked separately. No user-driven repeated diagnostic test was requested.
+This confirms the current runner-to-executor route works. A separate live staging run 45505790776 then loaded exact candidate bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17 through Potassium. All 13 embedded modules and the inactive UI staged; the current WolfAnimClient was present. A scoped zero pose attribute passed write/readback and exact restoration across a render boundary. Candidate cleanup passed with the previous active hub retained. No Rest, bite, feed, carry or other native gameplay request was issued. The sanitized result is live-v1521-stage.json.
+
+This validates local staging and attribute ownership, not the rendered pose under a real automatic Rest window, another player's view, sustained 2x/4x rates or server acceptance. No user-driven repeated diagnostic test was requested.
 
 ## Version 15.2.0 follow-up
 

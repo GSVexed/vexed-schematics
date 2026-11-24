@@ -1,3 +1,30 @@
+# Renaissance 15.2.1 — recovery correction
+
+Pinned source: [bdfd2fc](https://github.com/GSVexed/vexed-schematics/blob/bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17/roblox-tools/feral-renaissance-v15.2.1.lua). The complete 15.2.0 bundle and CLEAN v14 remain unchanged.
+
+- Camera right-mouse input no longer counts as an attack or blocks recovery. Native left-mouse/gamepad R2 attacks still release Rest first.
+- Successfully masked echoes no longer cause a 15-second recovery pause. Delayed automatic responses keep their provenance rather than becoming manual Rest after a timeout; hot reload preserves this distinction.
+- The native persistent Rest blend receives an owner-scoped reset, with exact restoration for manual Rest, character changes, downed state, external replacements and shutdown.
+- Rest controls hand over ownership before native input. Deferred native Rest taps do not immediately restart automatic recovery.
+- Native HP Rest=2 and injury/bleed/venom Rest=4 are retained with ordinary base rates. The former cosmetic base-rate compensation is removed.
+- The recovery row distinguishes an actual HP increase from a request or a window without observed progress. Each condition is observed independently; missing values and growth do not become recovery evidence.
+
+Validation: 113/113 regressions and 17 compile checks pass locally. Candidate live staging in private runner run 45505790776 confirmed all 13 modules, current native animator presence, pose-attribute write/readback/exact restoration, cleanup and preservation of the existing hub. It issued zero native gameplay requests. The published source gate is [run 45505688605](https://github.com/GSVexed/vexed-schematics/actions/runs/45505688605). Details: V15_2_1_RECOVERY.md and LIVE_EVIDENCE.md.
+
+Sustained real 2× HP recovery, 4× condition clearing and the final visible pose while moving remain live-unverified. The successful attribute test is local evidence. A passive sample of the preceding hub had full HP throughout and cannot establish a healing rate. HP recovery continues to yield to combat and native actions. All 21 feature records, saved settings, hollow player-only ESP, Right Shift and permanent Bite Reach remain.
+
+Use:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+
+Rollback to complete 15.2.0:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/21da4732f05897c7225fde2ffd6ea81d02be6b1b/roblox-tools/feral-renaissance-v15.2.0.lua"))()
+
+Original CLEAN v14 rollback remains below. Re-running a complete loader retires the active Renaissance owner; avoid stacking separate legacy modules.
+
+---
+
 # Renaissance 15.2.0 — release record
 
 Released source: [21da4732f05897c7225fde2ffd6ea81d02be6b1b](https://github.com/GSVexed/vexed-schematics/blob/21da4732f05897c7225fde2ffd6ea81d02be6b1b/roblox-tools/feral-renaissance-v15.2.0.lua). The launcher pins that immutable source. Compilation, all 99 service-boundary regressions, deterministic packaging and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45494741846). The finalized loader was also locally checked before promotion.
