@@ -285,7 +285,7 @@ function Mock.new()
                 return enum.ContextActionResult.Sink
             end,false,3000,enum.KeyCode.Space,enum.KeyCode.ButtonA,enum.KeyCode.ButtonR2,enum.UserInputType.MouseButton1)
         end
-        remote.OnClientEvent:Connect(function(event,data)
+        local function onGrab(event,data)
             if event=="begin" then
                 state={id=data.f or data.id,role=data.role or "prey",n=data.n or 1}
                 bind()
@@ -296,7 +296,8 @@ function Mock.new()
                 elseif event=="end" then state.ended=true;cas:UnbindAction("FeralGrabV2Press")
                 elseif event=="res" and state.strike and state.strike.k==data.k then state.strike.myTier=data.tier end
             end
-        end)
+        end
+        remote.OnClientEvent:Connect(onGrab)
         uis.InputBegan:Connect(function(input,processed)
             if not self.nativeActionsEnabled and not processed and input.UserInputType==enum.UserInputType.MouseButton1
                 and player.Character:GetAttribute("FeralPinned")~=true then
@@ -307,6 +308,7 @@ function Mock.new()
         self:registerNative(nativePress,"FeralGrabV2UI","serverPress",function()
             return {[1]=state,[2]=w.configs.GrabV2Config,[3]=remote}
         end)
+        self:registerNative(onGrab,"FeralGrabV2UI","onGrab",function()return {nativePress}end)
         self.nativeGrabState=function()return state end
     end
     function w:enableNativeActions()
@@ -356,14 +358,19 @@ function Mock.new()
         self:registerNative(toggleFeed,"WolfController","toggleFeed",function()
             return {[1]=mode,[2]=started,[5]=player,[6]=remote}
         end)
-        self:registerNative(cancelFeed,"WolfController","cancelFeed",function()return {player,remote}end)
+        -- Native cancelFeed is not retained by the captured script; cancellation uses toggleFeed.
         cas:BindActionAtPriority("NativeFeed",function(_,inputState)
             if inputState==enum.UserInputState.Begin then toggleFeed() end
             return enum.ContextActionResult.Sink
         end,false,2000,enum.KeyCode.E)
-        uis.InputBegan:Connect(function(input,processed)
+        local function onInput(input,processed)
             if not processed and input.UserInputType==enum.UserInputType.MouseButton1 then tryBite() end
-        end)
+        end
+        self:registerNative(onInput,"WolfController","onInput",function()return {tryBite}end)
+        uis.InputBegan:Connect(onInput)
+        local function feedTap()toggleFeed()end
+        self:registerNative(feedTap,"WolfController","feedTap",function()return {toggleFeed}end)
+        player:GetAttributeChangedSignal("FeralFeedTap"):Connect(feedTap)
         self.finishFeedApproach=start
         self.nativeFeedMode=function()return mode,started end
         remote.OnClientEvent:Connect(function(event,reason)
@@ -371,6 +378,15 @@ function Mock.new()
                 mode,started=nil,false;player.Character:SetAttribute("WolfFeed",false)
             end
         end)
+    end
+    function w:enableNativeConnections()
+        env.getconnections=function(event)
+            local result={}
+            for _,connection in ipairs(event.listeners or {})do
+                if connection.Connected then table.insert(result,{Function=connection.fn}) end
+            end
+            return result
+        end
     end
     function w:enableCarry()
         self:addConfig("Species",{})

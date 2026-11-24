@@ -1,6 +1,6 @@
 {
   "version": "15.2.0",
-  "bundle_sha256": "a214fe6cc6d55267e64894883bf78d6a486f4f99e7c5b74160c9725bc384d46a",
+  "bundle_sha256": "435265c032d1c200157e2004021ab491dc7c317317c5792e0070c2b1fffc8ceb",
   "compiled": [
     "core.luau",
     "settings.luau",
@@ -23,8 +23,8 @@
   "module_parity": true,
   "rollback_hashes_unchanged": true,
   "regressions": {
-    "total": 97,
-    "passed": 97,
+    "total": 99,
+    "passed": 99,
     "failed": 0
   },
   "runtime_exit_code": 0,
@@ -203,6 +203,10 @@
     "PASS feeding and bite coordination preserve automatic minigame timing",
     "[FERAL Renaissance 15.2.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
     "PASS one shared native scan discards a large non-function heap and releases its snapshots",
-    "RENAISSANCE_TEST_RESULT total=97 passed=97 failed=0"
+    "[FERAL Renaissance 15.2.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS native callback discovery avoids heap enumeration and invokes no input during startup",
+    "[FERAL Renaissance 15.2.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS guarded native feed cancellation never starts an inactive feeding offer",
+    "RENAISSANCE_TEST_RESULT total=99 passed=99 failed=0"
   ]
 }

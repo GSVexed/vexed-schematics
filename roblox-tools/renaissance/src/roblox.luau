@@ -92,7 +92,7 @@ function Roblox.new(Core, environment)
         if not scriptObject then self.grabDiscovery = nil; return nil end
         if self.grabDiscovery and self.grabDiscovery.script ~= scriptObject then self.grabDiscovery = nil end
         if not self.grabDiscovery and now < (self.nextGrabDiscovery or 0) then return nil end
-        if type(getgc) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return nil end
+        if (type(getgc) ~= "function" and type(getconnections) ~= "function") or type(debug) ~= "table" or type(debug.info) ~= "function" then return nil end
         local many = type(debug.getupvalues) == "function" and debug.getupvalues
             or type(getupvalues) == "function" and getupvalues
         local one = type(debug.getupvalue) == "function" and debug.getupvalue
@@ -113,12 +113,16 @@ function Roblox.new(Core, environment)
         end
         local function nativeName(fn)
             local ok,source,name = pcall(debug.info,fn,"sn")
-            if not ok or type(source) ~= "string" or not string.find(source,"FeralGrabV2UI",1,true) then return nil end
+            if not ok then return nil end
+            local owned=type(source)=="string" and source:find("FeralGrabV2UI",1,true)~=nil
             if type(getfenv) == "function" then
                 local valid,env = pcall(getfenv,fn)
-                if valid and type(env) == "table" and env.script ~= nil and env.script ~= scriptObject then return nil end
+                if valid and type(env) == "table" and env.script ~= nil then
+                    if env.script ~= scriptObject then return nil end
+                    owned=true
+                end
             end
-            return name
+            return owned and name or nil
         end
         local pool,source=self:nativeFunctions(now)
         if not pool then return nil end
@@ -183,23 +187,65 @@ function Roblox.new(Core, environment)
         return nil
     end
     function b:isClimbing(char) return self:attribute(char,"FeralClimbLocal") == true end
+    function b:connectedNativeFunctions()
+        if type(getconnections)~="function" or type(debug.info)~="function" then return {} end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local wolf=scripts and scripts:FindFirstChild("WolfController")
+        local grab=scripts and scripts:FindFirstChild("FeralGrabV2UI")
+        local seen,functions={},{}
+        local started=self.clock()
+        local function visit(fn,depth)
+            if type(fn)~="function" or seen[fn] or depth>4 or #functions>=256 or self.clock()-started>.025 then return end
+            seen[fn]=true
+            local ok,source=pcall(debug.info,fn,"s")
+            local owned=ok and type(source)=="string" and (source:find("WolfController",1,true) or source:find("FeralGrabV2UI",1,true))
+            if type(getfenv)=="function" then
+                local valid,env=pcall(getfenv,fn)
+                if valid and type(env)=="table" and env.script~=nil then
+                    owned=env.script==wolf or env.script==grab
+                end
+            end
+            if not owned then return end
+            table.insert(functions,fn)
+            for _,value in pairs(self:upvalues(fn)) do if type(value)=="function" then visit(value,depth+1) end end
+        end
+        local signals={self.UserInputService.InputBegan,self.player:GetAttributeChangedSignal("FeralFeedTap")}
+        local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+        if remote and remote:IsA("RemoteEvent") then table.insert(signals,remote.OnClientEvent) end
+        for _,signal in ipairs(signals) do
+            local ok,connections=pcall(getconnections,signal)
+            if ok and type(connections)=="table" then
+                for index,connection in ipairs(connections) do
+                    if index>96 then break end
+                    local valid,fn=pcall(function()return connection.Function end)
+                    if valid then visit(fn,0) end
+                end
+            end
+        end
+        return functions
+    end
     function b:nativeFunctions(now)
         local scan=self.nativeScan
         if scan and scan.complete and now>=(scan.refreshAt or math.huge) then scan=nil end
         if not scan then
-            if type(getgc)~="function" or now<(self.nextNativeScan or 0) then return nil end
+            if now<(self.nextNativeScan or 0) then return nil end
             self.nextNativeScan=now+30
-            local ok,raw=pcall(getgc,false)
-            if not ok or type(raw)~="table" then return nil end
-            scan={raw=raw,index=1,total=#raw,functions={},complete=false,refreshAt=now+30}
+            local functions=self:connectedNativeFunctions()
+            scan={index=1,total=0,functions=functions,complete=false,refreshAt=now+30,heapAt=now+(#functions>0 and .08 or 0)}
             self.nativeScan=scan
         end
         if not scan.complete then
+            if not scan.raw then
+                if now<scan.heapAt then return scan.functions,scan end
+                local ok,raw=false,nil
+                if type(getgc)=="function" then ok,raw=pcall(getgc,false) end
+                if not ok or type(raw)~="table" then scan.complete=true;return scan.functions,scan end
+                scan.raw,scan.total=raw,#raw
+            end
             local started,count=self.clock(),0
             while scan.index<=scan.total and count<32768 do
                 local index=scan.index
                 local value=scan.raw[index]
-                scan.raw[index]=nil -- release this owned snapshot entry immediately
                 scan.index+=1;count+=1
                 if type(value)=="function" then table.insert(scan.functions,value) end
                 if count%256==0 and self.clock()-started>.003 then break end
@@ -210,7 +256,7 @@ function Roblox.new(Core, environment)
     end
     function b:releaseNativeScan()
         local native=self.wolfActions
-        if native and native.tryBite and native.toggleFeed and native.cancelFeed
+        if native and native.tryBite and native.toggleFeed
             and not self.wolfDiscovery and not self.grabDiscovery then self.nativeScan=nil;self.nextNativeScan=0 end
     end
     function b:closeNativeScan()
@@ -241,20 +287,24 @@ function Roblox.new(Core, environment)
         if not ownScript then self.wolfActions,self.wolfDiscovery = nil,nil;return nil end
         if self.wolfActions and self.wolfActions.script ~= ownScript then self.wolfActions,self.wolfDiscovery = nil,nil end
         local native = self.wolfActions
-        if native and native.tryBite and native.toggleFeed and native.cancelFeed then return native end
+        if native and native.tryBite and native.toggleFeed then return native end
         if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then return native end
-        if type(getgc) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
+        if (type(getgc) ~= "function" and type(getconnections) ~= "function") or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
         if type(debug.getupvalues) ~= "function" and type(getupvalues) ~= "function"
             and type(debug.getupvalue) ~= "function" and type(getupvalue) ~= "function" then return native end
         local function nameOf(fn)
             if type(fn) ~= "function" then return nil end
             local ok,source,name = pcall(debug.info,fn,"sn")
-            if not ok or type(source) ~= "string" or not source:find("WolfController",1,true) then return nil end
+            if not ok then return nil end
+            local owned=type(source)=="string" and source:find("WolfController",1,true)~=nil
             if type(getfenv) == "function" then
                 local valid,env = pcall(getfenv,fn)
-                if valid and type(env) == "table" and env.script ~= nil and env.script ~= ownScript then return nil end
+                if valid and type(env)=="table" and env.script~=nil then
+                    if env.script~=ownScript then return nil end
+                    owned=true
+                end
             end
-            return name
+            return owned and name or nil
         end
         local pool,source=self:nativeFunctions(now)
         if not pool then return native end
@@ -282,9 +332,9 @@ function Roblox.new(Core, environment)
                 end
                 if playerMatched and remoteMatched then native[name] = fn end
             end
-            if native.tryBite and native.toggleFeed and native.cancelFeed then break end
+            if native.tryBite and native.toggleFeed then break end
         end
-        if source.complete or native.tryBite and native.toggleFeed and native.cancelFeed then self.wolfDiscovery = nil end
+        if source.complete or native.tryBite and native.toggleFeed then self.wolfDiscovery = nil end
         self:releaseNativeScan()
         return native
     end
@@ -303,7 +353,11 @@ function Roblox.new(Core, environment)
     end
     function b:stopNativeFeed(now)
         local native = self:nativeWolfActions(now)
-        return native and native.cancelFeed and pcall(native.cancelFeed) or false
+        if native and native.cancelFeed then return pcall(native.cancelFeed) end
+        local mode,_,known=self:nativeFeedState(now)
+        -- The named cancelFeed prototype may be unretained after script startup.
+        -- The original toggle's first branch performs the same native cancellation.
+        return known and mode~=nil and native and native.toggleFeed and pcall(native.toggleFeed) or false
     end
     function b:tryNativeBite(now)
         local native = self:nativeWolfActions(now)

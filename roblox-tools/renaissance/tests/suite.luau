@@ -737,12 +737,28 @@ test("one shared native scan discards a large non-function heap and releases its
     w.env.getgc=function()
         calls+=1;local pool=table.create(200000,false)
         for _,fn in ipairs(original())do table.insert(pool,fn)end
-        return pool
+        return table.freeze(pool)
     end
     local h=load(w,{settings={states={minigame=true}}});w:advance(.4)
     eq(calls,1);assert(h.bridge.grabController);assert(h.bridge.wolfActions.tryBite)
-    assert(h.bridge.wolfActions.toggleFeed);assert(h.bridge.wolfActions.cancelFeed)
+    assert(h.bridge.wolfActions.toggleFeed);eq(h.bridge.wolfActions.cancelFeed,nil)
     eq(h.bridge.nativeScan,nil);h:close();eq(h.bridge.grabDiscovery,nil);eq(h.bridge.wolfDiscovery,nil)
+end)
+
+test("native callback discovery avoids heap enumeration and invokes no input during startup",function()
+    local w=Mock.new();w:enableNativeGrab();w:enableNativeActions();w:enableNativeConnections()
+    local calls=0;w.env.getgc=function()calls+=1;error("heap enumeration should not be needed")end
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.1)
+    eq(calls,0);assert(h.bridge.grabController);assert(h.bridge.wolfActions.tryBite);assert(h.bridge.wolfActions.toggleFeed)
+    eq(w.nativeBites,nil);eq(w.nativeFeedToggles,nil);eq(h.grabInput.lease,nil)
+    local _,_,known=h.bridge:nativeFeedState(w.time);eq(known,true);h:close()
+end)
+test("guarded native feed cancellation never starts an inactive feeding offer",function()
+    local w=Mock.new();w:enableNativeActions();w.player.Character:SetAttribute("FeedCan","eat")
+    local h=load(w,{settings={states={}}});w:advance(.1)
+    eq(h.bridge.wolfActions.cancelFeed,nil);eq(h.bridge:stopNativeFeed(w.time),false);eq(w.nativeFeedToggles,nil)
+    w:input(E.KeyCode.E);eq(w.nativeFeedMode(),"eat")
+    eq(h.bridge:stopNativeFeed(w.time),true);eq(w.nativeFeedMode(),nil);h:close()
 end)
 
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))

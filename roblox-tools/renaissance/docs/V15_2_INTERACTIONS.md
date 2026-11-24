@@ -23,7 +23,11 @@ The source-traces index records the exact capture fingerprints. Raw game program
 
 The actual Potassium stage check passed module/UI compatibility but exposed slow native discovery. The follow-up returned heap lists with 944,824 to 2,306,709 entries even with getgc(false); most inspected entries were not functions. The capabilities and target scripts were present. The earlier 384-raw-entry budget had not reached the needed functions.
 
-Both lookups now share one snapshot, progressively discard non-function entries, and inspect a function-only list. The raw snapshot is released as it is consumed and all discovery state is released on shutdown. A regression uses a 200,000-entry non-function prefix to verify one enumeration, successful lookup and cleanup. This is a response to observed executor behavior, not an assumed capability.
+Discovery now first reads functions reachable through the native own-script callbacks on InputBegan, FeralFeedTap and FeralGrabV2. It does not invoke, disconnect or replace those connections. A regression verifies that supported callback inspection finds both controllers without calling getgc.
+
+When that route is unavailable, both lookups share one read-only snapshot and inspect a progressively built function-only list. The raw snapshot is dropped after filtering, and discovery state is released on completion/shutdown. A regression uses a frozen 200,000-entry non-function prefix to verify one enumeration, successful lookup and cleanup.
+
+A further instruction-reference check found that the named cancelFeed prototype is defined but not captured by the persistent native callbacks. The original toggleFeed first branch already cancels an active session. The repair uses that branch only after validating the native mode, avoiding a dependency on an unretained function and preventing an inactive offer from being started by cancellation. These changes respond to observed executor behavior and verified native control flow.
 
 ## Resulting behavior
 
@@ -31,12 +35,12 @@ The tracker and renderer both require actual player-character ownership. The exi
 
 E and the native feeding UI protect both approach and active feeding from Rest. Hunger/thirst increases are observed, never written. A stationary session with no increase for 4.5 seconds can receive one original-toggleFeed stop/start repair. Movement, attacks, completion/no-food replies, respawn and shutdown cancel pending repair. This does not initiate eating from a low-resource threshold or search for food/water.
 
-Clicks near a feeding offer remain attack inputs. An actual attack can call the original native feeding cancellation before the ordinary bite callback. A bite blocked by the hub's recent Rest exit can wait through the native profile's lock and retry once through original tryBite. It does not issue extra BiteHit claims or bypass pin/cooldown rules. The minigame input separation is preserved.
+Clicks near a feeding offer remain attack inputs. An actual attack can call the guarded original native feeding-toggle cancellation before the ordinary bite callback. A bite blocked by the hub's recent Rest exit can wait through the native profile's lock and retry once through original tryBite. It does not issue extra BiteHit claims or bypass pin/cooldown rules. The minigame input separation is preserved.
 
 G keeps normal carry/drop behavior unless an eligible friendly cub in water is selected. Rescue can request one ordinary jump and wait for actual water-exit eligibility, then dispatch the ordinary carry request once. It never changes positions, swim flags, water permission, age/size limits or the cub. The result is recorded as observed only when the own native Carry clamp references that cub. A request without a clamp times out as unconfirmed.
 
 ## Validation and limits
 
-97 service-boundary scenarios pass locally, including player/NPC identity, real-player-only rendering, live health-colour updates, protected/friendly selection, fresh geometry, post-Rest native retry, long feeding approaches, one stall repair, actual progress, cancellation, water-exit rescue, unconfirmed pickup timeout, native feedback and concurrent minigame timing.
+99 service-boundary scenarios pass locally, including player/NPC identity, real-player-only rendering, live health-colour updates, protected/friendly selection, fresh geometry, post-Rest native retry, long feeding approaches, one stall repair, actual progress, cancellation, water-exit rescue, unconfirmed pickup timeout, native feedback and concurrent minigame timing.
 
 These fixtures simulate the verified client contract. Live reduced ghost-hit frequency, repaired hunger/thirst progress, water-cub pickup, extra accepted reach and continuous 4x condition clearance require actual gameplay evidence. Private server handlers were not captured. Universal pickup while swimming or submerged is not established. New executor validation is recorded separately in LIVE_EVIDENCE.md; earlier-version results do not validate the new source.
