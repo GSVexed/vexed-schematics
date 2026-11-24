@@ -92,7 +92,7 @@ function Roblox.new(Core, environment)
         if not scriptObject then self.grabDiscovery = nil; return nil end
         if self.grabDiscovery and self.grabDiscovery.script ~= scriptObject then self.grabDiscovery = nil end
         if not self.grabDiscovery and now < (self.nextGrabDiscovery or 0) then return nil end
-        if (type(getgc) ~= "function" and type(getconnections) ~= "function") or type(debug) ~= "table" or type(debug.info) ~= "function" then return nil end
+        if self.deferNativeDiscovery or type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return nil end
         local many = type(debug.getupvalues) == "function" and debug.getupvalues
             or type(getupvalues) == "function" and getupvalues
         local one = type(debug.getupvalue) == "function" and debug.getupvalue
@@ -130,11 +130,10 @@ function Roblox.new(Core, environment)
             self.nextGrabDiscovery = now+30
             self.grabDiscovery = {script=scriptObject,pool=pool,index=1,source=source}
         end
-        -- Resume after the previous slice; a large GC pool must not repeatedly
-        -- scan only its prefix and never reach the native UI closure.
+        -- Resume the shared own-callback pool without revisiting its prefix.
         local discovery,started,checked = self.grabDiscovery,self.clock(),0
         while discovery.index <= #discovery.pool do
-            if checked >= 384 or self.clock()-started > .012 then return nil end
+            if checked >= 32 or self.clock()-started > .001 then return nil end
             local fn = discovery.pool[discovery.index]
             discovery.index += 1; checked += 1
             if type(fn) == "function" and nativeName(fn) == "serverPress" then
@@ -187,80 +186,75 @@ function Roblox.new(Core, environment)
         return nil
     end
     function b:isClimbing(char) return self:attribute(char,"FeralClimbLocal") == true end
-    function b:connectedNativeFunctions()
-        if type(getconnections)~="function" or type(debug.info)~="function" then return {} end
+    -- Inspect only three existing own-script callback chains. Never enumerate
+    -- the Lua heap. Both consumers share a resumable, bounded queue.
+    function b:nativeFunctions(now)
+        if self.deferNativeDiscovery then return nil end
+        if type(getconnections)~="function" or type(debug)~="table" or type(debug.info)~="function" then return nil end
         local scripts=self.player:FindFirstChild("PlayerScripts")
         local wolf=scripts and scripts:FindFirstChild("WolfController")
         local grab=scripts and scripts:FindFirstChild("FeralGrabV2UI")
-        local seen,functions={},{}
-        local started=self.clock()
-        local function visit(fn,depth)
-            if type(fn)~="function" or seen[fn] or depth>4 or #functions>=256 or self.clock()-started>.025 then return end
-            seen[fn]=true
-            local ok,source=pcall(debug.info,fn,"s")
-            local owned=ok and type(source)=="string" and (source:find("WolfController",1,true) or source:find("FeralGrabV2UI",1,true))
-            if type(getfenv)=="function" then
-                local valid,env=pcall(getfenv,fn)
-                if valid and type(env)=="table" and env.script~=nil then
-                    owned=env.script==wolf or env.script==grab
-                end
-            end
-            if not owned then return end
-            table.insert(functions,fn)
-            for _,value in pairs(self:upvalues(fn)) do if type(value)=="function" then visit(value,depth+1) end end
-        end
-        local signals={self.UserInputService.InputBegan,self.player:GetAttributeChangedSignal("FeralFeedTap")}
-        local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
-        if remote and remote:IsA("RemoteEvent") then table.insert(signals,remote.OnClientEvent) end
-        for _,signal in ipairs(signals) do
-            local ok,connections=pcall(getconnections,signal)
-            if ok and type(connections)=="table" then
-                for index,connection in ipairs(connections) do
-                    if index>96 then break end
-                    local valid,fn=pcall(function()return connection.Function end)
-                    if valid then visit(fn,0) end
-                end
-            end
-        end
-        return functions
-    end
-    function b:nativeFunctions(now)
         local scan=self.nativeScan
-        if scan and scan.complete and now>=(scan.refreshAt or math.huge) then scan=nil end
+        if scan and (scan.wolf~=wolf or scan.grab~=grab or scan.complete and now>=scan.refreshAt) then scan=nil end
         if not scan then
-            if now<(self.nextNativeScan or 0) then return nil end
-            self.nextNativeScan=now+30
-            local functions=self:connectedNativeFunctions()
-            scan={index=1,total=0,functions=functions,complete=false,refreshAt=now+30,heapAt=now+(#functions>0 and .08 or 0)}
+            local signals={self.UserInputService.InputBegan,self.player:GetAttributeChangedSignal("FeralFeedTap")}
+            local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+            if remote and remote:IsA("RemoteEvent") then table.insert(signals,remote.OnClientEvent) end
+            scan={wolf=wolf,grab=grab,functions={},seen={},queue={},cursor=1,signalIndex=1,
+                signals=signals,complete=false,refreshAt=now+30}
             self.nativeScan=scan
         end
-        if not scan.complete then
-            if not scan.raw then
-                if now<scan.heapAt then return scan.functions,scan end
-                local ok,raw=false,nil
-                if type(getgc)=="function" then ok,raw=pcall(getgc,false) end
-                if not ok or type(raw)~="table" then scan.complete=true;return scan.functions,scan end
-                scan.raw,scan.total=raw,#raw
+        if scan.complete or scan.lastStep==now then return scan.functions,scan end
+        scan.lastStep=now
+        local started,checked=self.clock(),0
+        while checked<32 and self.clock()-started<.002 do
+            if #scan.functions>=256 then scan.complete=true;break end
+            local item=scan.queue[scan.cursor]
+            if item then
+                scan.cursor+=1;checked+=1
+                local fn,depth=item.fn,item.depth
+                if type(fn)~="function" or scan.seen[fn] or depth>4 then continue end
+                scan.seen[fn]=true
+                local ok,source=pcall(debug.info,fn,"s")
+                local owned=ok and type(source)=="string" and (source:find("WolfController",1,true) or source:find("FeralGrabV2UI",1,true))
+                if type(getfenv)=="function" then
+                    local valid,env=pcall(getfenv,fn)
+                    if valid and type(env)=="table" and env.script~=nil then owned=env.script==wolf or env.script==grab end
+                end
+                if not owned then continue end
+                table.insert(scan.functions,fn)
+                local count=0
+                for _,value in pairs(self:upvalues(fn)) do
+                    count+=1;if count>64 then break end
+                    if type(value)=="function" and not scan.seen[value] and #scan.queue<512 then
+                        table.insert(scan.queue,{fn=value,depth=depth+1})
+                    end
+                end
+            elseif scan.connections then
+                local connection=scan.connections[scan.connectionIndex]
+                if not connection or scan.connectionIndex>96 then scan.connections=nil;continue end
+                scan.connectionIndex+=1;checked+=1
+                local ok,fn=pcall(function()return connection.Function end)
+                if ok and type(fn)=="function" and #scan.queue<512 then table.insert(scan.queue,{fn=fn,depth=0}) end
+            else
+                local signal=scan.signals[scan.signalIndex]
+                if not signal then scan.complete=true;break end
+                scan.signalIndex+=1;checked+=1
+                local ok,connections=pcall(getconnections,signal)
+                if ok and type(connections)=="table" then scan.connections,scan.connectionIndex=connections,1 end
             end
-            local started,count=self.clock(),0
-            while scan.index<=scan.total and count<32768 do
-                local index=scan.index
-                local value=scan.raw[index]
-                scan.index+=1;count+=1
-                if type(value)=="function" then table.insert(scan.functions,value) end
-                if count%256==0 and self.clock()-started>.003 then break end
-            end
-            if scan.index>scan.total then scan.raw=nil;scan.complete=true end
         end
+        if scan.complete then scan.queue,scan.seen,scan.connections,scan.signals=nil,nil,nil,nil end
         return scan.functions,scan
     end
     function b:releaseNativeScan()
         local native=self.wolfActions
-        if native and native.tryBite and native.toggleFeed
-            and not self.wolfDiscovery and not self.grabDiscovery then self.nativeScan=nil;self.nextNativeScan=0 end
+        if native and native.tryBite and native.toggleFeed and self.grabController
+            and not self.wolfDiscovery and not self.grabDiscovery then self.nativeScan=nil end
     end
     function b:closeNativeScan()
         self.nativeScan,self.wolfDiscovery,self.grabDiscovery=nil,nil,nil
+        self.biteTiming=nil
     end
     function b:upvalues(fn)
         local many = type(debug.getupvalues) == "function" and debug.getupvalues
@@ -289,7 +283,7 @@ function Roblox.new(Core, environment)
         local native = self.wolfActions
         if native and native.tryBite and native.toggleFeed then return native end
         if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then return native end
-        if (type(getgc) ~= "function" and type(getconnections) ~= "function") or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
+        if self.deferNativeDiscovery or type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
         if type(debug.getupvalues) ~= "function" and type(getupvalues) ~= "function"
             and type(debug.getupvalue) ~= "function" and type(getupvalue) ~= "function" then return native end
         local function nameOf(fn)
@@ -316,7 +310,7 @@ function Roblox.new(Core, environment)
         local scan,started,count = self.wolfDiscovery,self.clock(),0
         local remote = self.ReplicatedStorage:FindFirstChild("WolfActions")
         while scan.index <= #scan.pool do
-            if count >= 384 or self.clock()-started > .008 then return native end
+            if count >= 32 or self.clock()-started > .001 then return native end
             local fn = scan.pool[scan.index];scan.index += 1;count += 1
             local name = nameOf(fn)
             if name == "tryBite" or name == "toggleFeed" or name == "cancelFeed" then
@@ -326,9 +320,10 @@ function Roblox.new(Core, environment)
                     if remote and value == remote then remoteMatched = true end
                     if name == "tryBite" and nameOf(value) == "doBite" then
                         for _,upvalue in pairs(self:upvalues(value)) do
-                            if remote and upvalue == remote then remoteMatched = true end
+                            if remote and upvalue == remote then remoteMatched = true;native.doBite=value end
                         end
                     end
+                    if name == "tryBite" and nameOf(value) == "biteCooldown" then native.biteCooldown=value end
                 end
                 if playerMatched and remoteMatched then native[name] = fn end
             end
@@ -376,6 +371,47 @@ function Roblox.new(Core, environment)
         local profile=profiles and profiles[self:attribute(char,"AnimProfile") or ""]
         local value=profile and profile.REST_UP_LOCK
         return Core.finite(value) and math.clamp(value,.05,1.5) or .7
+    end
+    function b:biteReadiness(s,now,policy)
+        local function result(ready,reason,known)return {ready=ready,reason=reason,known=known~=false}end
+        if not s.alive then return result(false,"waiting for animal") end
+        if s.chat or s.gameMenu then return result(false,"menu or text input") end
+        if s.captured or s.char:FindFirstChild("FeralClamp") then return result(false,"capture or carry lock") end
+        if s.feeding then return result(false,"feeding") end
+        if s.rest or policy.manualRest or policy:restLocked(now,self:restLock(s.char)) then return result(false,"Rest or stand-up lock") end
+        if s.ability or self:attribute(s.char,"FeralKingsAt") or self:attribute(s.char,"FeralCrushAt") then
+            return result(false,"native ability lock")
+        end
+        for _,key in ipairs({"FeralNoBiteUntil","FeralVenomRecoilUntil"}) do
+            local at=self:attribute(s.char,key)
+            if at~=nil and (not Core.finite(at) or not s.serverNow) then return result(false,"native timing unknown",false) end
+            if at and at>s.serverNow then return result(false,"native bite lock") end
+        end
+        local native=self.wolfActions
+        if not native or not native.tryBite or not native.doBite or not native.biteCooldown then
+            return result(false,"native timing unavailable",false)
+        end
+        local timing=self.biteTiming
+        if not timing or timing.native~=native or now>=timing.nextAt then
+            if self.deferNativeDiscovery then return result(false,"native timing deferred",false) end
+            local try,doBite=self:upvalues(native.tryBite),self:upvalues(native.doBite)
+            local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+            if try[1]~=self.player or try[4]~=native.biteCooldown or try[5]~=native.doBite
+                or doBite[1]~=self.player or doBite[8]~=remote or not remote
+                or not Core.finite(try[3]) or not Core.finite(doBite[4])
+                or type(doBite[2])~="boolean" or type(doBite[3])~="boolean" then
+                return result(false,"native timing layout unknown",false)
+            end
+            -- The captured biteCooldown prototype is a pure native calculation.
+            -- No attack/cooldown state is changed or bypassed.
+            local ok,cd=pcall(native.biteCooldown)
+            if not ok or not Core.finite(cd) or cd<.03 or cd>30 then return result(false,"native cooldown unknown",false) end
+            timing={native=native,lastBite=try[3],lastRest=doBite[4],resting=doBite[2] or doBite[3],cd=cd,nextAt=now+.05}
+            self.biteTiming=timing
+        end
+        if timing.resting or now-timing.lastRest<self:restLock(s.char) then return result(false,"native Rest lock") end
+        if now-timing.lastBite<timing.cd then return result(false,"native cooldown") end
+        return result(true,"client checks clear; gameplay unverified")
     end
     function b:io()
         return {
@@ -457,10 +493,12 @@ function Roblox.new(Core, environment)
         local clamp = char:FindFirstChild("FeralClamp")
         s.holding = clamp ~= nil and clamp:IsA("ObjectValue") and clamp.Value ~= nil
             or self:attribute(char,"FeralCarcassCarry") == true
+        s.talonLock=self:attribute(char,"FeralTalonLock")
+        s.diveLock=self:attribute(char,"FeralDiveLocal")
         s.ability = self:attribute(char,"FeralDeathRollLocal") == true
             or self:attribute(char,"FeralDowned") == true
             or self:attribute(char,"FeralRolling") == true
-            or self:attribute(char,"FeralTalonLock") == true
+            or s.talonLock~=nil or s.diveLock~=nil
             or self:attribute(char,"FeralDiveBomb") == true
             or self:attribute(char,"FeralVenomDown") == true
             or self:attribute(char,"FeralTumbleAt") ~= nil
@@ -658,16 +696,17 @@ function Roblox.new(Core, environment)
         self.treeTarget = nil
         self.reachTarget = nil
         local best,score = nil,math.huge
+        local eligible={}
         for _, target in ipairs(all) do
-            if self:combatEligible(target.char) and target.distance <= 45 then
+            if target.distance <= 45 and self:combatEligible(target.char) then
+                table.insert(eligible,target)
                 if target.sameTree and (not self.treeTarget or target.distance < self.treeTarget.distance) then self.treeTarget = target end
             end
         end
         local assisted,assistScore = nil,math.huge
         local selectionModel = table.clone(changed)
         selectionModel.biteLook = baseline.biteLook
-        for _,target in ipairs(all) do
-            if self:combatEligible(target.char) and target.distance <= 45 then
+        for _,target in ipairs(eligible) do
                 local geometry = self:geometry(selectionModel,s,target)
                 if geometry and geometry.withinBodyRange then
                     local stock = self:geometry(baseline,s,target)
@@ -677,18 +716,15 @@ function Roblox.new(Core, environment)
                         assisted,assistScore = target,rank
                     end
                 end
-            end
         end
         self.reachTarget = assisted
-        for _, target in ipairs(all) do
-            if self:combatEligible(target.char) and target.distance <= 45 then
+        for _, target in ipairs(eligible) do
                 local base = self:geometry(baseline,s,target)
                 local extended = self:geometry(changed,s,target)
                 if base or extended then
                     local rank = (extended and extended.score or math.huge) + (extended and extended.valid and 0 or 1000)
                     if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
                 end
-            end
         end
         if best then best.blocked = best.target.protected or self:occluded(s,best.target) end
         return best
@@ -848,7 +884,7 @@ function Roblox.new(Core, environment)
             return Enum.ContextActionResult.Pass
         end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.Z,Enum.KeyCode.X,
             Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
-            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,
+            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
             Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
         scope:add(function() self.ContextActionService:UnbindAction(actionName) end)
         connect(self.UserInputService.JumpRequest,function() hub:requestFlight() end)

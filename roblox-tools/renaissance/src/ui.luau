@@ -20,12 +20,16 @@ function UI.mount(hub, bridge, scope)
         text = Color3.fromRGB(239,246,252), sub = Color3.fromRGB(151,173,194),
         same = Color3.fromRGB(77,219,194), other = Color3.fromRGB(236,105,126),
         unknown = Color3.fromRGB(236,181,104), off = Color3.fromRGB(60,77,97),
+        on = Color3.fromRGB(27,111,98),
     }
     local function make(class,properties,parent)
         local object = Instance.new(class)
         for key,value in pairs(properties or {}) do object[key] = value end
         object.Parent = parent
         return object
+    end
+    local function assign(object,key,value)
+        if object[key]~=value then object[key]=value end
     end
     local function round(object,radius)
         make("UICorner",{CornerRadius = UDim.new(0,radius or 9)},object)
@@ -63,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.2.1",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.3",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -107,7 +111,7 @@ function UI.mount(hub, bridge, scope)
         if u.tab == "Combat" then
             info(0,"BITE REACH  ·  ALWAYS ON","Wider client range with rear and vertical assistance. Server acceptance unverified.",78)
             row("biteHelper",94)
-            info(161,"RANGE COLOURS","Teal: stock-reference range. Amber: extended only. Grey: blocked or leaving Rest.",80)
+            info(161,"RANGE COLOURS","Teal: stock-reference range. Amber: extended only. Grey: blocked, cooling down or readiness unknown.",80)
             u.combatReadout = info(258,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Vision" then
             row("esp",0); row("tags",57)
@@ -153,6 +157,7 @@ function UI.mount(hub, bridge, scope)
         self.visible = not self.visible
         frame.Visible = self.visible
         hub.policy.menuOpen = self.visible
+        self.nextText=0
         if self.visible then hub:stopWalk("menu opened") end
     end
     function u:contains(point)
@@ -183,6 +188,7 @@ function UI.mount(hub, bridge, scope)
                 self.records[char] = record
             end
             record.target = target
+            record.head=char:FindFirstChild("Head")
         end
         for char,record in pairs(self.records) do
             if not keep[char] then
@@ -197,63 +203,82 @@ function UI.mount(hub, bridge, scope)
         if now >= self.nextFit then
             self.nextFit = now+.5
             local size = camera.ViewportSize
-            scale.Scale = math.clamp(math.min((size.X-25)/704,(size.Y-30)/505,1),.5,1)
+            assign(scale,"Scale",math.clamp(math.min((size.X-25)/704,(size.Y-30)/505,1),.5,1))
         end
         local registry = hub.registry.byId
         for char,record in pairs(self.records) do
             local target = record.target
             local valid = char.Parent ~= nil and target.root.Parent ~= nil and target.hum.Parent ~= nil and target.hum.Health > 0
             local colour = palette[target.affiliation] or palette.unknown
-            record.highlight.FillTransparency = 1
-            record.highlight.OutlineColor = UI.healthColour(target.hum.Health,target.hum.MaxHealth)
-            record.highlight.DepthMode = hub.settings.walls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
-            record.highlight.Enabled = valid and registry.esp.requested
-            local head = char:FindFirstChild("Head")
-            local pos = head and head:IsA("BasePart") and head.Position+Vector3.new(0,head.Size.Y*.65,0)
-                or target.root.Position+Vector3.new(0,target.root.Size.Y*.6+1,0)
-            local projected,onScreen = camera:WorldToViewportPoint(pos)
-            local show = valid and registry.tags.requested and onScreen and projected.Z > 0
-            record.label.Visible = show
+            assign(record.highlight,"FillTransparency",1)
+            if registry.esp.requested then
+                local hp,maxHP=target.hum.Health,target.hum.MaxHealth
+                if record.hp~=hp or record.maxHP~=maxHP then
+                    record.hp,record.maxHP=hp,maxHP
+                    record.healthColour=UI.healthColour(hp,maxHP)
+                end
+                assign(record.highlight,"OutlineColor",record.healthColour)
+                assign(record.highlight,"DepthMode",hub.settings.walls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded)
+            end
+            assign(record.highlight,"Enabled",valid and registry.esp.requested)
+            local projected,onScreen
+            if valid and registry.tags.requested then
+                local head=record.head
+                local pos=head and head.Parent and head:IsA("BasePart") and head.Position+Vector3.new(0,head.Size.Y*.65,0)
+                    or target.root.Position+Vector3.new(0,target.root.Size.Y*.6+1,0)
+                projected,onScreen=camera:WorldToViewportPoint(pos)
+            end
+            local show=valid and registry.tags.requested and onScreen==true and projected.Z>0
+            assign(record.label,"Visible",show)
             if show then
                 local x,y = projected.X,math.max(20,projected.Y-6)
-                record.label.Position = UDim2.fromOffset(x,y)
-                record.label.Text = target.name
-                record.label.TextColor3 = colour
+                if not record.x or math.abs(x-record.x)>=.25 or math.abs(y-record.y)>=.25 then
+                    record.x,record.y=x,y;record.label.Position=UDim2.fromOffset(x,y)
+                end
+                assign(record.label,"Text",target.name)
+                assign(record.label,"TextColor3",colour)
             end
         end
         local guide = hub.guide
-        dot.Visible = false
+        local dotVisible=false
         if registry.biteHelper.requested and guide and guide.target.root.Parent then
             local point,onScreen = camera:WorldToViewportPoint(guide.target.root.Position)
             if onScreen and point.Z > 0 then
                 local desired = Vector2.new(point.X,point.Y)
                 self.lastPoint = self.lastPoint and self.lastPoint:Lerp(desired,1-math.exp(-22*math.min(dt,.1))) or desired
-                dot.Position = UDim2.fromOffset(self.lastPoint.X,self.lastPoint.Y)
-                dot.Visible = true
-                local locked = hub.policy:restLocked(now)
-                if guide.blocked or locked then dotStroke.Color = palette.sub
-                elseif guide.baseline and guide.baseline.valid then dotStroke.Color = palette.same
-                else dotStroke.Color = palette.unknown end
+                if self.dotX~=self.lastPoint.X or self.dotY~=self.lastPoint.Y then
+                    self.dotX,self.dotY=self.lastPoint.X,self.lastPoint.Y
+                    dot.Position=UDim2.fromOffset(self.dotX,self.dotY)
+                end
+                dotVisible = true
+                local readiness=hub.biteReadiness
+                local stale=now-(hub.guideAt or -math.huge)>.35
+                local locked=not readiness or not readiness.ready
+                if guide.blocked or locked or stale then assign(dotStroke,"Color",palette.sub)
+                elseif guide.baseline and guide.baseline.valid then assign(dotStroke,"Color",palette.same)
+                else assign(dotStroke,"Color",palette.unknown) end
             end
         else self.lastPoint = nil end
+        assign(dot,"Visible",dotVisible)
+        if not self.visible then return end
         if now < self.nextText then return end
         self.nextText = now+.25
         for id,rowValue in pairs(self.rows) do
             local feature = registry[id]
-            rowValue.toggle.Text = not feature.requested and "OFF"
+            assign(rowValue.toggle,"Text",not feature.requested and "OFF"
                 or feature.applied and (feature.state == "PARTIAL" and "PARTIAL"
-                    or feature.state == "ARMED" and "ARMED" or "ON") or "WAIT"
-            rowValue.toggle.BackgroundColor3 = feature.requested and feature.applied
-                and (feature.state == "PARTIAL" and palette.unknown or Color3.fromRGB(27,111,98)) or palette.off
-            rowValue.status.Text = feature.requested and feature.reason ~= "" and feature.reason or feature.detail
+                    or feature.state == "ARMED" and "ARMED" or "ON") or "WAIT")
+            assign(rowValue.toggle,"BackgroundColor3",feature.requested and feature.applied
+                and (feature.state == "PARTIAL" and palette.unknown or palette.on) or palette.off)
+            assign(rowValue.status,"Text",feature.requested and feature.reason ~= "" and feature.reason or feature.detail)
         end
-        footer.Text = hub.rescue.pending and hub.rescue.status
-            or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu"
+        assign(footer,"Text",hub.rescue.pending and hub.rescue.status
+            or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu")
         if self.combatReadout then
-            self.combatReadout.Text = (hub.combatStatus or "Watching native attacks") .. "\n" .. hub.rescue.status
+            assign(self.combatReadout,"Text",(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.rescue.status)
         end
         if self.finderReadout then
-            self.finderReadout.Text = string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range)
+            assign(self.finderReadout,"Text",string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range))
         end
     end
     function u:activate()

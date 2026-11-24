@@ -611,7 +611,7 @@ test("closing an active minigame owner restores working native manual input",fun
     w:input(E.KeyCode.Space);eq(w.nativeManualPresses,1);w:advance(.6);eq(h.grab.presses,0)
 end)
 test("missing executor introspection is reported as partial minigame support",function()
-    local w=Mock.new();w:enableNativeGrab();w.env.getgc=nil
+    local w=Mock.new();w:enableNativeGrab();w.env.getconnections=nil
     local h=load(w,{settings={states={minigame=true}}});w:step(.02)
     local r=w:remote("FeralGrabV2")
     r.OnClientEvent:Fire("begin",{f=34,role="prey"});w:advance(.4)
@@ -619,15 +619,20 @@ test("missing executor introspection is reported as partial minigame support",fu
     eq(h.ui.rows.minigame.toggle.Text,"PARTIAL")
     assert(w.cas:GetAllBoundActionInfo().FeralGrabV2Press);h:close()
 end)
-test("bounded native closure discovery resumes beyond a large unrelated GC prefix",function()
-    local w=Mock.new();w:enableNativeGrab();local original=w.env.getgc;local calls=0
-    w.env.getgc=function()
+test("bounded callback discovery resumes beyond unrelated connections without a heap scan",function()
+    local w=Mock.new();w:enableNativeGrab()
+    local original=w.env.getconnections;local calls=0
+    w.env.getconnections=function(event)
         calls+=1;local pool={}
-        for i=1,800 do pool[i]=function()return i end end
-        table.insert(pool,original()[1]);return pool
+        if event==w.uis.InputBegan then
+            for i=1,60 do pool[i]={Function=function()return i end} end
+        end
+        for _,connection in ipairs(original(event))do table.insert(pool,connection)end
+        return pool
     end
-    local h=load(w,{settings={states={minigame=true}}});w:advance(.1)
-    eq(calls,1);assert(h.bridge.grabController);eq(h.bridge.grabDiscovery,nil)
+    w.env.getgc=function()error("heap scan")end
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.8)
+    assert(calls<=3);assert(h.bridge.grabController);eq(h.bridge.grabDiscovery,nil)
     w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=35,role="prey"})
     assert(h.grabInput.lease);h:close()
 end)
@@ -766,7 +771,7 @@ test("native feeding approach longer than the old action pause keeps Rest releas
     w.finishFeedApproach();w:advance(.2);eq(h.recovery.owned,nil);eq(w.nativeFeedMode(),"eat");h:close()
 end)
 test("feeding intent protects native approach even without executor introspection",function()
-    local w=Mock.new();w:enableNativeActions();w.env.getgc=nil;w.feedApproach=true;w.hum.Health=50
+    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil;w.feedApproach=true;w.hum.Health=50
     w.player.Character:SetAttribute("FeedCan","drink")
     local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
     w:input(E.KeyCode.E);w:advance(3);eq(h.feeding.busy,true);eq(h.recovery.owned,nil);h:close()
@@ -812,7 +817,7 @@ test("an attack ends native feeding before the game's ordinary bite callback",fu
     eq(w.nativeFeedMode(),nil);eq(w.nativeBites,1);eq(h.ledger.counts.native_feed_cancel_for_attack,1);h:close()
 end)
 test("missing native feeding access leaves the game session intact instead of fabricating progress",function()
-    local w=Mock.new();w:enableNativeActions();w.env.getgc=nil
+    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil
     w.player.Character:SetAttribute("Thirst",40);w.player.Character:SetAttribute("FeedCan","drink")
     local h=load(w,{settings={states={}}});w:advance(.1);w:input(E.KeyCode.E);w:advance(9)
     eq(w.nativeFeedToggles,1);eq(w.nativeFeedMode(),"drink");eq(w.player.Character:GetAttribute("Thirst"),40)
@@ -864,7 +869,7 @@ test("feeding and bite coordination preserve automatic minigame timing",function
     eq(w.nativeBites,1);eq(h.grab.presses,1);eq(w.nativeManualPresses,nil);eq(h.recovery.owned,nil);h:close()
 end)
 
-test("one shared native scan discards a large non-function heap and releases its snapshots",function()
+test("native lookup never requests a large heap and releases its bounded callback queue",function()
     local w=Mock.new();w:enableNativeGrab();w:enableNativeActions()
     local original=w.env.getgc;local calls=0
     w.env.getgc=function()
@@ -873,7 +878,7 @@ test("one shared native scan discards a large non-function heap and releases its
         return table.freeze(pool)
     end
     local h=load(w,{settings={states={minigame=true}}});w:advance(.4)
-    eq(calls,1);assert(h.bridge.grabController);assert(h.bridge.wolfActions.tryBite)
+    eq(calls,0);assert(h.bridge.grabController);assert(h.bridge.wolfActions.tryBite)
     assert(h.bridge.wolfActions.toggleFeed);eq(h.bridge.wolfActions.cancelFeed,nil)
     eq(h.bridge.nativeScan,nil);h:close();eq(h.bridge.grabDiscovery,nil);eq(h.bridge.wolfDiscovery,nil)
 end)
@@ -892,6 +897,150 @@ test("guarded native feed cancellation never starts an inactive feeding offer",f
     eq(h.bridge.wolfActions.cancelFeed,nil);eq(h.bridge:stopNativeFeed(w.time),false);eq(w.nativeFeedToggles,nil)
     w:input(E.KeyCode.E);eq(w.nativeFeedMode(),"eat")
     eq(h.bridge:stopNativeFeed(w.time),true);eq(w.nativeFeedMode(),nil);h:close()
+end)
+
+test("recovery trend expires an old HP gain instead of reporting it forever",function()
+    local w=Mock.new();w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.6)
+    w.hum.Health=61;w:advance(.4);assert(h.recovery:summary():find("HP rising",1,true))
+    w:advance(6.6);assert(h.recovery:summary():find("no HP rise observed",1,true))
+    eq(h.recovery.observations.hp.change,0);assert(h.recovery.observations.hp.seconds<=6.00001)
+    assert(#h.recovery.observations.hp.samples<=32);h:close()
+end)
+test("HP and three condition trends remain independent in one recovery session",function()
+    local w=Mock.new();w.hum.Health=60
+    local c=w.player.Character;c:SetAttribute("FeralInjury",8);c:SetAttribute("FeralBleed",7);c:SetAttribute("FeralVenomAmt",6)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.6)
+    w.hum.Health=61;c:SetAttribute("FeralInjury",7);c:SetAttribute("FeralBleed",nil);w:advance(.4)
+    assert(h.recovery:summary():find("HP rising",1,true));assert(h.recovery:effectsSummary():find("injury: easing",1,true))
+    eq(h.recovery.observations.bleed,nil);eq(h.recovery.observations.venom.change,0)
+    c:SetAttribute("FeralInjury",9);w:advance(.7);eq(h.recovery.observations.injury.change,0)
+    w.hum.MaxHealth=101;w.hum.Health=62;w:advance(.7);eq(h.recovery.observations.hp.change,0)
+    h:close()
+end)
+test("native bite guidance reports cooldown without invoking an attack",function()
+    local w=Mock.new();w:enableNativeActions();local h=load(w,{settings={states={}}});w:advance(.2)
+    eq(h.biteReadiness.ready,true);eq(w.nativeBites,nil)
+    w:input(nil,E.UserInputType.MouseButton1);w:advance(.04)
+    eq(h.biteReadiness.ready,false);eq(h.biteReadiness.reason,"native cooldown")
+    w:advance(.55);eq(h.biteReadiness.ready,true);eq(w.nativeBites,1);h:close()
+end)
+test("bite guidance respects capture, timed ability and private Rest locks",function()
+    local w=Mock.new();w:enableNativeActions();local h=load(w,{settings={states={}}});w:advance(.2)
+    local c=w.player.Character;c:SetAttribute("FeralPinned",true);w:advance(.1);eq(h.biteReadiness.ready,false)
+    c:SetAttribute("FeralPinned",nil);c:SetAttribute("FeralNoBiteUntil",w.time+1001);w:advance(.1)
+    eq(h.biteReadiness.reason,"native bite lock")
+    c:SetAttribute("FeralNoBiteUntil",nil);c:SetAttribute("FeralKingsAt",w.time);w:advance(.1)
+    eq(h.biteReadiness.reason,"native ability lock")
+    c:SetAttribute("FeralKingsAt",nil);w.nativeRestWanted=true;w:advance(.1);eq(h.biteReadiness.reason,"native Rest lock")
+    w.nativeRestWanted=false;w:advance(.1);eq(h.biteReadiness.ready,true);eq(w.nativeBites,nil);h:close()
+end)
+test("missing native timing stays unknown instead of advertising bite readiness",function()
+    local w,h=boot({biteHelper=true});eq(h.biteReadiness.ready,false);eq(h.biteReadiness.known,false);h:close()
+end)
+test("unchanged hollow player outlines and stationary name positions generate no repeat writes",function()
+    local w=Mock.new();local _,char,hum=w:enemy(2,Mock.V3.new(0,3,-40))
+    local h=load(w,{settings={states={esp=true,tags=true}}});w:advance(.4);h.ui:toggle();w:resetMetrics()
+    w:advance(1)
+    eq(w.metrics.writes["Highlight:OutlineColor"],nil);eq(w.metrics.writes["Highlight:FillTransparency"],nil)
+    eq(w.metrics.writes["Highlight:Enabled"],nil);eq(w.metrics.writes["TextLabel:Position"],nil)
+    hum.Health=20;w:advance(.1);eq(w.metrics.writes["Highlight:OutlineColor"],1)
+    eq(h.ui.records[char].highlight.FillTransparency,1);h:close()
+end)
+test("disabled name tags perform no world projections",function()
+    local w=Mock.new();for i=1,24 do w:enemy(2,Mock.V3.new(i,3,-50))end
+    local h=load(w,{settings={states={esp=true,tags=false,biteHelper=false}}});w:advance(.4);w:resetMetrics()
+    w:advance(1);eq(w.metrics.projections,0);h:close()
+end)
+test("active native strikes defer background work through frame hitches and concurrent bites",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    local h=load(w,{settings={states={minigame=true,recovery=true,esp=true}}});w:advance(.3)
+    for _,key in ipairs({"candidates","bindNative"})do
+        local original=h.bridge[key]
+        h.bridge[key]=function(self,...)assert(not h.timingCritical,"background work during strike");return original(self,...)end
+    end
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=62,role="prey",n=4})
+    local before=w.metrics.connections
+    for strike=1,8 do
+        local at=w.time+1000
+        r.OnClientEvent:Fire("strike",{f=62,k=strike,t0=at,spd=1,from=0,zc=.5,zw=.215})
+        w:input(nil,E.UserInputType.MouseButton1)
+        r.OnClientEvent:Fire("n",{f=62,n=2+strike%4})
+        for _,dt in ipairs({.31,.32,.11,.13,.07,.28,.29,.1,.11})do w:step(dt)end
+        assert(h.active,h.lastError);eq(h.grab.presses,strike)
+    end
+    eq(w.nativeBites,8);eq(w.nativeManualPresses,nil);eq(h.grab.grades.perfect,0)
+    eq(w.metrics.connections,before)
+    for _,call in ipairs(w.calls)do
+        if call.name=="FeralGrabV2" and call.args[1]=="press" then close(call.args[4],call.at+1000) end
+    end
+    r.OnClientEvent:Fire("end",{f=62});w:advance(.2);eq(h.timingCritical,false);h:close()
+end)
+test("a strike recovered from native UI state immediately protects its timing frame",function()
+    local w=Mock.new();w:enableNativeGrab();w:enableNativeActions()
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.3)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=63,role="prey"})
+    h.grab:reset("missed observer event")
+    local state=w.nativeGrabState();state.strike={f=63,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2.5}
+    h.nextGrabPoll=0;h.nextScan=0
+    local calls=0;local original=h.bridge.candidates
+    h.bridge.candidates=function(self,...)calls+=1;return original(self,...)end
+    w:step(.02);eq(h.timingCritical,true);eq(calls,0);assert(h.grab.pending)
+    w:advance(.6);eq(h.grab.presses,1);h:close()
+end)
+test("preserved release comparison reduces repeated visual writes and strike background scans",function()
+    local P=assert(loadstring(PERF_SOURCE))()
+    local old=P.run(BASELINE,Mock,false);local new=P.run(BUNDLE,Mock,false)
+    assert(new.highlightWrites<old.highlightWrites*.1);assert(new.labelPositions<old.labelPositions*.1)
+    assert(new.upvalues<old.upvalues);eq(new.heap,0)
+    local oldStrike=P.run(BASELINE,Mock,true);local newStrike=P.run(BUNDLE,Mock,true)
+    assert(oldStrike.candidateScans>=10);eq(newStrike.candidateScans,0)
+    assert(newStrike.boundInfo<oldStrike.boundInfo*.35)
+    print(string.format("WORK_BENCH old_highlight=%d new_highlight=%d old_label_position=%d new_label_position=%d old_idle_upvalues=%d new_idle_upvalues=%d old_strike_scans=%d new_strike_scans=%d old_binding_queries=%d new_binding_queries=%d",old.highlightWrites,new.highlightWrites,old.labelPositions,new.labelPositions,old.upvalues,new.upvalues,oldStrike.candidateScans,newStrike.candidateScans,oldStrike.boundInfo,newStrike.boundInfo))
+end)
+test("native talon and dive session IDs block recovery and do not trigger underwater auto-drop",function()
+    local w=Mock.new();w:enableVultureFlight();w.hum.Health=60
+    local c=w.player.Character;c:SetAttribute("FeralTalonLock",84);c:SetAttribute("FeralUnderwater",true)
+    local h=load(w,{settings={states={flight=true,recovery=true}}});w:advance(.3)
+    eq(h.snapshot.ability,true);eq(h.recovery.owned,nil);eq(c:GetAttribute("FeralFlyDrop"),nil)
+    c:SetAttribute("FeralTalonLock",nil);c:SetAttribute("FeralDiveLocal",85);w:advance(.3)
+    eq(h.snapshot.ability,true);eq(c:GetAttribute("FeralFlyDrop"),nil);h:close()
+end)
+test("a real Vulture let-go intent receives at most one native release retry",function()
+    local w=Mock.new();w:enableVultureFlight();w.player.Character:SetAttribute("FeralTalonLock",84)
+    local h=load(w,{settings={states={flight=true}}});w:advance(.2)
+    w:input(E.KeyCode.Space);w:advance(2)
+    local releases=0;for _,call in ipairs(w.calls)do if call.name=="FeralLunge" and call.args[1]=="release"then releases+=1 end end
+    eq(releases,2);eq(h.ledger.counts.native_talon_release_retried,1)
+    eq(w.player.Character:GetAttribute("FeralTalonLock"),84);w:advance(3)
+    eq(h.ledger.counts.native_talon_release_retried,1);h:close()
+end)
+test("a stalled post-attack Vulture uses native restart intents without editing physics",function()
+    local w=Mock.new();w:enableVultureFlight();local c=w.player.Character;c:SetAttribute("FeralTalonLock",84)
+    local h=load(w,{settings={states={flight=true}}});w:advance(.2)
+    c:SetAttribute("FeralTalonLock",nil);w:resetMetrics();w:advance(1)
+    eq(c:GetAttribute("FeralFlyDrop"),true);assert(type(c:GetAttribute("FeralFlyRelaunch"))=="number")
+    eq(w.metrics.writes["Part:Anchored"],nil);eq(w.metrics.writes["Part:Position"],nil)
+    eq(w.metrics.writes["Part:AssemblyLinearVelocity"],nil);eq(w.vultureMovers.vel.Enabled,false)
+    eq(h.ledger.counts.post_attack_native_flight_restart,1)
+    w.acceptNativeFlightRepair=true;w:advance(.4)
+    eq(w.nativeFlightRestarts,1);eq(h.ledger.counts.post_attack_flight_motion_observed,1)
+    eq(c:GetAttribute("FeralFlyDrop"),nil);eq(c:GetAttribute("FeralFlyRelaunch"),nil);h:close()
+end)
+test("Vulture recovery never restarts an active, anchored, captured or deliberately stationary flight",function()
+    local w=Mock.new();w:enableVultureFlight();local c=w.player.Character;c:SetAttribute("FeralTalonLock",84)
+    local h=load(w,{settings={states={flight=true}}});w:advance(1.2);eq(c:GetAttribute("FeralFlyDrop"),nil)
+    c:SetAttribute("FeralTalonLock",nil);w.root.Anchored=true;w:advance(1);eq(c:GetAttribute("FeralFlyDrop"),nil)
+    w.root.Anchored=false;c:SetAttribute("FeralPinned",true);w:advance(1);eq(c:GetAttribute("FeralFlyDrop"),nil)
+    c:SetAttribute("FeralPinned",nil);w.hum.MoveDirection=Mock.V3.new();w:advance(1)
+    eq(c:GetAttribute("FeralFlyDrop"),nil);h:close()
+end)
+test("flight restart timeout and disable restore only owned intents",function()
+    local w=Mock.new();w:enableVultureFlight();local c=w.player.Character;c:SetAttribute("FeralTalonLock",84)
+    local h=load(w,{settings={states={flight=true}}});w:advance(.2);c:SetAttribute("FeralTalonLock",nil);w:advance(1)
+    assert(h.flightRepair);c:SetAttribute("FeralFlyRelaunch",999)
+    h:set("flight",false);eq(c:GetAttribute("FeralFlyDrop"),nil);eq(c:GetAttribute("FeralFlyRelaunch"),999)
+    eq(h.flightRepair,nil);h:close()
 end)
 
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))

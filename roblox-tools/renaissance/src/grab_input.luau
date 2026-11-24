@@ -20,20 +20,22 @@ function GrabInput.new(bridge,token)
     function i:controller(now)
         return bridge:nativeGrabController(now)
     end
-    function i:update(grab,now)
+    function i:update(grab,now,native,state)
         if not grab.enabled or not grab.active then
             if self.lease then self:release() end
             return false
         end
-        local native = self:controller(now)
-        local state = native and native.state()
+        native = native or self:controller(now)
+        state = state or native and native.state()
         if not state or state.ended or tostring(state.id) ~= tostring(grab.session) then
             if self.lease then self:release() end
             self.status = "native input isolation unavailable"
             return false
         end
         if self.lease and (self.lease.controller ~= native or self.lease.state ~= state) then self:release() end
-        if bridge:nativeGrabBound() then
+        local check=not self.lease or now >= (self.nextBindingCheck or 0)
+        if check then self.nextBindingCheck=now+.1 end
+        if check and bridge:nativeGrabBound() then
             local lease = { controller = native,state = state,character = bridge.player.Character }
             self.lease = lease -- record before calling out so partial failure unwinds
             local ok = pcall(native.bind,false)

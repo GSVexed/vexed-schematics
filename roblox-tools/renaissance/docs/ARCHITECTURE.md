@@ -1,4 +1,4 @@
-# Renaissance 15.2.1 architecture
+# Renaissance 15.3.0 architecture
 
 The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. This replaces fourteen embedded legacy modules with thirteen original, independently compiled modules. No raw game bytecode or reconstructed game source is bundled.
 
@@ -56,7 +56,7 @@ The NPC/litter registry is bounded and used for affiliation and rescue. Real Pla
 
 ## Work and data bounds
 
-One heartbeat drives timing, incremental native closure discovery and slower tasks. If callback inspection cannot supply the required functions, both lookups share one read-only heap snapshot. A filtering slice reads up to 32,768 entries within approximately 3 ms and appends only functions. Lookups inspect at most 384 actual functions with their existing 8/12 ms bounds. The raw snapshot is dropped after filtering; all discovery state is released on completion and shutdown. Target discovery runs at most about eight times per second and inspects at most 256 NPC children and 256 litter records. Geometry is calculated from current positions, and the guide uses the verified native target score. The renderer projects up to 24 players and a small guide. Terrain safety checks run only for requested idle walks. Pose guards read only the current own Rest attribute.
+One heartbeat gives pending minigame strikes priority. Discovery is restricted to three own-script callback chains; the shared resumable source examines at most 32 entries within an approximate 2 ms slice, with bounded depth, connections, queue and accepted functions. No heap enumeration fallback remains. Pending native strikes defer discovery and nonurgent scans/config/terrain work, including when recovered from native UI state. All discovery state is released on completion and shutdown. Target discovery runs at most about eight times per second and inspects at most 256 NPC children and 256 litter records. Geometry is calculated from current positions, and the guide uses the verified native target score. The renderer projects up to 24 real players and a small guide, skips disabled tags and avoids unchanged property writes. The marker combines client geometry with validated native cooldown/guard evidence; unknown timing and stale geometry are grey. Independent recovery observations use bounded six-second windows. Guarded Vulture release/resume handling lives with the existing flight owner and does not edit native physics or locks. See V15_3_IMPROVEMENTS.md. Terrain safety checks run only for requested idle walks. Pose guards read only the current own Rest attribute.
 
 The ledger retains 160 events and aggregate rate buckets; transaction history retains 32 entries. Rates exclude character, maximum HP, combat, movement and Rest-mode transitions. Missing condition attributes never count as cures. The hub includes no console dump, private capture payload, credential or automatic GitHub upload.
 

@@ -100,21 +100,43 @@ function Recovery.new(bridge, policy, ledger)
                 or key ~= "hp" and a <= 0 then self.observations[key]=nil;continue end
             local delta = key == "hp" and b-a or a-b
             if delta < 0 then self.observations[key]=nil;continue end
-            local item=self.observations[key] or {seconds=0,change=0}
+            local item=self.observations[key] or {samples={}}
             self.observations[key]=item
-            item.seconds += now-previous.now;item.change += delta
+            table.insert(item.samples,{from=previous.now,to=now,change=delta})
+            local cutoff=now-6
+            while #item.samples>0 and (item.samples[1].to<=cutoff or #item.samples>32) do
+                table.remove(item.samples,1)
+            end
+            local first=item.samples[1]
+            if first and first.from<cutoff then
+                first.change *= (first.to-cutoff)/(first.to-first.from)
+                first.from=cutoff
+            end
+            item.seconds,item.change=0,0
+            for _,sample in ipairs(item.samples) do
+                item.seconds += sample.to-sample.from;item.change += sample.change
+            end
             item.rate = item.change/item.seconds
         end
     end
     function r:summary()
         local hp = self.observations.hp
         local message = self.owned and "Recovery requested" or self.state
-        if self.owned and self.purpose == "health" then
+        if self.owned and self.previous and self.previous.combat==false then
             message ..= hp and hp.change > .02 and " · HP rising; 2× unverified"
-                or hp and hp.seconds >= 6 and " · no HP rise observed; 2× unverified"
+                or hp and hp.seconds >= 5.9 and " · no HP rise observed; 2× unverified"
                 or " · watching HP; 2× unverified"
         else message ..= " · gameplay unverified" end
         return message
+    end
+    function r:effectsSummary()
+        local pieces={}
+        for _,key in ipairs({"injury","bleed","venom"}) do
+            local item=self.observations[key]
+            table.insert(pieces,key..": "..(not item and "unmeasured" or item.change>0 and "easing"
+                or item.seconds>=5.9 and "no recent decrease" or "watching"))
+        end
+        return table.concat(pieces," · ").." · 4× unverified"
     end
     function r:tick(s, now)
         self:guardPose(now)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "ui", "controller")
-DEST = ROOT.parent / "feral-renaissance-v15.2.1.lua"
+DEST = ROOT.parent / "feral-renaissance-v15.3.0.lua"
 
 BOOT = '''
 local M = {}
@@ -65,13 +65,13 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.2.1] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.3.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 
 
 def build():
-    chunks = ["-- FERAL Project Renaissance 15.2.1 | v2412 client baseline",
+    chunks = ["-- FERAL Project Renaissance 15.3.0 | v2412 client baseline",
               "-- Gameplay acceptance is unverified unless independently observed.",
               "local options = ...",
               'if type(options) ~= "table" then options = {} end',
@@ -88,7 +88,7 @@ def build():
     chunks.append(BOOT.strip())
     data = ("\n".join(chunks) + "\n").encode()
     DEST.write_bytes(data)
-    record = {"version": "15.2.1", "game_baseline": 2412, "modules": manifest,
+    record = {"version": "15.3.0", "game_baseline": 2412, "modules": manifest,
               "bundle_sha256": hashlib.sha256(data).hexdigest(), "bundle_bytes": len(data),
               "stable_clean_v14_overwritten": False}
     (ROOT / "manifest.json").write_text(json.dumps(record, indent=2) + "\n")

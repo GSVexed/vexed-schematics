@@ -65,7 +65,8 @@
       "capture_id": 4628,
       "bytecode_sha256": "5f8cc157580b14f66165b8c9591d07d76a082ebc79f2bcc7f15f412ef298173c",
       "prototypes": 33,
-      "suffix_bytes": 24
+      "suffix_bytes": 24,
+      "reviewed_handoff": "native talon/dive suspension, same-session release and ordinary flight drop/relaunch lifecycle; no server authority inferred"
     },
     {
       "name": "FeralGrabV2UI",
@@ -220,6 +221,24 @@
       "prototypes": 155,
       "suffix_bytes": 24,
       "reviewed_contract": "stepRig words 3600-3760: persistent Rest blends and scoped WolfDbgRestP Vector3 input; native render binding words 2108-2133"
+    },
+    {
+      "name": "FeralTalonLockClient",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralTalonLockClient",
+      "capture_id": 4567,
+      "bytecode_sha256": "3f7330c43ea3dc5717d80da287fe2351f5cb5d12bce0306896fe6825881c20f6",
+      "prototypes": 44,
+      "suffix_bytes": 24,
+      "reviewed_handoff": "native talon/dive suspension, same-session release and ordinary flight drop/relaunch lifecycle; no server authority inferred"
+    },
+    {
+      "name": "FeralDiveBombClient",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralDiveBombClient",
+      "capture_id": 4655,
+      "bytecode_sha256": "e66090b723feee0efed5d19962abfa0055577920d8cd5e27f891b62c2b1ee363",
+      "prototypes": 65,
+      "suffix_bytes": 24,
+      "reviewed_handoff": "native talon/dive suspension, same-session release and ordinary flight drop/relaunch lifecycle; no server authority inferred"
     }
   ]
 }

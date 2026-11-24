@@ -9,6 +9,7 @@ function Feeding.new(bridge,policy,ledger)
         if active then policy.actionUntil = math.max(policy.actionUntil,now+.45) end
     end
     function f:input(s,now)
+        self.nextProbe=0
         if s.feeding or self.intent or self.restart then self:cancel("manual feeding toggle",now);return end
         local kind = bridge:attribute(s.char,"FeedCan")
         if kind == "eat" or kind == "drink" then
@@ -29,13 +30,17 @@ function Feeding.new(bridge,policy,ledger)
         end
     end
     function f:tick(s,now)
-        local mode,started,known = bridge:nativeFeedState(now)
         local invalid = not s.alive or s.chat or s.gameMenu or s.captured or s.grab or s.holding
             or s.attackHeld or now < policy.attackUntil
         if invalid then
-            if self.intent or self.session or self.restart then self:cancel("feeding yielded to native action",now) end
+            if self.intent or self.session or self.restart or self.busy then self:cancel("feeding yielded to native action",now) end
             return
         end
+        if now >= (self.nextProbe or 0) or s.feeding or self.intent or self.restart or self.busy then
+            self.mode,self.started,self.known=bridge:nativeFeedState(now)
+            self.nextProbe=now+.25
+        end
+        local mode,started,known = self.mode,self.started,self.known
         if self.intent and (self.intent.char ~= s.char or now > self.intent.untilAt
             or known and mode == nil and not self.restart and now > self.intent.untilAt-5.65) then self.intent=nil end
         if self.session and (self.session.char ~= s.char or s.feedMode ~= self.session.kind) and not self.restart then self.session=nil end

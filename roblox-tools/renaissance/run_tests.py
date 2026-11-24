@@ -28,7 +28,7 @@ def main():
     manifest = build()
     compiled = []
     compile_paths = [*(ROOT/"src"/f"{name}.luau" for name in MODULES),
-                     ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", DEST]
+                     ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", ROOT/"tests/performance.luau", DEST]
     launcher = ROOT.parent/"feral-renaissance.lua"
     if launcher.exists():
         compile_paths.append(launcher)
@@ -51,6 +51,7 @@ def main():
         "feral-renaissance-v15.1.0.lua": "7c289fd74de07c86537476e1c7fa760f3422ff8d305737bb5e19ab3e546cb093",
     }
     stable_hashes["feral-renaissance-v15.2.0.lua"] = "435265c032d1c200157e2004021ab491dc7c317317c5792e0070c2b1fffc8ceb"
+    stable_hashes["feral-renaissance-v15.2.1.lua"] = "d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9"
     for name, digest in stable_hashes.items():
         assert hashlib.sha256((ROOT.parent/name).read_bytes()).hexdigest() == digest, f"rollback changed: {name}"
     source = DEST.read_text()
@@ -58,8 +59,11 @@ def main():
         body = re.search(r'sources\["' + name + r'"\] = \[============\[\n(.*?)\]============\]', source, re.S).group(1)
         assert body == (ROOT/"src"/f"{name}.luau").read_text(), f"bundle parity: {name}"
     assert not re.search(r'FireServer\s*\(\s*["\']Bite(?:Hit)?["\']', source)
+    assert not re.search(r'\bgetgc\s*\(', source), "runtime heap enumeration forbidden"
     script = "local BUNDLE = " + long_string(source) + "\nlocal MOCK_SOURCE = " + long_string(
-        (ROOT/"tests/mock_roblox.luau").read_text()) + "\n" + (ROOT/"tests/suite.luau").read_text()
+        (ROOT/"tests/mock_roblox.luau").read_text()) + "\nlocal BASELINE = " + long_string(
+        (ROOT.parent/"feral-renaissance-v15.2.1.lua").read_text()) + "\nlocal PERF_SOURCE = " + long_string(
+        (ROOT/"tests/performance.luau").read_text()) + "\n" + (ROOT/"tests/suite.luau").read_text()
     with tempfile.TemporaryDirectory(prefix="renaissance-test-") as directory:
         path = pathlib.Path(directory)/"regression.luau"
         path.write_text(script)
@@ -68,7 +72,7 @@ def main():
     if result.stderr:
         print(result.stderr)
     match = re.search(r"RENAISSANCE_TEST_RESULT total=(\d+) passed=(\d+) failed=(\d+)", result.stdout)
-    summary = {"version": "15.2.1", "bundle_sha256": manifest["bundle_sha256"],
+    summary = {"version": "15.3.0", "bundle_sha256": manifest["bundle_sha256"],
                "compiled": compiled, "module_parity": True, "rollback_hashes_unchanged": True,
                "regressions": dict(zip(("total","passed","failed"), map(int,match.groups()))) if match else None,
                "runtime_exit_code": result.returncode, "gameplay_success_claimed": False,

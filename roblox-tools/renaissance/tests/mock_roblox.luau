@@ -43,7 +43,11 @@ end})
 local function kind(v) return type(v)=="table" and v._type or type(v) end
 function Mock.new()
     local w = { time=10,objects={},calls={},configs={},renders={},bindings={},bindingInfo={},parts={},
-        nativeRestEcho=false,localEnvironment={},failure=nil,waterY=nil,blocked=false }
+        nativeRestEcho=false,localEnvironment={},failure=nil,waterY=nil,blocked=false,
+        metrics={writes={},projections=0,connections=0,info=0,upvalues=0,heap=0,boundInfo=0} }
+    function w:resetMetrics()
+        self.metrics={writes={},projections=0,connections=0,info=0,upvalues=0,heap=0,boundInfo=0}
+    end
     local methods = {}
     local function new(class)
         if w.failure == "instance:"..class then error("injected Instance creation failure") end
@@ -62,6 +66,8 @@ function Mock.new()
                 return self._props[k]
             end,
             __newindex=function(self,k,v)
+                local key=self.ClassName..":"..k
+                w.metrics.writes[key]=(w.metrics.writes[key] or 0)+1
                 if (k:match("Color3$") or k=="Color" or k=="OutlineColor" or k=="FillColor") and v~=nil then
                     assert(kind(v)=="Color3","colour property received non-colour: "..k)
                 end
@@ -143,7 +149,7 @@ function Mock.new()
     workspace.Terrain=new("Terrain");workspace.Terrain.Parent=workspace
     workspace.CurrentCamera={
         ViewportSize=V2.new(1400,900),
-        WorldToViewportPoint=function(_,p) return V3.new(700+p.X*2,450-p.Y*2,20-p.Z),true end
+        WorldToViewportPoint=function(_,p) w.metrics.projections+=1;return V3.new(700+p.X*2,450-p.Y*2,20-p.Z),true end
     }
     function workspace:GetServerTimeNow() return w.time+1000 end
     function workspace:Raycast(origin,direction,params)
@@ -204,6 +210,7 @@ function Mock.new()
     end
     function cas:UnbindAction(name) w.bindings[name]=nil;w.bindingInfo[name]=nil end
     function cas:GetAllBoundActionInfo()
+        w.metrics.boundInfo+=1
         local result={}
         for name in pairs(w.bindings) do result[name]=w.bindingInfo[name] or {} end
         if w.nativeShake then result.FeralShakeTaps={} end
@@ -250,6 +257,7 @@ function Mock.new()
             local originalInfo=debug.info
             local mockDebug=table.clone(debug)
             mockDebug.info=function(target,options)
+                self.metrics.info+=1
                 local record=self.nativeRecords[target]
                 if not record then return originalInfo(target,options) end
                 local source="Players.LocalPlayer.PlayerScripts."..record.script
@@ -258,11 +266,13 @@ function Mock.new()
                 if options=="s" then return source end
             end
             mockDebug.getupvalues=function(target)
+                self.metrics.upvalues+=1
                 local record=self.nativeRecords[target]
                 return record and record.values() or {}
             end
             env.debug=mockDebug
-            env.getgc=function()return table.clone(self.nativePool)end
+            env.getgc=function()self.metrics.heap+=1;return table.clone(self.nativePool)end
+            self:enableNativeConnections()
         end
         self.nativeRecords[fn]={script=scriptName,name=name,values=values}
         table.insert(self.nativePool,fn)
@@ -353,8 +363,15 @@ function Mock.new()
                 or self.time-(self.lastBiteAt or -100)<.5 or mode then return end
             doBite()
         end
-        self:registerNative(doBite,"WolfController","doBite",function()return {player,remote}end)
-        self:registerNative(tryBite,"WolfController","tryBite",function()return {[1]=player,[5]=doBite}end)
+        local function biteCooldown()return .5 end
+        self:registerNative(biteCooldown,"WolfController","biteCooldown",function()return {}end)
+        self:registerNative(doBite,"WolfController","doBite",function()
+            return {[1]=player,[2]=self.nativeRestWanted==true,[3]=self.nativeRestActive==true,
+                [4]=self.nativeRestReleasedAt or -100,[6]=self.lastBiteAt or -100,[8]=remote}
+        end)
+        self:registerNative(tryBite,"WolfController","tryBite",function()
+            return {[1]=player,[3]=self.lastBiteAt or -100,[4]=biteCooldown,[5]=doBite}
+        end)
         self:registerNative(toggleFeed,"WolfController","toggleFeed",function()
             return {[1]=mode,[2]=started,[5]=player,[6]=remote}
         end)
@@ -381,6 +398,7 @@ function Mock.new()
     end
     function w:enableNativeConnections()
         env.getconnections=function(event)
+            self.metrics.connections+=1
             local result={}
             for _,connection in ipairs(event.listeners or {})do
                 if connection.Connected then table.insert(result,{Function=connection.fn}) end
@@ -421,6 +439,19 @@ function Mock.new()
             if kind(override)=="Vector3" then pose.sit,pose.lie,pose.hold=override.X,override.Y,override.Z end
             self.movingRestVisible=self.hum.MoveDirection.Magnitude>.13 and (pose.sit>.01 or pose.lie>.01)
         end}
+    end
+    function w:enableVultureFlight()
+        self:spawn("Vulture")
+        self.configs.FlightConfig.canFly=function(char)return char and (char:GetAttribute("Species")=="Vulture" or char:GetAttribute("Species")=="BaldEagle")end
+        self.hum.FloorMaterial=enum.Material.Air;self.hum.MoveDirection=V3.new(1,0,0)
+        self.player.Character:SetAttribute("FeralFlyLocal",true)
+        local vel=new("LinearVelocity");vel.Name="FeralFlyVel";vel.Enabled=false;vel.VectorVelocity=V3.new();vel.Parent=self.root
+        local rot=new("AlignOrientation");rot.Name="FeralFlyRot";rot.Enabled=false;rot.Parent=self.root
+        self.vultureMovers={vel=vel,rot=rot}
+        cas:BindActionAtPriority("FeralTalonLetGo",function(_,state)
+            if state==enum.UserInputState.Begin then rs:FindFirstChild("FeralLunge"):FireServer("release") end
+            return enum.ContextActionResult.Sink
+        end,false,3000,enum.KeyCode.Space,enum.KeyCode.ButtonB)
     end
     function w:animal(species,position)
         local char=new("Model");char.Name=species or "Wolf";char.Parent=workspace
@@ -465,6 +496,19 @@ function Mock.new()
     end
     function w:step(dt)
         self.time+=dt or .05
+        if self.acceptNativeFlightRepair and self.vultureMovers then
+            local char=self.player.Character
+            if char:GetAttribute("FeralFlyDrop")==true then
+                char:SetAttribute("FeralFlyDrop",nil);char:SetAttribute("FeralFlyLocal",nil)
+                self.nativeFlightDropped=true
+            elseif self.nativeFlightDropped and char:GetAttribute("FeralFlyRelaunch")~=nil then
+                char:SetAttribute("FeralFlyRelaunch",nil);char:SetAttribute("FeralFlyLocal",true)
+                self.vultureMovers.vel.Enabled=true;self.vultureMovers.rot.Enabled=true
+                self.vultureMovers.vel.VectorVelocity=V3.new(20,0,0);self.root.AssemblyLinearVelocity=V3.new(20,0,0)
+                self.nativeFlightDropped=false;self.nativeFlightRestarts=(self.nativeFlightRestarts or 0)+1
+            end
+            if self.root.AssemblyLinearVelocity.Magnitude>2 then self.root.Position+=self.root.AssemblyLinearVelocity*(dt or .05) end
+        end
         for index=#(self.nativeClaims or {}),1,-1 do
             local claim=self.nativeClaims[index]
             if self.time>=claim.at then

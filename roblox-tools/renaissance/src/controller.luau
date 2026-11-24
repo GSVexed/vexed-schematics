@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.2.1", tokenIdentity = tokenIdentity,
+    local h = { version = "15.3.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -42,12 +42,89 @@ function Controller.new(M,bridge,options)
         end
     end
     function h:clearFlight()
+        self:releaseFlightRepair()
+        self.flightEpisode,self.flightStatus=nil,nil
         self.features.leases:release("surface")
         self.surfaceUntil = nil
         if self.drop then
             bridge:restoreAttribute(self.drop.char,"FeralFlyDrop",true,self.drop.before)
             self.drop = nil
         end
+    end
+    function h:releaseFlightRepair()
+        local r=self.flightRepair;self.flightRepair=nil
+        if r then
+            bridge:restoreAttribute(r.char,"FeralFlyDrop",true,nil)
+            bridge:restoreAttribute(r.char,"FeralFlyRelaunch",r.at,nil)
+        end
+    end
+    function h:noteFlightCancel(input,s,now)
+        if not self.registry.byId.flight.requested or self.grab.active
+            or bridge:attribute(s.char,"Species")~="Vulture" or s.talonLock==nil then return end
+        local info=bridge.ContextActionService:GetAllBoundActionInfo().FeralTalonLetGo
+        for _,key in ipairs(info and info.inputTypes or {}) do
+            if key==input.KeyCode then
+                local q=self.flightEpisode
+                if not q or q.char~=s.char or q.lock~=s.talonLock then
+                    q={char=s.char,generation=s.generation,lock=s.talonLock,at=now}
+                    self.flightEpisode=q
+                end
+                q.cancelAt=now
+                return
+            end
+        end
+    end
+    function h:stepFlightHandoff(s,now)
+        if self.flightRepair then
+            local r=self.flightRepair
+            if not s.alive or r.char~=s.char or s.grab or s.captured or s.ability or s.chat or s.gameMenu
+                or now-r.at>1.5 then self:releaseFlightRepair()
+            elseif (s.root.Position-r.position).Magnitude>1.5 and s.root.AssemblyLinearVelocity.Magnitude>2 then
+                self.flightStatus="Movement observed after native restart; cause unverified"
+                self.ledger:event("post_attack_flight_motion_observed",now)
+                self:releaseFlightRepair()
+            end
+        end
+        if not self.registry.byId.flight.requested or not s.alive or bridge:attribute(s.char,"Species")~="Vulture" then
+            self.flightEpisode=nil;return
+        end
+        local q=self.flightEpisode
+        if s.talonLock~=nil then
+            if not q or q.char~=s.char or q.lock~=s.talonLock then
+                q={char=s.char,generation=s.generation,lock=s.talonLock,at=now};self.flightEpisode=q
+            end
+            -- Replay only an actual native let-go intent, once for this session.
+            -- Server/native cleanup owns anchoring and capture restrictions.
+            if q.cancelAt and not q.releaseRetried and now-q.cancelAt>=1 and now-q.cancelAt<3
+                and not s.grab and not s.captured and not s.chat and not s.gameMenu then
+                q.releaseRetried=true
+                local sent=bridge:fire("FeralLunge","release")
+                self.flightStatus="Native attack release retried; response unconfirmed"
+                self.ledger:event("native_talon_release_retried",now,{sent=sent})
+            end
+            return
+        end
+        if not q or q.char~=s.char or q.generation~=s.generation then self.flightEpisode=nil;return end
+        q.ended=q.ended or now
+        if now-q.ended>4 then self.flightEpisode=nil;return end
+        if s.grab or s.captured or s.ability or s.chat or s.gameMenu or s.underwater or s.swimming
+            or s.climbing or s.attackHeld or s.root.Anchored or s.hum.FloorMaterial~=Enum.Material.Air
+            or s.hum.MoveDirection.Magnitude<=.13 or s.root.AssemblyLinearVelocity.Magnitude>=.6 then q.stillAt=nil;return end
+        local vel=s.root:FindFirstChild("FeralFlyVel")
+        local rot=s.root:FindFirstChild("FeralFlyRot")
+        if not s.flying or not vel or not vel:IsA("LinearVelocity") or not rot or not rot:IsA("AlignOrientation") then return end
+        q.stillAt=q.stillAt or now
+        if now-q.stillAt<.75 or q.restarted or self.timingCritical then return end
+        if bridge:attribute(s.char,"FeralFlyDrop")~=nil or bridge:attribute(s.char,"FeralFlyRelaunch")~=nil then return end
+        -- v2412 FeralFlight consumes these normal drop/relaunch intents. Never
+        -- edit native movers, anchors, velocities, capture flags or positions.
+        q.restarted=true
+        self.flightRepair={char=s.char,at=now,position=s.root.Position}
+        local a=bridge:setAttribute(s.char,"FeralFlyRelaunch",now)
+        local b=a and bridge:setAttribute(s.char,"FeralFlyDrop",true)
+        if not b then self:releaseFlightRepair() end
+        self.flightStatus=b and "Native flight restart requested; movement unconfirmed" or "Native restart unavailable"
+        self.ledger:event("post_attack_native_flight_restart",now,{sent=b==true})
     end
     function h:set(id,on)
         if self.closed or not self.active then return false end
@@ -77,6 +154,7 @@ function Controller.new(M,bridge,options)
         self.recovery:clearPose()
         self.recovery.lastAutomaticCharacter,self.recovery.previous = nil,nil
         self.recovery.observations,self.recovery.nativeEchoObserved = {},false
+        bridge.biteTiming,bridge.deferNativeDiscovery=nil,false
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.grab:reset("animal changed")
         self.grabInput:release()
@@ -179,6 +257,7 @@ function Controller.new(M,bridge,options)
             self.grab:manual()
             return
         end
+        if key==Enum.KeyCode.Space or key==Enum.KeyCode.ButtonB then self:noteFlightCancel(input,s,now) end
         if key == Enum.KeyCode.E or (primary or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
             self.feeding:input(s,now)
             self.policy:input("action",now)
@@ -228,6 +307,7 @@ function Controller.new(M,bridge,options)
         local s = bridge:snapshot(now,false)
         if key == "WolfRest" then self.recovery:echo(s,now)
         elseif key == "WolfBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
+            bridge.biteTiming=nil
             if not s.alive then return end
             self.combatInput:cancel()
             self.policy.attackUntil = math.max(self.policy.attackUntil,now+1.1)
@@ -289,7 +369,12 @@ function Controller.new(M,bridge,options)
             self:stopWalk("native minigame")
             self.ledger:event("native_grab_" .. tostring(event),bridge.clock(),
                 {tier = event == "res" and data.mine == true and data.tier or nil})
-            if event == "begin" then bridge.nextGrabDiscovery = 0 end
+            if event == "begin" then
+                bridge.nextGrabDiscovery = 0
+                if not bridge.grabController then bridge.nativeScan=nil end
+            end
+            bridge.deferNativeDiscovery=self.grab.enabled and self.grab.pending~=nil
+            if event=="begin" or event=="strike" then self.grabInput.nextBindingCheck=0 end
             self.grabInput:update(self.grab,bridge.clock())
         end
     end
@@ -346,7 +431,7 @@ function Controller.new(M,bridge,options)
                 local c = bridge:config("FlightConfig")
                 local ok,eligible = pcall(function() return s.alive and c.canFly(s.char) end)
                 r:ack(id,ok and eligible == true,ok and eligible and "ARMED" or "WAITING",
-                    ok and eligible and (s.underwater and "underwater; takeoff blocked" or "surface assistance armed")
+                    ok and eligible and (self.flightStatus or (s.underwater and "underwater; takeoff blocked" or "surface assistance armed"))
                         or "waiting for flight-eligible animal")
             elseif id == "survivalAFK" then
                 r:ack(id,true,"ARMED",self.walk and "safe walk active; credit unverified" or self.walkStatus or "waiting for safe idle window")
@@ -358,7 +443,7 @@ function Controller.new(M,bridge,options)
         if recovery.requested then
             recovery.reason = self.recovery:summary()
             recovery.observed = self.recovery.nativeEchoObserved and "owned native pose echo observed locally" or "unknown"
-            r.byId.effects.reason = "Native Rest requested separately from observed clearing; 4× unverified"
+            r.byId.effects.reason = self.recovery:effectsSummary()
             r.byId.effects.observed = self.recovery.observations
         end
         r.byId.minigame.observed = {
@@ -459,7 +544,7 @@ function Controller.new(M,bridge,options)
         if self.drop then
             if not s.flying then self.ledger:event("underwater_flight_exit_observed",now) end
             if not s.flying or self.drop.char ~= s.char or now >= self.drop.untilAt then self:clearFlight() end
-        elseif self.registry.byId.flight.requested and s.flying and s.underwater and not s.grab then
+        elseif self.registry.byId.flight.requested and s.flying and s.underwater and not s.grab and not s.ability and not s.captured then
             local before = bridge:attribute(s.char,"FeralFlyDrop")
             if bridge:setAttribute(s.char,"FeralFlyDrop",true) then
                 self.drop = {char = s.char,before = before,untilAt = now+2}
@@ -484,20 +569,28 @@ function Controller.new(M,bridge,options)
         if not self.active or self.closed then return end
         local now = bridge.clock()
         local slow = now >= self.nextSlow
-        local s = bridge:snapshot(now,slow and self.registry.byId.flight.requested)
+        local critical=self.registry.byId.minigame.requested and self.grab.active and self.grab.pending~=nil
+        self.timingCritical,bridge.deferNativeDiscovery=critical,critical
+        local s = bridge:snapshot(now,not critical and slow and self.registry.byId.flight.requested)
         self.snapshot = s
         self.grab.enabled = self.registry.byId.minigame.requested
         local clock = s.serverNow
         if clock then
             local cfg = self.grab.enabled and bridge:config("GrabV2Config")
             local native = self.grab.enabled and self.grabInput:controller(now)
+            local nativeState
+            if native and (self.grab.active or now >= (self.nextGrabPoll or 0)) then
+                nativeState=native.state();self.nextGrabPoll=now+.25
+            end
             if native and s.alive then
-                self.grab:syncNative(native.state(),clock,s.generation,cfg and cfg.PERFECT or .32,
+                self.grab:syncNative(nativeState,clock,s.generation,cfg and cfg.PERFECT or .32,
                     cfg and cfg.PASSES or 2.5,now)
             end
+            critical=critical or self.grab.enabled and self.grab.active and self.grab.pending~=nil
+            self.timingCritical,bridge.deferNativeDiscovery=critical,critical
             if not s.alive and self.grab.active then self.grab:reset("animal unavailable") end
             s.grab,s.afkWalking = self.grab.active,self.walk ~= nil
-            self.grabInput:update(self.grab,now)
+            self.grabInput:update(self.grab,now,native,nativeState)
             self.grab:tick(clock,s.generation,s.alive and self.policy:allowed("grab",s,now),
                 function(session,strike,at)
                     local sent = bridge:fire("FeralGrabV2","press",session,strike,at)
@@ -505,25 +598,28 @@ function Controller.new(M,bridge,options)
                     return sent
                 end)
         else self.grab.pending = nil; s.grab,s.afkWalking = self.grab.active,self.walk ~= nil end
-        if now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
+        if not critical and now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
         self.feeding:tick(s,now)
+        self:stepFlightHandoff(s,now)
         self.rescue:tick(s,now)
         self.combatInput:tick(s,now)
-        self.features:reconcile(s,now)
+        if not critical then self.features:reconcile(s,now) end
         self.recovery.enabled = self.registry.byId.recovery.requested
         self.recovery:tick(s,now)
         self:stepClimb(s,now)
         self:stepEscape(s,now)
-        self:stepCombat(s,now)
-        if now >= self.nextScan then
+        if not critical then self:stepCombat(s,now) end
+        self.biteReadiness=bridge:biteReadiness(s,now,self.policy)
+        if not critical and now >= self.nextScan then
             self.nextScan = now+.12
             local candidates = bridge:candidates(s,self.settings.range)
             if self.features.originalCombat and self.features.leases:valid("reach") then
                 self.guide = bridge:select(s,self.features.originalCombat,self.features.combat,candidates)
             else self.guide = nil end
+            self.guideAt=now
             self.ui:syncTracked(bridge.tracked)
         end
-        if slow then
+        if slow and not critical then
             self.nextSlow = now+.25
             self:stepFlight(s,now)
             self:stepAFK(s,now)

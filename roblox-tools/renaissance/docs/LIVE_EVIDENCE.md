@@ -1,5 +1,9 @@
 # Live validation record
 
+## Version 15.3.0 candidate
+
+128 local regressions and 18 compile checks pass, including deterministic operation comparison against preserved 15.2.1. Exact candidate staging and published CI are pending. A passive movement check through the existing Potassium runner (run 45512958870) returned the exact marker. The current hub was 15.2.1 in FERAL 2412; the user was moving normally as a Bison, not in the reported Vulture freeze. No attributes or gameplay inputs were changed. This does not establish the cause or resolution of that earlier freeze.
+
 ## Version 15.2.1 recovery correction
 
 Exact source bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17 passes all 113 service-boundary regressions and 17 compile checks locally. Published source gate: 45505688605. The supplied current WolfAnimClient bytecode supports the scoped native blend reset; its fingerprint and instruction range are recorded in V15_2_1_RECOVERY.md. These are implementation and static-contract results. Live sustained HP/condition multipliers and the final rendered pose are not confirmed.
