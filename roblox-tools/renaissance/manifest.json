@@ -35,11 +35,11 @@
       "bytes": 14211
     },
     "controller": {
-      "sha256": "e4d4340e507d2fc3b1c0f709a1abb352fd49a4a9009bab247fd76478a3d81c49",
-      "bytes": 24751
+      "sha256": "15f73eb05e6234fd6bc87ce7ba4ec65239325017a02824e869161d3a338bc259",
+      "bytes": 24872
     }
   },
-  "bundle_sha256": "0dba8b6a1f7a310573aa1006ddfb43d5f85b611a59a0e2c3e0604855daac54e1",
-  "bundle_bytes": 103793,
+  "bundle_sha256": "bc388ccfdc8bae19e7fe2dca7c24bf2fbd3f97266c205c38544735e81ea3e12f",
+  "bundle_bytes": 103914,
   "stable_clean_v14_overwritten": false
 }

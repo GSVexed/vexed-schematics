@@ -1473,7 +1473,9 @@ sources["controller"] = [============[
 local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
-    local h = { version = "15.0.0", token = tostring(math.floor(bridge.clock()*1000000)),
+    local tokenIdentity = {}
+    local h = { version = "15.0.0", tokenIdentity = tokenIdentity,
+        token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
         nextScan = 0, nextSlow = 0, nextBind = 0, nextSample = 0, nextEscape = 0,

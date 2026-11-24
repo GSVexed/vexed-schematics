@@ -6,7 +6,7 @@ All 21 approved functions have an explicit implementation and status. The compac
 
 The nine-module rewrite fixes false/OFF reconciliation, attach cleanup, duplicate renderers, native Grab V2 res handling, session wire types, duplicate presses, local rate compounding, stale config identity and native-Q double-tap risk.
 
-The local suite passes 53 service-boundary scenarios; each module, both fixtures and the bundle compile with the pinned official Luau compiler. Native/server gameplay acceptance remains unverified.
+The local suite passes 54 service-boundary scenarios; each module, both fixtures and the bundle compile with the pinned official Luau compiler. The added same-clock staging test verifies unique listener/render ownership. The first published CI gate and actual Potassium hidden-staging check passed. Native/server gameplay acceptance remains unverified.
 
 ## Rollback
 

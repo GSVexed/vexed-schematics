@@ -1,0 +1,76 @@
+{
+  "runner_run": 45441710135,
+  "cleanup_errors": 0,
+  "config_features": {
+    "mobility": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 2
+    },
+    "climb": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 6
+    },
+    "leap": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 28
+    },
+    "reach": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 8
+    },
+    "recovery": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 2
+    },
+    "speed": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 2
+    },
+    "stamina": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 6
+    },
+    "effects": {
+      "restored": true,
+      "schema_compatible": true,
+      "write_readback": true,
+      "fields": 6
+    }
+  },
+  "place_version": 2412,
+  "previous_hub_preserved": true,
+  "server_gameplay_tested": false,
+  "source_commit": "68aec605e46011b33b024102469aeac4a15528bd",
+  "native_remotes": {
+    "grab": true,
+    "feedback": true,
+    "rest": true,
+    "escape": true
+  },
+  "previous_hub_preserved_after_close": true,
+  "settings_roundtrip": true,
+  "ok": true,
+  "closed": true,
+  "render_preflight": true,
+  "owned_native_requests": 0,
+  "place_id": 108901361810209,
+  "features": 21,
+  "settings_file_capability": true,
+  "staged": true,
+  "schema": 15,
+  "modules_compiled": 9
+}

@@ -1,6 +1,6 @@
 {
   "version": "15.0.0",
-  "bundle_sha256": "0dba8b6a1f7a310573aa1006ddfb43d5f85b611a59a0e2c3e0604855daac54e1",
+  "bundle_sha256": "bc388ccfdc8bae19e7fe2dca7c24bf2fbd3f97266c205c38544735e81ea3e12f",
   "compiled": [
     "core.luau",
     "settings.luau",
@@ -18,8 +18,8 @@
   "module_parity": true,
   "rollback_hashes_unchanged": true,
   "regressions": {
-    "total": 53,
-    "passed": 53,
+    "total": 54,
+    "passed": 54,
     "failed": 0
   },
   "runtime_exit_code": 0,
@@ -114,6 +114,8 @@
     "PASS shutdown makes public action entry points inert",
     "[FERAL Renaissance 15.0.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
     "PASS clicking hub controls never counts as an attack intent",
-    "RENAISSANCE_TEST_RESULT total=53 passed=53 failed=0"
+    "[FERAL Renaissance 15.0.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS staging in the same clock tick never replaces active render or input owners",
+    "RENAISSANCE_TEST_RESULT total=54 passed=54 failed=0"
   ]
 }
