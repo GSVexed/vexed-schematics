@@ -1,5 +1,11 @@
 # Live validation record
 
+## Version 15.2.1 recovery correction
+
+The candidate passes all 111 service-boundary regressions and 17 compile checks locally. The supplied current WolfAnimClient bytecode supports the scoped native blend reset; its fingerprint and instruction range are recorded in V15_2_1_RECOVERY.md. These are implementation and static-contract results. Live sustained HP/condition multipliers and the final rendered pose are not confirmed.
+
+One bounded passive observer of the preceding active hub is being attempted through the existing paired runner. It writes no attributes and issues no native actions. Its receipt alone cannot count as execution or recovery evidence. No repeated user test is required.
+
 ## Version 15.2.0 follow-up
 
 Final source 21da4732f05897c7225fde2ffd6ea81d02be6b1b passes all 99 regressions, compilation, deterministic packaging and preserved rollback hashes in published source CI run 45494741846. This is automated service-boundary evidence, not private-server efficacy.

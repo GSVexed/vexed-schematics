@@ -45,7 +45,7 @@ Native-function access requires supported executor inspection. Without it, feedi
 
 Previous Renaissance 15.1.0:
 
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/552995031659c52e36bf8bda436d0d07d348abd6/roblox-tools/feral-renaissance-v15.1.0.lua"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/552965031659c52e36bf8bda436d0d07d348abd6/roblox-tools/feral-renaissance-v15.1.0.lua"))()
 
 Original CLEAN v14:
 

@@ -403,6 +403,25 @@ function Mock.new()
             return enum.ContextActionResult.Sink
         end,false,2000,enum.KeyCode.G)
     end
+    function w:enableNativePose()
+        -- Model the captured persistent blend and its supported override.
+        -- A false WolfRest alone takes time to stand up from a cached pose.
+        self.nativePose={sit=1,lie=1,hold=8}
+        self.renders.WolfAnim={priority=202,fn=function(dt)
+            local pose=self.nativePose
+            local char=player.Character
+            if char:GetAttribute("WolfRest")==true or char:GetAttribute("FeralDowned")==true then
+                pose.sit=math.min(1,pose.sit+dt)
+                pose.lie=math.min(1,pose.lie+dt)
+            else
+                pose.lie=math.max(0,pose.lie-dt/1.2)
+                if pose.lie<=.4 then pose.sit=math.max(0,pose.sit-dt/.8) end
+            end
+            local override=char:GetAttribute("WolfDbgRestP")
+            if kind(override)=="Vector3" then pose.sit,pose.lie,pose.hold=override.X,override.Y,override.Z end
+            self.movingRestVisible=self.hum.MoveDirection.Magnitude>.13 and (pose.sit>.01 or pose.lie>.01)
+        end}
+    end
     function w:animal(species,position)
         local char=new("Model");char.Name=species or "Wolf";char.Parent=workspace
         local hum=new("Humanoid");hum.Parent=char
@@ -462,7 +481,10 @@ function Mock.new()
         end
         run.PreAnimation:Fire()
         run.Heartbeat:Fire(dt or .05)
-        for _,record in pairs(table.clone(self.renders)) do record.fn(dt or .05) end
+        local renders={}
+        for _,record in pairs(self.renders) do table.insert(renders,record) end
+        table.sort(renders,function(a,b)return a.priority<b.priority end)
+        for _,record in ipairs(renders) do record.fn(dt or .05) end
     end
     function w:advance(seconds)
         for _=1,math.ceil(seconds/.02) do self:step(.02) end

@@ -1,4 +1,4 @@
-# Renaissance 15.2.0 architecture
+# Renaissance 15.2.1 architecture
 
 The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. This replaces fourteen embedded legacy modules with thirteen original, independently compiled modules. No raw game bytecode or reconstructed game source is bundled.
 
@@ -9,7 +9,7 @@ The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its ex
 | policy.luau | Local priorities, manual Rest sovereignty, attack windows, AFK eligibility | Shared by every controller |
 | grab.luau | Native begin/strike/res/bite/n/end sessions; deduplication, actual time, own-character grades, missed-crossing recovery | One session per character generation |
 | grab_input.luau | Reversible separation of native minigame mouse and manual key bindings | One lease per genuine native UI session |
-| recovery.luau | Native Rest, owned pose mask, deficit and recurrence handling | One Rest owner; no HP/status writes |
+| recovery.luau | Native Rest provenance, reversible native blend override, deficit and progress observation | One Rest owner; no HP/status writes |
 | feeding.luau | User-started native feeding intent, approach protection, resource observation, one stall repair | One current own-character session; no resource writes |
 | combat_input.luau | One delayed original-tryBite retry after Rest blocks a user bite | One bounded input per current character |
 | rescue.luau | Manual G water-cub attempt through native eligibility and carry protocol | One short request; native attachment observed separately |
@@ -32,9 +32,9 @@ Reach remains permanently requested, even when a compatibility conflict prevents
 
 Combat records intention, WolfBiteAt, a candidate near the expected claim window, native FeralHit feedback and later target HP. In v2412 the marker precedes the native Bite request. The hub does not observe actual outgoing Bite/BiteHit calls and never fabricates them. HP decline is a correlation. HP baselines are captured at the native marker rather than after the delayed claim, and native FeralBiteLocal targets and FeralHit replies remain separate evidence. The native HIT2.PREDICT flag is reversibly disabled so local prediction does not impersonate a confirmed impact.
 
-Recovery does not keep Rest primed at full health. Real input releases owned Rest; held attacks prevent rearming. The native post-Rest lock is preserved and reported as a possible blocker. HP recovery yields to combat. Condition recovery can request native Rest during a known combat tag when there is an injury, bleed or venom deficit; it still yields to held/recent attacks, abilities, climb/flight, capture, minigames and feeding. Ground movement alone does not block recovery. Unknown combat state blocks both purposes. Genuine manual Rest is never masked or cancelled. A pose mask establishes only local presentation.
+Recovery does not keep Rest primed at full health. Real input releases owned Rest; held attacks prevent rearming. The native post-Rest lock is preserved and reported as a possible blocker. HP recovery yields to combat. Condition recovery can request native Rest during a known combat tag when there is an injury, bleed or venom deficit; it still yields to held/recent attacks, abilities, climb/flight, capture, minigames and feeding. Ground movement alone does not block recovery. Unknown combat state blocks both purposes. Genuine manual Rest is never masked or cancelled. Explicit controls take priority before native input, including deferred native Rest taps. Same-character automatic provenance survives delayed responses and hot reload instead of expiring into manual ownership. Successfully masked echoes do not cause a timed pause. WolfDbgRestP resets only the owned native sit/lie/hold blend; manual actions, downed state, character changes and shutdown release it. A pose mask establishes only local presentation. See V15_2_1_RECOVERY.md for the exact current animation contract.
 
-The local HP reference is capped at 2x total; injury/bleed/venom references at 4x total. Base rates and Rest multipliers are coordinated to avoid 4x-by-4x local compounding. Private server calculations may ignore all client values.
+Native HP and condition Rest factors remain intact at 2x and 4x respectively. Ordinary base rates are preserved; only unexpectedly larger factors are capped in the local reference. Independent real-value observations distinguish an increase from a request and never infer a multiplier from client config. Private server calculations may ignore all client values.
 
 ## Concurrent bites and minigames
 

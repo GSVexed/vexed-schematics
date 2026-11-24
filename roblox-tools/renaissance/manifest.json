@@ -1,5 +1,5 @@
 {
-  "version": "15.2.0",
+  "version": "15.2.1",
   "game_baseline": 2412,
   "modules": {
     "core": {
@@ -23,8 +23,8 @@
       "bytes": 2989
     },
     "recovery": {
-      "sha256": "fea822a0cc24de099e3b8e580d3d8f61ca24a6489eb8af206dd009e51e48e191",
-      "bytes": 4698
+      "sha256": "2bac7b6b4b382a0ae7e41d6e17ba866bf58b81b149ca7dd11f6ffcef0e8738c0",
+      "bytes": 9230
     },
     "feeding": {
       "sha256": "9dac690ce2a4b2854e74436c9da1fa050201b91af242742934ba07d0cb1228ed",
@@ -39,23 +39,23 @@
       "bytes": 2538
     },
     "features": {
-      "sha256": "fbefc750e611238db8b4ec1a1e75e199bf866e0ad561d3170e446652f52cfe28",
-      "bytes": 12520
+      "sha256": "b5839ef6f03d64ad893e23a8d64fa622dbea7aa605f289c5646a0bda10a3e40b",
+      "bytes": 13033
     },
     "roblox": {
-      "sha256": "a583e5013de4a1a8f65e90cd893b9bd4965724734cc38ccad58d56ae413e2a71",
-      "bytes": 48534
+      "sha256": "bdd4765df364ac659b9a778b1e4ab5a8606672aa06b0de634595e02307413f81",
+      "bytes": 49033
     },
     "ui": {
-      "sha256": "cf9d0c753597379fb82143788741dd240a019f117fef0adcccf63e77ee2f638b",
-      "bytes": 14309
+      "sha256": "06aee9b430e9756d94adb0aa09642375235fe94e5032a73efaa93bf81716a877",
+      "bytes": 14311
     },
     "controller": {
-      "sha256": "57e0464ef0d2428a0baa289f10675938f785009e68a257e03698d936756acb4e",
-      "bytes": 31143
+      "sha256": "e2d221d007044522f17234c57c6b0881726e4ff9eb61b181ff13288c619750ea",
+      "bytes": 31551
     }
   },
-  "bundle_sha256": "435265c032d1c200157e2004021ab491dc7c317317c5792e0070c2b1fffc8ceb",
-  "bundle_bytes": 151722,
+  "bundle_sha256": "f53358c03fe3fb1c19b70d521d25719aca3f165a1fc8ef7927a7621fb478dcd6",
+  "bundle_bytes": 158118,
   "stable_clean_v14_overwritten": false
 }

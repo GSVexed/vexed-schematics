@@ -210,6 +210,15 @@
       "bytecode_sha256": "9a9ca75193026dcca044232ca1d7b10d8c246b6c9f6a943ee17556480b0a6ba5",
       "prototypes": 3,
       "suffix_bytes": 24
+    },
+    {
+      "name": "WolfAnimClient",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/WolfAnimClient",
+      "capture_id": 4660,
+      "bytecode_sha256": "2853919780696efd706e679a08d10a640b2cc00019c6fd4c7e106ce68528cb0f",
+      "prototypes": 155,
+      "suffix_bytes": 24,
+      "reviewed_contract": "stepRig words 3600-3760: persistent Rest blends and scoped WolfDbgRestP Vector3 input; native render binding words 2108-2133"
     }
   ]
 }

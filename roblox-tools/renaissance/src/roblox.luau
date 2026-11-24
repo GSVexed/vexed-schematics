@@ -457,6 +457,7 @@ function Roblox.new(Core, environment)
         s.holding = clamp ~= nil and clamp:IsA("ObjectValue") and clamp.Value ~= nil
             or self:attribute(char,"FeralCarcassCarry") == true
         s.ability = self:attribute(char,"FeralDeathRollLocal") == true
+            or self:attribute(char,"FeralDowned") == true
             or self:attribute(char,"FeralRolling") == true
             or self:attribute(char,"FeralTalonLock") == true
             or self:attribute(char,"FeralDiveBomb") == true
@@ -817,6 +818,13 @@ function Roblox.new(Core, environment)
         connect(self.player.CharacterAdded,character)
         connect(self.player.CharacterRemoving,function() character(nil) end)
         connect(self.player.Idled,function() hub:idle() end)
+        connect(self.player:GetAttributeChangedSignal("FeralRestTap"),function()
+            if self.UserInputService:GetFocusedTextBox() then return end
+            local now=self.clock()
+            hub.policy:input("rest",now)
+            hub.recovery:manual(now)
+            hub.combatInput:cancel();hub.feeding:cancel("manual rest control",now);hub.rescue:cancel()
+        end)
         connect(self.UserInputService.InputBegan,function(input,processed) hub:input(input,processed) end)
         connect(self.UserInputService.InputChanged,function(input)
             local kind = input.UserInputType
@@ -837,7 +845,8 @@ function Roblox.new(Core, environment)
             end
             if state == Enum.UserInputState.Begin then hub:preInput(input) end
             return Enum.ContextActionResult.Pass
-        end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
+        end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.Z,Enum.KeyCode.X,
+            Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
             Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
         scope:add(function() self.ContextActionService:UnbindAction(actionName) end)
         connect(self.UserInputService.JumpRequest,function() hub:requestFlight() end)

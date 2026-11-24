@@ -3,7 +3,34 @@ local Recovery = {}
 function Recovery.new(bridge, policy, ledger)
     local r = { state = "OFF", owned = nil, enabled = false, echoes = 0,
         backoffUntil = 0, releaseAt = -math.huge, signalAt = -math.huge,
-        nativeEchoObserved = false, writes = 0, nextRefresh = 0 }
+        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {} }
+    function r:clearPose()
+        local pose = self.pose
+        self.pose = nil
+        if pose then bridge:restoreAttribute(pose.char,"WolfDbgRestP",pose.value,pose.before) end
+    end
+    function r:holdPose(char, now)
+        if not char or char ~= bridge.player.Character or not char.Parent
+            or bridge:attribute(char,"FeralDowned") == true then self:clearPose();return false end
+        if self.pose and self.pose.char ~= char then self:clearPose() end
+        if self.pose then return bridge:attribute(char,"WolfDbgRestP") == self.pose.value end
+        -- v2412 WolfAnimClient.stepRig, words 3736-3760: this Vector3
+        -- replaces the persistent sit/lie/hold blend, not combat/downed state.
+        local pose = {char=char,before=bridge:attribute(char,"WolfDbgRestP"),value=Vector3.new(0,0,0)}
+        self.pose = pose -- record before a setter can fail after mutating
+        if not bridge:setAttribute(char,"WolfDbgRestP",pose.value) then self:clearPose();return false end
+        self.poseUntil = now+.35
+        return true
+    end
+    function r:guardPose(now)
+        if self.pose and (policy.manualRest or self.pose.char ~= bridge.player.Character
+            or bridge:attribute(self.pose.char,"FeralDowned") == true
+            or not self.owned and now >= (self.poseUntil or 0)) then self:clearPose() end
+        if self.owned and not self:holdPose(self.owned,now) then
+            self:release("native pose control unavailable",now)
+            self.backoffUntil = now+3
+        end
+    end
     function r:release(reason, now)
         local char = self.owned
         self.owned = nil
@@ -12,6 +39,7 @@ function Recovery.new(bridge, policy, ledger)
             bridge:rest(char, false)
             -- Only an echo attributed to this owner's Rest request is cleared.
             if not policy.manualRest then bridge:maskRest(char) end
+            self.poseUntil = now+.35 -- let the animator consume the reset after release
             ledger:event("owned_rest_released", now, { reason = reason })
         end
         self.state = reason or "OFF"
@@ -19,12 +47,15 @@ function Recovery.new(bridge, policy, ledger)
     function r:manual(now)
         -- Yield ownership without emitting false; native/manual Rest takes over.
         self.owned = nil
+        self.lastAutomaticCharacter = nil
+        self:clearPose()
         policy.manualRest = true
         self.state = "MANUAL"
         ledger:event("manual_rest_preserved", now)
     end
     function r:echo(s, now)
         if not s or not s.char then return end
+        if policy.manualRest then return end
         if self.owned == s.char and s.rest then
             if now <= policy.manualIntentUntil then self:manual(now); return end
             self.nativeEchoObserved = true
@@ -33,20 +64,64 @@ function Recovery.new(bridge, policy, ledger)
             local ok = bridge:maskRest(s.char)
             if ok then self.writes += 1 end
             ledger:event("owned_rest_pose_echo", now, { locallyMasked = ok })
-            if not ok or self.echoes >= 3 then
-                self:release("pose recurrence; recovery paused", now)
-                self.backoffUntil = now+15
+            if not ok then
+                self:release("native pose mask unavailable", now)
+                self.backoffUntil = now+3
             else self.state = "ECHO_OBSERVED" end
-        elseif not self.owned and s.rest and now-self.releaseAt > 2.6 then
-            self:manual(now)
-        elseif not self.owned and s.rest and now-self.releaseAt <= 2.6
-            and not policy.manualRest and now > policy.manualIntentUntil then
-            bridge:maskRest(s.char)
+        elseif not self.owned and s.rest then
+            if now <= policy.manualIntentUntil or self.lastAutomaticCharacter ~= s.char then
+                self:manual(now)
+            else
+                -- An elapsed timeout is not evidence of manual input. Keep
+                -- the provenance of our own session until a real Rest action
+                -- or character change, including while recovery is disabled.
+                if self:holdPose(s.char,now) then self.poseUntil = now+.35 end
+                bridge:maskRest(s.char)
+                ledger:event("late_owned_rest_echo",now)
+            end
         end
     end
+    function r:observe(s,now)
+        if now < (self.nextObserve or 0) then return end
+        self.nextObserve = now+.25
+        local mode = self.owned and (s.combat == false and "hp" or "effects") or "idle"
+        local previous = self.previous
+        self.previous = {char=s.char,now=now,maxHP=s.maxHP,moving=s.moving,combat=s.combat,mode=mode,
+            hp=s.hp,injury=s.injury,bleed=s.bleed,venom=s.venom}
+        if not previous or previous.char ~= s.char or previous.mode ~= mode or previous.combat ~= s.combat
+            or previous.moving ~= s.moving or previous.maxHP ~= s.maxHP or now-previous.now > 1.5 then
+            self.observations = {};return
+        end
+        if mode == "idle" then self.observations = {};return end
+        for _,key in ipairs({"hp","injury","bleed","venom"}) do
+            local a,b = previous[key],s[key]
+            if key == "hp" and s.combat ~= false or type(a) ~= "number" or type(b) ~= "number"
+                or a ~= a or b ~= b or math.abs(a)>=1e12 or math.abs(b)>=1e12
+                or key ~= "hp" and a <= 0 then self.observations[key]=nil;continue end
+            local delta = key == "hp" and b-a or a-b
+            if delta < 0 then self.observations[key]=nil;continue end
+            local item=self.observations[key] or {seconds=0,change=0}
+            self.observations[key]=item
+            item.seconds += now-previous.now;item.change += delta
+            item.rate = item.change/item.seconds
+        end
+    end
+    function r:summary()
+        local hp = self.observations.hp
+        local message = self.owned and "Recovery requested" or self.state
+        if self.owned and self.purpose == "health" then
+            message ..= hp and hp.change > .02 and " · HP rising; 2× unverified"
+                or hp and hp.seconds >= 6 and " · no HP rise observed; 2× unverified"
+                or " · watching HP; 2× unverified"
+        else message ..= " · gameplay unverified" end
+        return message
+    end
     function r:tick(s, now)
+        self:guardPose(now)
+        if s and s.alive then self:observe(s,now) end
         if policy.manualRest then
             if not s or not s.alive or not s.rest then
+                if s and s.alive and now <= policy.manualIntentUntil then self.state="MANUAL";return end
                 policy.manualRest = false
                 policy.manualIntentUntil = 0
                 policy.lastRestRelease = now
@@ -71,7 +146,11 @@ function Recovery.new(bridge, policy, ledger)
         if not deficit then self:release("armed; no recovery deficit", now); return end
         if not self.owned then
             -- Stage masking ownership BEFORE requesting native Rest.
+            if not self:holdPose(s.char,now) then
+                self.state="native pose control unavailable";self.backoffUntil=now+3;return
+            end
             self.owned = s.char
+            self.lastAutomaticCharacter = s.char
             self.echoes, self.nativeEchoObserved = 0, false
             self.echoWindow = now
             self.signalAt, self.nextRefresh = now, now+5
@@ -92,6 +171,8 @@ function Recovery.new(bridge, policy, ledger)
     function r:close(now)
         self.enabled = false
         self:release("CLOSED", now)
+        self:clearPose()
+        self.previous,self.observations,self.lastAutomaticCharacter = nil,{},nil
     end
     return r
 end

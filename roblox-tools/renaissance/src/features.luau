@@ -120,9 +120,12 @@ function Features.new(Core, bridge, registry)
             return plan
         elseif id == "recovery" then
             if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
-            -- At most 2x total local HP reference. Never edit combat exclusion.
-            return { entry(n,"HEALTH_REGEN",n.HEALTH_REGEN*2,"number"),
-                entry(n,"HEALTH_REST_MULT",1,"number") }
+            if n.HEALTH_REST_MULT < 1 then return nil,"native HP Rest multiplier unavailable" end
+            -- Keep the game's real Rest factor. Flattening it to one removed
+            -- the distinction between an actual Rest window and a local edit.
+            -- Cap only the local Rest reference at 2x; never edit combat exclusion.
+            return { entry(n,"HEALTH_REGEN",n.HEALTH_REGEN*math.min(1,2/n.HEALTH_REST_MULT),"number"),
+                entry(n,"HEALTH_REST_MULT",n.HEALTH_REST_MULT,"number") }
         elseif id == "effects" then
             local status = bridge:config("StatusConfig")
             local plan = {}
@@ -131,9 +134,11 @@ function Features.new(Core, bridge, registry)
                 if not numeric(c,{pair[2],"REST_MULT"}) or c[pair[2]] <= 0 then
                     return nil, "StatusConfig " .. pair[1] .. " schema unavailable"
                 end
-                -- Avoid v14's possible 4x base multiplied by 4x Rest = 16x.
-                table.insert(plan,entry(c,pair[2],c[pair[2]]*4,"number"))
-                table.insert(plan,entry(c,"REST_MULT",1,"number"))
+                if c.REST_MULT < 1 then return nil,"native condition Rest multiplier unavailable" end
+                -- Preserve native Rest=4 and ordinary base decay. Never
+                -- advertise a faster HUD calculation as a gameplay cure.
+                table.insert(plan,entry(c,pair[2],c[pair[2]]*math.min(1,4/c.REST_MULT),"number"))
+                table.insert(plan,entry(c,"REST_MULT",c.REST_MULT,"number"))
             end
             return plan
         elseif id == "mobility" then

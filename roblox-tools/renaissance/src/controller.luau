@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.2.0", tokenIdentity = tokenIdentity,
+    local h = { version = "15.2.1", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -74,6 +74,9 @@ function Controller.new(M,bridge,options)
     function h:characterChanged(generation)
         local now = bridge.clock()
         self.recovery:release("animal changed",now)
+        self.recovery:clearPose()
+        self.recovery.lastAutomaticCharacter,self.recovery.previous = nil,nil
+        self.recovery.observations,self.recovery.nativeEchoObserved = {},false
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.grab:reset("animal changed")
         self.grabInput:release()
@@ -165,9 +168,9 @@ function Controller.new(M,bridge,options)
         local s = bridge:snapshot(now,false)
         if s.gameMenu then return end
         if key == Enum.KeyCode.R or key == Enum.KeyCode.Z or key == Enum.KeyCode.X
-            or (click and self:isRestControl(input)) then
+            or ((click or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
             self.policy:input("rest",now)
-            if self.recovery.owned then self.recovery:manual(now) end
+            self.recovery:manual(now)
             self.combatInput:cancel();self.feeding:cancel("manual rest control",now);self.rescue:cancel()
             return
         end
@@ -352,8 +355,10 @@ function Controller.new(M,bridge,options)
         if self.settingsAvailable then r:ack("settings",true,"CLIENT","saved intent reconciled; " .. self.settingsOrigin) end
         local recovery = r.byId.recovery
         if recovery.requested then
-            recovery.reason = self.recovery.state .. " · gameplay unverified"
+            recovery.reason = self.recovery:summary()
             recovery.observed = self.recovery.nativeEchoObserved and "owned native pose echo observed locally" or "unknown"
+            r.byId.effects.reason = "Native Rest requested separately from observed clearing; 4× unverified"
+            r.byId.effects.observed = self.recovery.observations
         end
         r.byId.minigame.observed = {
             perfect = self.grab.grades.perfect,good = self.grab.grades.good,miss = self.grab.grades.miss,
@@ -534,9 +539,11 @@ function Controller.new(M,bridge,options)
         end
     end
     function h:maskPose()
+        local now = bridge.clock()
+        self.recovery:guardPose(now)
         if self.recovery.owned then
             local char = bridge.player.Character
-            self.recovery:echo({char = char,rest = bridge:attribute(char,"WolfRest") == true},bridge.clock())
+            self.recovery:echo({char = char,rest = bridge:attribute(char,"WolfRest") == true},now)
         end
     end
     function h:render(dt)
