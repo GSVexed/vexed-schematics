@@ -43,19 +43,19 @@
       "bytes": 13033
     },
     "roblox": {
-      "sha256": "bdd4765df364ac659b9a778b1e4ab5a8606672aa06b0de634595e02307413f81",
-      "bytes": 49033
+      "sha256": "7de90ee7c3a60896434e401bcee3c4f0acfb8085f492990b4590f58f8ec3a6e4",
+      "bytes": 49124
     },
     "ui": {
       "sha256": "06aee9b430e9756d94adb0aa09642375235fe94e5032a73efaa93bf81716a877",
       "bytes": 14311
     },
     "controller": {
-      "sha256": "e2d221d007044522f17234c57c6b0881726e4ff9eb61b181ff13288c619750ea",
-      "bytes": 31551
+      "sha256": "ee708f7f4e62cea336dca55f21a8480a2b98ff4c2f5e7424d7e29cded1638d84",
+      "bytes": 31653
     }
   },
-  "bundle_sha256": "f53358c03fe3fb1c19b70d521d25719aca3f165a1fc8ef7927a7621fb478dcd6",
-  "bundle_bytes": 158118,
+  "bundle_sha256": "d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9",
+  "bundle_bytes": 158311,
   "stable_clean_v14_overwritten": false
 }

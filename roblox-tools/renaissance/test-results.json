@@ -1,6 +1,6 @@
 {
   "version": "15.2.1",
-  "bundle_sha256": "f53358c03fe3fb1c19b70d521d25719aca3f165a1fc8ef7927a7621fb478dcd6",
+  "bundle_sha256": "d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9",
   "compiled": [
     "core.luau",
     "settings.luau",
@@ -23,8 +23,8 @@
   "module_parity": true,
   "rollback_hashes_unchanged": true,
   "regressions": {
-    "total": 111,
-    "passed": 111,
+    "total": 113,
+    "passed": 113,
     "failed": 0
   },
   "runtime_exit_code": 0,
@@ -84,6 +84,10 @@
     "[FERAL Renaissance 15.2.1] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
     "PASS hot reload carries automatic Rest provenance without inheriting manual Rest ownership",
     "PASS an unavailable pose setter does not issue automatic Rest or leak a partial override",
+    "[FERAL Renaissance 15.2.1] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS holding the camera mouse button never suppresses out-of-combat recovery",
+    "[FERAL Renaissance 15.2.1] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS gamepad R2 still releases recovery before the original native bite",
     "[FERAL Renaissance 15.2.1] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
     "PASS no recovery deficit sends no priming Rest requests",
     "[FERAL Renaissance 15.2.1] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
@@ -231,6 +235,6 @@
     "PASS native callback discovery avoids heap enumeration and invokes no input during startup",
     "[FERAL Renaissance 15.2.1] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
     "PASS guarded native feed cancellation never starts an inactive feeding offer",
-    "RENAISSANCE_TEST_RESULT total=111 passed=111 failed=0"
+    "RENAISSANCE_TEST_RESULT total=113 passed=113 failed=0"
   ]
 }

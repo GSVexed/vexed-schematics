@@ -177,7 +177,8 @@
       "capture_id": 4662,
       "bytecode_sha256": "7ed422d081bac217084eda4fd6c3699a17973434dad31a52ee2688ed23903ccb",
       "prototypes": 188,
-      "suffix_bytes": 24
+      "suffix_bytes": 24,
+      "reviewed_recovery_input": "prototype 95 accepts MouseButton1/ButtonR2; no MouseButton2 attack branch"
     },
     {
       "name": "CarryConfig",

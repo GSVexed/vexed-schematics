@@ -449,8 +449,9 @@ function Roblox.new(Core, environment)
         s.flying = self:attribute(char,"FeralFlyLocal") == true
         s.diveCan = self:attribute(char,"DiveCan") == true
         s.burst = self:attribute(self.player,"HudBurst") == true or self:attribute(char,"FeralFlyBurst") == true
+        -- v2412 WolfController input callback accepts MouseButton1/R2.
+        -- MouseButton2 is a camera control, not a continuously held bite.
         s.attackHeld = self.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-            or self.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
         local velocity = root.AssemblyLinearVelocity
         s.moving = hum.MoveDirection.Magnitude > .13 or Vector3.new(velocity.X,0,velocity.Z).Magnitude >= 2
         local clamp = char:FindFirstChild("FeralClamp")
@@ -847,7 +848,8 @@ function Roblox.new(Core, environment)
             return Enum.ContextActionResult.Pass
         end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.Z,Enum.KeyCode.X,
             Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
-            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
+            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,
+            Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
         scope:add(function() self.ContextActionService:UnbindAction(actionName) end)
         connect(self.UserInputService.JumpRequest,function() hub:requestFlight() end)
         connect(self.RunService.Heartbeat,function(dt)

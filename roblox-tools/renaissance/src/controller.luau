@@ -163,12 +163,13 @@ function Controller.new(M,bridge,options)
         if previous and now-previous < .1 then return end
         self.earlyInputs[input] = now
         local click = kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.MouseButton2
+        local primary = kind == Enum.UserInputType.MouseButton1
         local point = bridge.UserInputService:GetMouseLocation()
         if click and self.ui:contains(point) then return end
         local s = bridge:snapshot(now,false)
         if s.gameMenu then return end
         if key == Enum.KeyCode.R or key == Enum.KeyCode.Z or key == Enum.KeyCode.X
-            or ((click or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
+            or ((primary or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
             self.policy:input("rest",now)
             self.recovery:manual(now)
             self.combatInput:cancel();self.feeding:cancel("manual rest control",now);self.rescue:cancel()
@@ -178,17 +179,17 @@ function Controller.new(M,bridge,options)
             self.grab:manual()
             return
         end
-        if key == Enum.KeyCode.E or (click or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
+        if key == Enum.KeyCode.E or (primary or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
             self.feeding:input(s,now)
             self.policy:input("action",now)
             self.recovery:release("manual feeding input",now)
             self.combatInput:cancel();self.rescue:cancel()
             return
         end
-        if click then
+        if primary or key == Enum.KeyCode.ButtonR2 then
             self.policy:input("attack",now)
             self.recovery:release("attack input",now)
-            if kind == Enum.UserInputType.MouseButton1 then
+            if primary or key == Enum.KeyCode.ButtonR2 then
                 self.feeding:attack(s,now);self.rescue:cancel()
                 local tx = { intent = now, lock = self.policy:restLocked(now), generation = s.generation }
                 self.lastIntent = tx

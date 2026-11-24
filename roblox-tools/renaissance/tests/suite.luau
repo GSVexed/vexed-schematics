@@ -284,6 +284,25 @@ test("an unavailable pose setter does not issue automatic Rest or leak a partial
     eq(h.recovery.owned,nil);eq(w.player.Character:GetAttribute("WolfDbgRestP"),nil)
     eq(#w.calls,0);h:close()
 end)
+test("holding the camera mouse button never suppresses out-of-combat recovery",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    w.held=E.UserInputType.MouseButton2;w:input(nil,E.UserInputType.MouseButton2);w:advance(7)
+    eq(h.recovery.owned,w.player.Character);eq(h.snapshot.attackHeld,false)
+    eq(h.ledger.counts.attack_intent,nil)
+    for _,call in ipairs(w.calls) do
+        if call.args[1]=="Rest" then eq(call.args[2],true) end
+    end
+    w.hum.Health=100;w:advance(.1);eq(h.recovery.owned,nil)
+    w.hum.Health=80;w:advance(.1);eq(h.recovery.owned,w.player.Character);h:close()
+end)
+test("gamepad R2 still releases recovery before the original native bite",function()
+    local w=Mock.new();w:enableNativeActions();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    w:input(E.KeyCode.ButtonR2,E.UserInputType.Gamepad1)
+    eq(h.recovery.owned,nil);eq(h.ledger.counts.attack_intent,1)
+    w:advance(.9);eq(w.nativeBites,1);eq(h.ledger.counts.native_bite_buffer_released,1);h:close()
+end)
 test("no recovery deficit sends no priming Rest requests",function()
     local w,h=boot({recovery=true});w:advance(3)
     eq(#w.calls,0);eq(h.recovery.owned,nil);h:close()

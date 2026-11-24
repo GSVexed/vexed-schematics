@@ -10,6 +10,8 @@ This patch addresses automatic recovery stopping unexpectedly and a resting pose
 4. Rest-key handling previously ran after the native action because those keys were absent from the hub's earlier priority binding. The binding now records manual intent before passing the keys through. Native Rest taps and touch Rest controls also hand ownership back to the player. A brief deferred native state is not immediately mistaken for the end of that manual intent.
 5. The old client configuration flattened native Rest multipliers to one and moved their values into the base rate. The patch preserves native HP Rest=2 and condition Rest=4 with ordinary base rates. This retains native Rest semantics and avoids a cosmetic client calculation being presented as an actual health/status improvement. Larger unexpected client factors remain capped at the intended total reference.
 
+6. The previous policy treated held MouseButton2 as an attack. The current native WolfController prototype 95 accepts MouseButton1 or ButtonR2; camera mouse input must not continuously suppress recovery or manufacture attack intents. Actual left-mouse/R2 bites still release owned Rest.
+
 ## Evidence boundaries
 
 The animation input is grounded in the supplied v2412 bytecode, not a guessed animation ID or a global animation hook. WolfAnimClient fingerprint: 2853919780696efd706e679a08d10a640b2cc00019c6fd4c7e106ce68528cb0f; 155 prototypes; 24-byte suffix. The captured animator binds WolfAnim at the native render priority plus two. The existing hub pose guard runs before that binding.
@@ -20,7 +22,7 @@ No HP, injury, bleed or venom attribute is overwritten. The row distinguishes wa
 
 ## Validation
 
-All 111 service-boundary scenarios and 17 compiled files pass locally. Twelve added scenarios cover persistent native pose blends, late echoes, manual priority, Rest taps, exact restoration/external replacement, downed state, native factors, unchanged HP, actual HP progress, independent conditions, hot reload and setter failure. The existing simultaneous bite/minigame, feeding, carry, saved settings and lifecycle scenarios remain included.
+All 113 service-boundary scenarios and 17 compiled files pass locally. Fourteen added scenarios cover persistent native pose blends, late echoes, manual priority, Rest taps, exact restoration/external replacement, downed state, native factors, unchanged HP, actual HP progress, independent conditions, hot reload, setter failure, camera input and gamepad R2. The existing simultaneous bite/minigame, feeding, carry, saved settings and lifecycle scenarios remain included.
 
 Real sustained 2× HP recovery, 4× condition clearance and final rendered-pose behavior require a confirmed live result. The patch never treats a sent Rest request or a successful local mask as that result. Current native attack, feeding, movement and combat exclusions still apply; recovery cannot be described as uninterrupted across those actions.
 

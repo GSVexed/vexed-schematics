@@ -2,9 +2,11 @@
 
 ## Version 15.2.1 recovery correction
 
-The candidate passes all 111 service-boundary regressions and 17 compile checks locally. The supplied current WolfAnimClient bytecode supports the scoped native blend reset; its fingerprint and instruction range are recorded in V15_2_1_RECOVERY.md. These are implementation and static-contract results. Live sustained HP/condition multipliers and the final rendered pose are not confirmed.
+The candidate passes all 113 service-boundary regressions and 17 compile checks locally. The supplied current WolfAnimClient bytecode supports the scoped native blend reset; its fingerprint and instruction range are recorded in V15_2_1_RECOVERY.md. These are implementation and static-contract results. Live sustained HP/condition multipliers and the final rendered pose are not confirmed.
 
-One bounded passive observer of the preceding active hub is being attempted through the existing paired runner. It writes no attributes and issues no native actions. Its receipt alone cannot count as execution or recovery evidence. No repeated user test is required.
+Private runner run 45505057539 returned the exact validated passive-observer marker through Potassium. It observed the existing 15.2.0 hub in FERAL 2412 for thirteen samples, without inputs, attribute writes or native gameplay requests. Own HP equalled MaxHealth throughout, with both increasing together during growth; these changes are not regeneration evidence. The recovery reason remained attack priority, while manual Rest and automatic Rest ownership were false. The sample did not record mouse-button state, so it cannot identify which input caused that reason. Independent current-bytecode inspection found the incorrect right-mouse attack gate and grounded its correction.
+
+This confirms the current runner-to-executor route works. It does not validate the candidate's live pose correction or sustained recovery rates. The source/compile checks and exact candidate staging are tracked separately. No user-driven repeated diagnostic test was requested.
 
 ## Version 15.2.0 follow-up
 

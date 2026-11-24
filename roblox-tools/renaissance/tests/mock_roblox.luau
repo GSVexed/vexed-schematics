@@ -364,7 +364,7 @@ function Mock.new()
             return enum.ContextActionResult.Sink
         end,false,2000,enum.KeyCode.E)
         local function onInput(input,processed)
-            if not processed and input.UserInputType==enum.UserInputType.MouseButton1 then tryBite() end
+            if not processed and (input.UserInputType==enum.UserInputType.MouseButton1 or input.KeyCode==enum.KeyCode.ButtonR2) then tryBite() end
         end
         self:registerNative(onInput,"WolfController","onInput",function()return {tryBite}end)
         uis.InputBegan:Connect(onInput)
