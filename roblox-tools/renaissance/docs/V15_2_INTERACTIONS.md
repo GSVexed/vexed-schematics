@@ -19,6 +19,12 @@ The source-traces index records the exact capture fingerprints. Raw game program
 | WolfController prototypes 15/16 | The native bite marker precedes the delayed claim. Sampling HP only at claim time could miss an early decline. Baselines now start at the marker; native local target signals, replies and HP correlations remain separate observations. |
 | CarryConfig 98 and FeralCarryClient 4622 | Ordinary cub pickup uses native canCarry and FeralLunge carry. Native age, size, species/diet and range rules are retained. CarryConfig has a species WATER_OK table, but the captured client scan/press path does not read it. Editing that local table would not establish a server-side water fix. |
 
+## Executor compatibility finding
+
+The actual Potassium stage check passed module/UI compatibility but exposed slow native discovery. The follow-up returned heap lists with 944,824 to 2,306,709 entries even with getgc(false); most inspected entries were not functions. The capabilities and target scripts were present. The earlier 384-raw-entry budget had not reached the needed functions.
+
+Both lookups now share one snapshot, progressively discard non-function entries, and inspect a function-only list. The raw snapshot is released as it is consumed and all discovery state is released on shutdown. A regression uses a 200,000-entry non-function prefix to verify one enumeration, successful lookup and cleanup. This is a response to observed executor behavior, not an assumed capability.
+
 ## Resulting behavior
 
 The tracker and renderer both require actual player-character ownership. The existing 24-player and 300/600/900-stud tracking limits stay intact. Outlines remain hollow and use current health: green at full health, yellow at half, red near zero, neutral when HP is unknown. Names remain plain and pack-coloured. Floating HP percentages and distances are removed.
@@ -31,6 +37,6 @@ G keeps normal carry/drop behavior unless an eligible friendly cub in water is s
 
 ## Validation and limits
 
-96 service-boundary scenarios pass locally, including player/NPC identity, real-player-only rendering, live health-colour updates, protected/friendly selection, fresh geometry, post-Rest native retry, long feeding approaches, one stall repair, actual progress, cancellation, water-exit rescue, unconfirmed pickup timeout, native feedback and concurrent minigame timing.
+97 service-boundary scenarios pass locally, including player/NPC identity, real-player-only rendering, live health-colour updates, protected/friendly selection, fresh geometry, post-Rest native retry, long feeding approaches, one stall repair, actual progress, cancellation, water-exit rescue, unconfirmed pickup timeout, native feedback and concurrent minigame timing.
 
 These fixtures simulate the verified client contract. Live reduced ghost-hit frequency, repaired hunger/thirst progress, water-cub pickup, extra accepted reach and continuous 4x condition clearance require actual gameplay evidence. Private server handlers were not captured. Universal pickup while swimming or submerged is not established. New executor validation is recorded separately in LIVE_EVIDENCE.md; earlier-version results do not validate the new source.

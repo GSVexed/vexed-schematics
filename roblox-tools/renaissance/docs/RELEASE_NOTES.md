@@ -1,6 +1,6 @@
 # Renaissance 15.2.0 — release record
 
-Candidate status: local compilation and all 96 service-boundary regressions pass. Published CI and new executor validation are pending. The stable launcher still pins 15.1.0; release.json records the currently released pin until promotion.
+Candidate status: local compilation and all 97 service-boundary regressions pass. Published CI and new executor validation are pending. The stable launcher still pins 15.1.0; release.json records the currently released pin until promotion.
 
 ## Changes
 
@@ -21,7 +21,7 @@ The 21 retained feature records, four tabs, Right Shift, saved settings and perm
 | Gate | Result |
 |---|---|
 | Local compile | 13 modules, 2 fixtures, versioned bundle and launcher pass |
-| Local regressions | 96/96 pass |
+| Local regressions | 97/97 pass |
 | Embedded source parity / rollback hashes | Pass |
 | Published source CI | Pending |
 | New actual executor compatibility | Pending |
@@ -45,7 +45,7 @@ Native-function access requires supported executor inspection. Without it, feedi
 
 Previous Renaissance 15.1.0:
 
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/552965031659c52e36bf8bda436d0d07d348abd6/roblox-tools/feral-renaissance-v15.1.0.lua"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/552975031659c52e36bf8bda436d0d07d348abd6/roblox-tools/feral-renaissance-v15.1.0.lua"))()
 
 Original CLEAN v14:
 

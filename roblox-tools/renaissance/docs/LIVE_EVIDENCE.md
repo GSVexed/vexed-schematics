@@ -2,7 +2,7 @@
 
 ## Version 15.2.0 follow-up
 
-The new source passes 96 local service-boundary regressions, compilation, embedded parity and rollback checks. Published CI and a scoped stage-only executor check are pending. Earlier executor results below do not establish compatibility or gameplay efficacy for 15.2.
+The new source passes 97 local service-boundary regressions, compilation, embedded parity and rollback checks. Published CI and a scoped stage-only executor check are pending. Earlier executor results below do not establish compatibility or gameplay efficacy for 15.2.
 
 ## Version 15.1.0 follow-up
 
@@ -36,7 +36,7 @@ Private runner run 45441710135 executed that exact pinned source through Potassi
 
 ## Running release
 
-Final source 59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600 passed the published compile/regression gate in run 45442296264, including 54 regression scenarios.
+Final source 59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600 passed the published compile/regression gate in run 45442297264, including 54 regression scenarios.
 
 Private runner run 45442549339 then validated that exact source through Potassium in FERAL version 2412. The machine-readable result is in live-runtime-result.json.
 

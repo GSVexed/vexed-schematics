@@ -577,6 +577,7 @@ function Controller.new(M,bridge,options)
             function() self.grabInput:close() end,
             function() self.feeding:close(bridge.clock()) end,
             function() self.combatInput:cancel();self.rescue:cancel() end,
+            function() bridge:closeNativeScan() end,
             function() self:stopWalk("shutdown") end,
             function() self:clearFlight() end,
             function() self.features:close() end,

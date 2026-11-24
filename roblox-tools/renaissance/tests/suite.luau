@@ -731,5 +731,19 @@ test("feeding and bite coordination preserve automatic minigame timing",function
     eq(w.nativeBites,1);eq(h.grab.presses,1);eq(w.nativeManualPresses,nil);eq(h.recovery.owned,nil);h:close()
 end)
 
+test("one shared native scan discards a large non-function heap and releases its snapshots",function()
+    local w=Mock.new();w:enableNativeGrab();w:enableNativeActions()
+    local original=w.env.getgc;local calls=0
+    w.env.getgc=function()
+        calls+=1;local pool=table.create(200000,false)
+        for _,fn in ipairs(original())do table.insert(pool,fn)end
+        return pool
+    end
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.4)
+    eq(calls,1);assert(h.bridge.grabController);assert(h.bridge.wolfActions.tryBite)
+    assert(h.bridge.wolfActions.toggleFeed);assert(h.bridge.wolfActions.cancelFeed)
+    eq(h.bridge.nativeScan,nil);h:close();eq(h.bridge.grabDiscovery,nil);eq(h.bridge.wolfDiscovery,nil)
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

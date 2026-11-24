@@ -116,15 +116,15 @@ function Roblox.new(Core, environment)
             if not ok or type(source) ~= "string" or not string.find(source,"FeralGrabV2UI",1,true) then return nil end
             if type(getfenv) == "function" then
                 local valid,env = pcall(getfenv,fn)
-                if valid and env.script ~= nil and env.script ~= scriptObject then return nil end
+                if valid and type(env) == "table" and env.script ~= nil and env.script ~= scriptObject then return nil end
             end
             return name
         end
-        if not self.grabDiscovery then
+        local pool,source=self:nativeFunctions(now)
+        if not pool then return nil end
+        if not self.grabDiscovery or self.grabDiscovery.source~=source then
             self.nextGrabDiscovery = now+30
-            local ok,pool = pcall(getgc,false)
-            if not ok or type(pool) ~= "table" then return nil end
-            self.grabDiscovery = {script=scriptObject,pool=pool,index=1}
+            self.grabDiscovery = {script=scriptObject,pool=pool,index=1,source=source}
         end
         -- Resume after the previous slice; a large GC pool must not repeatedly
         -- scan only its prefix and never reach the native UI closure.
@@ -174,14 +174,48 @@ function Roblox.new(Core, environment)
                     end
                     self.grabController = native
                     self.grabDiscovery = nil
+                    self:releaseNativeScan()
                     return native
                 end
             end
         end
-        self.grabDiscovery = nil
+        if source.complete then self.grabDiscovery = nil end
         return nil
     end
     function b:isClimbing(char) return self:attribute(char,"FeralClimbLocal") == true end
+    function b:nativeFunctions(now)
+        local scan=self.nativeScan
+        if scan and scan.complete and now>=(scan.refreshAt or math.huge) then scan=nil end
+        if not scan then
+            if type(getgc)~="function" or now<(self.nextNativeScan or 0) then return nil end
+            self.nextNativeScan=now+30
+            local ok,raw=pcall(getgc,false)
+            if not ok or type(raw)~="table" then return nil end
+            scan={raw=raw,index=1,total=#raw,functions={},complete=false,refreshAt=now+30}
+            self.nativeScan=scan
+        end
+        if not scan.complete then
+            local started,count=self.clock(),0
+            while scan.index<=scan.total and count<32768 do
+                local index=scan.index
+                local value=scan.raw[index]
+                scan.raw[index]=nil -- release this owned snapshot entry immediately
+                scan.index+=1;count+=1
+                if type(value)=="function" then table.insert(scan.functions,value) end
+                if count%256==0 and self.clock()-started>.003 then break end
+            end
+            if scan.index>scan.total then scan.raw=nil;scan.complete=true end
+        end
+        return scan.functions,scan
+    end
+    function b:releaseNativeScan()
+        local native=self.wolfActions
+        if native and native.tryBite and native.toggleFeed and native.cancelFeed
+            and not self.wolfDiscovery and not self.grabDiscovery then self.nativeScan=nil;self.nextNativeScan=0 end
+    end
+    function b:closeNativeScan()
+        self.nativeScan,self.wolfDiscovery,self.grabDiscovery=nil,nil,nil
+    end
     function b:upvalues(fn)
         local many = type(debug.getupvalues) == "function" and debug.getupvalues
             or type(getupvalues) == "function" and getupvalues
@@ -222,12 +256,12 @@ function Roblox.new(Core, environment)
             end
             return name
         end
-        if not self.wolfDiscovery then
+        local pool,source=self:nativeFunctions(now)
+        if not pool then return native end
+        if not self.wolfDiscovery or self.wolfDiscovery.source~=source then
             self.nextWolfDiscovery = now+30
-            local ok,pool = pcall(getgc,false)
-            if not ok or type(pool) ~= "table" then return native end
             native = native or {script=ownScript}
-            self.wolfActions,self.wolfDiscovery = native,{pool=pool,index=1}
+            self.wolfActions,self.wolfDiscovery = native,{pool=pool,index=1,source=source}
         end
         local scan,started,count = self.wolfDiscovery,self.clock(),0
         local remote = self.ReplicatedStorage:FindFirstChild("WolfActions")
@@ -250,7 +284,8 @@ function Roblox.new(Core, environment)
             end
             if native.tryBite and native.toggleFeed and native.cancelFeed then break end
         end
-        self.wolfDiscovery = nil
+        if source.complete or native.tryBite and native.toggleFeed and native.cancelFeed then self.wolfDiscovery = nil end
+        self:releaseNativeScan()
         return native
     end
     function b:nativeFeedState(now)

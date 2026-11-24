@@ -10,7 +10,7 @@ CLEAN v14, its clean loader and complete 15.0.0/15.1.0 bundles remain byte-for-b
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-The stable launcher remains pinned to 15.1.0 until the 15.2.0 release gates pass. The new source has passed local compilation and 96 regression scenarios. Published CI and new executor validation are pending; gameplay efficacy remains unverified.
+The stable launcher remains pinned to 15.1.0 until the 15.2.0 release gates pass. The new source has passed local compilation and 97 regression scenarios. Published CI and new executor validation are pending; gameplay efficacy remains unverified.
 
 ## Build and test
 
