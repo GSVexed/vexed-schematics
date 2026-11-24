@@ -1,0 +1,183 @@
+{
+  "baseline": 2412,
+  "capture_archive_sha256": "63d728715793e69e5c91dcaa1a17fb511ade651a1a06feddbfa37b20b354e777",
+  "verified_payloads": 943,
+  "unique_programs": 383,
+  "prototypes": 6386,
+  "instruction_words": 866208,
+  "constants": 173149,
+  "raw_programs_executed": false,
+  "raw_programs_published": false,
+  "source_baseline_commit": "158474ba80c0d613c3427399f24059341369acc8",
+  "official_luau_toolchain_commit": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+  "traces": [
+    {
+      "name": "AfkConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/AfkConfig",
+      "capture_id": 36,
+      "bytecode_sha256": "d48f61b1bee4bfc9114834909fa6217217c68613b2ec19efc73ec975f350ea1b",
+      "prototypes": 1,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "CombatConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/CombatConfig",
+      "capture_id": 47,
+      "bytecode_sha256": "b81ca362867ad87bdd9763a5898c4e31c0dcec652ea800e7f89541257497501f",
+      "prototypes": 16,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralActions",
+      "capture_path": "game/StarterPlayer/StarterPlayerScripts/FeralActions",
+      "capture_id": 15575,
+      "bytecode_sha256": "507854d3ea2bdf5091902695bec0a2573e11a7370b04c344c32394b3a7abeadd",
+      "prototypes": 28,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralAfk",
+      "capture_path": "game/StarterPlayer/StarterPlayerScripts/FeralAfk",
+      "capture_id": 15574,
+      "bytecode_sha256": "53142febb0db960c08acaeac6aee998577d4b764c6dcec944915b04e507a59a5",
+      "prototypes": 17,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralClimb",
+      "capture_path": "game/StarterPlayer/StarterPlayerScripts/FeralClimb",
+      "capture_id": 15584,
+      "bytecode_sha256": "097659768ed1a27fc934a547052e27ef10bf090aaaf7d4a02512e78ca92d5d6b",
+      "prototypes": 32,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralCombatClient",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralCombatClient",
+      "capture_id": 4564,
+      "bytecode_sha256": "173738ad9a0e19f0aa99716a21f5468f75d28d59cad47e869cc448855beaf7df",
+      "prototypes": 144,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralFlight",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralFlight",
+      "capture_id": 4628,
+      "bytecode_sha256": "5f8cc157580b14f66165b8c9591d07d76a082ebc79f2bcc7f15f412ef298173c",
+      "prototypes": 33,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralGrabV2UI",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralGrabV2UI",
+      "capture_id": 4659,
+      "bytecode_sha256": "2259c18b15f7bd5d2b8fdc434924e2520a87349a9bbb92276c644aa80ec7df23",
+      "prototypes": 97,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralLungeUI",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralLungeUI",
+      "capture_id": 4657,
+      "bytecode_sha256": "971b8d1f190127a8daf07fcff7a785ef9c3d8cfa53e17da3fb344e38df6d89a8",
+      "prototypes": 39,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralNameTags",
+      "capture_path": "game/StarterPlayer/StarterPlayerScripts/FeralNameTags",
+      "capture_id": 15566,
+      "bytecode_sha256": "cc56b913dd6ce4062279a62ce9942794c3c755b71450c016e470d6e21d213e7a",
+      "prototypes": 7,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralSurvivalUI",
+      "capture_path": "game/StarterPlayer/StarterPlayerScripts/FeralSurvivalUI",
+      "capture_id": 15583,
+      "bytecode_sha256": "1e48e02159251f6a6062ef38656fc713ec6c13d3d275a72b7a94e7bbbdc2d3db",
+      "prototypes": 62,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FeralVenomClient",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/FeralVenomClient",
+      "capture_id": 4646,
+      "bytecode_sha256": "af96633b4d148a9ca459360d1e37d1b52a86c1d4fca5d4e3ded9034f5a536306",
+      "prototypes": 8,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "FlightConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/FlightConfig",
+      "capture_id": 65,
+      "bytecode_sha256": "b5ff1c5cbffe80bcb71d282b2dcbe9a9f12c34f404193fbe4ce4ea5bf48f3d80",
+      "prototypes": 5,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "GrabV2Config",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/GrabV2Config",
+      "capture_id": 39,
+      "bytecode_sha256": "a4474c7d28642aeebc3c73784ac7aae403606b3fdc8219de59f23c1d116f723f",
+      "prototypes": 1,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "JumpLeapConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/JumpLeapConfig",
+      "capture_id": 89,
+      "bytecode_sha256": "2db42aeedb6682f1965ae5402f1482a3fdebcc5b1ba0d1399b615796963c4321",
+      "prototypes": 2,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "NeedsConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/NeedsConfig",
+      "capture_id": 8,
+      "bytecode_sha256": "cdb9998b28dc121ced2b8956089267d0b89ebfb4c10eaa5cb9b74eaf5c16df31",
+      "prototypes": 1,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "PassiveConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/PassiveConfig",
+      "capture_id": 50,
+      "bytecode_sha256": "3bae7c3263be8b7e8dc774b168592fddf20c0ee8f67a358a99d55f002efc194a",
+      "prototypes": 5,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "StatusConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/StatusConfig",
+      "capture_id": 14,
+      "bytecode_sha256": "327fca03aee58d60341f4aee63320037a9b527290adfad47dc0bcaae12209147",
+      "prototypes": 11,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "SurvivalConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/SurvivalConfig",
+      "capture_id": 43,
+      "bytecode_sha256": "e6c5967bcc14e66090963227b06811864e27801e7673b766970d85de2ec15093",
+      "prototypes": 8,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "VenomConfig",
+      "capture_path": "game/ReplicatedStorage/FeralWorld/VenomConfig",
+      "capture_id": 75,
+      "bytecode_sha256": "99ce8a3dd278401e531098a386c5a804ad41878bd4731c584c17097f6528bb61",
+      "prototypes": 3,
+      "suffix_bytes": 24
+    },
+    {
+      "name": "WolfController",
+      "capture_path": "game/Players/LocalPlayer/PlayerScripts/WolfController",
+      "capture_id": 4662,
+      "bytecode_sha256": "7ed422d081bac217084eda4fd6c3699a17973434dad31a52ee2688ed23903ccb",
+      "prototypes": 188,
+      "suffix_bytes": 24
+    }
+  ]
+}

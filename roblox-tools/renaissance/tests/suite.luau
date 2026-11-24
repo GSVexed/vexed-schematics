@@ -1,0 +1,389 @@
+-- BUNDLE and MOCK_SOURCE are injected verbatim by run_tests.py.
+local Mock = assert(loadstring(MOCK_SOURCE))()
+local tests,failures = 0,{}
+local function test(name,fn)
+    tests += 1
+    local ok,why = pcall(fn)
+    if ok then print("PASS "..name)
+    else table.insert(failures,name..": "..tostring(why)); print("FAIL "..name..": "..tostring(why)) end
+end
+local function eq(a,b)
+    assert(a==b,"expected "..tostring(b)..", got "..tostring(a))
+end
+local function close(a,b) assert(math.abs(a-b)<1e-8,"numbers differ") end
+local function load(w,options)
+    return assert(w.env.loadstring(BUNDLE))(options)
+end
+local function modules()
+    local w=Mock.new()
+    return load(w,{inspect=true}),w
+end
+local function boot(settings)
+    local w=Mock.new()
+    local h=load(w,{settings={states=settings or {}}})
+    w:step(.02)
+    assert(h.active,h.lastError or "not active")
+    return w,h
+end
+local E=Mock.Enum
+
+test("exactly 21 retained features and permanent reach",function()
+    local M=modules();local r=M.core.registry()
+    eq(#r.order,21);r:request("reach",false);eq(r.byId.reach.requested,true)
+    eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
+    for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
+end)
+test("lease transaction rolls back earlier fields on rejection",function()
+    local M=modules();local l=M.core.leases();local first={value=4}
+    local locked=table.freeze({value=9})
+    local ok=l:apply("a",{{target=first,key="value",value=8,kind="number"},{target=locked,key="value",value=3,kind="number"}})
+    eq(ok,false);eq(first.value,4);eq(l.owners.a,nil)
+end)
+test("lease restores nil and rejects overlapping owners",function()
+    local M=modules();local l=M.core.leases();local t={}
+    eq(l:apply("a",{{target=t,key="optional",value=true}}),true)
+    eq(l:apply("b",{{target=t,key="optional",value=false}}),false)
+    l:release("a");eq(t.optional,nil)
+end)
+test("lease preserves external changes on shutdown",function()
+    local M=modules();local l=M.core.leases();local t={x=1}
+    l:apply("a",{{target=t,key="x",value=2}});t.x=3;l:close();eq(t.x,3);eq(l.conflicts,1)
+end)
+test("lease acknowledges equal values and mutation-then-error unwinds",function()
+    local M=modules();local l=M.core.leases();local backing={x=1}
+    local t=setmetatable({},{
+        __index=backing,
+        __newindex=function(_,k,v)backing[k]=v;if v==3 then error("mutated then threw")end end,
+    })
+    eq(l:apply("a",{{target=t,key="x",value=3}}),false);eq(backing.x,1)
+    eq(l:apply("b",{{target=t,key="x",value=1}}),true);eq(l:valid("b"),true);l:close()
+end)
+test("cleanup runs every owner despite one failure and is idempotent",function()
+    local M=modules();local s=M.core.scope();local count=0
+    s:add(function()count+=1 end);s:add(function()error("broken cleanup")end);s:add(function()count+=1 end)
+    s:close();s:close();eq(count,2);eq(#s.errors,1)
+end)
+test("legacy settings migrate ON and OFF and ignore removed features",function()
+    local M=modules();local p=M.settings.sanitize({states={endurance=true,recovery=false,tags=false,nightVision=true,walls=true},range=900},M.core.specs)
+    eq(p.states.stamina,true);eq(p.states.recovery,false);eq(p.states.tags,false);eq(p.states.nightVision,nil);eq(p.walls,true);eq(p.range,900)
+end)
+test("settings reject malformed values and impossible range",function()
+    local M=modules();local p=M.settings.sanitize({states={esp="yes",speed=1,leap=false},range=1/0,tab="removed"},M.core.specs)
+    eq(p.states.esp,false);eq(p.states.speed,false);eq(p.range,600);eq(p.tab,"Survival")
+end)
+test("failed settings writes retain previous file and explicit false",function()
+    local M=modules();local store={};local blocked=false
+    local io={read=function(path)assert(store[path]);return store[path]end,
+        write=function(path,value)if blocked then error("disk full")end;store[path]=value;return true end}
+    local p=M.settings.sanitize({states={tags=true}},M.core.specs)
+    eq(M.settings.save(io,p,M.core.specs),true);blocked=true;p.states.tags=false
+    eq(M.settings.save(io,p,M.core.specs),false);eq(store[M.settings.path].states.tags,true)
+end)
+test("corrupt primary settings fall back to backup",function()
+    local M=modules()
+    local p,origin=M.settings.load({read=function(path)
+        if path==M.settings.path then error("bad JSON")end
+        return {schema=15,states={tags=false,esp=true},range=300}
+    end},M.core.specs)
+    eq(origin,"migrated");eq(p.states.tags,false);eq(p.states.esp,true);eq(p.range,300)
+end)
+test("boot reconciles every false state and all 21 have statuses",function()
+    local w,h=boot()
+    for _,f in ipairs(h.registry.order) do
+        if not f.permanent then eq(f.requested,false);eq(f.applied,false) end
+        assert(f.state~="" and f.reason~="")
+    end
+    eq(h.grab.enabled,false);eq(h.recovery.enabled,false);eq(w:count("Highlight"),0)
+    h:close();eq(w:connections(),0)
+end)
+test("all opt-in client features wire together and clean exactly",function()
+    local M=modules();local states={}
+    for _,spec in ipairs(M.core.specs) do if not spec.permanent and not spec.linked then states[spec[1]]=true end end
+    local w,h=boot(states);w:advance(1.5)
+    assert(h.active,h.lastError);eq(h.registry.byId.stamina.applied,true);eq(h.registry.byId.effects.applied,true)
+    eq(w.configs.NeedsConfig.HEALTH_NO_REGEN_IN_COMBAT,true)
+    close(w.configs.StatusConfig.INJURY.HEAL*w.configs.StatusConfig.INJURY.REST_MULT,.45*4)
+    h:close();eq(w:connections(),0);close(w.configs.CombatConfig.REACH,1.45)
+    close(w.configs.NeedsConfig.STAMINA_REGEN,1.31);eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),nil)
+    close(w.configs.JumpLeapConfig.BODY_LENGTHS.Cobra,0)
+end)
+test("partial GUI attach failure preserves existing hub",function()
+    local w=Mock.new();local retired=0
+    w.localEnvironment.FERAL_NOVA_PRIME_ACTIVE={close=function()retired+=1 end}
+    w.failure="instance:TextLabel"
+    local ok=pcall(load,w,{})
+    eq(ok,false);eq(retired,0);eq(w:connections(),0);eq(w:count("ScreenGui"),0)
+end)
+test("late render attach failure unwinds GUI listeners and CAS",function()
+    local w=Mock.new();local retired=0
+    w.localEnvironment.FERAL_NOVA_PRIME_ACTIVE={close=function()retired+=1 end}
+    w.failure="render"
+    eq(pcall(load,w,{}),false);eq(retired,0);eq(w:connections(),0);eq(w:count("ScreenGui"),0)
+end)
+test("stage-only live preflight has no config or remote effects",function()
+    local w=Mock.new();local h=load(w,{stageOnly=true,settings={states={recovery=true,stamina=true}}})
+    eq(h.ready,true);eq(h.active,false);eq(#w.calls,0);close(w.configs.CombatConfig.REACH,1.45)
+    w:advance(.2);eq(#w.calls,0);h:close();eq(w:connections(),0)
+end)
+test("hot reload closes old controller once and leaves one GUI and scheduler",function()
+    local w,h=boot({esp=true,tags=false});w:enemy(2);w:advance(.2)
+    local count=w:connections();local oldGUI=h.ui.gui
+    local newer=load(w,{settings={states={esp=true,tags=false}}});w:advance(.2)
+    eq(h.closed,true);eq(oldGUI._destroyed,true);eq(w:count("ScreenGui"),1)
+    eq(w:connections(),count);assert(newer.active,newer.lastError)
+    newer:close();eq(w:connections(),0);eq(w:count("Highlight"),0)
+end)
+test("respawn restores old flag and applies new character once",function()
+    local w,h=boot({stamina=true,recovery=true});local old=w.player.Character
+    eq(old:GetAttribute("WolfDbgNoStamina"),true);local char=w:spawn("BaldEagle");w:advance(.1)
+    eq(old:GetAttribute("WolfDbgNoStamina"),nil);eq(char:GetAttribute("WolfDbgNoStamina"),true)
+    eq(h.grab.active,false);eq(h.climbQueue,nil);h:close();eq(w:connections(),0)
+end)
+test("manual Rest survives recovery disable and shutdown",function()
+    local w=Mock.new();w.player.Character:SetAttribute("WolfRest",true);w.hum.Health=80
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.2)
+    eq(h.policy.manualRest,true);eq(#w.calls,0);h:set("recovery",false);h:close()
+    eq(w.player.Character:GetAttribute("WolfRest"),true);eq(#w.calls,0)
+end)
+test("moving recovery masks only its own echo and releases on first bite",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=75;w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    eq(w.player.Character:GetAttribute("WolfRest"),false);eq(h.recovery.owned,w.player.Character)
+    w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.recovery.owned,nil);eq(h.lastIntent.lock,true)
+    local last=w.calls[#w.calls];eq(last.name,"WolfActions");eq(last.args[1],"Rest");eq(last.args[2],false)
+    assert(h.policy:restLocked(w.time));w:advance(.72);eq(h.policy:restLocked(w.time),false)
+    h:close()
+end)
+test("holding attack never re-arms recovery or fabricates bite traffic",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1);w:advance(3)
+    eq(h.recovery.owned,nil)
+    for _,call in ipairs(w.calls) do eq(call.args[1],"Rest") end
+    h:close()
+end)
+test("three repeated owned pose echoes release and back off",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    for _=1,3 do w.player.Character:SetAttribute("WolfRest",true) end
+    eq(h.recovery.owned,nil);assert(h.recovery.backoffUntil>w.time)
+    eq(w.player.Character:GetAttribute("WolfRest"),false);h:close()
+end)
+test("no recovery deficit sends no priming Rest requests",function()
+    local w,h=boot({recovery=true});w:advance(3)
+    eq(#w.calls,0);eq(h.recovery.owned,nil);h:close()
+end)
+test("combat and feeding preempt owned recovery",function()
+    local w=Mock.new();w.hum.Health=50;local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    assert(h.recovery.owned);w.player:SetAttribute("FeralCombatUntil",w.time+1003);w:advance(.1);eq(h.recovery.owned,nil)
+    w.player:SetAttribute("FeralCombatUntil",0);w.player.Character:SetAttribute("WolfFeed","drink");w:advance(.1);eq(h.recovery.owned,nil)
+    h:close()
+end)
+test("nearby same-pack target alone does not cancel recovery",function()
+    local w=Mock.new();w:enemy(1);w.hum.Health=50
+    local h=load(w,{settings={states={recovery=true,biteHelper=true}}});w:advance(.3)
+    eq(h.recovery.owned,w.player.Character);eq(h.guide,nil);h:close()
+end)
+test("native bite marker is distinct from sent claim and damage evidence",function()
+    local w,h=boot({biteHelper=true});local _,_,hum=w:enemy(2);w:advance(.2)
+    w:input(nil,E.UserInputType.MouseButton1);w.player.Character:SetAttribute("WolfBiteAt",1011)
+    w:advance(.3);hum.Health=90;w:advance(.9)
+    eq(h.ledger.counts.native_bite_marker,1);eq(h.ledger.counts.target_hp_decline_correlated,1)
+    for _,c in ipairs(w.calls) do assert(c.args[1]~="BiteHit" and c.args[1]~="Bite") end
+    h:close()
+end)
+test("missing status is excluded from condition cure measurements",function()
+    local M=modules();local l=M.core.ledger(3);local char={}
+    l:sample({char=char,now=1,maxHP=100,hp=50,injury=4,combat=false,moving=true},"NO_SIGNAL")
+    l:sample({char=char,now=1.5,maxHP=100,hp=51,injury=nil,combat=false,moving=true},"NO_SIGNAL")
+    local bucket=l.rates["NO_SIGNAL:false:moving"]
+    eq(bucket.effects.injury,nil)
+    for i=1,8 do l:event("x",i) end;eq(#l.events,3);eq(l.counts.x,8)
+end)
+test("rate windows exclude combat and movement transitions",function()
+    local M=modules();local l=M.core.ledger();local char={}
+    l:sample({char=char,now=1,maxHP=100,hp=50,combat=false,moving=false},"NO_SIGNAL")
+    l:sample({char=char,now=1.4,maxHP=100,hp=52,combat=true,moving=false},"NO_SIGNAL")
+    eq(next(l.rates),nil)
+end)
+test("native Grab V2 res grades require own matching session and strike",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    assert(g:event("begin",{f=1},100,1,.32,2.5))
+    assert(g:event("strike",{f=1,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215,dur=2},100,1,.32,2.5))
+    eq(g:event("res",{f=1,k=1,mine=false,tier="perfect"},100.5,1,.32,2.5),false)
+    assert(g:event("res",{f=1,k=1,mine=true,tier="perfect"},100.5,1,.32,2.5))
+    eq(g.grades.perfect,1)
+    eq(g:event("res",{f=1,k=1,mine=true,tier="perfect"},100.5,1,.32,2.5),false)
+    eq(g.grades.perfect,1)
+end)
+test("Grab duplicate strike cannot send a second press",function()
+    local M=modules();local g=M.grab.new();g.enabled=true;g:event("begin",{f=1},100,1,.32,2.5)
+    local packet={f=1,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215,dur=2}
+    g:event("strike",packet,100,1,.32,2.5);local sent=0
+    g:tick(100.5,1,true,function(session,_,timestamp)eq(session,1);eq(timestamp,100.5);sent+=1;return true end)
+    eq(sent,1);eq(g:event("strike",packet,100.6,1,.32,2.5),false)
+    g:tick(101.5,1,true,function()sent+=1;return true end);eq(sent,1)
+end)
+test("Grab rejects practice, stale session, future clock and respawn",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    eq(g:event("begin",{f=-1},100,1,.32,2.5),false);eq(M.grab.validId("-2"),false);eq(M.grab.validId("0"),false)
+    g:event("begin",{f=2},100,1,.32,2.5)
+    eq(g:event("end",{f=1},100,1,.32,2.5),false);eq(g.active,true)
+    eq(g:event("strike",{f=2,k=1,t0=104,spd=1,from=0,zc=.5,zw=.215,dur=2},100,1,.32,2.5),false)
+    g:tick(100.5,2,true,function()error("stale input sent")end);eq(g.active,false)
+end)
+test("Grab manual takeover and unavailable clock send no input",function()
+    local w,h=boot({minigame=true});local remote=w:remote("FeralGrabV2")
+    local at=w.time+1000
+    remote.OnClientEvent:Fire("begin",{f=9})
+    remote.OnClientEvent:Fire("strike",{f=9,k=1,t0=at,spd=1,from=0,zc=.5,zw=.215,dur=2})
+    assert(h.grab.pending);w:input(E.KeyCode.Space);w:advance(.8)
+    for _,c in ipairs(w.calls) do assert(c.name~="FeralGrabV2") end
+    h:close()
+end)
+test("minigame priority cancels recovery and legacy escape",function()
+    local w=Mock.new();w.hum.Health=50;w.nativeShake=true
+    local h=load(w,{settings={states={minigame=true,recovery=true,escape=true}}});w:advance(.1)
+    w.player.Character:SetAttribute("FeralPinned",true)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=5});w:advance(.2)
+    eq(h.recovery.owned,nil)
+    for _,c in ipairs(w.calls) do assert(c.name~="FeralLunge") end
+    h:close()
+end)
+test("climb buffer expires, honours Dive and never sends a climb remote",function()
+    local w,h=boot({climb=true})
+    w.player.Character:SetAttribute("DiveCan",true);w:input(E.KeyCode.Q);eq(h.climbQueue,nil)
+    w.player.Character:SetAttribute("DiveCan",false);w:input(E.KeyCode.Q);assert(h.climbQueue)
+    w:advance(2.4);eq(h.climbQueue,nil)
+    for _,c in ipairs(w.calls) do assert(c.name~="FeralClimb") end
+    h:close()
+end)
+test("climb waits for native handling and retries at most once",function()
+    local w,h=boot({climb=true});w.player.Character:SetAttribute("ClimbCan",true)
+    w:input(E.KeyCode.Q);eq(w.player:GetAttribute("FeralClimbTap"),nil)
+    w:advance(1.8);eq(h.ledger.counts.native_climb_tap,2);h:close()
+end)
+test("native mount after Q avoids duplicate assisted tap",function()
+    local w,h=boot({climb=true});w.player.Character:SetAttribute("ClimbCan",true)
+    w:input(E.KeyCode.Q);w.player.Character:SetAttribute("FeralClimbLocal",true);w:advance(.2)
+    eq(w.player:GetAttribute("FeralClimbTap"),nil);eq(h.ledger.counts.native_climb_mounted,1);h:close()
+end)
+test("surface takeoff is temporary and deep water never enables flight",function()
+    local w=Mock.new();w:spawn("BaldEagle");w.waterY=3;w.player.Character:SetAttribute("FeralSwimLocal",true)
+    local h=load(w,{settings={states={flight=true}}});w:step(.02)
+    eq(h:requestFlight(),true);eq(w.configs.FlightConfig.WATER.NO_TAKEOFF,false)
+    w.player.Character:SetAttribute("FeralUnderwater",true);w:advance(.3)
+    eq(w.configs.FlightConfig.WATER.NO_TAKEOFF,true);eq(h:requestFlight(),false);h:close()
+end)
+test("flight disable and shutdown restore original water permission",function()
+    local w=Mock.new();w:spawn("BaldEagle");w.waterY=3;w.player.Character:SetAttribute("FeralSwimLocal",true)
+    local h=load(w,{settings={states={flight=true}}});w:step(.02);assert(h:requestFlight())
+    h:set("flight",false);eq(w.configs.FlightConfig.WATER.NO_TAKEOFF,true);h:close()
+end)
+test("friendly baby carry is protected but pinning immediately wins",function()
+    local w,h=boot({escape=true});local baby=w.player.Character;baby:SetAttribute("Growth",.2)
+    local p,adult=w:enemy(1);adult:SetAttribute("Growth",.8)
+    local clamp=w.new("ObjectValue");clamp.Name="FeralClamp";clamp.Value=baby;clamp.Parent=adult
+    baby:SetAttribute("FeralCarried",true);w:advance(.3)
+    for _,c in ipairs(w.calls) do assert(c.name~="FeralLunge") end
+    baby:SetAttribute("FeralPinned",true);w:advance(.7)
+    eq(h.ledger.counts.native_escape_requested,2);h:close()
+end)
+test("idle API failure remains unavailable instead of pcall-only ON",function()
+    local w,h=boot({robloxAFK=true});w.idleBlocked=true;h:idle();w:advance(.3)
+    eq(h.registry.byId.robloxAFK.applied,false);eq(h.registry.byId.robloxAFK.state,"UNAVAILABLE")
+    h:close();local pulses=w.idlePulses or 0;w.player.Idled:Fire(121);eq(w.idlePulses or 0,pulses)
+end)
+test("survival AFK no unsolicited movement; danger and manual input stop walk",function()
+    local w,h=boot({survivalAFK=true});h.ui:toggle();w:advance(20);eq(h.walk,nil)
+    w:advance(72);assert(h.walk,h.walkStatus or "no walk")
+    w:input(E.KeyCode.W);eq(h.walk,nil);local oldGoal=w.hum.goal
+    w:advance(91);assert(h.walk,h.walkStatus or "no second walk")
+    local _,_,_,root=w:enemy(2);w.parts={root};w:advance(.3);eq(h.walk,nil)
+    h:close();eq(w:connections(),0)
+end)
+test("AFK route checks intermediate ground rather than only endpoints",function()
+    local w,h=boot({survivalAFK=true});h.ui:toggle();w.hole=true;w.blocked=true;w:advance(91)
+    eq(h.walk,nil);eq(h.walkStatus,"no safe ground step");h:close()
+end)
+test("manual mouse control is never swallowed after virtual idle pulse",function()
+    local w,h=boot({robloxAFK=true,survivalAFK=true});h.ui:toggle();w:advance(91);assert(h.walk)
+    h:idle();w:input(E.KeyCode.W);eq(h.walk,nil);h:close()
+end)
+test("hollow ESP and tags OFF persist across tracking refresh and respawn",function()
+    local w,h=boot({esp=true,tags=false,biteHelper=true});local p,char=w:enemy(2);w:advance(.3)
+    local rec=h.ui.records[char];assert(rec);eq(rec.highlight.FillTransparency,1);eq(rec.label.Visible,false)
+    w.blocked=true;w:advance(.3);assert(h.active,h.lastError)
+    h:set("tags",true);w:advance(.1);eq(rec.label.Visible,true)
+    h:set("tags",false);w:spawn("Wolf");w:advance(.3)
+    eq(rec.label.Visible,false);eq(rec.highlight.FillTransparency,1);h:close()
+end)
+test("affiliation uses pack hue while health remains a separate cue",function()
+    local w,h=boot({esp=true,tags=true});local p,char,hum=w:enemy(2);hum.Health=20;w:advance(.3)
+    local rec=h.ui.records[char];local colour=rec.highlight.OutlineColor
+    eq(colour.R,236/255);eq(rec.label.TextColor3.R,236/255)
+    eq(rec.health.Text:sub(1,1),"!")
+    p:SetAttribute("FeralPack",1);w:advance(.3);eq(rec.highlight.OutlineColor.G,219/255)
+    p:SetAttribute("FeralPack",nil);w:advance(.3);eq(rec.highlight.OutlineColor.R,236/255);eq(rec.highlight.OutlineColor.G,181/255)
+    h:close()
+end)
+test("streaming and finder limit bound local records to 24",function()
+    local w,h=boot({esp=true,tags=true})
+    for i=1,32 do w:enemy(2,Mock.V3.new(i,3,-20)) end
+    w:advance(.3);local n=0;for _ in pairs(h.ui.records)do n+=1 end;eq(n,24)
+    for _,p in ipairs(w.env.game:GetService("Players"):GetPlayers()) do if p~=w.player then p.Character.Parent=nil end end
+    w:advance(.3);eq(next(h.ui.records),nil);eq(w:count("Highlight"),0);h:close()
+end)
+test("Right Shift has one menu binding and respects focused text",function()
+    local w,h=boot();local visible=h.ui.visible
+    w:input(E.KeyCode.RightShift);eq(h.ui.visible,not visible)
+    w.chat={};w:input(E.KeyCode.RightShift);eq(h.ui.visible,not visible);w.chat=nil
+    h:close();eq(next(w.bindings),nil)
+end)
+test("external config conflict fails visibly and restores unrelated fields",function()
+    local w,h=boot({speed=true});w.configs.NeedsConfig.RUN_SPEED=1.7;w:advance(1.4)
+    eq(h.registry.byId.speed.applied,false);eq(h.registry.byId.speed.state,"UNAVAILABLE")
+    close(w.configs.NeedsConfig.RUN_SPEED,1.7);close(w.configs.NeedsConfig.SWIM_SPEED,1)
+    h:close()
+end)
+test("cleanup continues when a controller throws",function()
+    local w,h=boot({stamina=true});h.recovery.close=function()error("broken owner")end
+    h:close();eq(w:connections(),0);eq(w:count("ScreenGui"),0)
+    close(w.configs.NeedsConfig.STAMINA_REGEN,1.31);eq(#h.cleanupErrors,1)
+end)
+test("ordinary Rest renewal does not accumulate recurrence failures",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+    local h=load(w,{settings={states={recovery=true}}});w:advance(17)
+    eq(h.recovery.owned,w.player.Character);eq(h.recovery.backoffUntil,0);assert(h.ledger.counts.native_rest_renewed>=3)
+    h:close()
+end)
+test("streamed replacement config releases stale table and patches current one",function()
+    local w,h=boot({speed=true});local old=w.configs.NeedsConfig
+    w.rs:FindFirstChild("FeralWorld"):FindFirstChild("NeedsConfig"):Destroy()
+    local replacement=table.clone(old);replacement.RUN_SPEED=1;replacement.SWIM_SPEED=1
+    w:addConfig("NeedsConfig",replacement);w:advance(1.4)
+    close(old.RUN_SPEED,1);close(replacement.RUN_SPEED,1.15);eq(h.registry.byId.speed.applied,true);h:close()
+    close(replacement.RUN_SPEED,1)
+end)
+test("runtime error closes owned loops and restores all patches",function()
+    local w,h=boot({speed=true,stamina=true});h.ui.render=function()error("injected render failure")end
+    w:step(.02);eq(h.closed,true);eq(w:connections(),0);close(w.configs.NeedsConfig.RUN_SPEED,1)
+    eq(w:count("ScreenGui"),0)
+end)
+test("shutdown makes public action entry points inert",function()
+    local w,h=boot({stamina=true,robloxAFK=true,minigame=true})
+    h:close();local calls,pulses=#w.calls,w.idlePulses or 0
+    eq(h:set("speed",true),false);h:idle();h:tick()
+    h:nativeEvent("grab","begin",{f=5})
+    eq(#w.calls,calls);eq(w.idlePulses or 0,pulses);eq(h.grab.active,false)
+end)
+test("clicking hub controls never counts as an attack intent",function()
+    local w,h=boot({recovery=true})
+    w.uis.GetMouseLocation=function()return Mock.V2.new(100,100)end
+    w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.ledger.counts.attack_intent,nil);h:close()
+end)
+
+print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
+if #failures>0 then error(table.concat(failures,"\n"),0) end

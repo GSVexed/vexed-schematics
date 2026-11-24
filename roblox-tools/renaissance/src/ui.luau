@@ -1,0 +1,260 @@
+-- One compact window and one owner for all hub outlines, tags and the bite dot.
+local UI = {}
+function UI.mount(hub, bridge, scope)
+    local player = bridge.player
+    local pg = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui",10)
+    assert(pg,"PlayerGui unavailable")
+    local u = { visible = true, rows = {}, records = {}, nextText = 0, nextFit = 0,
+        tab = hub.settings.tab, lastPoint = nil }
+    local palette = {
+        bg = Color3.fromRGB(12,17,28), side = Color3.fromRGB(15,22,36),
+        panel = Color3.fromRGB(22,31,48), line = Color3.fromRGB(48,65,85),
+        text = Color3.fromRGB(239,246,252), sub = Color3.fromRGB(151,173,194),
+        same = Color3.fromRGB(77,219,194), other = Color3.fromRGB(236,105,126),
+        unknown = Color3.fromRGB(236,181,104), off = Color3.fromRGB(60,77,97),
+    }
+    local function make(class,properties,parent)
+        local object = Instance.new(class)
+        for key,value in pairs(properties or {}) do object[key] = value end
+        object.Parent = parent
+        return object
+    end
+    local function round(object,radius)
+        make("UICorner",{CornerRadius = UDim.new(0,radius or 9)},object)
+        return object
+    end
+    local function text(parent,body,x,y,w,h,size,colour)
+        return make("TextLabel",{Text = body, BackgroundTransparency = 1, BorderSizePixel = 0,
+            Position = UDim2.fromOffset(x,y), Size = UDim2.fromOffset(w,h),
+            Font = Enum.Font.Gotham, TextSize = size or 12, TextColor3 = colour or palette.text,
+            TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd},parent)
+    end
+    local function button(parent,body,x,y,w,h)
+        return round(make("TextButton",{Text = body, AutoButtonColor = true,
+            BackgroundColor3 = palette.off, BorderSizePixel = 0, TextColor3 = palette.text,
+            Font = Enum.Font.GothamMedium, TextSize = 11, Position = UDim2.fromOffset(x,y),
+            Size = UDim2.fromOffset(w,h)},parent),7)
+    end
+    -- Parent ownership is registered immediately, before any child creation.
+    local gui = Instance.new("ScreenGui")
+    scope:add(function() gui:Destroy() end)
+    gui.Name = "FeralRenaissanceV15_" .. tostring(hub.token)
+    gui.ResetOnSpawn, gui.Enabled, gui.IgnoreGuiInset = false,false,true
+    gui.DisplayOrder = 350
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = pg
+    u.gui = gui
+    local folder = Instance.new("Folder")
+    scope:add(function() folder:Destroy() end)
+    folder.Name,folder.Parent = gui.Name .. "_Outlines",bridge.Workspace
+    local frame = round(make("Frame",{Size = UDim2.fromOffset(704,505),
+        Position = UDim2.fromScale(.5,.5), AnchorPoint = Vector2.new(.5,.5),
+        BackgroundColor3 = palette.bg, BorderSizePixel = 0, Active = true},gui),15)
+    u.frame = frame
+    local scale = make("UIScale",{},frame)
+    local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
+        BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
+    text(side,"F E R A L",18,22,130,28,20)
+    text(side,"RENAISSANCE  /  15",18,52,140,18,10,palette.same)
+    local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
+        Size = UDim2.fromOffset(511,470)},frame)
+    local title = text(content,u.tab,10,0,470,30,19)
+    local subtitle = text(content,"Simple controls. Native gameplay remains in charge.",10,34,480,20,11,palette.sub)
+    local cards = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(10,68),
+        Size = UDim2.fromOffset(490,365)},content)
+    text(content,"Client changes and predictions · gameplay results unverified",10,440,485,18,10,palette.sub)
+    local footer = text(side,"Ready",14,452,140,39,10,palette.sub)
+    footer.TextWrapped = true
+    local hide = button(side,"HIDE  ·  RIGHT SHIFT",12,378,141,30)
+    local unload = button(side,"UNLOAD",12,414,141,27)
+    local tabs = {}
+    local function card(y,height)
+        return round(make("Frame",{Position = UDim2.fromOffset(0,y),Size = UDim2.fromOffset(490,height),
+            BorderSizePixel = 0,BackgroundColor3 = palette.panel},cards),9)
+    end
+    local function info(y,heading,body,height)
+        local c = card(y,height or 75)
+        text(c,heading,14,8,460,20,13,palette.same)
+        local t = text(c,body,14,33,459,(height or 75)-37,11,palette.sub)
+        t.TextWrapped = true
+        return t
+    end
+    local function row(id,y)
+        local f = hub.registry.byId[id]
+        local c = card(y,50)
+        text(c,f.title,13,4,365,21,13)
+        local status = text(c,f.detail,13,27,365,18,10,palette.sub)
+        local toggle = button(c,"OFF",394,9,82,32)
+        u.rows[id] = { toggle = toggle, status = status }
+        toggle.Activated:Connect(function()
+            if not hub.active then return end
+            hub:set(id,not hub.registry.byId[id].requested)
+            u.nextText = 0
+        end)
+    end
+    local function draw()
+        for _, child in ipairs(cards:GetChildren()) do child:Destroy() end
+        u.rows,u.combatReadout,u.finderReadout = {},nil,nil
+        title.Text = string.upper(u.tab)
+        if u.tab == "Combat" then
+            info(0,"BITE REACH  ·  ALWAYS ON","Native targeting with extended client geometry. Extra range is unverified.",78)
+            row("biteHelper",94)
+            info(161,"RANGE COLOURS","Teal: native geometry. Amber: extended only. Grey: blocked or recovering from Rest.",80)
+            u.combatReadout = info(258,"NATIVE COMBAT","Waiting for an animal.",100)
+        elseif u.tab == "Vision" then
+            row("esp",0); row("tags",57)
+            local c = card(123,52)
+            text(c,"Tracking range",14,8,270,20,13)
+            text(c,"Replicated players only · up to 24",14,29,320,17,10,palette.sub)
+            local range = button(c,tostring(hub.settings.range) .. " STUDS",350,10,124,30)
+            range.Activated:Connect(function()
+                if not hub.active then return end
+                local old = hub.settings.range
+                hub.settings.range = old == 300 and 600 or old == 600 and 900 or 300
+                range.Text = tostring(hub.settings.range) .. " STUDS"
+                hub:save(); hub.nextScan = 0
+            end)
+            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,187,490,32)
+            walls.Activated:Connect(function()
+                if not hub.active then return end
+                hub.settings.walls = not hub.settings.walls
+                walls.Text = "Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF")
+                hub:save()
+            end)
+            info(232,"FACTION / HEALTH","Teal: same known pack. Red: another known pack. Amber: unknown. Health stays a separate cue.",70)
+            u.finderReadout = info(313,"PLAYER FINDER","Waiting for replicated players.",50)
+        else
+            local order = u.tab == "Survival"
+                and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
+                or {"climb","flight","mobility","speed","leap"}
+            for i,id in ipairs(order) do row(id,(i-1)*57) end
+        end
+        for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end
+        u.nextText = 0
+    end
+    for i,name in ipairs({"Survival","Combat","Movement","Vision"}) do
+        local btn = button(side,string.upper(name),12,113+(i-1)*49,141,37)
+        tabs[name] = btn
+        btn.Activated:Connect(function()
+            if not hub.active then return end
+            u.tab,hub.settings.tab = name,name
+            draw(); hub:save()
+        end)
+    end
+    function u:toggle()
+        self.visible = not self.visible
+        frame.Visible = self.visible
+        hub.policy.menuOpen = self.visible
+        if self.visible then hub:stopWalk("menu opened") end
+    end
+    function u:contains(point)
+        if not self.visible or not gui.Enabled then return false end
+        local p,s = frame.AbsolutePosition,frame.AbsoluteSize
+        return point.X >= p.X and point.X <= p.X+s.X and point.Y >= p.Y and point.Y <= p.Y+s.Y
+    end
+    hide.Activated:Connect(function() if hub.active then u:toggle() end end)
+    unload.Activated:Connect(function() if hub.active then hub:close() end end)
+    local dot = round(make("Frame",{Name = "BiteRangeMarker",BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(15,15),AnchorPoint = Vector2.new(.5,.5),Visible = false},gui),50)
+    local dotStroke = make("UIStroke",{Thickness = 1.5,Transparency = .05,Color = palette.same},dot)
+    function u:syncTracked(tracked)
+        local keep = {}
+        for _, target in ipairs(tracked) do
+            local char = target.char
+            keep[char] = true
+            local record = self.records[char]
+            if not record then
+                local highlight = Instance.new("Highlight")
+                highlight.Name,highlight.Adornee = "Outline",char
+                highlight.FillTransparency,highlight.OutlineTransparency = 1,0
+                highlight.Enabled,highlight.Parent = false,folder
+                local label = text(gui,"",0,0,180,18,11)
+                label.TextXAlignment, label.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
+                local health = text(gui,"",0,0,180,14,9)
+                health.TextXAlignment,health.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,0)
+                record = { highlight = highlight,label = label,health = health }
+                self.records[char] = record
+            end
+            record.target = target
+        end
+        for char,record in pairs(self.records) do
+            if not keep[char] then
+                record.highlight:Destroy(); record.label:Destroy(); record.health:Destroy()
+                self.records[char] = nil
+            end
+        end
+    end
+    function u:render(dt,now)
+        local camera = bridge.Workspace.CurrentCamera
+        if not camera then return end
+        if now >= self.nextFit then
+            self.nextFit = now+.5
+            local size = camera.ViewportSize
+            scale.Scale = math.clamp(math.min((size.X-25)/704,(size.Y-30)/505,1),.5,1)
+        end
+        local registry = hub.registry.byId
+        for char,record in pairs(self.records) do
+            local target = record.target
+            local valid = char.Parent ~= nil and target.root.Parent ~= nil and target.hum.Parent ~= nil and target.hum.Health > 0
+            local colour = palette[target.affiliation] or palette.unknown
+            record.highlight.FillTransparency = 1
+            record.highlight.OutlineColor = colour
+            record.highlight.DepthMode = hub.settings.walls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+            record.highlight.Enabled = valid and registry.esp.requested
+            local head = char:FindFirstChild("Head")
+            local pos = head and head:IsA("BasePart") and head.Position+Vector3.new(0,head.Size.Y*.65,0)
+                or target.root.Position+Vector3.new(0,target.root.Size.Y*.6+1,0)
+            local projected,onScreen = camera:WorldToViewportPoint(pos)
+            local show = valid and registry.tags.requested and onScreen and projected.Z > 0
+            record.label.Visible,record.health.Visible = show,show
+            if show then
+                local x,y = projected.X,math.max(20,projected.Y)
+                record.label.Position,record.health.Position = UDim2.fromOffset(x,y),UDim2.fromOffset(x,y+1)
+                record.label.Text,record.label.TextColor3 = target.name,colour
+                local ratio = target.hum.MaxHealth > 0 and math.clamp(target.hum.Health/target.hum.MaxHealth,0,1) or nil
+                record.health.Text = ratio and string.format("%s%d%% · %.0f studs",ratio < .3 and "! " or "",ratio*100,target.distance)
+                    or string.format("HP unknown · %.0f studs",target.distance)
+                record.health.TextColor3 = ratio and ratio < .3 and palette.unknown or palette.sub
+            end
+        end
+        local guide = hub.guide
+        dot.Visible = false
+        if registry.biteHelper.requested and guide and guide.target.root.Parent then
+            local point,onScreen = camera:WorldToViewportPoint(guide.target.root.Position)
+            if onScreen and point.Z > 0 then
+                local desired = Vector2.new(point.X,point.Y)
+                self.lastPoint = self.lastPoint and self.lastPoint:Lerp(desired,1-math.exp(-22*math.min(dt,.1))) or desired
+                dot.Position = UDim2.fromOffset(self.lastPoint.X,self.lastPoint.Y)
+                dot.Visible = true
+                local locked = hub.policy:restLocked(now)
+                if guide.blocked or locked then dotStroke.Color = palette.sub
+                elseif guide.baseline and guide.baseline.valid then dotStroke.Color = palette.same
+                else dotStroke.Color = palette.unknown end
+            end
+        else self.lastPoint = nil end
+        if now < self.nextText then return end
+        self.nextText = now+.25
+        for id,rowValue in pairs(self.rows) do
+            local feature = registry[id]
+            rowValue.toggle.Text = not feature.requested and "OFF"
+                or feature.applied and (feature.state == "ARMED" and "ARMED" or "ON") or "WAIT"
+            rowValue.toggle.BackgroundColor3 = feature.requested and feature.applied
+                and Color3.fromRGB(27,111,98) or palette.off
+            rowValue.status.Text = feature.requested and feature.reason ~= "" and feature.reason or feature.detail
+        end
+        footer.Text = hub.notice or "Right Shift opens menu"
+        if self.combatReadout then
+            self.combatReadout.Text = hub.combatStatus or "Watching native attacks"
+        end
+        if self.finderReadout then
+            self.finderReadout.Text = string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range)
+        end
+    end
+    function u:activate()
+        gui.Enabled = true
+        hub.policy.menuOpen = self.visible
+    end
+    draw()
+    return u
+end
+return UI

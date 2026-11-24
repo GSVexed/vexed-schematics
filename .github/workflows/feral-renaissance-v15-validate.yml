@@ -1,0 +1,37 @@
+name: FERAL Renaissance v15 compile and regression gate
+on:
+  push:
+    branches: [main, 'renaissance/**']
+    paths:
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-renaissance*'
+      - '.github/workflows/feral-renaissance-v15-validate.yml'
+  pull_request:
+    paths:
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-renaissance*'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the pinned official Luau compiler and interpreter
+        run: |
+          git clone https://github.com/luau-lang/luau.git /tmp/renaissance-luau
+          git -C /tmp/renaissance-luau checkout 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/renaissance-luau config=release -j2 luau luau-compile
+      - name: Compile all modules and run service-boundary regressions
+        run: |
+          python3 roblox-tools/renaissance/run_tests.py \
+            --luau /tmp/renaissance-luau/luau \
+            --compiler /tmp/renaissance-luau/luau-compile \
+            --output /tmp/renaissance-results.json
+      - name: Confirm deterministic bundle and manifest
+        run: git diff --exit-code -- roblox-tools/feral-renaissance-v15.0.0.lua roblox-tools/renaissance/manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: renaissance-v15-regression-results
+          path: /tmp/renaissance-results.json

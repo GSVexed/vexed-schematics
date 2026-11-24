@@ -1,0 +1,294 @@
+-- Deterministic service boundary. It simulates events/streaming, not a server.
+local Mock = {}
+local function signal()
+    local s = { listeners = {} }
+    function s:Connect(fn)
+        local c = { Connected = true, fn = fn }
+        function c:Disconnect() self.Connected = false end
+        table.insert(self.listeners,c)
+        return c
+    end
+    function s:Fire(...)
+        local current = table.clone(self.listeners)
+        for _,c in ipairs(current) do if c.Connected then c.fn(...) end end
+    end
+    function s:Count()
+        local count = 0
+        for _,c in ipairs(self.listeners) do if c.Connected then count += 1 end end
+        return count
+    end
+    return s
+end
+local function vectors(dim)
+    local methods,meta = {},{}
+    local function new(x,y,z) return setmetatable({X=x or 0,Y=y or 0,Z=z or 0,_type=dim==3 and "Vector3" or "Vector2"},meta) end
+    function meta.__index(v,k)
+        if k == "Magnitude" then return math.sqrt(v.X*v.X+v.Y*v.Y+(dim==3 and v.Z*v.Z or 0)) end
+        if k == "Unit" then local m=v.Magnitude; return m>0 and new(v.X/m,v.Y/m,v.Z/m) or new() end
+        return methods[k]
+    end
+    function meta.__add(a,b) return new(a.X+b.X,a.Y+b.Y,a.Z+b.Z) end
+    function meta.__sub(a,b) return new(a.X-b.X,a.Y-b.Y,a.Z-b.Z) end
+    function meta.__mul(a,b) if type(a)=="number" then a,b=b,a end; return new(a.X*b,a.Y*b,a.Z*b) end
+    function meta.__div(a,b) return new(a.X/b,a.Y/b,a.Z/b) end
+    function methods:Dot(b) return self.X*b.X+self.Y*b.Y+self.Z*b.Z end
+    function methods:Lerp(b,a) return self+(b-self)*a end
+    return { new=new }
+end
+local V3,V2 = vectors(3),vectors(2)
+local enum = setmetatable({}, {__index=function(t,k)
+    local group = setmetatable({}, {__index=function(g,v) local value=k.."."..v;rawset(g,v,value);return value end})
+    rawset(t,k,group);return group
+end})
+local function kind(v) return type(v)=="table" and v._type or type(v) end
+function Mock.new()
+    local w = { time=10,objects={},calls={},configs={},renders={},bindings={},parts={},
+        nativeRestEcho=false,localEnvironment={},failure=nil,waterY=nil,blocked=false }
+    local methods = {}
+    local function new(class)
+        if w.failure == "instance:"..class then error("injected Instance creation failure") end
+        local o = {_props={ClassName=class,Name=class,Visible=true,Enabled=true,Text="",
+            AbsolutePosition=V2.new(0,0),AbsoluteSize=V2.new(704,505),
+            Size=V3.new(2,2,4),Position=V3.new(0,3,0),Health=100,MaxHealth=100,
+            HipHeight=1,MoveDirection=V3.new(),AssemblyLinearVelocity=V3.new(),
+            FloorMaterial=enum.Material.Grass,CFrame={LookVector=V3.new(0,0,-1),UpVector=V3.new(0,1,0)}},
+            _children={},_attrs={},_signals={},_destroyed=false}
+        setmetatable(o,{
+            __index=function(self,k)
+                if methods[k] then return methods[k] end
+                if k=="Activated" or k=="OnClientEvent" or k=="Event" then
+                    self._signals[k]=self._signals[k] or signal();return self._signals[k]
+                end
+                return self._props[k]
+            end,
+            __newindex=function(self,k,v)
+                if (k:match("Color3$") or k=="Color" or k=="OutlineColor" or k=="FillColor") and v~=nil then
+                    assert(kind(v)=="Color3","colour property received non-colour: "..k)
+                end
+                if k=="Parent" then
+                    local old=self._props.Parent
+                    if old then
+                        for i,c in ipairs(old._children) do if c==self then table.remove(old._children,i);break end end
+                    end
+                    if v then assert(not v._destroyed,"parent was destroyed");table.insert(v._children,self) end
+                end
+                self._props[k]=v
+            end,
+        })
+        table.insert(w.objects,o)
+        return o
+    end
+    function methods:IsA(class)
+        return self.ClassName==class or class=="Instance"
+            or class=="BasePart" and (self.ClassName=="Part" or self.ClassName=="MeshPart")
+            or class=="GuiButton" and (self.ClassName=="TextButton" or self.ClassName=="ImageButton")
+    end
+    function methods:GetChildren() return table.clone(self._children) end
+    function methods:GetDescendants()
+        local all={}
+        local function visit(o) for _,c in ipairs(o._children) do table.insert(all,c);visit(c) end end
+        visit(self);return all
+    end
+    function methods:FindFirstChild(name,recursive)
+        for _,c in ipairs(self._children) do if c.Name==name then return c end end
+        if recursive then for _,c in ipairs(self:GetDescendants()) do if c.Name==name then return c end end end
+        return nil
+    end
+    function methods:FindFirstChildOfClass(class)
+        for _,c in ipairs(self._children) do if c:IsA(class) then return c end end
+        return nil
+    end
+    function methods:FindFirstAncestorOfClass(class)
+        local p=self.Parent
+        while p do if p:IsA(class) then return p end;p=p.Parent end
+        return nil
+    end
+    function methods:IsDescendantOf(parent)
+        local p=self.Parent
+        while p do if p==parent then return true end;p=p.Parent end
+        return false
+    end
+    function methods:WaitForChild(name) return self:FindFirstChild(name) end
+    function methods:GetAttribute(key) return self._attrs[key] end
+    function methods:SetAttribute(key,value)
+        local old=self._attrs[key];self._attrs[key]=value
+        if old~=value and self._signals[key] then self._signals[key]:Fire() end
+    end
+    function methods:GetAttributeChangedSignal(key)
+        self._signals[key]=self._signals[key] or signal();return self._signals[key]
+    end
+    function methods:Destroy()
+        if self._destroyed then return end
+        for _,c in ipairs(self:GetChildren()) do c:Destroy() end
+        for _,s in pairs(self._signals) do for _,c in ipairs(s.listeners) do c:Disconnect() end end
+        self.Parent=nil;self._destroyed=true
+    end
+    function methods:FireServer(...)
+        local args=table.pack(...)
+        table.insert(w.calls,{name=self.Name,args=args,at=w.time})
+        if self.Name=="WolfActions" and args[1]=="Rest" and w.nativeRestEcho then
+            w.player.Character:SetAttribute("WolfRest",args[2])
+        end
+    end
+    function methods:GetState() return enum.HumanoidStateType.Running end
+    function methods:MoveTo(goal) self.goal=goal end
+    function methods:GetGuiObjectsAtPosition() return w.guiHits or {} end
+    local root = new("DataModel")
+    local workspace = new("Workspace");workspace.Parent=root
+    workspace.Terrain=new("Terrain");workspace.Terrain.Parent=workspace
+    workspace.CurrentCamera={
+        ViewportSize=V2.new(1400,900),
+        WorldToViewportPoint=function(_,p) return V3.new(700+p.X*2,450-p.Y*2,20-p.Z),true end
+    }
+    function workspace:GetServerTimeNow() return w.time+1000 end
+    function workspace:Raycast(origin,direction,params)
+        if params.FilterType==enum.RaycastFilterType.Include then
+            return w.waterY and {Material=enum.Material.Water,Position=V3.new(origin.X,w.waterY,origin.Z),Normal=V3.new(0,1,0),Instance=self.Terrain} or nil
+        end
+        if direction.Y==0 then return w.blocked and {Instance=self.Terrain,Position=origin,Material=enum.Material.Grass} or nil end
+        if w.hole and math.abs(origin.X)>2 and math.abs(origin.X)<4 then return nil end
+        return {Position=V3.new(origin.X,0,origin.Z),Normal=V3.new(0,1,0),Material=enum.Material.Grass,Instance=self.Terrain}
+    end
+    function workspace:GetPartBoundsInRadius() return w.parts end
+    local player=new("Player");player.Parent=root;player.Name="LocalPlayer";player.DisplayName="Local"
+    local pg=new("PlayerGui");pg.Parent=player
+    player.CharacterAdded,player.CharacterRemoving,player.Idled=signal(),signal(),signal()
+    player:SetAttribute("FeralCombatUntil",0);player:SetAttribute("FeralPack",1);player:SetAttribute("FeralSurvival",0)
+    local players={LocalPlayer=player,list={player}}
+    function players:GetPlayers() return table.clone(self.list) end
+    function players:GetPlayerFromCharacter(char)
+        for _,p in ipairs(self.list) do if p.Character==char then return p end end
+    end
+    local rs=new("ReplicatedStorage");rs.Parent=root
+    local world=new("Folder");world.Name="FeralWorld";world.Parent=rs
+    local needs={STAMINA_REGEN=1.31,STAMINA_REGEN_DELAY=.8,STAMINA_SPRINT_DRAIN=.94,
+        STAMINA_JUMP_COST=6,STAMINA_LOW_NEEDS=.5,STAMINA_REST_MULT=3,
+        HEALTH_REGEN=.01,HEALTH_REST_MULT=2,HEALTH_NO_REGEN_IN_COMBAT=true,
+        HURT_SLOW=.3,RUN_SPEED=1,SWIM_SPEED=1}
+    local combat={REACH=1.45,HIT_SCALE=1.15,CONE=71,SLACK=1.2,MAX_DY=2.5,
+        bodyGap=function(_,flat) return math.max(0,flat.Magnitude-1) end}
+    function w:addConfig(name,value)
+        local m=new("ModuleScript");m.Name=name;m.ModuleValue=value;m.Parent=world;self.configs[name]=value
+        return m
+    end
+    w:addConfig("NeedsConfig",needs);w:addConfig("CombatConfig",combat)
+    w:addConfig("StatusConfig",{INJURY={HEAL=.45,REST_MULT=4,SLOW_PER_POINT=.1},
+        BLEED={CLOT=.2,REST_MULT=4},VENOM={FADE=.3,REST_MULT=4}})
+    w:addConfig("JumpLeapConfig",{ON=true,DEFAULT=1,MAX_RUN_SHARE=1,BODY_LENGTHS={Wolf=1,Cobra=0}})
+    w:addConfig("FlightConfig",{FLAP_DRAIN=.85,WATER={NO_TAKEOFF=true,GRACE=.3},
+        canFly=function(char) return char and char:GetAttribute("Species")=="BaldEagle" end})
+    w:addConfig("PassiveConfig",{CLIMBER={GRAB_REACH=.8,E_REACH=1.6,GRAB_FACING=.7,MOUNT_TIME=.32,levels={{},{}}}})
+    w:addConfig("SurvivalConfig",{AFK_MOVE=4,AFK_AFTER=120})
+    w:addConfig("GrabV2Config",{PERFECT=.32,PASSES=2.5})
+    for _,name in ipairs({"WolfActions","FeralGrabV2","FeralHit","FeralLunge"}) do
+        local remote=new("RemoteEvent");remote.Name=name;remote.Parent=rs
+    end
+    local run={Heartbeat=signal(),PreAnimation=signal()}
+    function run:BindToRenderStep(name,priority,fn)
+        if w.failure=="render" then error("injected render attach failure") end
+        w.renders[name]={priority=priority,fn=fn}
+    end
+    function run:UnbindFromRenderStep(name) w.renders[name]=nil end
+    local uis={InputBegan=signal(),InputChanged=signal(),JumpRequest=signal()}
+    function uis:GetFocusedTextBox() return w.chat end
+    function uis:IsMouseButtonPressed(button) return w.held==button end
+    function uis:GetMouseLocation() return V2.new(1200,850) end
+    local cas={}
+    function cas:BindActionAtPriority(name,fn) w.bindings[name]=fn end
+    function cas:UnbindAction(name) w.bindings[name]=nil end
+    function cas:GetAllBoundActionInfo()
+        local result={}
+        for name in pairs(w.bindings) do result[name]={} end
+        if w.nativeShake then result.FeralShakeTaps={} end
+        return result
+    end
+    local virtual={}
+    function virtual:CaptureController() if w.idleBlocked then error("input unavailable") end end
+    function virtual:ClickButton2() w.idlePulses=(w.idlePulses or 0)+1 end
+    local files={}
+    local http={}
+    function http:JSONDecode(key) assert(files[key],"invalid JSON");return files[key] end
+    function http:JSONEncode(value) local key="json:"..tostring(#w.calls)..":"..tostring(w.time)..":"..tostring(value);files[key]=value;return key end
+    local services={Players=players,ReplicatedStorage=rs,RunService=run,UserInputService=uis,
+        ContextActionService=cas,HttpService=http,Workspace=workspace,VirtualUser=virtual}
+    local gameObject={PlaceId=108901361810209,PlaceVersion=2412}
+    function gameObject:GetService(name) return assert(services[name],"unknown service "..name) end
+    local stored={}
+    local mockOS=table.clone(os);mockOS.clock=function()return w.time end
+    local env=setmetatable({
+        game=gameObject,workspace=workspace,Enum=enum,Vector3=V3,Vector2=V2,
+        Color3={fromRGB=function(r,g,b)return {_type="Color3",R=r/255,G=g/255,B=b/255}end},
+        UDim={new=function(a,b)return {Scale=a,Offset=b}end},
+        UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end},
+        Instance={new=new},RaycastParams={new=function()return {}end},OverlapParams={new=function()return {}end},
+        typeof=kind,os=mockOS,
+        getgenv=function()return w.localEnvironment end,
+        readfile=function(path)assert(stored[path],"file absent");return stored[path]end,
+        writefile=function(path,value) if w.writeBlocked then error("disk unavailable") end;stored[path]=value end,
+        require=function(object)return assert(object.ModuleValue,"module unavailable")end,
+        warn=function(message)w.warning=message end,
+    },{__index=getfenv()})
+    env.loadstring=function(source,name)
+        local fn,err=loadstring(source,name)
+        if fn then setfenv(fn,env) end
+        return fn,err
+    end
+    function w:animal(species,position)
+        local char=new("Model");char.Name=species or "Wolf";char.Parent=workspace
+        local hum=new("Humanoid");hum.Parent=char
+        local rootPart=new("Part");rootPart.Name="HumanoidRootPart";rootPart.Position=position or V3.new(0,3,0);rootPart.Parent=char
+        char:SetAttribute("Species",species or "Wolf");char:SetAttribute("IsWolf",true)
+        char:SetAttribute("Growth",.8);char:SetAttribute("Hunger",100);char:SetAttribute("Thirst",100)
+        char:SetAttribute("FeralInjury",0);char:SetAttribute("FeralBleed",0);char:SetAttribute("FeralVenomAmt",0)
+        char:SetAttribute("Stamina",80);char:SetAttribute("StaminaMax",100);char:SetAttribute("PassiveClimber",1)
+        return char,hum,rootPart
+    end
+    function w:spawn(species)
+        local old=player.Character
+        if old then player.CharacterRemoving:Fire(old) end
+        local char,hum,rootPart=self:animal(species)
+        player.Character=char;self.hum,self.root=hum,rootPart
+        player.CharacterAdded:Fire(char)
+        return char
+    end
+    function w:enemy(pack,position)
+        local p=new("Player");p.Parent=root;p.DisplayName="Other";p:SetAttribute("FeralPack",pack or 2)
+        local char,hum,rootPart=self:animal("Wolf",position or V3.new(0,3,-4))
+        p.Character=char;table.insert(players.list,p)
+        return p,char,hum,rootPart
+    end
+    function w:step(dt)
+        self.time+=dt or .05
+        run.PreAnimation:Fire()
+        run.Heartbeat:Fire(dt or .05)
+        for _,record in pairs(table.clone(self.renders)) do record.fn(dt or .05) end
+    end
+    function w:advance(seconds)
+        for _=1,math.ceil(seconds/.02) do self:step(.02) end
+    end
+    function w:input(key,kind,processed)
+        local input={KeyCode=key or enum.KeyCode.Unknown,UserInputType=kind or enum.UserInputType.Keyboard,Position=V3.new(1200,850,0)}
+        for _,fn in pairs(table.clone(self.bindings)) do fn("",enum.UserInputState.Begin,input) end
+        uis.InputBegan:Fire(input,processed==true)
+        return input
+    end
+    function w:connections()
+        local n=0
+        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do n+=s:Count() end
+        for _ in pairs(self.renders) do n+=1 end
+        for _ in pairs(self.bindings) do n+=1 end
+        for _,o in ipairs(self.objects) do for _,s in pairs(o._signals) do n+=s:Count() end end
+        return n
+    end
+    function w:count(class)
+        local n=0
+        for _,o in ipairs(self.objects) do if not o._destroyed and o:IsA(class) then n+=1 end end
+        return n
+    end
+    function w:remote(name) return rs:FindFirstChild(name) end
+    w.env,w.player,w.workspace,w.rs,w.run,w.uis,w.cas,w.new,w.stored=env,player,workspace,rs,run,uis,cas,new,stored
+    w:spawn("Wolf")
+    return w
+end
+Mock.Enum,Mock.V3,Mock.V2 = enum,V3,V2
+return Mock
