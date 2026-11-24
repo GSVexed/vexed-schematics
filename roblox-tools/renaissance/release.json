@@ -1,0 +1,22 @@
+{
+  "version": "15.0.0",
+  "date": "2026-11-24",
+  "source_commit": "59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600",
+  "bundle_sha256": "bc388ccfdc8bae19e7fe2dca7c24bf2fbd3f97266c205c38544735e81ea3e12f",
+  "game_baseline": 2412,
+  "retained_features": 21,
+  "removed_features_reintroduced": 0,
+  "regressions": {
+    "total": 54,
+    "passed": 54,
+    "failed": 0
+  },
+  "source_ci_run": 45442296264,
+  "potassium_staging_run": 45441710135,
+  "potassium_runtime_run": 45442549339,
+  "compiled_files": 13,
+  "gameplay_acceptance": "unverified",
+  "rollback_commit": "158474ba80c0d613c3427399f24059341369acc8",
+  "clean_v14_hash_unchanged": true,
+  "source_parity": true
+}

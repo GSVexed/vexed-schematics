@@ -27,8 +27,13 @@ def main():
     args = ap.parse_args()
     manifest = build()
     compiled = []
-    for p in [*(ROOT/"src"/f"{name}.luau" for name in MODULES),
-              ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", DEST]:
+    compile_paths = [*(ROOT/"src"/f"{name}.luau" for name in MODULES),
+                     ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", DEST]
+    launcher = ROOT.parent/"feral-renaissance.lua"
+    if launcher.exists():
+        compile_paths.append(launcher)
+        assert "59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600/roblox-tools/feral-renaissance-v15.0.0.lua" in launcher.read_text()
+    for p in compile_paths:
         result = subprocess.run([args.compiler, "--null", str(p)], capture_output=True, text=True)
         if result.returncode:
             raise RuntimeError(result.stdout + result.stderr)

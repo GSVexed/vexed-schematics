@@ -13,7 +13,8 @@
     "controller.luau",
     "mock_roblox.luau",
     "suite.luau",
-    "feral-renaissance-v15.0.0.lua"
+    "feral-renaissance-v15.0.0.lua",
+    "feral-renaissance.lua"
   ],
   "module_parity": true,
   "rollback_hashes_unchanged": true,

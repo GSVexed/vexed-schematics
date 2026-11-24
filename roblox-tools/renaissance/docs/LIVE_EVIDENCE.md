@@ -18,4 +18,24 @@ Private runner run 45441710135 executed that exact pinned source through Potassi
 | Native gameplay requests | Zero |
 | Shutdown | GUI removed; zero owner cleanup errors |
 
-The running-release lifecycle check is pending in this commit. No fresh combat, HP, condition-clearance, survival-credit, escape, minigame-grade or authoritative movement outcome is claimed.
+## Running release
+
+Final source 59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600 passed the published compile/regression gate in run 45442296264, including 54 regression scenarios.
+
+Private runner run 45442549339 then validated that exact source through Potassium in FERAL version 2412. The machine-readable result is in live-runtime-result.json.
+
+| Check | Observed result |
+|---|---|
+| Stage gate | Hidden construction, render and cleanup passed before retiring any active hub |
+| Active runtime | 49 actual heartbeat ticks and 49 render frames observed; remained active |
+| Permanent reach | Client geometry lease applied |
+| Menu | Visibility changed and restored through its live owner method |
+| Hot reload | Previous Renaissance instance closed and removed its GUI; replacement active |
+| Shutdown | GUI removed, exact owned reach fields/functions restored, zero cleanup errors |
+| Final activation | Version 15.0.0 active using migrated real saved settings; all 21 records requested |
+| Validation gameplay requests | Zero from the all-OFF validation instance |
+| Own-animal visual fixture | Unavailable: no active own animal during this live run |
+
+The final saved-settings activation may arm the user's selected native features when an eligible animal/session exists. It is normal operation, not controlled efficacy evidence.
+
+Actual live hollow outlines/tags on a spawned animal, native keyboard sprint interaction, accepted combat damage/range, sustained stamina, added HP, 4x condition clearance, survival credit, escape outcomes, surface takeoff and minigame grades remain unverified. No private server handler was obtained. Native interface presence and local write/readback do not establish those results.

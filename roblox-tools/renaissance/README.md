@@ -4,6 +4,12 @@ The scoped client-hub rewrite for the v2412 research baseline retains all 21 app
 
 CLEAN v14 and its clean loader remain byte-for-byte unchanged. Renaissance has a separate versioned source and loader.
 
+## Start
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+
+The launcher pins source 59e0a6d0db6d1a9e8c9f57f7a8368e858f8ec600. The hub is already live-checked for startup, settings, reload and cleanup. All 54 regression scenarios pass. Server-dependent benefits remain explicitly unverified.
+
 ## Build and test
 
 Use official Luau commit 97b2f4bf9cd935bed666f3e643a3b749b4d22f38, then:
