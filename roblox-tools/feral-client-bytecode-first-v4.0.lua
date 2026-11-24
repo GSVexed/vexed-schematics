@@ -39,7 +39,7 @@ local player = Players.LocalPlayer
 if not player then warn("[FERAL v3.0] LocalPlayer unavailable."); return end
 local playerGui = player:FindFirstChildOfClass("PlayerGui")
 if not playerGui then warn("[FERAL v3.0] Join fully, then run the loader again."); return end
-for _,name in ipairs({"FeralCompleteDiagnosticV30", "FeralCompleteDiagnosticV301", "FeralCompleteDiagnosticV302", "FeralCompleteDiagnosticV303", "FeralClientRefreshV304"}) do
+for _,name in ipairs({"FeralBytecodeFirstV400"}) do
     local previous = playerGui:FindFirstChild(name)
     if previous then
         -- These are only our diagnostic panels. Their Destroying handler requests
@@ -67,7 +67,8 @@ end
 local API = {
     write = resolveApi("writefile",writefile), read = resolveApi("readfile",readfile), mkdir = resolveApi("makefolder",makefolder),
     isfolder = resolveApi("isfolder",isfolder), isfile = resolveApi("isfile",isfile),
-    decompile = nil, -- intentionally disabled: bytecode only clipboard = resolveApi("setclipboard",setclipboard) or resolveApi("toclipboard",toclipboard),
+    decompile = nil, -- intentionally disabled
+    clipboard = resolveApi("setclipboard",setclipboard) or resolveApi("toclipboard",toclipboard),
     loadedModules = resolveApi("getloadedmodules",getloadedmodules), scripts = resolveApi("getscripts",getscripts),
     bytecode = resolveApi("getscriptbytecode",getscriptbytecode),
     cancel = optional(task.cancel), defer = optional(task.defer), spawn = optional(task.spawn),
@@ -696,7 +697,7 @@ function D.createUI()
     local colors = {bg = Color3.fromRGB(17,24,35), ink = Color3.fromRGB(235,243,249),
         muted = Color3.fromRGB(161,184,202), blue = Color3.fromRGB(44,103,157),
         green = Color3.fromRGB(26,124,101), red = Color3.fromRGB(159,60,70)}
-    local gui = make("ScreenGui", {Name = "FeralClientRefreshV304", ResetOnSpawn = false,
+    local gui = make("ScreenGui", {Name = "FeralBytecodeFirstV400", ResetOnSpawn = false,
         IgnoreGuiInset = true, DisplayOrder = 470}, playerGui)
     D.gui = gui
     local panel = make("Frame", {Name = "Panel", Size = UDim2.fromOffset(620,484),
@@ -849,7 +850,7 @@ function D.summary()
         local seconds = math.max(0.001,os.clock() - D.sourcePhaseStarted)
         local processed = D.sourceTerminal or 0
         local rate = processed / seconds
-        lines[#lines + 1] = string.format("Source phase: %.0fs | average %.1f scripts/s",seconds,rate)
+        lines[#lines + 1] = string.format("Bytecode phase: %.0fs | average %.1f scripts/s",seconds,rate)
         if seconds >= 3 and rate > 0 and not D.finished then
             lines[#lines + 1] = string.format("Approx. %.0f minutes remaining at that average rate (estimate)",math.max(0,D.c.eligible - processed)/rate/60)
         end
@@ -891,75 +892,20 @@ end
 
 -- Exports are data-only text. Windows creates the ZIP after collection.
 local EXPORT_README = [[
-FERAL BYTECODE-FIRST v4.0.0
-This run collects bytecode WITHOUT in-game decompilation.
-Bytecode files have .b64.txt extensions and preserve raw executor output.
-Offline decompilation may require a matching tool and is not guaranteed.
-Bytecode is NOT safely redacted; inspect before sharing.
+FERAL BYTECODE-FIRST V4.0.0 — LOCAL BYTECODE EXPORT
 
-FERAL COMPLETE DIAGNOSTIC v3.0.3 — DATA-ONLY EXPORT
+Captures only CLIENT-VISIBLE BYTECODE, not reconstructed source.
+No decompilation, Source property reads, game remotes, or automatic uploads.
+Files under UPLOAD_PART_* use lossless Base64 to preserve raw executor
+output. The bytes may be wrapped/compressed and might not be compatible
+with an offline decompiler. There is no private server-only source.
 
-Click START SCAN in Roblox. Wait for a finished status, or click STOP & SAVE.
-All generated files are plain text. There are no executable packaging helpers.
+Opaque bytecode cannot safely be redacted. Inspect files before sharing.
+Personal player, profile and chat branches are excluded by the inventory.
 
-ONE ZIP (recommended):
-Open Velocity's workspace and find the folder shown in the panel.
-Right-click the ENTIRE export folder in Windows and choose:
-  Show more options > Send to > Compressed (zipped) folder
-Or use Compress to > ZIP file if that menu is offered.
-Upload the resulting ZIP to ChatGPT. Do not upload only a summary.
-
-SMALLER ZIPs (if the whole ZIP is too large):
-Inside the export folder, zip EACH UPLOAD_PART_* folder separately using the
-same Windows menu. Upload ALL those ZIPs, including UPLOAD_PART_000_METADATA.
-Each part contains UPLOAD_PART.json.txt with session, part number and total.
-The data parts aim for 24 MiB of payload-plus-overhead accounting, excluding
-advisory metadata. A single unusually large record may exceed that target and
-is explicitly marked. Ordinary data/source chunks are 256/512 KiB.
-
-UPLOAD_PART_000_METADATA/manifest.json.txt is the authoritative latest master.
-Its catalog/files_*.ndjson.txt lists every payload's root-relative path, byte
-length, Adler-32 checksum and executor read-back status. Keep folder names.
-When uploading individual part ZIPs, their internal paths are relative to the
-folder named by UPLOAD_PART.json.txt. Reattach that prefix when reconstructing.
-The master names all required parts and hashes the catalogs and controls.
-The final ZIP itself is made by Windows; upload completeness and checksums can
-be checked against this text metadata after upload.
-
-Metadata checkpoints are immutable. The mutable latest manifest, latest summary,
-root READ_FIRST.txt and per-folder UPLOAD_PART.json.txt are convenience/index
-copies. They do not replace the authoritative cataloged payload. A crash may
-leave later files unreferenced by the last intact checkpoint. Such a snapshot
-is partial. No partial collection is labelled as a complete game project.
-
-objects/{game,platform}_*.ndjson.txt: hierarchy, IDs/parent IDs, names, paths,
-classes, attributes, tags, covered properties, observation times, failed reads.
-scripts/*: the full known script inventory, saved before source collection.
-source-results/*: one terminal outcome per known script, joined by instance ID.
-sources/{game,platform}/S*_part*.source.txt: successful privacy-filtered source.
-Concatenate chunks in the source-result.files order without separators. A chunk
-may split a UTF-8 character; reconstruct all bytes before decoding the source.
-Every eligible script retains its own outcome. Exactly equal exported text can
-reference one shared file. If optional getscriptbytecode returns supported raw
-Luau data, byte-for-byte identical code can reuse a verified canonical source
-reconstruction. Those records are marked shared_identical_bytecode_reconstruction.
-Raw bytecode is never written. Unsupported getter/format falls back to ordinary
-source reconstruction. Sharing does not remove game/platform inventory entries.
-attributes, values, remotes, ui, assets, focus and logs contain cross-references,
-errors and deliberate exclusions. focus never replaces the full inventories.
-coverage.json.txt documents the complete property schema, caps and omissions.
-Sources over the size cap are explicitly not exported; no prefix is called full.
-
-No gameplay remotes or arbitrary game modules are invoked. No gameplay values,
-security identities or server checks are changed. Only our GUI and text exports
-are written. Other-player/profile data, UI/chat text, credentials, authentication
-APIs and debug/getgc memory are excluded. Suspicious source literals are redacted
-and comments omitted before saving. Raw exception text is not exported.
-This is a changing client snapshot, not an atomic Studio project. Server-only,
-unreplicated, streamed-out and inaccessible content is absent. Decompilation
-is optional and reconstructed source can be inaccurate. Native blocking executor
-calls cannot be forcibly preempted. Pausing resumes in-session; restarting creates
-a fresh folder rather than a cross-session resume.
+After START SCAN completes, COPY FOLDER NAME and ZIP the entire folder.
+Alternatively ZIP each UPLOAD_PART_* folder, including part 000 metadata.
+Stop the older collector before running this one.
 ]]
 
 function D.control(path, body)
@@ -1012,13 +958,13 @@ function D.manifest()
             checksum_algorithm = "adler32", checksums_are_authentication = false},
         catalogs = D.catalogs, controls = controls, streams = streams,
         capabilities = {writefile = API.write ~= nil, readfile = API.read ~= nil,
-            makefolder = API.mkdir ~= nil, decompile = API.decompile ~= nil,
+            makefolder = API.mkdir ~= nil, decompile = false, getscriptbytecode = API.bytecode ~= nil,
             getloadedmodules = API.loadedModules ~= nil, getscripts = API.scripts ~= nil,
             task_cancel = API.cancel ~= nil, task_defer = API.defer ~= nil,task_spawn = API.spawn ~= nil},
-        source_optimization = {scope = "eligible_game_scripts_only_platform_inventory_retained",concurrent_decompilers = 1,
+        source_optimization = {scope = "eligible_game_scripts_only_platform_inventory_retained",concurrent_decompilers = 0,
             shared_text_requires_byte_equality = true,cache_entry_limit = CFG.sourceDedupeMaxEntries,
             cache_source_byte_limit = CFG.sourceDedupeMaxBytes,bytecode_api = API.bytecode ~= nil,
-            bytecode_reuse_requires_exact_bytes = true,raw_bytecode_exported = false,
+            bytecode_reuse_requires_exact_bytes = true,raw_bytecode_exported = true,
             bytecode_cache_byte_limit = CFG.bytecodeCacheMaxBytes},
         startup_stage = D.startupStage, startup_failure_code = D.failureCode,
         api_resolution = apiOrigins,
@@ -1102,12 +1048,12 @@ function D.preflight()
         D.createdFolders[name] = true
     end
     D.stage("writing_startup_probe","Testing a small file write and read-back...")
-    D.control("startup-check.txt","FERAL v3.0.3 export write/read check\n")
+    D.control("startup-check.txt","FERAL bytecode-first v4.0 export write/read check\n")
     D.stage("writing_text_instructions","Saving data-only ZIP instructions...")
     D.control("README.txt",EXPORT_README)
     D.rawWrite("READ_FIRST.txt",EXPORT_README)
     local coverage = {
-        schema = "feral-coverage/3.0.3", configuration = CFG, properties_by_base_class = D.properties,
+        schema = "feral-coverage/4.0-bytecode-first", configuration = CFG, properties_by_base_class = D.properties,
         file_output = "Text data only. Executable packaging helpers are neither exported nor required.",
         source_eligibility = {"Game-classified LocalScript", "Game-classified ModuleScript", "Game-classified Script with readable RunContext.Client"},
         source_methods = {"getscriptbytecode only", "lossless Base64 export", "exact duplicate byte comparison"},
@@ -1636,7 +1582,7 @@ function D.run()
     elseif D.c.sourceFailed > 0 or D.c.childFailures > 0 or D.c.attributeFailures > 0
         or D.c.propertyFailures > 0 or D.c.readErrors > 0 or D.c.optionalApiFailures > 0 or next(D.limits) then D.phase = "finished_with_gaps"
     else D.phase = "finished" end
-    D.current = "Export sealed. Use Windows to ZIP the entire export folder."
+    D.current = "Bytecode capture sealed. ZIP the export folder."
     D.checkpoint()
     D.finished = true
     D.notice = "Saved. Right-click the displayed folder in Windows, compress to ZIP, and upload it. For smaller ZIPs, compress and upload every UPLOAD_PART_* folder."
