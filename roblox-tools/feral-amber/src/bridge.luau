@@ -15,7 +15,7 @@ function Bridge.new(nav)
     local player=assert(Players.LocalPlayer,"No local player")
     local b={player=player,Players=Players,Rep=Rep,Workspace=Workspace,
         UserInput=UserInput,nav=nav,hexes={},hexByKey={},
-        cfg=nil,spots=nil,territory=nil,refreshAt=0,lastString=nil,
+        cfg=nil,spots=nil,territoryInstance=nil,refreshAt=0,lastString=nil,
         lastBiome=nil,motionReason="Idle",manualUncertain=false,spotCache={},spotTry={}}
     local world=Rep:FindFirstChild("FeralWorld")
     local function config(name)
@@ -26,7 +26,7 @@ function Bridge.new(nav)
     end
     b.cfg=config("TerritoryConfig")
     b.spots=config("MapSpots")
-    b.territory=Rep:FindFirstChild("FeralTerritory")
+    b.territoryInstance=Rep:FindFirstChild("FeralTerritory")
     local function attr(object,key)
         if not object then return nil end
         local ok,value=pcall(function() return object:GetAttribute(key) end)
@@ -56,14 +56,14 @@ function Bridge.new(nav)
         return all
     end
     function b:refresh(now)
-        if not self.cfg or not self.territory then
+        if not self.cfg or not self.territoryInstance then
             world=Rep:FindFirstChild("FeralWorld")
             self.cfg=config("TerritoryConfig")
             self.spots=config("MapSpots")
-            self.territory=Rep:FindFirstChild("FeralTerritory")
-            if not self.cfg or not self.territory then return end
+            self.territoryInstance=Rep:FindFirstChild("FeralTerritory")
+            if not self.cfg or not self.territoryInstance then return end
         end
-        local text=attr(self.territory,"Hexes")
+        local text=attr(self.territoryInstance,"Hexes")
         local biome=attr(Workspace,"FeralBiome") or "WolfValley"
         if type(text)~="string" or #text==0 or type(self.cfg.parseHexes)~="function"
             or type(self.cfg.hexCenter)~="function" then return end
@@ -99,11 +99,11 @@ function Bridge.new(nav)
         self.hexes,self.hexByKey=hexes,byKey
     end
     local function terrAttr(key,suffix)
-        local t=b.territory
+        local t=b.territoryInstance
         return attr(t,key.."_"..suffix)
     end
     function b:territory(key)
-        if not self.territory then return nil end
+        if not self.territoryInstance then return nil end
         local h=self.hexByKey[key]
         if not h then return nil end
         return {key=key,neutral=terrAttr(key,"neutral")==true,
