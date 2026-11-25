@@ -233,6 +233,50 @@ function Features.new(Core, bridge, registry)
         end
         return nil, "unknown config feature"
     end
+    -- Hippo Crusher Bite has a v2412 native SPEED_CAP="trot" profile.
+    -- A separate owner avoids touching other species or requiring a new toggle.
+    -- This only removes a client-side cap; the server may still impose a slow.
+    function f:reconcileHippo(s)
+        local hippo=s.alive and s.species=="Hippo"
+        local ability=hippo and bridge:config("AbilityConfig")
+        local base=hippo and bridge:config("AbilityConfigBase")
+        local profile
+        if hippo then
+            for _,cfg in ipairs({ability or false,base or false}) do
+                if type(cfg)=="table" then
+                    local candidate=cfg.CrusherBite
+                        or (type(cfg.Hippo)=="table" and cfg.Hippo.CrusherBite)
+                        or cfg.CRUSHER
+                    if type(candidate)=="table" and candidate.SPEED_CAP=="trot" then
+                        profile=candidate;break
+                    end
+                end
+            end
+        end
+        if self.hippoProfile and (not hippo or not profile or self.hippoProfile~=profile
+            or self.hippoCharacter~=s.char) then
+            self.leases:release("hippoCrush")
+            self.hippoProfile,self.hippoCharacter=nil,nil
+        end
+        if not hippo then self.hippoStatus="OFF";return end
+        if self.leases.owners.hippoCrush then
+            if self.leases:valid("hippoCrush") then
+                self.hippoStatus="CLIENT";return
+            end
+            -- An external edit owns this value now; don't overwrite it.
+            self.leases:release("hippoCrush")
+            self.hippoProfile,self.hippoCharacter=nil,nil
+            self.hippoStatus="CONFLICT";return
+        end
+        if not profile then self.hippoStatus="WAITING";return end
+        -- The native speed tier is read from the same scoped Crusher Bite
+        -- profile. Do not force Humanoid.WalkSpeed or manipulate ability remotes.
+        local applied=self.leases:apply("hippoCrush",{
+            entry(profile,"SPEED_CAP","sprint","string")
+        })
+        self.hippoStatus=applied and "CLIENT" or "WAITING"
+        if applied then self.hippoProfile,self.hippoCharacter=profile,s.char end
+    end
     function f:reconcile(s, now, force)
         if not force and now < self.nextReconcile then return end
         self.nextReconcile = now+1.25
@@ -290,6 +334,7 @@ function Features.new(Core, bridge, registry)
                 else registry:ack(id,false,"WAITING",why) end
             end
         end
+        self:reconcileHippo(s)
         local stamina = registry.byId.stamina
         if not self:flagCharacter(s,stamina.requested and stamina.applied) and stamina.requested then
             registry:ack("stamina",false,"PARTIAL","local config applied; character flag unavailable")
