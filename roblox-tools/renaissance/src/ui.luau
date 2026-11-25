@@ -67,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.4",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.4.1",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)

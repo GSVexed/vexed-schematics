@@ -1,5 +1,25 @@
 -- Every shared client-config mutation goes through one lease manager.
 local Features = {}
+-- Native tables can alias the same consumption profile in several paths.
+-- Coalesce equal intents before the strict lease manager reserves a field.
+-- Conflicting values remain an error; never silently choose the last value.
+function Features.uniquePlan(plan)
+    local result,seen={},{}
+    for _,item in ipairs(plan) do
+        if type(item.target)~="table" or item.key==nil then return nil,"invalid stamina field" end
+        local fields=seen[item.target]
+        if not fields then fields={};seen[item.target]=fields end
+        local previous=fields[item.key]
+        if previous then
+            if previous.value~=item.value or previous.kind~=item.kind then
+                return nil,"conflicting aliased stamina field: "..tostring(item.key)
+            end
+        else
+            fields[item.key]=item;table.insert(result,item)
+        end
+    end
+    return result
+end
 function Features.new(Core, bridge, registry)
     local f = { leases = Core.leases(), originalCombat = nil, combat = nil, flag = nil,
         nextReconcile = 0, configIdentity = {}, failures = {} }
@@ -147,7 +167,7 @@ function Features.new(Core, bridge, registry)
             for _,key in ipairs({"SPRINT_DRAIN","OTHER_DRAIN","BITE_DRAIN"}) do zero(venom,key) end
             local status=bridge:config("StatusConfig")
             for _,key in ipairs({"STAMINA_BASE","STAMINA_PER_POINT"}) do zero(status and status.VENOM,key) end
-            return plan
+            return Features.uniquePlan(plan)
         elseif id == "recovery" then
             if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
             if n.HEALTH_REST_MULT < 1 then return nil,"native HP Rest multiplier unavailable" end
@@ -213,6 +233,51 @@ function Features.new(Core, bridge, registry)
         end
         return nil, "unknown config feature"
     end
+    -- Hippo Crusher Bite has a v2412 native SPEED_CAP="trot" profile.
+    -- A separate owner avoids touching other species or requiring a new toggle.
+    -- This only removes a client-side cap; the server may still impose a slow.
+    function f:reconcileHippo(s)
+        local hippo=s.alive and s.species=="Hippo"
+        local ability=hippo and bridge:config("AbilityConfig")
+        local base=hippo and bridge:config("AbilityConfigBase")
+        local profile
+        if hippo then
+            for _,cfg in ipairs({ability or false,base or false}) do
+                if type(cfg)=="table" then
+                    local candidate=cfg.CrusherBite
+                        or (type(cfg.Hippo)=="table" and cfg.Hippo.CrusherBite)
+                        or cfg.CRUSHER
+                    if type(candidate)=="table" and (candidate.SPEED_CAP=="trot"
+                        or candidate==self.hippoProfile and candidate.SPEED_CAP=="sprint") then
+                        profile=candidate;break
+                    end
+                end
+            end
+        end
+        if self.hippoProfile and (not hippo or not profile or self.hippoProfile~=profile
+            or self.hippoCharacter~=s.char) then
+            self.leases:release("hippoCrush")
+            self.hippoProfile,self.hippoCharacter=nil,nil
+        end
+        if not hippo then self.hippoStatus="OFF";return end
+        if self.leases.owners.hippoCrush then
+            if self.leases:valid("hippoCrush") then
+                self.hippoStatus="CLIENT";return
+            end
+            -- An external edit owns this value now; don't overwrite it.
+            self.leases:release("hippoCrush")
+            self.hippoProfile,self.hippoCharacter=nil,nil
+            self.hippoStatus="CONFLICT";return
+        end
+        if not profile then self.hippoStatus="WAITING";return end
+        -- The native speed tier is read from the same scoped Crusher Bite
+        -- profile. Do not force Humanoid.WalkSpeed or manipulate ability remotes.
+        local applied=self.leases:apply("hippoCrush",{
+            entry(profile,"SPEED_CAP","sprint","string")
+        })
+        self.hippoStatus=applied and "CLIENT" or "WAITING"
+        if applied then self.hippoProfile,self.hippoCharacter=profile,s.char end
+    end
     function f:reconcile(s, now, force)
         if not force and now < self.nextReconcile then return end
         self.nextReconcile = now+1.25
@@ -270,6 +335,7 @@ function Features.new(Core, bridge, registry)
                 else registry:ack(id,false,"WAITING",why) end
             end
         end
+        self:reconcileHippo(s)
         local stamina = registry.byId.stamina
         if not self:flagCharacter(s,stamina.requested and stamina.applied) and stamina.requested then
             registry:ack("stamina",false,"PARTIAL","local config applied; character flag unavailable")

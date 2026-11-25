@@ -1510,5 +1510,88 @@ test("a replaced minigame remote invalidates the cached controller identity",fun
     assert(current~=old);h:close()
 end)
 
+test("aliased native climb levels no longer reject the whole stamina profile",function()
+    local w=Mock.new();local shared={stamina="drain",drain=1}
+    w.configs.PassiveConfig.CLIMBER.levels={shared,shared,{stamina="walk"}}
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2)
+    eq(h.registry.byId.stamina.applied,true);eq(h.features.leases:valid("stamina"),true)
+    eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),true)
+    eq(w.configs.NeedsConfig.STAMINA_SPRINT_DRAIN,0);eq(shared.drain,0);eq(shared.stamina,"walk")
+    local seen={}
+    for _,entry in ipairs(h.features.leases.owners.stamina)do
+        seen[entry.target]=seen[entry.target] or {};eq(seen[entry.target][entry.key],nil);seen[entry.target][entry.key]=true
+    end
+    h:close();eq(shared.drain,1);eq(shared.stamina,"drain")
+    close(w.configs.NeedsConfig.STAMINA_SPRINT_DRAIN,.94);eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),nil)
+end)
+test("aliased species climb-sprint profiles share one reversible stamina field",function()
+    local w=Mock.new();local shared={DRAIN=.8,SPEED=1.5}
+    w.configs.PassiveConfig.CLIMBER.CLIMB_SPRINT={Python=shared,Eagle=shared}
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2)
+    eq(h.registry.byId.stamina.applied,true);eq(shared.DRAIN,0);eq(shared.SPEED,1.5)
+    h:set("stamina",false);eq(shared.DRAIN,.8);eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),nil);h:close()
+end)
+test("equal aliased stamina intents coalesce while genuinely conflicting values are rejected",function()
+    local M=modules();local t={drain=1}
+    local plan=M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="drain",value=0,kind="number"}})
+    eq(#plan,1);eq(t.drain,1)
+    local bad,why=M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="drain",value=1,kind="number"}})
+    eq(bad,nil);assert(why:find("conflicting aliased",1,true));eq(t.drain,1)
+end)
+test("case-distinct stamina fields remain separate and kind conflicts remain errors",function()
+    local M=modules();local t={drain=1,DRAIN=.8}
+    local p=M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="DRAIN",value=0,kind="number"}})
+    eq(#p,2)
+    eq(M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="drain",value=0}}),nil)
+end)
+test("shared stamina profiles still release and rearm across a new animal",function()
+    local w=Mock.new();local shared={stamina="drain",drain=1}
+    w.configs.PassiveConfig.CLIMBER.levels={shared,shared,shared}
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2);local old=w.player.Character
+    w:spawn("Hippo");w:advance(.2);eq(old:GetAttribute("WolfDbgNoStamina"),nil)
+    eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),true);eq(h.registry.byId.stamina.applied,true)
+    h:close();eq(shared.drain,1);eq(shared.stamina,"drain")
+end)
+
+test("Hippo Crusher Bite releases native trot speed cap without affecting other species",function()
+    local w=Mock.new()
+    local crusher={SPEED_CAP="trot",CHARGE_TIME=1.2,FREEZE=.2}
+    w:addConfig("AbilityConfig",{CrusherBite=crusher})
+    local h=load(w,{settings={states={speed=false}}});w:advance(.3)
+    eq(crusher.SPEED_CAP,"trot")
+    w:spawn("Hippo");w:advance(1.5)
+    eq(crusher.SPEED_CAP,"sprint");eq(h.features.hippoStatus,"CLIENT")
+    eq(h.registry.byId.speed.requested,false)
+    w:advance(1.6);eq(crusher.SPEED_CAP,"sprint")
+    eq(crusher.CHARGE_TIME,1.2);eq(crusher.FREEZE,.2)
+    w:spawn("Wolf");w:advance(1.5);eq(crusher.SPEED_CAP,"trot")
+    h:close();eq(crusher.SPEED_CAP,"trot")
+end)
+test("Hippo Crusher Bite releases the exact original cap on shutdown",function()
+    local w=Mock.new();local crusher={SPEED_CAP="trot"}
+    w:addConfig("AbilityConfig",{CrusherBite=crusher});w:spawn("Hippo")
+    local h=load(w,{settings={states={speed=true}}});w:advance(.3)
+    eq(crusher.SPEED_CAP,"sprint");eq(h.features.leases:valid("hippoCrush"),true)
+    h:close();eq(crusher.SPEED_CAP,"trot")
+    eq(w.configs.NeedsConfig.RUN_SPEED,1)
+end)
+test("Hippo cap refuses incompatible schema and preserves external config edits",function()
+    local w=Mock.new();local crusher={SPEED_CAP="unknown"}
+    w:addConfig("AbilityConfig",{CrusherBite=crusher});w:spawn("Hippo")
+    local h=load(w);w:advance(.2);eq(crusher.SPEED_CAP,"unknown")
+    eq(h.features.hippoStatus,"WAITING")
+    crusher.SPEED_CAP="trot";w:advance(1.5);eq(crusher.SPEED_CAP,"sprint")
+    crusher.SPEED_CAP="custom";w:advance(1.5)
+    eq(crusher.SPEED_CAP,"custom")
+    h:close();eq(crusher.SPEED_CAP,"custom")
+end)
+test("Hippo cap falls back to current shared base profile without writing unknown ability tables",function()
+    local w=Mock.new();local crusher={SPEED_CAP="trot"}
+    w:addConfig("AbilityConfigBase",{Hippo={CrusherBite=crusher}})
+    w:spawn("Hippo");local h=load(w);w:advance(.3)
+    eq(crusher.SPEED_CAP,"sprint")
+    h:close();eq(crusher.SPEED_CAP,"trot")
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

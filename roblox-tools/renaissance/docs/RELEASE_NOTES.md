@@ -1,3 +1,31 @@
+# Renaissance 15.4.2 — Hippo Crusher Bite and stamina-plan repair
+
+Source: [immutable 15.4.2 bundle](https://github.com/GSVexed/vexed-schematics/blob/cbd9e84740538895f0f4c766b39604e10c014214/roblox-tools/feral-renaissance-v15.4.2.lua).
+The official [Luau compile and regression gate](https://github.com/GSVexed/vexed-schematics/actions/runs/45677068683) passes **185/185 scenarios**, all **18 compile checks**, module parity, reproducible packaging and unchanged historic rollback hashes.
+
+- **Hippo Crusher Bite movement:** the v2412 captured `AbilityConfigBase` contains a native `CrusherBite.SPEED_CAP = "trot"` restriction. When your own animal is Hippo and the game exposes an exact supported client-side Crusher Bite profile, Renaissance uses a separate, reversible owner to set that field to `"sprint"`. The patch does not affect other animals, force Humanoid speed every frame, send additional ability requests, or change charge, damage and cooldown values. It restores the original field upon animal change, external conflict, or shutdown. A changed/incompatible schema is left untouched.
+- **Stamina-plan fix:** preserve 15.4.1's correction of aliased fields that caused the reproduced `duplicate field` error in the actual v2412 Hippo session. The fix restores normal lease application in the simulated native contract; sustained live no-drain behavior remains separately unverified.
+- **No-regression packaging:** the build now refuses to write a candidate bundle or manifest when a known-good rollback source is missing or altered. Tampering and missing-file cases are exercised in CI.
+- **Retained:** all 21 existing features, first-safe-Perfect-window automatic minigame scheduling, native Rest provenance and pose cleanup, compact four-tab UI, Right Shift, hollow player-only health-coloured outlines, saved settings and permanent Bite Reach.
+
+**Evidence boundary:** code compilation and simulated client contracts are verified, but server-accepted Hippo travel speed, stamina across gaits, 2×/4× condition recovery, Vulture flight handoff and live minigame outcomes have not been observed for this new bundle. No private server handler was obtained.
+
+Launch the released version from the standard loader:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+```
+
+Direct rollback to full 15.4.0:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua"))()
+```
+
+CLEAN v14 and earlier complete Renaissance bundle hashes remain unchanged.
+
+---
+
 # Renaissance 15.4.0 — rapid minigames and coordinated upgrades
 
 Immutable source: [ef1544f](https://github.com/GSVexed/vexed-schematics/blob/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua). [Published source CI 45643744396](https://github.com/GSVexed/vexed-schematics/actions/runs/45643744396) passes all 176 regressions, 18 compile checks, deterministic packaging and rollback checks. The exact source also passed Potassium staging in FERAL v2412, preserving the active hub and issuing zero gameplay requests or attribute writes.
