@@ -73,8 +73,8 @@ function Agent.new(planner,adapter)
             end
             self.prevAmber=state.amber
         end
-        if state.menuOpen or state.manualInput or state.combat or state.ability
-            or state.pinned or state.resting or state.flying or state.underwater then
+        if state.menuOpen or state.manualInput or (state.combat and (not self.goal or self.goal.kind~="EAT"))
+            or state.ability or state.pinned or state.resting or state.flying or state.underwater then
             self.phase="PAUSED";self.reason="Yielding to native movement/combat/menu"
             self.adapter:stop("native action / manual control")
             return
