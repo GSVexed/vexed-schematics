@@ -1,16 +1,16 @@
 {
-  "version": "15.6.1",
+  "version": "15.6.2",
   "date": "2026-11-25",
-  "source_commit": "19c07c3311836be8d5f2bb2aedd8099c2dbc55a1",
-  "bundle_sha256": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",
+  "source_commit": "c4cbd5a5c088c85c273f5735afc68ceb46cfc90e",
+  "bundle_sha256": "c1275bd161e5548522d7ab47e9c791eba361d5d383337535d751dfab9afafa98",
   "game_baseline": 2412,
-  "retained_features": 21,
-  "module_count": 23,
+  "retained_features": 22,
+  "module_count": 24,
   "integrated_territory_version": "0.6.1",
-  "compiled_files": 28,
+  "compiled_files": 29,
   "regressions": {
-    "total": 187,
-    "passed": 187,
+    "total": 193,
+    "passed": 193,
     "failed": 0
   },
   "amber_regressions": {
@@ -26,15 +26,21 @@
   "live_gameplay_tested": false,
   "potassium_staging_run": null,
   "gameplay_acceptance": "unverified",
-  "previous_renaissance_version": "15.6.0",
-  "previous_renaissance_source": "180eba2d914e3c089482ccf90947ac880439179d",
-  "rollback_commit": "dad53c221c95b39d0c07d13d47c450224dbd5f93",
-  "release_report": "../feral-amber/docs/V0_6_1_RELEASE.md",
+  "previous_renaissance_version": "15.6.1",
+  "previous_renaissance_source": "19c07c3311836be8d5f2bb2aedd8099c2dbc55a1",
+  "rollback_commit": "e32845a8b559522a49703b2ea83f83cf15fbb870",
+  "release_report": "docs/RELEASE_NOTES.md",
   "limitations": [
     "Deterministic simulations and service mocks do not establish current live travel, gait acceptance, NPC damage, feeding rate, full-map retention or Amber/hour.",
     "Captured v2412 client configuration is read at runtime when available; later game changes can invalidate contracts.",
     "Ground and surface-swimming routes are supported; aerial and underwater routing remain manual.",
     "Native combat, ability, capture, manual controls, Rest and menus retain priority.",
     "Existing core features retain their earlier server-acceptance and live-validation limits."
-  ]
+  ],
+  "zoom_unlock": {
+    "minimum": 0.5,
+    "maximum": 100000,
+    "enabled_by_default": true,
+    "live_tested": false
+  }
 }
