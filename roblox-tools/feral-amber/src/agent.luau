@@ -160,8 +160,9 @@ function Agent.new(planner,adapter)
         end
         if goal.kind=="DRINK" then
             local value=state.thirst
-            if finite(value) and (finite(goal.baseline) and value>goal.baseline+1
-                or value>= (state.careTarget or 68)) then
+            if finite(value) and (value>= (state.careTarget or 68)
+                or finite(goal.baseline) and value>=goal.baseline+12
+                    and state.feedMode~="drink" and state.feedMode~=true) then
                 self.feeds+=1;self.goal=nil;self.phase="CONFIRMED"
                 self.reason="Thirst actually increased";self.adapter:stop("drink confirmed");return
             end
@@ -169,7 +170,9 @@ function Agent.new(planner,adapter)
             if not water then self.phase="WAIT_WATER";self.reason="No safe drinking shore detected";return end
             if state.feedCan=="drink" then
                 self.phase="DRINKING";self.adapter:stop("native drink opportunity")
-                if now>=goal.nextAction then
+                if state.feedMode=="drink" or state.feedMode==true then
+                    self.reason="Native drink session active; watching thirst"
+                elseif now>=goal.nextAction then
                     local ok=self.adapter:feed(state,"drink")
                     goal.tries+=1;goal.nextAction=now+5
                     self.reason=ok and "Native drink input; checking thirst" or "Drink input unavailable"
@@ -186,19 +189,35 @@ function Agent.new(planner,adapter)
             return
         end
         if goal.kind=="EAT" then
-            if finite(state.hunger) and (finite(goal.baseline) and state.hunger>goal.baseline+1
-                or state.hunger>= (state.careTarget or 68)) then
+            if finite(state.hunger) and (state.hunger>= (state.careTarget or 68)
+                or finite(goal.baseline) and state.hunger>=goal.baseline+12
+                    and state.feedMode~="eat" and state.feedMode~=true) then
                 self.feeds+=1;self.goal=nil;self.phase="CONFIRMED"
                 self.reason="Hunger actually increased";self.adapter:stop("food confirmed");return
             end
             if state.feedCan=="eat" then
                 self.phase="EATING";self.adapter:stop("native food opportunity")
-                if now>=goal.nextAction then
+                if state.feedMode=="eat" or state.feedMode==true then
+                    self.reason="Native eating session active; watching hunger"
+                elseif now>=goal.nextAction then
                     local ok=self.adapter:feed(state,"eat")
                     goal.tries+=1;goal.nextAction=now+5
                     self.reason=ok and "Native eat input; checking hunger" or "Eat input unavailable"
                 end
             else
+                if goal.prey and goal.prey.hum and goal.prey.hum.Health<=0
+                    and not goal.preyKilled then
+                    goal.preyKilled=true;goal.killAt=now
+                    self.hunts+=1
+                    self.adapter:stop("observed NPC health reached zero")
+                    self:log(now,"hunt","NPC health reached zero; waiting for edible offer")
+                end
+                if goal.preyKilled and now-(goal.killAt or now)<8 then
+                    self.phase="WAIT_FOOD"
+                    self.reason="Prey down; waiting for native FeedCan eat offer"
+                    return
+                end
+                if goal.preyKilled then goal.prey=nil;goal.preyKilled=false end
                 local prey=goal.prey and self.adapter:checkPrey(goal.prey,state)
                 if not prey then
                     prey=self.adapter:prey(state)
