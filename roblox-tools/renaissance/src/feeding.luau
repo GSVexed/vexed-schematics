@@ -29,7 +29,7 @@ function Feeding.new(bridge,policy,ledger)
             ledger:event("native_feed_cancel_for_attack",now,{called=called==true})
         end
     end
-    function f:tick(s,now)
+    function f:tick(s,now,externalCare)
         local invalid = not s.alive or s.chat or s.gameMenu or s.captured or s.grab or s.holding or s.ability
             or s.flying or s.climbing
             or s.attackHeld or now < policy.attackUntil
@@ -85,7 +85,10 @@ function Feeding.new(bridge,policy,ledger)
         local cfg=bridge:config("NeedsConfig")
         local maximum=cfg and cfg[active=="eat" and "HUNGER_MAX" or "THIRST_MAX"] or 100
         if type(maximum) ~= "number" then maximum=100 end
-        if value >= maximum-.5 or now-session.progressAt < 4.5 then return end
+        -- Territory Care owns repair/cancellation for its own feeding session.
+        -- Keep native approach protection and observations, without a second
+        -- stop/start repair racing the farming controller.
+        if externalCare or value >= maximum-.5 or now-session.progressAt < 4.5 then return end
         self.status="Feeding stalled; no resource increase observed"
         if bridge:attribute(s.char,"FeedCan")~=active then
             self.status="Feeding stalled; native food/water offer lost"

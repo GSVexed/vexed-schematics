@@ -1,4 +1,4 @@
-# Renaissance 15.5.0 architecture
+# Renaissance 15.6.0 architecture
 
 The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. The complete bundle embeds thirteen core modules and ten Amber modules, independently compiled from owned source. No raw game bytecode or reconstructed game source is bundled.
 
@@ -48,7 +48,7 @@ Disable, shutdown and reload release the owned manual binding and restore the or
 
 Native discovery first inspects existing own-script callbacks on InputBegan, FeralFeedTap and FeralGrabV2. It reads their function upvalues without invoking or replacing connections. WolfController closure discovery is scoped to the own script and requires the actual player/remote anchors. tryBite additionally verifies its captured doBite function and WolfActions reference. toggleFeed state layout is validated before reading native pending/started state. The named cancelFeed prototype is not required to remain live: cancellation can use the original toggleFeed first branch only after verifying an active mode. It cannot start an inactive feeding offer. All calls retain native cooldown, pin, diet, distance and other eligibility checks. Missing capability does not cause fabricated gameplay requests.
 
-Feeding intent starts only from E/native feeding UI or an already active native session. Both native pending approach and a bounded manual-intent fallback block Rest. A stationary session with no measured hunger/thirst increase can receive one original-toggleFeed stop/start repair. Movement, attacks, native no-food/completion replies, respawn and shutdown cancel pending repairs. There is no food search, threshold activation or local hunger/thirst write.
+Feeding intent starts only from E/native feeding UI or an already active native session. Both native pending approach and a bounded manual-intent fallback block Rest. A stationary session with no measured hunger/thirst increase can receive one original-toggleFeed stop/start repair. Movement, attacks, native no-food/completion replies, respawn and shutdown cancel pending repairs. That describes the core user-started feeding owner. The integrated Territory coordinator additionally owns automatic resource seeking and threshold care; neither writes local hunger/thirst values. During owned Territory care, core feeding continues protection/observation and yields stall repair to that care owner.
 
 G remains ordinary carry/drop unless a native-eligible friendly cub in water is selected. Rescue may request one ordinary jump, wait for actual water-exit eligibility, and dispatch the normal carry request once. It does not alter water flags, permissions, age/size limits, positions or opponents. An own native Carry clamp must reference the cub before the ledger records an observed pickup.
 
@@ -75,3 +75,7 @@ The owned pose reset expires after a native animation frame (hub Camera+3; captu
 Agent owns the single objective across travel, territory, feeding and hunting. Care distinguishes requested approach, active feeding, interruption and verified resource completion. Planner holds a native region cursor and builds local tours; contested hexes are deferred without blanket proximity pauses. Nav verifies physical displacement and body clearance; Driver restores only callbacks it still owns. STOP invalidates paths and releases owned input immediately. UI tab/hide only retires the page view, leaving engine ownership intact.
 
 The preserved core feature registry remains exactly 21 records. Requested Territory farming is a separate explicit START/STOP operation integrated into the same owner. See ../../feral-amber/docs/V0_5_RELEASE.md for contracts, bounds and acceptance evidence.
+
+## Territory 0.6 ownership refinements
+
+A bounded return chain preserves root territory work across urgent scent and care. Native tryBite owns native cooldown checks; cached advisory readiness cannot veto that original handler. Nav validates mesh edges and immediate support, gives detours a precise arrival radius, recognizes slow progress and prefers a checked direct corridor when clear. Guarded Burst can be requested with a known native mode when stamina telemetry is absent. Resource scouting persists while useful; multi-second depletion estimates and critical owned-feed cancellation improve survival decisions. Current versus retained hunt evidence and route-local counters are separate. These changes remain live-unverified; see ../../feral-amber/docs/V0_6_RELEASE.md.

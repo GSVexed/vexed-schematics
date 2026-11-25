@@ -225,5 +225,60 @@ test("a later success replaces the last skipped-hex notice",function()
     local b,a=world();a:log(10,"deferred","Old skipped target");a:log(11,"confirmed","Finished another target")
     eq(a:status().lastNotice,"Finished another target")
 end)
+test("urgent scent interrupted by thirst retains the original territory return chain",function()
+    local b,a=world();b.state.regionGrid=3;b.hex.region=1
+    local scent={key="S",region=9,center={x=0,z=100},owner=2,hold=.6}
+    function b:territories()return {self.hex,scent}end
+    function b:territory(key)return key=="S" and scent or self.hex end
+    function b:territorySpot(key)return self:territory(key).center end
+    a:tick(10);local original=a.goal;scent.hold=.1;a:tick(11.2);eq(a.goal.key,"S")
+    b.state.thirst=25;b.state.feedCan="drink";a:tick(12);eq(a.goal.kind,"DRINK")
+    b.state.thirst=100;b.state.feedCan=nil;a:tick(13);eq(a.goal.key,"S");eq(a.suspended,original)
+    scent.hold=1;a:tick(14);a:tick(14.6);eq(a.goal,original);eq(a.suspended,nil);eq(#a.returns,0)
+end)
+test("two failed route approaches retain the hex and the third failure defers it",function()
+    local b,a=world();b.move=function()return "STUCK"end
+    a:tick(10);eq(a.goal.key,"H");eq(a.failures,0)
+    a:tick(11);eq(a.goal.key,"H");eq(a.failures,0)
+    a:tick(12);eq(a.goal,nil);eq(a.failures,1)
+end)
+test("currency earned during STOP is excluded on the next start",function()
+    local b,a=world();b.state.amber=100;a:tick(10);a:setEnabled(false)
+    b.state.amber=500;a:setEnabled(true);a:tick(20);eq(a.earned,0)
+    b.state.amber=510;a:tick(21);eq(a.earned,10)
+end)
+test("old hunt information is not presented as the current territory hunt",function()
+    local b,a=world();a.lastHunt={active=true,attacks=0,result="native cooldown"};a:tick(10)
+    eq(a:status().hunt,nil);assert(a:status().lastHunt)
+end)
+test("low health food care searches edible resources instead of hunting or starving in place",function()
+    local b,a=world();b.state.hunger=10;b.state.healthFraction=.3
+    b.resourceSearch=function()return {x=80,z=0}end
+    a:tick(10);eq(a.phase,"SEARCH_FOOD");eq(b.moves,1)
+end)
+test("owned eating yields to critical thirst after native cancellation is observed",function()
+    local b,a=world();b.state.hunger=20;b.state.feedCan="eat";a:tick(10)
+    b.state.nativeFeedMode="eat";b.state.nativeFeedKnown=true;b.state.thirst=8;a:tick(11)
+    eq(b.cancels,1);eq(a.phase,"VERIFY_FEED_RELEASE");eq(a.goal.kind,"EAT")
+    b.state.nativeFeedMode=nil;b.state.feedCan="drink";a:tick(11.5)
+    eq(a.goal.kind,"DRINK");eq(b.inputs,2)
+end)
+test("measured rapid depletion brings survival care forward before the fixed threshold",function()
+    local b,a=world();b.state.hunger=79;a:tick(10)
+    b.state.hunger=74;a:tick(15);eq(a.goal.kind,"EAT");assert(a.lastState.hungerReserve<240)
+end)
+test("sparse replicated need drops do not create a false rapid-depletion forecast",function()
+    local b,a=world();b.state.hunger=79;a:tick(10)
+    b.state.hunger=78.8;a:tick(10.2);eq(a.goal.kind,"TERRITORY")
+    a:tick(14.2);eq(a.goal.kind,"TERRITORY");assert(a.lastState.hungerReserve>240)
+end)
+test("care budget does not discard an ongoing hunt with repeatedly observed useful progress",function()
+    local b,a=world();b.state.hunger=25
+    a.Hunt={new=function()return {kills=0,tick=function(self,s)self.lastUsefulAt=s.now;return "HUNT_VERIFY","HP progress"end,
+        status=function()return {active=true}end}end}
+    a:tick(10);local goal=a.goal
+    for at=20,200,10 do a:tick(at);eq(a.goal,goal)end
+    eq(a.failures,0)
+end)
 print(string.format("AMBER_CARE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Care transition regressions failed")

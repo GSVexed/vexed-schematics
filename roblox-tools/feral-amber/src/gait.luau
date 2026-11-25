@@ -40,7 +40,7 @@ function Gait.select(distance,turn,stamina,options)
     end
     local reserve=finite(stamina) and stamina or nil
     local angle=finite(turn) and turn or 0
-    if options.allowBurst~=false and reserve and reserve>=.56
+    if options.allowBurst~=false and (reserve and reserve>=.56 or not reserve and options.nativeBurstAvailable==true)
         and distance>=80 and angle<=22 and not options.crowded
         and options.burstReady~=false then return "BURST" end
     if options.hunting and (options.preySpeed or 0)>6 and distance>6
@@ -93,6 +93,7 @@ function Gait.controller(io)
         if wanted=="BURST" and (type(s.hudBurst)~="boolean" or s.hudBurstNo or (self.blocked.BURST or 0)>now) then wanted="SPRINT" end
         if (wanted=="SPRINT" or wanted=="BURST") and (self.blocked.SPRINT or 0)>now then wanted="TROT" end
         if wanted~=self.requested then self.changedAt=now;self.requested=wanted end
+        if observed==wanted and not self.pending then self.reason="Native gait already active" end
         local fast=wanted=="SPRINT" or wanted=="BURST"
         io:hold("SHIFT",fast)
         local function request(mode,key)

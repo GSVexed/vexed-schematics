@@ -47,9 +47,11 @@ Baseline: v2412 bytecode, independently rechecked (943 payloads; 383 programs; 6
 15. Sampling HP after the delayed claim could miss a fast HP drop. Baselines now start at the native bite marker.
 16. Native biteClaimTarget ranks by bodyGap minus facingDot times two. The guide previously used a different distance-based rank and cached position delta.
 
-## Deliberately excluded
+## Historical exclusions and current integrated scope
 
-All thirteen removals remain excluded: hunger/thirst assistance; oversized Eagle carrying; Talon cooldown assistance; night vision; camera shake reduction; performance mode; territory rush; automatic claiming; automatic rescenting; hidden territory movement; automatic food/water; visible diagnostics/copy-status; animal/mechanics information.
+The CLEAN core historically excluded hunger/thirst assistance, oversized Eagle carrying, Talon cooldown assistance, night vision, camera shake reduction, performance mode, Territory Rush, automatic claiming/rescenting, hidden territory movement, automatic food/water, a diagnostics page and animal/mechanics information.
+
+Since 15.5, ordinary continuous-travel Territory claiming/rescenting and native automatic food/water are integrated in the main Territory page, with optional local COPY STATUS. The original core registry remains 21 records. Old teleport/hidden movement, removed carrying/cooldown changes and a diagnostics tab remain excluded. The 15.6 Territory overhaul coordinates core feeding protection with its own care owner; see ../../feral-amber/docs/V0_6_RELEASE.md for current behavior and limits.
 
 ## Explicitly requested interaction improvements in 15.2
 

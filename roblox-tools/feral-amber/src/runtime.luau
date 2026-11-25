@@ -1,5 +1,5 @@
 -- Built-in Territory engine. Renaissance owns scheduling, UI and shutdown.
-local Runtime={version="0.5.1"}
+local Runtime={version="0.6.0"}
 function Runtime.start(M,hub)
     assert(hub and hub.ui and type(hub.ui.registerPage)=="function","Update Renaissance for its built-in Territory page")
     local env=(type(getgenv)=="function" and getgenv()) or _G
@@ -54,7 +54,7 @@ function Runtime.start(M,hub)
             pcall(agent.setEnabled,agent,false)
             pcall(nav.stop,nav,nav.desiredHum,nav.desiredRoot,"TERRITORY_ERROR")
             pcall(nav.releaseKeys,nav);pcall(bridge.releaseInputs,bridge)
-            agent.enabled=false;agent.goal=nil;agent.suspended=nil;agent.phase="ERROR"
+            agent.enabled=false;agent.goal=nil;agent.suspended=nil;agent.returns={};agent.phase="ERROR"
             agent.lastError=tostring(why):sub(1,180);agent.reason="Territory stopped after an input or data error"
         end
     end

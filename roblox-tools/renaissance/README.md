@@ -1,6 +1,6 @@
-# FERAL Project Renaissance 15.5.1
+# FERAL Project Renaissance 15.6.0
 
-Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records and Amber 0.5.1.
+Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records and Amber 0.6.0.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
@@ -10,11 +10,11 @@ Open **Territory** and select **START FARMING** after spawning and joining a pac
 
 The update adds strategic 3×3 region sweeps and local routes, contested-hex skipping, stable claim completion, interrupted/full drinking, faster bounded tree recovery, sustained sprint/Burst and trailing NPC pursuit. See the [complete 15.5 / Amber 0.5 report](../feral-amber/docs/V0_5_RELEASE.md) for exact behavior and bounds.
 
-**Validation:** 187/187 retained Renaissance regressions plus 188/188 Amber regressions pass with the pinned official Luau compiler/interpreter. All 23 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
+**Validation:** 187/187 retained Renaissance regressions plus 215/215 Amber regressions pass with the pinned official Luau compiler/interpreter. All 23 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
 
 **Live gameplay remains unverified for this version.** No current Roblox/Potassium session is available here. Tests do not establish accepted speed, NPC damage, full-map retention, income, sustained stamina or recovery effects. Previous core features retain their earlier limits.
 
-The [15.5.1 patch report](../feral-amber/docs/V0_5_1_RELEASE.md) covers claim-position stability, bounded water work, recovery handoffs, urgent scent resumption and fault isolation. The previous broad overhaul remains documented separately.
+The [15.6.0 / Territory 0.6 release report](../feral-amber/docs/V0_6_RELEASE.md) covers committed hunts, original native attack dispatch, continuous terrain-aware travel, guarded Burst, survival handoffs and regression evidence.
 
 ## Build
 
@@ -40,7 +40,7 @@ The 15.5.0 rollback already includes its Territory page. Earlier companion relea
 
 ## Records
 
-- [Current release report](../feral-amber/docs/V0_5_RELEASE.md), [release metadata](release.json), [test results](test-results.json).
+- [Current release report](../feral-amber/docs/V0_6_RELEASE.md), [release metadata](release.json), [test results](test-results.json).
 - [Architecture](docs/ARCHITECTURE.md), [21-feature audit](docs/FEATURE_AUDIT.md), [historical release notes](docs/RELEASE_NOTES.md).
 - [Native territory/input contracts](../feral-amber/docs/native-contracts.json), [previous live evidence](docs/LIVE_EVIDENCE.md).
 

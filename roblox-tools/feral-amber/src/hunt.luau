@@ -11,6 +11,7 @@ function Hunt.new(adapter)
             if self.adapter.preyBlocked then self.adapter.preyBlocked[self.target.model]=now+80 end
         end
         self.target,self.pending=nil,nil
+        self.blockedAt=now;self.abandonReason=why
         self.lastResult=why;self.nextSelect=now+.25
         self.adapter:stop(why)
     end
@@ -32,9 +33,17 @@ function Hunt.new(adapter)
             if prey and prey.model and (self.blocked[prey.model] or 0)>now then prey=nil end
             if not prey then self.adapter:stop("no suitable NPC prey");return "WAIT_FOOD","No suitable safe NPC prey or edible food" end
             self.target=prey;self.started=now;self.bestDistance=distance(s.position,prey.position)
-            self.closingAt=now;self.sample=nil;self.noDamageAt=now;self.missesOnTarget=0
+            self.closingAt=now;self.sample=nil;self.noDamageAt=nil;self.missesOnTarget=0
+            self.lastTargetHealth=prey.health or prey.hum and prey.hum.Health
+            self.lastUsefulAt=now;self.blockedSince=nil;self.nextAttack=now
+            self.repositionUntil=nil;self.previousThrottle=nil;self.fullSpeed=nil;self.routeRetries=0
         end
         local health=prey.health or prey.hum and prey.hum.Health
+        if finite(health) and finite(self.lastTargetHealth) and health<self.lastTargetHealth-.01 then
+            self.lastUsefulAt=now;self.noDamageAt=now;self.closingAt=now
+            self.missesOnTarget=0;self.routeRetries=0
+        end
+        self.lastTargetHealth=health
         if self.pending then
             local p=self.pending
             if finite(health) and health<p.health-.01 then
@@ -48,9 +57,9 @@ function Hunt.new(adapter)
             end
         end
         local d=distance(s.position,prey.position)
-        if d<self.bestDistance-3 then self.bestDistance=d;self.closingAt=now end
-        if d>390 or now-self.started>30 or self.missesOnTarget>=3
-            or now-self.closingAt>5 and d>28 or now-self.noDamageAt>7 and d<28 then
+        if d<self.bestDistance-2 then self.bestDistance=d;self.closingAt=now;self.lastUsefulAt=now;self.routeRetries=0 end
+        if d>390 or now-self.lastUsefulAt>60 or self.missesOnTarget>=5
+            or now-self.closingAt>12 and d>28 or self.noDamageAt and now-self.noDamageAt>16 and d<28 then
             self:abandon(now,"Prey escaping, unreachable or attacks ineffective")
             return "HUNT_REPLAN",self.lastResult
         end
@@ -65,6 +74,7 @@ function Hunt.new(adapter)
         local lead=math.clamp(d/math.max(20,(s.travelSpeed or 35)+speed),.08,.85)
         local geometry=type(self.adapter.attackGeometry)=="function" and self.adapter:attackGeometry(s,prey) or nil
         local valid=geometry and geometry.valid
+        if not valid then self.blockedSince=nil end
         local heading=speed>1 and {x=velocity.x/speed,z=velocity.z/speed} or prey.forward
         local standoff=math.clamp((prey.attackRange or 7)*.65,2.4,8)
         local target={x=prey.position.x+velocity.x*lead,z=prey.position.z+velocity.z*lead}
@@ -88,10 +98,16 @@ function Hunt.new(adapter)
         if valid and now>=self.nextAttack and not self.pending and now>=(self.repositionUntil or 0) then
             local sent,why=self.adapter:bite(s,prey)
             self.lastResult=why or (sent and "Attack requested; awaiting prey HP" or "Native attack not ready")
-            self.nextAttack=now+(s.attackCooldown or .9)
+            self.nextAttack=now+(sent and (s.attackCooldown or .9) or .25)
+            if sent then self.blockedSince=nil;self.noDamageAt=self.noDamageAt or now
+            else self.blockedSince=self.blockedSince or now end
             if sent and finite(health) then
                 self.attacks+=1;self.pending={at=now,health=health}
             end
+        end
+        if self.blockedSince and now-self.blockedSince>12 then
+            self:abandon(now,"Native attack unavailable: "..tostring(self.lastResult))
+            return "HUNT_REPLAN",self.lastResult
         end
         if valid and speed<2 and not self.repositionUntil then
             self.adapter:stop("valid stationary attack position")
@@ -111,18 +127,30 @@ function Hunt.new(adapter)
             local result=self.adapter:move(target,s,{navKey=prey.model or "NPC_HUNT",
                 movingTarget=true,hunting=true,following=following,moveScale=scale,preySpeed=speed,moveRadius=.9})
             if result=="STUCK" or result=="BLOCKED" then
-                self:abandon(now,"NPC pursuit route failed")
-                return "HUNT_REPLAN",self.lastResult
+                self.routeRetries=(self.routeRetries or 0)+1
+                self.adapter:stop("Retrying approach to committed prey")
+                if self.routeRetries>=3 then
+                    self:abandon(now,"NPC pursuit route failed repeatedly")
+                    return "HUNT_REPLAN",self.lastResult
+                end
             end
         end
         if self.repositionUntil and now>=self.repositionUntil then self.repositionUntil=nil end
         self.distance=d;self.preySpeed=speed
         return self.pending and "HUNT_VERIFY" or valid and "HUNT_ATTACK" or "HUNT_APPROACH",self.lastResult
     end
+    function h:resume(delay)
+        -- Manual intervention pauses a hunt; it does not blacklist its prey.
+        for _,key in ipairs({"started","closingAt","noDamageAt","lastUsefulAt","blockedSince"}) do
+            if self[key] then self[key]+=delay end
+        end
+        self.pending=nil;self.sample=nil;self.nextAttack=0
+    end
     function h:status()
         return {attacks=self.attacks,hpDeclines=self.hits,misses=self.misses,
             result=self.lastResult,distance=self.distance,preySpeed=self.preySpeed,
-            active=self.target~=nil,killsObserved=self.kills}
+            active=self.target~=nil,killsObserved=self.kills,blockedSince=self.blockedSince,
+            committedSince=self.started,lastUsefulAt=self.lastUsefulAt,abandonReason=self.abandonReason}
     end
     return h
 end

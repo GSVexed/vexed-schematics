@@ -18,7 +18,7 @@ local function signal()
     end
     return s
 end
-local function world()
+local function world(native)
     local w=Mock.new();local env=w.env;local V=Mock.V3
     env.Vector3.zero=V.new();env.UDim2.new=function(a,b,c,d)return {X={Scale=a,Offset=b},Y={Scale=c,Offset=d}}end
     local create=env.Instance.new
@@ -31,6 +31,12 @@ local function world()
     w.uis.InputEnded=signal();w.keys={};w.keyEvents={}
     function w.uis:IsKeyDown(key)return w.keys[key]==true end
     w.workspace.CurrentCamera.CFrame={LookVector=V.new(0,0,-1),RightVector=V.new(1,0,0)}
+    local groundRay=w.workspace.Raycast
+    function w.workspace:Raycast(origin,direction,params)
+        -- A shallow lateral ray above flat ground does not hit that ground.
+        if direction.X~=0 or direction.Z~=0 then return nil end
+        return groundRay(self,origin,direction,params)
+    end
     function w.hum:Move(dir)self.MoveDirection=dir end
     w.controls={calls=0,moveFunction=function(_,dir,relative)
         w.controls.calls+=1;w.hum:Move(dir);return relative
@@ -64,13 +70,14 @@ local function world()
     local t=w.new("Folder");t.Name="FeralTerritory";t.Parent=w.rs
     t:SetAttribute("Hexes","0,0;1,0");t:SetAttribute("H0_0_owner",2);t:SetAttribute("H0_0_hold",.7)
     w:spawn("Bear");function w.hum:Move(dir)self.MoveDirection=dir end
+    if native then w:enableNativeActions();w:enableNativeConnections() end
     w.owner=assert(env.loadstring(RENAISSANCE_SRC,"=RenaissanceIntegrated"))()
     assert(w.owner and w.owner.territory,"Built-in territory failed to load")
     function w:load()return assert(env.loadstring(BUNDLE_SRC,"=AmberPackage"))()end
     return w,w.owner.territory
 end
 test("Renaissance contains Territory by default with one window and scheduler",function()
-    local w,h=world();eq(h.version,"0.5.1");eq(h.agent.enabled,false)
+    local w,h=world();eq(h.version,"0.6.0");eq(h.agent.enabled,false)
     eq(w:count("ScreenGui"),1);eq(w.run.Heartbeat:Count(),1)
     assert(w.owner.ui:selectTab("Territory"));assert(w.owner.ui.frame:FindFirstChild("TerritoryStart",true))
     w.owner:close()
@@ -126,7 +133,7 @@ test("COPY STATUS is available on the native page without other player names",fu
     local w,h=world();local copied;w.env.setclipboard=function(value)copied=value end
     w.owner.ui:selectTab("Territory");w.owner.ui.frame:FindFirstChild("TerritoryCopy",true).Activated:Fire()
     assert(copied);local data=w.env.game:GetService("HttpService"):JSONDecode(copied)
-    eq(data.version,"0.5.1");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
+    eq(data.version,"0.6.0");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
     w.owner:close()
 end)
 test("closing the hub invalidates deferred path computations",function()
@@ -218,6 +225,48 @@ test("a failing Territory stop cannot escape into the shared hub tick",function(
     w.time+=.25;local ok=pcall(w.owner.tick,w.owner,.25);eq(ok,true)
     eq(h.agent.phase,"ERROR");eq(h.agent.enabled,false);eq(h.nav.desiredPoint,nil);eq(next(h.nav.held),nil)
     eq(w.owner.closed,false);assert(w.owner.snapshot);w.owner:close()
+end)
+test("advisory cooldown cannot suppress a valid original native bite and simulated damage",function()
+    local w,h=world(true);local target=w.new("Model");target.Parent=w.workspace
+    local hp=w.new("Humanoid");hp.Health=80;hp.MaxHealth=80;hp.Parent=target
+    local prey={model=target,hum=hp,health=80,position={x=4,z=0}}
+    h.bridge.checkPrey=function()return prey end;h.bridge.attackGeometry=function()return {valid=true}end
+    w.owner.bridge.biteReadiness=function()return {known=true,ready=false,reason="native cooldown"}end
+    w.owner.snapshot=w.owner.bridge:snapshot(w.time)
+    w.nativeBiteTarget=target;w.nativeDamage=10
+    local s=h.bridge:snapshot(w.time);eq(h.bridge:bite(s,prey),true)
+    eq(w.nativeBites,1);w:advance(.4);eq(hp.Health,70);eq(w.nativeHitResponses,1)
+    w.owner:close()
+end)
+test("original native cooldown still guards repeated dispatched attempts",function()
+    local w,h=world(true);local prey={model={},position={x=4,z=0}}
+    h.bridge.checkPrey=function()return prey end;h.bridge.attackGeometry=function()return {valid=true}end
+    local s=h.bridge:snapshot(w.time);h.bridge:bite(s,prey);h.bridge:bite(s,prey)
+    eq(w.nativeBites,1);eq(w.nativeBiteAttempts,2);w.owner:close()
+end)
+test("resource scouting keeps a reachable distant target while making progress",function()
+    local w,h=world();local s=h.bridge:snapshot(w.time)
+    h.bridge.hexes={{key="A",center={x=300,z=0}},{key="B",center={x=0,z=320}}}
+    local first=h.bridge:resourceSearch(s,"FOOD");eq(first.key,"A")
+    s.now+=9;s.position={x=50,z=0};eq(h.bridge:resourceSearch(s,"FOOD"),first)
+    s.now+=9;s.position={x=100,z=0};eq(h.bridge:resourceSearch(s,"FOOD"),first)
+    w.owner:close()
+end)
+test("resource scouting leaves a genuinely stalled target within its budget",function()
+    local w,h=world();local s=h.bridge:snapshot(w.time)
+    h.bridge.hexes={{key="A",center={x=300,z=0}},{key="B",center={x=0,z=320}}}
+    eq(h.bridge:resourceSearch(s,"FOOD").key,"A");s.now+=16
+    eq(h.bridge:resourceSearch(s,"FOOD").key,"B");w.owner:close()
+end)
+test("core feeding cannot race Territory's owned stalled-session repair",function()
+    local w,h=world();local c=w.player.Character;c:SetAttribute("WolfFeed","drink")
+    c:SetAttribute("FeedCan","drink");c:SetAttribute("Thirst",50)
+    w.owner.bridge.nativeFeedState=function()return "drink",true,true end
+    local calls=0;w.owner.bridge.toggleNativeFeed=function()calls+=1;return true end
+    local s=w.owner.bridge:snapshot(w.time);w.owner.feeding:tick(s,w.time,true)
+    w.owner.feeding:tick(s,w.time+5.1,true);eq(calls,0)
+    w.owner.feeding:tick(s,w.time+5.2,false);eq(calls,1)
+    w.owner:close()
 end)
 print(string.format("AMBER_LIFECYCLE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Integrated lifecycle regressions failed")

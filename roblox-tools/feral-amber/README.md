@@ -1,6 +1,6 @@
-# FERAL Amber Autopilot 0.5.1
+# FERAL Amber Autopilot 0.6.0
 
-Territory farming is now a permanent **Territory** page in Renaissance 15.5.1. The hub owns its window, scheduler, controls and shutdown.
+Territory farming is now a permanent **Territory** page in Renaissance 15.6.0. The hub owns its window, scheduler, controls and shutdown.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber.lua"))()
@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schemat
 
 Spawn, join a pack and select **START FARMING**. The engine starts disabled. **STOP FARMING** releases owned movement and feeding input. **Right Shift** opens or hides the main hub; hiding it or changing tabs keeps farming active. **SKIP TARGET** defers the current hex. **COPY STATUS** copies a local report and performs no upload.
 
-The 0.5.1 patch keeps a valid claim position between replication updates, bounds water scans, repairs low-throttle key steering, improves recovery/resume handoffs and contains cleanup failures. See the [patch report](docs/V0_5_1_RELEASE.md).
+The 0.6.0 overhaul adds committed prey pursuit, original native attack dispatch without an advisory cooldown veto, continuous direct-route recovery, precise detours, terrain-drop checks, guarded Burst when stamina telemetry is absent, stable resource searches, survival forecasting and nested objective resumption. See the [release report](docs/V0_6_RELEASE.md).
 
 ## Farming behavior
 
@@ -24,7 +24,7 @@ Native Species/Forage configuration supplies diet and capabilities. Bear/Spirit 
 
 ## Verification
 
-The pinned official Luau toolchain passes **188/188 Amber regressions** and **187/187 retained Renaissance regressions**. Both bundles have exact source parity; previous versioned bundles remain hash protected. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
+The pinned official Luau toolchain passes **215/215 Amber regressions** and **187/187 retained Renaissance regressions**. Both bundles have exact source parity; previous versioned bundles remain hash protected. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
 
 These are deterministic simulations and service mocks. **Current live FERAL travel, gait acceptance, NPC damage, feeding rates and Amber/hour are unverified for this release.** Configuration and local observations cannot independently prove server persistence or reward attribution.
 

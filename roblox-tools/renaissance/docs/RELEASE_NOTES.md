@@ -1,3 +1,11 @@
+# Renaissance 15.6.0 — Territory autonomy overhaul
+
+Committed prey pursuit, original native attack dispatch without an advisory cooldown veto, slow-progress recognition, checked straight shortcuts, precise detours, terrain/drop checks, guarded Burst without stamina telemetry, stable resource searches, nested returns and coordinated survival care. All 21 core records remain.
+
+Validation: 215/215 Territory and 187/187 retained core cases with official Luau, source parity and protected previous bundles. New gameplay remains live-unverified; autonomous aerial/underwater routing and universal unattended survival are not claimed. See [complete report](../../feral-amber/docs/V0_6_RELEASE.md).
+
+---
+
 # Renaissance 15.5.1 — farming flow corrections
 
 Preserve active claim positions across replication gaps, bound incremental water searches, repair low-throttle digital pursuit, release owned automatic recovery at its farming handoff, revalidate suspended objectives and return after urgent scent maintenance. A failing Territory cleanup remains inside its fault boundary. Manual Rest, full drinking, the built-in page and all original features remain.
