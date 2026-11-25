@@ -1,4 +1,4 @@
--- Optional combined launcher: latest Renaissance hub + Amber Autopilot 0.2.
+-- Optional combined launcher: latest Renaissance hub + Amber Autopilot 0.3.
 -- Amber remains opt-in and disabled until the player presses START.
 if game.PlaceId ~= 108901361810209 then
     warn("[FERAL AMBER] Join FERAL Animal Survival first.")
