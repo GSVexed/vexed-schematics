@@ -188,8 +188,11 @@ function Nav.new(pathService,workspace)
         end
         local path
         local ok=pcall(function()
-            path=self.service:CreatePath({AgentRadius=5,AgentHeight=10,AgentCanJump=false,
-                AgentCanClimb=false,WaypointSpacing=14})
+            local half=math.max(root.Size.X,root.Size.Z)*.5
+            local radius=math.clamp(half+1.5,2,12)
+            local height=math.clamp(hum.HipHeight+root.Size.Y+2,5,30)
+            path=self.service:CreatePath({AgentRadius=radius,AgentHeight=height,
+                AgentCanJump=false,AgentCanClimb=false,WaypointSpacing=14})
             path:ComputeAsync(from,surface)
         end)
         local points={}
@@ -347,7 +350,7 @@ function Agent.new(planner,adapter)
             self.prevAmber=state.amber
         end
         if state.menuOpen or state.manualInput or (state.combat and (not self.goal or self.goal.kind~="EAT"))
-            or state.ability or state.pinned or state.resting or state.flying or state.underwater then
+            or state.ability or state.pinned or state.resting or state.flying or state.swimming or state.underwater then
             self.phase="PAUSED";self.reason="Yielding to native movement/combat/menu"
             self.adapter:stop("native action / manual control")
             return
@@ -750,6 +753,7 @@ function Bridge.new(nav)
                 or attr(c,"FeralDragged")==true or attr(c,"FeralCarried")==true,
             ability=power,resting=attr(c,"WolfRest")==true,
             flying=attr(c,"FeralFlyLocal")==true,
+            swimming=attr(c,"FeralSwimLocal")==true,
             underwater=attr(c,"FeralUnderwater")==true}
     end
     function b:move(destination,state)
