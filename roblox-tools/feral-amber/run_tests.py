@@ -16,8 +16,10 @@ def main():
     bridge=ROOT/"src/bridge.luau"
     suites=[ROOT/"tests/suite.luau",ROOT/"tests/agent_suite.luau"]
     bundle=ROOT.parent/"feral-amber-autopilot-v0.1.lua"
+    launcher=ROOT.parent/"feral-amber.lua"
     subprocess.run(["python3",str(ROOT/"build.py"),"--check"],check=True)
-    subprocess.run([args.compiler,str(bundle)],check=True,stdout=subprocess.DEVNULL)
+    for file in (bundle,launcher):
+        subprocess.run([args.compiler,str(file)],check=True,stdout=subprocess.DEVNULL)
     for path in (planner,agent,nav,bridge,*suites):
         subprocess.run([args.compiler,str(path)],check=True,stdout=subprocess.DEVNULL)
     sources={}
