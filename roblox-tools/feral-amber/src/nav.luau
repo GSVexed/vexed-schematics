@@ -27,7 +27,9 @@ function Nav.new(pathService,workspace,Gait)
         routeAt=0,lastAt=0,issued=0,failures=0,replans=0,
         progressAt=0,progressDistance=nil,previousPosition=nil,
         lastHeading=nil,lastGaitAt=0,lastBurstAt=-100,lastTrotAt=-100,
-        fallbackUntil=0,lastMode="WORLD",burstObserved=false}
+        fallbackUntil=0,lastMode="WORLD",burstObserved=false,
+        keyEpoch=0,inputAttempts=0,stallsInRow=0,segmentCount=0,driveCalls=0,
+        lastPhysicalDistance=nil,lastPhysicalAt=0,lastRoot=nil,goalStart=0}
     local bindings={W=Enum.KeyCode.W,A=Enum.KeyCode.A,
         S=Enum.KeyCode.S,D=Enum.KeyCode.D,
         SHIFT=Enum.KeyCode.LeftShift,X=Enum.KeyCode.X,Z=Enum.KeyCode.Z}
@@ -62,12 +64,13 @@ function Nav.new(pathService,workspace,Gait)
         return true
     end
     function n:tap(name)
+        -- Never let a delayed release from a previous route interfere with a
+        -- newly created route after stop, unload or character change.
+        if self.held[name] then return false end
         if not self:hold(name,true) then return false end
-        local owner=self
+        local owner,epoch=self,self.keyEpoch
         task.delay(.09,function()
-            -- A tap's release must not be held across stop/unload; release is
-            -- idempotent even if the controller was closed during the delay.
-            owner:hold(name,false)
+            if owner.keyEpoch==epoch then owner:hold(name,false) end
         end)
         return true
     end
@@ -75,7 +78,11 @@ function Nav.new(pathService,workspace,Gait)
         for _,name in ipairs({"W","A","S","D"}) do self:hold(name,false) end
     end
     function n:releaseKeys()
-        for name in pairs(self.held) do self:hold(name,false) end
+        self.keyEpoch+=1
+        -- Iterate over a snapshot so removing held keys cannot skip releases.
+        local keys={}
+        for name in pairs(self.held) do table.insert(keys,name) end
+        for _,name in ipairs(keys) do self:hold(name,false) end
         self.gait="STOP"
     end
     function n:stop(hum,root,reason)
@@ -89,6 +96,8 @@ function Nav.new(pathService,workspace,Gait)
         self.destination,self.body=nil,nil
         self.points,self.index={},1
         self.progressDistance=nil
+        self.lastRoot=nil
+        self.lastPhysicalDistance=nil
         self.lastReason=reason or "IDLE"
     end
     function n:reset(destination,char,now)
@@ -99,11 +108,19 @@ function Nav.new(pathService,workspace,Gait)
         self.desiredPoint,self.desiredRoot,self.desiredHum=nil,nil,nil
         self.routeAt=0;self.issued=0
         self.progressAt=now;self.progressDistance=nil
+        self.goalStart=now
+        self.stallsInRow=0
+        self.lastRoot=nil;self.lastPhysicalDistance=nil
         self.lastReason="NEW_ROUTE"
         self.previousPosition=nil;self.lastHeading=nil
         self.fallbackUntil=0;self.lastMode="WORLD"
     end
     function n:route(root,hum,char,now)
+        -- Never keep steering toward the previous segment while ComputeAsync
+        -- yields. Set the new segment only after the path is ready.
+        self.desiredPoint=nil
+        self:releaseSteering()
+        self:hold("SHIFT",false)
         local from=root.Position
         local delta=self.destination-from
         local distance=flat(from,self.destination)
@@ -144,6 +161,10 @@ function Nav.new(pathService,workspace,Gait)
             end
         end
         if #points<2 then
+            if flat(from,surface)>48 then
+                self.lastReason="NO_SAFE_PATH"
+                return false
+            end
             -- Only make a short direct ground step when the ray has no physical
             -- obstacles. Missing/unloaded obstacles must not become a blind TP.
             local params=RaycastParams.new()
@@ -161,8 +182,11 @@ function Nav.new(pathService,workspace,Gait)
         self.points,self.index=points,1
         self.routeOrigin=from
         self.routeAt=now
-        self.progressAt=now
-        self.progressDistance=distance
+        self.segmentCount+=1
+        if not self.progressDistance then
+            self.progressAt=now
+            self.progressDistance=distance
+        end
         self.lastReason=success and "PATH_SURFACE" or "SHORT_SURFACE"
         return true
     end
@@ -175,19 +199,21 @@ function Nav.new(pathService,workspace,Gait)
         -- Sprint uses the actual FERAL LeftShift input. Never use RightShift,
         -- because it owns both hub menus.
         local faster=wanted=="SPRINT" or wanted=="BURST"
-        self:hold("SHIFT",faster)
-        if wanted=="TROT" and not (state and state.hudTrot==true)
+        if self:hold("SHIFT",faster) and faster then self.inputAttempts+=1 end
+        if wanted=="TROT" and state and state.hudTrot==false
             and now-self.lastTrotAt>9 then
             if self:tap("Z") then self.lastTrotAt=now end
         end
         if wanted=="BURST" then
             local observed=state and state.hudBurst==true
+            if observed then self.burstObserved=true end
             if not observed and now-self.lastBurstAt>8 then
                 if self:tap("X") then self.lastBurstAt=now end
             end
         end
     end
     function n:drive()
+        self.driveCalls+=1
         local root,hum,p=self.desiredRoot,self.desiredHum,self.desiredPoint
         if not root or not hum or not p or not root.Parent or hum.Health<=0 then
             self:releaseKeys()
@@ -275,6 +301,7 @@ function Nav.new(pathService,workspace,Gait)
             self.points={}
             self.desiredPoint=nil
             self:releaseSteering()
+            self:hold("SHIFT",false)
             pcall(function()hum:Move(Vector3.zero,false)end)
             self.lastReason="SEGMENT_COMPLETE"
             return "MOVING"
@@ -284,17 +311,19 @@ function Nav.new(pathService,workspace,Gait)
             local progress=self.math.progress(now,self.progressAt,self.progressDistance,total,5.5,3.5)
             if progress=="STALLED" then
                 self.replans+=1
+                self.stallsInRow+=1
                 self.lastReason="STALL_REPLAN"
                 self:releaseSteering()
                 self.fallbackUntil=now+math.min(2.5,1+self.replans*.3)
                 self.progressAt=now
                 self.progressDistance=total
                 self.points={}
-                if self.replans>=4 then return "STUCK" end
+                if self.stallsInRow>=4 then return "STUCK" end
                 return "WAIT"
             end
             self.progressAt=now
             self.progressDistance=total
+            self.stallsInRow=0
             self.fallbackUntil=0
         end
         -- Acceleration choice is based on full distance to the claimed hex
@@ -316,10 +345,8 @@ function Nav.new(pathService,workspace,Gait)
         })
         self:setGait(wanted,state,now)
         self.desiredPoint,self.desiredRoot,self.desiredHum=waypoint,root,hum
-        if now-self.issued>=1.5 then
-            self.issued=now
-            pcall(function()hum:MoveTo(waypoint)end)
-        end
+        -- No simultaneous MoveTo: the per-frame Humanoid:Move stream is the
+        -- steering owner. Running both used to fight the native animal controller.
         self.lastReason="FOLLOWING_"..wanted.."_"..self.lastMode
         return "MOVING"
     end
