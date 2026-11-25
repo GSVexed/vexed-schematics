@@ -73,6 +73,7 @@ function Planner.plan(hexes,state,options)
     if type(hexes)~="table" or not state or not state.position then return {} end
     local route,from={},state.position
     local exclude={}
+    for key,blocked in pairs(options.exclude or {}) do if blocked then exclude[key]=true end end
     local n=math.min(options.maxStops or 6,16)
     for step=1,n do
         local ranked={}
