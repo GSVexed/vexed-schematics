@@ -1,5 +1,5 @@
 {
-  "version": "15.4.1",
+  "version": "15.4.2",
   "game_baseline": 2412,
   "modules": {
     "core": {
@@ -39,8 +39,8 @@
       "bytes": 2717
     },
     "features": {
-      "sha256": "f0e5d6f55ec7167c9048e7c785ff79ff325d731093cf3d9eb81a3f73d7fde848",
-      "bytes": 16734
+      "sha256": "ac1aaf83ea6fdfeb5996288e8f17c91d21dff4b90e97af399ae43f1dc188c387",
+      "bytes": 19040
     },
     "roblox": {
       "sha256": "44d9dae31deecfb917b21f03c504a617ada5cf87109f59264e3af6f969bcb55a",
@@ -55,7 +55,7 @@
       "bytes": 43608
     }
   },
-  "bundle_sha256": "22903a4f0ea88fbfdc5965104d511c3c73251ae706b3aa0c3db7e2f1e00ea6c5",
-  "bundle_bytes": 193209,
+  "bundle_sha256": "022d9f06c5544eced1da971152243438b98f3b304743a95f3870d1ccc74e053a",
+  "bundle_bytes": 195515,
   "stable_clean_v14_overwritten": false
 }
