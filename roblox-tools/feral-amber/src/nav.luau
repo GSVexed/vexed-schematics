@@ -237,7 +237,8 @@ function Nav.new(pathService,workspace,Gait)
         local total=flat(root.Position,destination)
         if total<9 then self:stop(hum,root,"ARRIVED");return "REACHED" end
         for _,pos in ipairs(otherPlayers or {}) do
-            if typeof(pos)=="Vector3" and flat(pos,root.Position)<115 then
+            if pos and type(pos.X)=="number" and type(pos.Z)=="number"
+                and flat(pos,root.Position)<115 then
                 self:stop(hum,root,"PLAYER_NEARBY");return "BLOCKED"
             end
         end
