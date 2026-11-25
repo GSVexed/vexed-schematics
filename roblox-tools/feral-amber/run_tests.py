@@ -20,6 +20,16 @@ def main():
     subprocess.run(["python3",str(ROOT/"build.py"),"--check"],check=True)
     for file in (bundle,launcher):
         subprocess.run([args.compiler,str(file)],check=True,stdout=subprocess.DEVNULL)
+    # Surface-only invariant: movement cannot silently regress to teleport/hover
+    # or to direct server resource/ability command issuance.
+    forbidden=("PivotTo(", "AssemblyLinearVelocity=", "AssemblyAngularVelocity=",
+        ":FireServer(", "root.CFrame=", "char.CFrame=", "AlignPosition")
+    for source in (planner,agent,nav,bridge,ROOT/"src/ui.luau"):
+        raw=source.read_text(encoding="utf-8")
+        executable="\n".join(line for line in raw.splitlines()
+            if not line.strip().startswith("--"))
+        for pattern in forbidden:
+            assert pattern not in executable, f"Forbidden movement or remote primitive {pattern} in {source}"
     for path in (planner,agent,nav,bridge,*suites):
         subprocess.run([args.compiler,str(path)],check=True,stdout=subprocess.DEVNULL)
     sources={}
