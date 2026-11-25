@@ -53,9 +53,24 @@ function handle.close()
 end
 function handle.setEnabled(on) agent:setEnabled(on==true) end
 function handle.status() return agent:status() end
+function handle.setPanelVisible(on) panel:setVisible(on) end
+function handle.togglePanel() panel:toggle() end
 local lastError=0
 connection=game:GetService("RunService").Heartbeat:Connect(function()
-    if not active or handle.working then return end
+    if not active then return end
+    -- Keep the native movement direction active every frame. The planner
+    -- itself runs less often and path computation may yield.
+    if agent.enabled then
+        local driven,driveErr=pcall(nav.drive,nav)
+        if not driven then
+            nav.lastReason="Navigation input error"
+            if os.clock()-lastError>4 then
+                lastError=os.clock()
+                warn("[FERAL AMBER] Native steering: "..tostring(driveErr))
+            end
+        end
+    end
+    if handle.working then return end
     handle.working=true
     local now=os.clock()
     if agent.enabled then
