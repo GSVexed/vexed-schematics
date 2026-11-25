@@ -197,7 +197,6 @@ function Bridge.new(nav)
         local power=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true
             or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")~=nil
             or attr(c,"FeralTumbleAt")~=nil or attr(c,"FeralDeathRollLocal")==true
-        local snack=attr(c,"Hunger"),attr(c,"Thirst")
         local amber=attr(player,"Amber")
         if not finite(amber) then
             local stats=player:FindFirstChild("leaderstats")
@@ -211,6 +210,7 @@ function Bridge.new(nav)
             species=species,coat=coat,pack=attr(player,"FeralPack"),
             healthFraction=h.MaxHealth>0 and h.Health/h.MaxHealth or 0,
             hunger=attr(c,"Hunger"),thirst=attr(c,"Thirst"),feedCan=attr(c,"FeedCan"),
+            feedMode=attr(c,"WolfFeed"),
             amber=amber,now=now,unixNow=os.time(),players=self:otherPlayerPositions(),
             avoidRadius=110,claimRadius=17,careTarget=65,menuOpen=menu or typing,
             manualInput=manual,combat=combat,pinned=attr(c,"FeralPinned")==true
