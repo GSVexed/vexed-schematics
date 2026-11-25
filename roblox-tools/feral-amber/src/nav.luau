@@ -269,8 +269,12 @@ function Nav.new(pathService,workspace,Gait)
         end
         self.index=newIndex
         if self.index>#self.points then
+            -- Do not leave a stale waypoint steering the animal backwards.
             self.points={}
+            self.desiredPoint=nil
             self:releaseSteering()
+            pcall(function()hum:Move(Vector3.zero,false)end)
+            self.lastReason="SEGMENT_COMPLETE"
             return "MOVING"
         end
         local waypoint=self.points[self.index]
