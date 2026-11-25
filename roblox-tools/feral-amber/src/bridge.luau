@@ -275,9 +275,11 @@ function Bridge.new(nav)
             end
         end
         local combat=finite(nowServer) and finite(untilCombat) and untilCombat>nowServer or false
+        -- Never treat a merely present timestamp or false boolean as an
+        -- active ability: those attributes may persist for the animal's life.
         local power=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true
-            or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")~=nil
-            or attr(c,"FeralTumbleAt")~=nil or attr(c,"FeralDeathRollLocal")==true
+            or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")==true
+            or attr(c,"FeralDeathRollLocal")==true
         local amber=attr(player,"Amber")
         if not finite(amber) then
             local stats=player:FindFirstChild("leaderstats")
