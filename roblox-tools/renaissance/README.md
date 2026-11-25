@@ -1,20 +1,20 @@
-# FERAL Project Renaissance 15.4.0
+# FERAL Project Renaissance 15.4.1
 
 The v2412 client hub retains all 21 approved functions in one compact four-tab interface. Right Shift, permanent Bite Reach, hollow-only outlines and schema-15 saved settings are preserved.
 
-This release adds first-safe-window minigame timing, one bounded deadline timer, resilient native-state reads, immediate native-action recovery handoffs, extended stamina consumption coverage, current target geometry, guarded talon/dive flight recovery and safer feeding/rescue/idle transitions. It passes 176 scenarios and 18 compile checks locally, including a 72-case timing replay matrix. See docs/V15_4_UPGRADES.md for measurements, the full upgrade decisions and live limits.
+This release adds first-safe-window minigame timing, one bounded deadline timer, resilient native-state reads, immediate native-action recovery handoffs, extended stamina consumption coverage, current target geometry, guarded talon/dive flight recovery and safer feeding/rescue/idle transitions. It passes 181 scenarios and 18 compile checks locally, including a 72-case timing replay matrix. See docs/V15_4_UPGRADES.md for measurements, the full upgrade decisions and live limits.
 
 The retained recovery correction preserves native Rest factors, removes false recurrence pauses, keeps automatic-response provenance, separates camera input from attacks, and resets the owned native animation blend. Actual HP increases and unchanged windows are distinguished; sustained 2x/4x gameplay effects remain unverified. See docs/V15_2_1_RECOVERY.md.
 
 The retained 15.2 behavior keeps ESP/tags restricted to real players, colours outlines green-to-red by current health, and removes floating percentages/distances. It coordinates native feeding approaches and one stalled-session repair, filters invalid bite targets, buffers a post-Rest bite through the original native function, separates predicted impacts from game replies, and adds a bounded G-key water-cub rescue attempt using native pickup rules.
 
-CLEAN v14, its clean loader and complete 15.0.0/15.1.0/15.2.0/15.2.1/15.3.0 bundles remain byte-for-byte unchanged. No threshold-based auto food/water, forced resource refill, oversized carrying or other removed feature is restored.
+CLEAN v14, its clean loader and complete 15.0.0/15.1.0/15.2.0/15.2.1/15.3.0/15.4.0 bundles remain byte-for-byte unchanged. No threshold-based auto food/water, forced resource refill, oversized carrying or other removed feature is restored.
 
 ## Start
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-The launcher pins immutable source [ef1544f](https://github.com/GSVexed/vexed-schematics/blob/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua). All 176 regressions, 18 compile checks, source parity and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45643744396). Exact Potassium staging in FERAL v2412 confirmed all 13 modules, rapid timing logic, native minigame/feeding handlers, the 17-field stamina plan, renderer construction and clean shutdown while retaining the active 15.3 hub. Validation made zero gameplay requests and zero attribute writes. Actual minigame win rates, rendered/remote pose, flight repair and sustained recovery/stamina/range results remain unverified.
+The launcher pins immutable source [64c3487](https://github.com/GSVexed/vexed-schematics/blob/64c3487b111a7f3075004d645c9b18e23daa744e/roblox-tools/feral-renaissance-v15.4.1.lua). All 181 regressions, 18 compile checks, source parity and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45647825543). A passive live check confirmed the 15.4.0 failure: equal aliased native fields rejected the entire stamina plan, preventing the no-drain flag from being enabled. This patch normalizes that plan before strict lease validation. Live repair results remain unconfirmed; sustained stamina efficacy is not established. See docs/V15_4_1_STAMINA_FIX.md. Earlier exact 15.4.0 staging remains recorded separately in LIVE_EVIDENCE.md.
 
 ## Build and test
 
@@ -27,6 +27,7 @@ This rebuilds deterministically, compiles all thirteen modules, fixtures, bundle
 ## Records
 
 - docs/FEATURE_AUDIT.md: all 21 retained functions and explicit user-requested interaction improvements.
+- docs/V15_4_1_STAMINA_FIX.md: live rejected-plan diagnosis and equal-alias repair.
 - docs/V15_4_UPGRADES.md: rapid minigame timing, extended native coordination, per-feature upgrade decisions and boundaries.
 - docs/ARCHITECTURE.md: ownership, activation, cleanup and evidence.
 - docs/V15_3_IMPROVEMENTS.md: recent trends, native guide, work bounds, operation comparison and Vulture handoff.

@@ -1,3 +1,27 @@
+# Renaissance 15.4.1 — stamina plan rejection fix
+
+Pinned source: [64c3487](https://github.com/GSVexed/vexed-schematics/blob/64c3487b111a7f3075004d645c9b18e23daa744e/roblox-tools/feral-renaissance-v15.4.1.lua). [Source CI 45647825543](https://github.com/GSVexed/vexed-schematics/actions/runs/45647825543) passes all 181 regressions, 18 compile checks, deterministic packaging and protected rollback hashes.
+
+The live 15.4.0 hub rejected the requested stamina plan as `duplicate field`, leaving both its config lease and own no-drain flag inactive. Equal aliased fields are now coalesced before lease validation; conflicting values still fail, and exact restoration is retained. Five added regressions cover shared level/species profiles, conflicting aliases and restoration/respawn. See [the detailed defect record](V15_4_1_STAMINA_FIX.md).
+
+The configuration-application failure is confirmed. A live repair request and one read-only late pickup did not return their matching result, so active application and sustained infinite stamina remain unconfirmed. This release does not fill the stamina resource or claim server-authoritative success. The 15.4 minigame improvements and all 21 retained records remain; no deliberately removed feature returns.
+
+Apply the patch using the full loader and your saved settings:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+
+Complete 15.4.0 rollback:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua"))()
+
+Original CLEAN v14 rollback:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/158474ba80c0d613c3427399f24059341369acc8/roblox-tools/feral-nova-v14.0-clean-reach-core.lua"))()
+
+Every earlier complete bundle remains unchanged. Re-running a complete loader retires the previous Renaissance owner.
+
+---
+
 # Renaissance 15.4.0 — rapid minigames and coordinated upgrades
 
 Immutable source: [ef1544f](https://github.com/GSVexed/vexed-schematics/blob/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua). [Published source CI 45643744396](https://github.com/GSVexed/vexed-schematics/actions/runs/45643744396) passes all 176 regressions, 18 compile checks, deterministic packaging and rollback checks. The exact source also passed Potassium staging in FERAL v2412, preserving the active hub and issuing zero gameplay requests or attribute writes.

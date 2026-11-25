@@ -1,5 +1,13 @@
 # Live validation record
 
+## Version 15.4.1 stamina defect
+
+Passive runner run 45646784705 returned the exact schema-1541 observation from the actual 15.4.0 hub in FERAL v2412. Stamina was requested but applied=false, state=UNAVAILABLE, reason=duplicate field, with no valid lease and no own no-drain flag. The own Hippo moved during 60/61 samples; 23 downward steps were observed in six seconds. The observation changed no attributes and sent no inputs/gameplay requests. Sanitized result: live-v1541-stamina-before.json.
+
+Source 64c3487b111a7f3075004d645c9b18e23daa744e passes 181 checks, 18 compile checks, deterministic packaging and all protected rollback hashes in public CI 45647825543. Its stamina normalizer coalesces identical table/key/value/kind entries before the strict lease transaction. Conflicting values remain errors, and original values retain a single restore owner.
+
+A guarded active repair using this exact normalizer was requested in private run 45648152224. The request was acknowledged, but no matching schema-1542 result was returned. One read-console-only late pickup, run 45648691978, also did not return that result. These are MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED. Active repair, flag activation and sustained stamina efficacy remain unconfirmed. No additional test movement was requested. Attempts to schedule a short alternate repair hit connector write errors; no success is inferred from those errors. Earlier 15.4.0 stage-only success is not final 15.4.1 efficacy evidence.
+
 ## Version 15.4.0 release
 
 Exact source ef1544f25d37f071df90dd1da84b9fd5df60bdaf passes all 176 code-level scenarios, 18 compile checks, deterministic packaging and rollback gates in public source CI run 45643744396. The suite includes an independent 72-case native-formula timing matrix and a direct comparison against preserved 15.3.0: the late-packet example changes from a 1020 ms wait to immediate eligibility; ordinary safe entry is 30.272 ms before centre. No actual live speedup, Perfect rate or win rate is inferred from those simulations.
