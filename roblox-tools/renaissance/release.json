@@ -10,12 +10,12 @@
   "compiled_files": 18,
   "regressions": {
     "total": 185,
-    "passed": null,
-    "failed": null
+    "passed": 185,
+    "failed": 0
   },
   "minigame_replay_subcases": 72,
-  "source_ci_run": null,
-  "source_ci_status": "pending",
+  "source_ci_run": 45677068683,
+  "source_ci_status": "success",
   "potassium_staging_run": null,
   "potassium_validation": "NOT_EXECUTED_FOR_15_4_2",
   "gameplay_acceptance": "unverified",
@@ -29,7 +29,7 @@
   "rollback_commit": "158474ba80c0d613c3427399f24059341369acc8",
   "previous_renaissance_hashes_unchanged": true,
   "clean_v14_hash_unchanged": true,
-  "source_parity": "pending source CI",
+  "source_parity": true,
   "minigame_timing_comparison": {
     "baseline": "15.3.0",
     "reproduced_late_packet_wait_ms": [
