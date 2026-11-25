@@ -76,6 +76,7 @@ function Planner.plan(hexes,state,options)
     if type(hexes)~="table" or not state or not state.position then return {} end
     local route,from={},state.position
     local exclude={}
+    for key,blocked in pairs(options.exclude or {}) do if blocked then exclude[key]=true end end
     local n=math.min(options.maxStops or 6,16)
     for step=1,n do
         local ranked={}
@@ -429,7 +430,18 @@ function Agent.new(planner,adapter)
             end
             if finite(native.hold) and native.hold>(goal.lastHold or 0)+.002 then goal.progressAt=now end
             goal.lastProg,goal.lastHold=native.prog,native.hold
-            if now-goal.progressAt>32 or now-goal.start>165 then
+            if now-goal.progressAt>20 and (goal.alternates or 0)<3 then
+                -- Do not abandon valid hexes just because the first ground
+                -- position missed a native claim circle. Try nearby walkable
+                -- surface points in the SAME hex after a real timeout.
+                goal.alternates=(goal.alternates or 0)+1
+                goal.progressAt=now
+                self.adapter:advanceSpot(goal.key)
+                self.adapter:stop("alternate claim position")
+                self.phase="REPOSITION"
+                self.reason="Trying alternate walkable claim spot in "..goal.key
+                self:log(now,"alternate","Native claim zone recheck "..goal.key)
+            elseif now-goal.progressAt>32 or now-goal.start>165 then
                 self:fail(state,"No confirmed territory progress: "..goal.key)
             end
             return
@@ -552,7 +564,7 @@ function Bridge.new(nav)
     local b={player=player,Players=Players,Rep=Rep,Workspace=Workspace,
         UserInput=UserInput,nav=nav,hexes={},hexByKey={},
         cfg=nil,spots=nil,territory=nil,refreshAt=0,lastString=nil,
-        lastBiome=nil,motionReason="Idle",manualUncertain=false}
+        lastBiome=nil,motionReason="Idle",manualUncertain=false,spotCache={},spotTry={}}
     local world=Rep:FindFirstChild("FeralWorld")
     local function config(name)
         local module=world and world:FindFirstChild(name)
@@ -605,6 +617,7 @@ function Bridge.new(nav)
             or type(self.cfg.hexCenter)~="function" then return end
         if text==self.lastString and biome==self.lastBiome then return end
         self.lastString,self.lastBiome=text,biome
+        self.spotCache,self.spotTry={},{}
         local ok,parsed=pcall(self.cfg.parseHexes,text)
         if not ok or type(parsed)~="table" then return end
         local hexes,byKey={},{}
@@ -656,6 +669,23 @@ function Bridge.new(nav)
         end
         return list
     end
+    function b:counts(state)
+        local pack=state and state.pack or attr(player,"FeralPack")
+        local result={total=0,eligible=0,neutral=0,owned=0,other=0,fading=0}
+        for _,hex in ipairs(self:territories(state or {now=os.clock()})) do
+            result.total+=1
+            if hex.neutral then
+                result.neutral+=1
+            else
+                result.eligible+=1
+                if pack~=nil and hex.owner==pack then
+                    result.owned+=1
+                    if finite(hex.hold) and hex.hold<.84 then result.fading+=1 end
+                else result.other+=1 end
+            end
+        end
+        return result
+    end
     local function groundAt(x,z,c)
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude
@@ -667,19 +697,71 @@ function Bridge.new(nav)
         end
         return nil
     end
-    function b:territorySpot(key)
+    -- Native hex geometry contains the entire territory pool; MapSpots is
+    -- supplemental, not a whitelist. Sample walkable ground inside each hex,
+    -- favouring genuine named claim zones where one exists.
+    function b:territorySpot(key,state)
         local h=self.hexByKey[key]
         if not h then return nil end
+        local cached=self.spotCache[key]
+        if cached and (self.spotTry[key] or 0)==cached.index then return cached.pos end
         local c=player.Character
-        local p=h.spot or h.center
-        local ground=groundAt(p.x,p.z,c)
-        if ground then return point(ground) end
-        local center=h.center
-        if p~=center then
-            ground=groundAt(center.x,center.z,c)
-            if ground then return point(ground) end
+        local focus=h.spot or h.center
+        local candidate={focus}
+        if not h.spot then
+            -- Hex-only territories have no landmark; use their hex centre.
+            candidate={h.center}
         end
-        return nil
+        local ring={12,25,40,57,75}
+        for _,radius in ipairs(ring) do
+            for direction=0,11 do
+                local angle=direction*math.pi/6
+                table.insert(candidate,{x=focus.x+math.cos(angle)*radius,
+                    z=focus.z+math.sin(angle)*radius})
+            end
+        end
+        if h.spot then table.insert(candidate,h.center) end
+        local viable={}
+        local native=self.cfg
+        for _,p in ipairs(candidate) do
+            local matching=true
+            if type(native.hexAt)=="function" then
+                local ok,i,j=pcall(native.hexAt,p.x,p.z)
+                if not ok then matching=false else
+                    local hexKey
+                    if type(native.hexKey)=="function" then
+                        local good,keyResult=pcall(native.hexKey,i,j)
+                        if good then hexKey=keyResult end
+                    else
+                        hexKey="H"..tostring(i).."_"..tostring(j)
+                    end
+                    matching=hexKey==key
+                end
+            end
+            if matching and (not h.spot or dist(p,h.spot)<108) then
+                local ground=groundAt(p.x,p.z,c)
+                if ground then
+                    local q=point(ground)
+                    local clear=true
+                    for _,other in ipairs(state and state.players or {}) do
+                        if dist(q,other)<(state.avoidRadius or 110) then clear=false;break end
+                    end
+                    if clear then table.insert(viable,q) end
+                end
+            end
+        end
+        if #viable==0 then return nil end
+        -- Walkable alternative landing slots are used only after a genuine
+        -- no-progress timeout, never to teleport or change hex ownership.
+        local index=math.min(1+(self.spotTry[key] or 0),#viable)
+        local position=viable[index]
+        self.spotCache[key]={index=self.spotTry[key] or 0,pos=position}
+        return position
+    end
+    function b:advanceSpot(key)
+        if not self.hexByKey[key] then return end
+        self.spotTry[key]=math.min(3,(self.spotTry[key] or 0)+1)
+        self.spotCache[key]=nil
     end
     function b:water(state)
         local char=player.Character
@@ -964,8 +1046,9 @@ function UI.new(agent,bridge)
         start.Text=st.enabled and "STOP" or "START"
         mode.Text=(st.enabled and "RUNNING · " or "OFF · ")..st.phase
             ..(st.key and " · "..st.key or "")
-        info.Text=string.format("Claims %d  |  Scent %d  |  Feeds %d  |  Amber +%.0f",
-            st.claimed,st.scented,st.feeds,st.earned)
+        local counts=bridge:counts(snap)
+        info.Text=string.format("Hexes %d/%d owned · %d fading · Amber +%.0f",
+            counts.owned,counts.eligible,counts.fading,st.earned)
         local species=tostring(st.species or snap.species or "No animal")
         reason.Text=species.." · "..st.reason
     end
