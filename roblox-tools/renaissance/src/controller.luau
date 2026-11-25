@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.5.1", tokenIdentity = tokenIdentity,
+    local h = { version = "15.6.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -694,7 +694,8 @@ function Controller.new(M,bridge,options)
             self:updateGrabWake()
         else self.grab.pending = nil; s.grab,s.afkWalking = self.grab.active,self.walk ~= nil end
         if not critical and now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
-        self.feeding:tick(s,now)
+        local care=self.territory and self.territory.agent.enabled and self.territory.agent.goal
+        self.feeding:tick(s,now,care and (care.kind=="EAT" or care.kind=="DRINK"))
         self:stepFlightHandoff(s,now)
         self.rescue:tick(s,now)
         self.activity=self.policy:activity(s,now)

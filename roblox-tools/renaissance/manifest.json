@@ -1,5 +1,5 @@
 {
-  "version": "15.5.1",
+  "version": "15.6.0",
   "game_baseline": 2412,
   "modules": {
     "core": {
@@ -27,8 +27,8 @@
       "bytes": 11469
     },
     "feeding": {
-      "sha256": "aeac57feeaaffe3259c3e5a08a1563f5797cf355124e05567d803b3a46dbe6f1",
-      "bytes": 5673
+      "sha256": "e1017d927e4834f4a3e5b0cce980059472cd3b4bea0f6b68ec15ccb43e911fa3",
+      "bytes": 5920
     },
     "combat_input": {
       "sha256": "8f86e05a4dc5b94b793fa09b7f7aec8a8c97217b7abc134a8738f4054f25abbd",
@@ -47,55 +47,55 @@
       "bytes": 59807
     },
     "ui": {
-      "sha256": "9eb7ba3dcdd24c9b2134958b4502865f5db716e087999f15a23db8b51769d4c5",
+      "sha256": "7fece15f0bc6d4d299d81998743fd93b664c014b33d93adbc9dd9068d43c1c8b",
       "bytes": 17439
     },
     "controller": {
-      "sha256": "83e0a6f913de070b1023b487e5bc63d24c517120a6ea7b61d5bd4c61ffc11ffd",
-      "bytes": 43827
+      "sha256": "e94e4b3af701834f83b726205341800f2784e351c7bab2504e4af567c25d6e5c",
+      "bytes": 43974
     },
     "amber_planner": {
-      "sha256": "92a4a93da50247eb5d127c86bfea0cf356fe5c736efef0076fd1a54f7c309b6c",
-      "bytes": 11654
+      "sha256": "640a60dbe1d52c41bb5e3effc836ab621013393e3f49e911befb29c93e4ca3d8",
+      "bytes": 12021
     },
     "amber_gait": {
-      "sha256": "496a44aeeb833da3ad4c61024304e0b2ed4423c07bce7ee86446d134426acd95",
-      "bytes": 7705
+      "sha256": "49bbeda65a5af15f3b9837fc8ba1845f573910dd0259bb56856ab43f244c28b0",
+      "bytes": 7860
     },
     "amber_nav": {
-      "sha256": "ef726e463f45d4ad17da087c5edceccc671719ad302bdf5c83b722494abafa78",
-      "bytes": 25193
+      "sha256": "ed37cea6d2311fcf17389a16812b436d644839c9da80771b5e2c2a40477d3725",
+      "bytes": 28890
     },
     "amber_hunt": {
-      "sha256": "12a3a386941b9c9eaf099911ee6c254d974a1177bcd4fb06bd25e490d774a6e9",
-      "bytes": 7110
+      "sha256": "a0d05aa697d099b780055cd2831bdd5bf17b4318c744ce428a83fc2c84a1172b",
+      "bytes": 8884
     },
     "amber_care": {
       "sha256": "0e513ed5c3fd74dc02b316759e22ae55e66855a3b91bf525779b96af09b75cb0",
       "bytes": 4259
     },
     "amber_agent": {
-      "sha256": "8b10ddb11c2f38711a8f3f87a2e124ae84bf485ebc412ce14662ecb0c5cacee4",
-      "bytes": 24318
+      "sha256": "e1aa0e14d34c80af2f190d0afce75340002b7256bbed1fd7ff256c69cc408312",
+      "bytes": 29372
     },
     "amber_bridge": {
-      "sha256": "026b79da9a145808075cb1dc97afc301ad764779ea24783917043788316f9307",
-      "bytes": 38803
+      "sha256": "3d2a59e9b17fcf5467424ff30064a4c2e00e63485d6b6fde81f1833657931ad3",
+      "bytes": 41820
     },
     "amber_driver": {
       "sha256": "acad46a645fe3058f6a47f850f8923883d8771a755ccf55b55dddf4b1db8fd1c",
       "bytes": 4231
     },
     "amber_ui": {
-      "sha256": "2d67a69167ab6a63918d4ba715913553996b28927a2bfbf56ed1d07f5092a4cd",
-      "bytes": 3784
+      "sha256": "cd37ed7dc3c253894a5dc2d739f3a7967169342b59cc756f96e6af17bc514b92",
+      "bytes": 3809
     },
     "amber_runtime": {
-      "sha256": "5eae29e218ae9f4d23e82f1bdcb89170e7f5360aca7c8a1763f7cc23745d07dc",
-      "bytes": 3889
+      "sha256": "6aa9e1787d3a7dc3befa5d4f214a15f79752bb42c00272bf91d976c05717e2bd",
+      "bytes": 3906
     }
   },
-  "bundle_sha256": "771e130b2a1afae4b70d5334fd40fdf1363fd690682350f6d9c012b65d637b69",
-  "bundle_bytes": 328924,
+  "bundle_sha256": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
+  "bundle_bytes": 343424,
   "stable_clean_v14_overwritten": false
 }

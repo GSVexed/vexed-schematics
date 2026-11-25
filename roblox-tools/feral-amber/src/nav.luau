@@ -86,6 +86,7 @@ function Nav.new(pathService,workspace,Gait)
         self.recoveryProgress=0;self.overlapAt=nil;self.overlapParts=nil
         self.detourUntil=nil;self.lastObstacleProbe=nil
         self.lastReason="NEW_ROUTE";self.goalStarted=now
+        self.routeTravel=0;self.safetyBlockedUntil=nil;self.lastSafety=nil
     end
     function n:surface(pos,char,allowWater)
         local params=rayParams(char)
@@ -103,7 +104,7 @@ function Nav.new(pathService,workspace,Gait)
             and (not terrain or solid.Position.Y>terrain.Position.Y+.4) then hit=solid end
         if not hit then return nil end
         local wet=hit.Material==Enum.Material.Water
-        if wet and not allowWater or not wet and hit.Normal.Y<.46 then return nil end
+        if wet and not allowWater or not wet and hit.Normal.Y<(self.minGroundNormal or .46) then return nil end
         return hit.Position+Vector3.new(0,2.5,0),wet
     end
     function n:bodyClear(from,to,char)
@@ -141,6 +142,7 @@ function Nav.new(pathService,workspace,Gait)
         return true
     end
     function n:clearSegment(from,to,char,allowWater)
+        self.lastSafety=nil
         local distance=flat(from,to)
         if distance<.1 then return true,false end
         local params=rayParams(char);params.IgnoreWater=true
@@ -155,12 +157,21 @@ function Nav.new(pathService,workspace,Gait)
             if flank and (not flank.Instance or flank.Instance.CanCollide~=false) then return false,false end
         end
         local wet=false;local previous=nil
-        local steps=math.max(1,math.ceil(distance/10))
+        local steps=math.max(1,math.ceil(distance/4))
         for step=0,steps do
             local p=from+(to-from)*(step/steps)
             local ground,water=self:surface(p,char,allowWater)
             if not ground then return false,wet end
-            if previous and math.abs(ground.Y-previous.Y)>math.max(7,distance/steps*1.05) then return false,wet end
+            if not previous and from.Y-ground.Y>(self.supportHeight or 5)+(self.maxDrop or 3) then
+                self.lastSafety="UNSUPPORTED_DROP";return false,wet
+            end
+            if previous then
+                local rise=ground.Y-previous.Y
+                if rise>(self.maxStepUp or 3) or -rise>(self.maxDrop or 3) then
+                    self.lastSafety=rise>0 and "STEEP_ASCENT" or "UNSAFE_DESCENT"
+                    return false,wet
+                end
+            end
             previous=ground;wet=wet or water
         end
         return true,wet
@@ -179,7 +190,7 @@ function Nav.new(pathService,workspace,Gait)
             if point and self:clearSegment(root.Position,point,char,state.allowWater==true) then
                 self.epoch+=1;self.pending=nil
                 self.points,self.index={point},1;self.routeOrigin=root.Position
-                self.detourUntil=now+2;self.detourSide=-sides
+                self.detourUntil=now+3;self.detourSide=-sides
                 self.obstacleRecoveries=(self.obstacleRecoveries or 0)+1
                 self.lastFailure="LOCAL_OBSTACLE_DETOUR"
                 return true
@@ -217,7 +228,14 @@ function Nav.new(pathService,workspace,Gait)
                         for _,p in ipairs(path:GetWaypoints()) do
                             if typeof(p.Position)=="Vector3" and flat(p.Position,from)>2 then table.insert(points,p.Position) end
                         end
-                        if #points>0 then return points,"PATH_SURFACE" end
+                        -- A successful mesh path can include steep drops and
+                        -- unchecked ledges. Validate its actual walking edges.
+                        local safe=#points>0;local previous=from
+                        for _,p in ipairs(points) do
+                            if not self:clearSegment(previous,p,char,false) then safe=false;break end
+                            previous=p
+                        end
+                        if safe then return points,"PATH_SURFACE" end
                     end
                 end
             end
@@ -313,6 +331,10 @@ function Nav.new(pathService,workspace,Gait)
         self.clearance=math.clamp(root.Size.X*.5+.65,2,12)
         self.bodyHeight=math.clamp(root.Size.Y*.8,1,10)
         self.bodyLength=math.clamp(root.Size.Z*.65,2,18)
+        self.supportHeight=math.max(2,hum.HipHeight+root.Size.Y*.5)
+        self.maxDrop=math.clamp(hum.HipHeight*.75,2,4)
+        self.maxStepUp=math.clamp(hum.HipHeight,2,4)
+        self.minGroundNormal=math.cos(math.rad(math.clamp(hum.MaxSlopeAngle or 55,20,55)))
         if not self.destination or self.body~=char or self.identity~=identity then self:reset(destination,char,now,identity) end
         local targetShift=flat(destination,self.destination)
         self.destination=destination
@@ -330,10 +352,10 @@ function Nav.new(pathService,workspace,Gait)
                 self.lastFailure="POSITION_CORRECTION";self.lastProgressAt=now
                 if self.corrections>=3 then self:stop(hum,root,"REPEATED_CORRECTIONS");return "STUCK" end
             else
-                self.travelled+=moved;self.windowTravel+=moved
+                self.travelled+=moved;self.routeTravel+=moved;self.windowTravel+=moved
                 self.speed=self.speed*.6+math.min(180,moved/dt)*.4
                 local wp=self.points[self.index]
-                if wp and flat(self.lastPosition,wp)-flat(root.Position,wp)>.45 then
+                if wp and flat(self.lastPosition,wp)-flat(root.Position,wp)>math.max(.05,dt*.4) then
                     self.lastProgressAt=now;self.inputVerified=true
                     self.recoveryProgress+=moved
                     if self.recoveryProgress>15 then self.stallsInRow=0 end
@@ -342,21 +364,25 @@ function Nav.new(pathService,workspace,Gait)
         end
         self.lastPosition=root.Position;self.lastSampleAt=now
         self.windowOrigin=self.windowOrigin or root.Position
+        local oscillating=false
         if now-self.windowAt>=6 then
             if self.windowTravel>35 and flat(root.Position,self.windowOrigin)<6 then
                 self.lastProgressAt=math.min(self.lastProgressAt,now-6)
                 self.lastFailure="OSCILLATION"
+                oscillating=true
             end
             self.windowOrigin=root.Position;self.windowTravel=0;self.windowAt=now
         end
-        local advanced=self:advance(root,math.clamp(root.Size.X*.5+4,6,12))
-        if advanced then self.lastProgressAt=now;self.inputVerified=true end
+        local waypointRadius=self.detourUntil and now<self.detourUntil and 2 or math.clamp(root.Size.X*.5+4,6,12)
+        local advanced=self:advance(root,waypointRadius)
+        if advanced and not oscillating then self.lastProgressAt=now;self.inputVerified=true end
         if self.pending and now-self.pending.at>4 then
             self.epoch+=1;self.pending=nil;self.routeFailures+=1
             self.lastFailure="PATH_TIMEOUT"
         end
         if self.routeFailures>=4 then self:stop(hum,root,self.lastFailure);return "STUCK" end
-        if now-self.lastProgressAt>.9 and now-(self.lastObstacleProbe or 0)>1 then
+        if now-self.lastProgressAt>.9 and now-(self.lastObstacleProbe or 0)>1
+            and not (self.detourUntil and now<self.detourUntil and self.index<=#self.points) then
             self.lastObstacleProbe=now
             local probePoint=self.desiredPoint or destination
             local towards=probePoint-root.Position
@@ -392,12 +418,24 @@ function Nav.new(pathService,workspace,Gait)
         if (not self.detourUntil or now>=self.detourUntil or exhausted) and (exhausted or prefetch or targetShift>14 and now-(self.routeAt or 0)>1.1) then
             self:route(root,hum,char,now,state)
         end
-        self:advance(root,math.clamp(root.Size.X*.5+4,6,12))
+        self:advance(root,waypointRadius)
         local waypoint=self.points[self.index]
         if not waypoint then
             self.desiredPoint=nil;self:releaseSteering();self:hold("SHIFT",false)
             self.lastReason=self.pending and "PLANNING" or self.lastFailure or "WAIT_ROUTE"
             return "WAIT"
+        end
+        if not state.movingTarget and not (self.detourUntil and now<self.detourUntil)
+            and now>=(self.shortcutAt or 0) then
+            self.shortcutAt=now+.75
+            local d=destination-root.Position
+            local direct=self:surface(root.Position+Vector3.new(d.X/total,0,d.Z/total)*math.min(total,100),char,state.allowWater==true)
+            -- Prefer the checked straight corridor when an old obstacle path
+            -- is no longer necessary. Do not cut a mountain bend blindly.
+            if direct and flat(direct,waypoint)>8 and self:clearSegment(root.Position,direct,char,state.allowWater==true) then
+                self.epoch+=1;self.pending=nil;self.points={direct};self.index=1
+                self.routeOrigin=root.Position;self.segmentCount+=1;waypoint=direct
+            end
         end
         -- Collapse straight, visible path sections into a body-checked horizon.
         -- Gaits can remain fast across tiny mesh waypoints without cutting bends.
@@ -413,6 +451,21 @@ function Nav.new(pathService,workspace,Gait)
             local clear=self:clearSegment(root.Position,destination,char,state.allowWater==true)
             if clear then waypoint=destination end
         end
+        -- Recheck the immediate corridor after every meaningful navigation
+        -- update. Terrain may stream/change after the path was computed.
+        local ahead=waypoint-root.Position;local aheadFlat=flat(root.Position,waypoint)
+        local reach=math.min(aheadFlat,math.max(8,self.speed*.5+self.bodyLength*.5))
+        if aheadFlat>.1 then
+            local probe=root.Position+Vector3.new(ahead.X/aheadFlat*reach,0,ahead.Z/aheadFlat*reach)
+            local safe=self:clearSegment(root.Position,probe,char,state.allowWater==true)
+            if not safe then
+                self.desiredPoint=nil;self:releaseSteering();self:hold("SHIFT",false)
+                if hum then pcall(hum.Move,hum,Vector3.zero,false) end
+                self.lastFailure=self.lastSafety or "BLOCKED_CORRIDOR";self.lastReason="CHECKING_SAFE_APPROACH"
+                self.points={};self.epoch+=1;self.pending=nil;self.nextRouteAt=now+.15
+                return "WAIT"
+            end
+        end
         local look=root.CFrame and root.CFrame.LookVector
         local previous=look and {x=root.Position.X-look.X*5,z=root.Position.Z-look.Z*5} or nil
         local turn=self.math.turn(previous,p2(root.Position),p2(waypoint))
@@ -423,6 +476,7 @@ function Nav.new(pathService,workspace,Gait)
         state.brake=braking or self.detourUntil and now<self.detourUntil
         local wanted=self.math.select(state.hunting and total*2 or total,turn,state.staminaFraction,{
             allowBurst=state.allowBurst~=false and self.inputVerified and localRange>=38,
+            nativeBurstAvailable=type(state.hudBurst)=="boolean",
             burstReady=not state.hudBurstNo,swimming=state.swimming,
             swimSprint=state.swimSprint,combat=state.combat,hunting=state.hunting,
             preySpeed=state.preySpeed,following=state.following,gaitSpeeds=state.gaitSpeeds,ability=state.ability})
@@ -437,8 +491,11 @@ function Nav.new(pathService,workspace,Gait)
             requested=self.gaits.requested,observed=self.gaits.observed,
             gaitReason=self.gaits.reason,gaitRequests=self.gaits.requests,
             gaitConfirmations=self.gaits.confirmations,input=self.nativeInput,
+            staminaFraction=self.lastState and self.lastState.staminaFraction,
             inputVerified=self.inputVerified,distance=self.distance,
             travelled=math.floor(self.travelled*10)/10,speed=math.floor(self.speed*10)/10,
+            routeTravel=math.floor((self.routeTravel or 0)*10)/10,routeAge=self.goalStarted and (self.lastAt-self.goalStarted),
+            stalledFor=self.lastProgressAt and (self.lastAt-self.lastProgressAt),safety=self.lastSafety,
             replans=self.replans,failures=self.failures,waterRoutes=self.waterRoutes,
             corrections=self.corrections,segments=self.segmentCount,obstacleRecoveries=self.obstacleRecoveries or 0}
     end

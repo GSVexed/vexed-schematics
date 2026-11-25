@@ -281,6 +281,10 @@ function Bridge.new(nav)
     end
     function b:manualInput()
         if UserInput:GetFocusedTextBox() then return true end
+        if type(UserInput.IsMouseButtonPressed)=="function" and Enum.UserInputType then
+            local ok,down=pcall(UserInput.IsMouseButtonPressed,UserInput,Enum.UserInputType.MouseButton1)
+            if ok and down and not (self.pendingInputs and self.pendingInputs.M1) then return true end
+        end
         for _,name in ipairs({"W","A","S","D","Up","Down","Left","Right","Space"}) do
             local key=Enum.KeyCode[name]
             if key then
@@ -458,10 +462,10 @@ function Bridge.new(nav)
             feedPosition=typeof(offer)=="Vector3" and point(offer) or nil,
             staminaFraction=reserve,hudBurst=hudBurst,hudTrot=hudTrot,hudSprint=attr(player,"HudSprint"),
             hudBurstNo=burstNo==true or finite(burstNo) and now>=burstNo and now-burstNo<1.7,
-            runIntent=attr(c,"WolfRunIntent"),allowBurst=reserve~=nil and reserve>=.56,
+            runIntent=attr(c,"WolfRunIntent"),allowBurst=reserve==nil or reserve>=.56,
             allowWater=profile.swim==true,swimSprint=profile.swimSprint==true,
             amber=amber,now=now,serverNow=at,unixNow=os.time(),players=others,contested=contested,currentHex=self:hexAt(point(r.Position)),
-            avoidRadius=35,claimRadius=15,careTarget=72,
+            avoidRadius=35,claimRadius=self.cfg and finite(self.cfg.CLAIM_RADIUS) and math.clamp(self.cfg.CLAIM_RADIUS,8,180) or 15,careTarget=85,
             thirstMax=finite(needs.THIRST_MAX) and needs.THIRST_MAX or 100,
             drinkTarget=finite(needs.THIRST_MAX) and needs.THIRST_MAX or 100,
             refillTime=self.cfg and self.cfg.REFILL_TIME,
@@ -542,7 +546,27 @@ function Bridge.new(nav)
         end
         return false
     end
-    function b:food(state)
+    function b:food(state,preferred)
+        -- Keep a real edible food target instead of chasing a new nearest item
+        -- on every tick. Revalidate consumption, diet, ownership and position.
+        local item=preferred and preferred.model
+        local profile=state.profile or self:profile(state.char,state.species)
+        local forage=config("Forage")
+        if item and item.Parent and item:IsDescendantOf(Workspace) and forage and type(forage.canEat)=="function" then
+            local ok,edible=pcall(forage.canEat,profile.diet,attr(item,"Diet"))
+            local left,owner=attr(item,"FoodLeft"),attr(item,"TutorialOwner")
+            if ok and edible and attr(item,"Consumed")~=true and (not finite(left) or left>.01)
+                and (owner==nil or owner==player.UserId) and (self.foodBlocked[item] or 0)<=state.now then
+                local pos=attr(item,"FoodPos")
+                if typeof(pos)~="Vector3" and item:IsA("BasePart") then pos=item.Position end
+                if typeof(pos)~="Vector3" and item:IsA("Model") then
+                    local good,cf=pcall(item.GetBoundingBox,item);if good then pos=cf.Position end
+                end
+                if typeof(pos)=="Vector3" and safePosition(point(pos),state) then
+                    return {model=item,position=point(pos)}
+                end
+            end
+        end
         local finder=config("FeedFinder")
         if finder and type(finder.food)=="function" then
             local ok,item,pos=pcall(finder.food,state.char,state.root)
@@ -551,8 +575,6 @@ function Bridge.new(nav)
                 return {position=point(pos),model=item}
             end
         end
-        local profile=state.profile or self:profile(state.char,state.species)
-        local forage=config("Forage")
         if not profile.diet or not forage or type(forage.canEat)~="function" then return nil end
         if forage.PLANT_DIETS and forage.PLANT_DIETS[profile.diet] and type(forage.nearest)=="function" then
             local ok,entry,pos=pcall(forage.nearest,state.root.Position,300)
@@ -593,7 +615,14 @@ function Bridge.new(nav)
     function b:resourceSearch(state,kind)
         self.searchVisits=self.searchVisits or {}
         local active=self.searchPoint
-        if active and state.now<(self.searchUntil or 0) and dist(active,state.position)>12 then return active end
+        if active and self.searchKind==kind then
+            local remaining=dist(active,state.position)
+            if not self.searchBest or remaining<self.searchBest-1 then
+                self.searchBest=remaining;self.searchProgressAt=state.now
+            end
+            if state.now<(self.searchUntil or 0) and state.now-(self.searchProgressAt or state.now)<15
+                and remaining>12 then return active end
+        end
         if active then self.searchVisits[active.key or "last"]=state.now end
         local best,score=nil,math.huge
         for _,hex in ipairs(self.hexes) do
@@ -605,7 +634,8 @@ function Bridge.new(nav)
                 if rank<score then best,score={x=p.x,z=p.z,key=hex.key},rank end
             end
         end
-        self.searchPoint,self.searchUntil=best,state.now+8
+        self.searchPoint,self.searchUntil=best,state.now+120
+        self.searchKind=kind;self.searchBest=best and dist(best,state.position);self.searchProgressAt=state.now
         return best
     end
     function b:patrol(state)
@@ -705,11 +735,10 @@ function Bridge.new(nav)
         local hub=self:hub()
         if hub and type(hub.bridge.tryNativeBite)=="function" then
             if hub.recovery then hub.recovery:release("Amber hunt",state.now) end
-            local s=hub.snapshot
-            if s and s.char==state.char and type(hub.bridge.biteReadiness)=="function" then
-                local ready=hub.bridge:biteReadiness(s,state.now,hub.policy)
-                if ready.known and not ready.ready then return false,ready.reason end
-            end
+            -- Readiness guidance is advisory. Cached/private timing must not
+            -- suppress the original handler: that handler already owns the
+            -- native cooldown, Rest and capture guards. Dispatch is still only
+            -- an attempt; the hunter observes actual HP separately.
             if hub.policy then hub.policy:input("attack",state.now) end
             local ok,sent=pcall(hub.bridge.tryNativeBite,hub.bridge,state.now)
             if ok and sent then self.lastInput="Native tryBite requested";return true,self.lastInput end
@@ -727,6 +756,21 @@ function Bridge.new(nav)
             -- The owned WolfController callback above avoids UI hit testing.
             -- Fallback mouse input is reported as a request, never as damage.
             local m=UserInput:GetMouseLocation()
+            local camera=Workspace.CurrentCamera
+            local gui=player:FindFirstChildOfClass("PlayerGui")
+            if camera and camera.ViewportSize and gui and type(gui.GetGuiObjectsAtPosition)=="function" then
+                local found=false
+                for _,uv in ipairs({{.08,.45},{.92,.45},{.5,.5},{.5,.82}}) do
+                    local x,y=camera.ViewportSize.X*uv[1],camera.ViewportSize.Y*uv[2]
+                    local checked,objects=pcall(gui.GetGuiObjectsAtPosition,gui,x,y)
+                    local blocked=not checked
+                    for _,object in ipairs(checked and objects or {}) do
+                        if object.Active or object:IsA("GuiButton") or object:IsA("TextBox") then blocked=true;break end
+                    end
+                    if not blocked then m={X=x,Y=y};found=true;break end
+                end
+                if not found then return false,"Attack input blocked by interface" end
+            end
             self.lastInput="Mouse attack requested"
             return pulse("M1",function()v:SendMouseButtonEvent(m.X,m.Y,0,true,game,0)end,
                 function()v:SendMouseButtonEvent(m.X,m.Y,0,false,game,0)end),self.lastInput

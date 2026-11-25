@@ -243,6 +243,10 @@ function Planner.need(state,options)
     local h,t=state.hunger,state.thirst
     if finite(t) and t<(options.emergencyThirst or 19) then return "DRINK" end
     if finite(h) and h<(options.emergencyHunger or 19) then return "EAT" end
+    -- Measured depletion can bring care forward before a long search/hunt.
+    -- Absent telemetry does not invent a rate or a full resource value.
+    if finite(t) and t<80 and finite(state.thirstReserve) and state.thirstReserve<180 then return "DRINK" end
+    if finite(h) and h<80 and finite(state.hungerReserve) and state.hungerReserve<240 then return "EAT" end
     if finite(t) and t<(options.thirstTrigger or 44) then return "DRINK" end
     if finite(h) and h<(options.hungerTrigger or 42) then return "EAT" end
     return "TERRITORY"

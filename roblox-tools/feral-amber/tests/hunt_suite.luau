@@ -56,7 +56,8 @@ test("faster escaping prey is abandoned and cooled down",function()
 end)
 test("a blocked chase abandons the prey without an endless route loop",function()
     local a,h,p,s=world();a.moveResult="STUCK"
-    eq(h:tick(s),"HUNT_REPLAN");eq(h.target,nil)
+    h:tick(s);eq(h.target,p);s.now=11;h:tick(s);eq(h.target,p)
+    s.now=12;eq(h:tick(s),"HUNT_REPLAN");eq(h.target,nil)
 end)
 test("native geometry being unavailable never creates a guessed attack",function()
     local a,h,p,s=world();a.attackGeometry=function()return nil end
@@ -74,8 +75,37 @@ end)
 test("nearby ineffective attacks abandon prey within seconds",function()
     local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0}
     h:tick(s);local phase
-    for i=1,40 do s.now=10+i*.2;phase=h:tick(s);if phase=="HUNT_REPLAN"then break end end
-    eq(phase,"HUNT_REPLAN");assert(s.now<19);assert(h.misses>=2)
+    for i=1,90 do s.now=10+i*.2;phase=h:tick(s);if phase=="HUNT_REPLAN"then break end end
+    eq(phase,"HUNT_REPLAN");assert(s.now<29);assert(h.misses>=5)
+end)
+test("productive prey remains committed beyond the old thirty-second limit",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0}
+    p.health=500;p.hum.Health=500;h:tick(s)
+    for t=11,55 do s.now=t;p.health-=2;p.hum.Health=p.health;h:tick(s);eq(h.target,p)end
+    assert(h.attacks>10);assert(h.hits>10)
+end)
+test("seven seconds of a rejected cooldown does not switch otherwise viable prey",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0}
+    function a:bite()return false,"native cooldown"end
+    h:tick(s)
+    for t=11,20 do s.now=t;h:tick(s);eq(h.target,p)end
+    eq(h.attacks,0);eq(h.misses,0)
+    s.now=23;eq(h:tick(s),"HUNT_REPLAN");assert(h.lastResult:find("Native attack unavailable",1,true))
+end)
+test("manual assistance resumes the same prey without blacklisting it",function()
+    local a,h,p,s=world();h:tick(s);h:resume(100);s.now=111;h:tick(s)
+    eq(h.target,p);eq(a.preyBlocked[p.model],nil)
+end)
+test("another nearer candidate does not replace a valid committed prey",function()
+    local a,h,p,s=world();h:tick(s);local calls=0
+    function a:prey()calls+=1;return {model={},position={x=1,z=0}}end
+    for t=11,14 do s.now=t;h:tick(s);eq(h.target,p)end
+    eq(calls,0)
+end)
+test("a late HP decline clears ineffective-attempt accumulation between attacks",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0};s.attackCooldown=3
+    h:tick(s);s.now=11.5;h:tick(s);eq(h.missesOnTarget,1)
+    p.health=70;p.hum.Health=70;s.now=12;h:tick(s);eq(h.missesOnTarget,0);eq(h.target,p)
 end)
 print(string.format("AMBER_HUNT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Hunting regressions failed")

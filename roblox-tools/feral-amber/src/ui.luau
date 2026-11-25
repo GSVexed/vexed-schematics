@@ -39,10 +39,10 @@ function UI.new(engine,hub)
             local target=s.targetProgress or {}
             local value=target.action=="SCENT" and target.hold or target.progress
             progress.Text=type(value)=="number" and ("Native territory progress "..amount(value*100).."%")
-                or s.suspended and ("Will resume "..s.suspended) or "Native claim and feeding outcomes are verified"
+                or s.suspended and ("Will resume "..s.suspended) or "Watching native progress and resource changes"
             gait.Text=tostring(n.requested or "STOP").." requested · "..tostring(n.observed or "UNKNOWN").." observed"
             travel.Text="Travelled "..amount(n.travelled).." studs · Target "..amount(n.distance).." studs"
-                ..(n.failure and " · "..n.failure or "")
+                ..(n.failure and (n.stalledFor or 0)>1 and " · "..n.failure or "")
             if s.strategy and s.strategy.area then
                 progress.Text=s.strategy.area.." · "..tostring(s.strategy.owned or 0).."/"..tostring(s.strategy.total or 0).." owned"
                     ..(type(value)=="number" and (" · Native progress "..amount(value*100).."%") or "")
