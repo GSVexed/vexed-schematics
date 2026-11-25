@@ -1,12 +1,12 @@
 {
-  "version": "15.5.1",
+  "version": "15.6.0",
   "date": "2026-11-25",
-  "source_commit": "e6f2bccf72efb75d736b64996e05bed1a95cefd3",
-  "bundle_sha256": "771e130b2a1afae4b70d5334fd40fdf1363fd690682350f6d9c012b65d637b69",
+  "source_commit": "180eba2d914e3c089482ccf90947ac880439179d",
+  "bundle_sha256": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
   "game_baseline": 2412,
   "retained_features": 21,
   "module_count": 23,
-  "integrated_territory_version": "0.5.1",
+  "integrated_territory_version": "0.6.0",
   "compiled_files": 28,
   "regressions": {
     "total": 187,
@@ -14,8 +14,8 @@
     "failed": 0
   },
   "amber_regressions": {
-    "total": 188,
-    "passed": 188,
+    "total": 215,
+    "passed": 215,
     "failed": 0
   },
   "amber_compiled_files": 21,
@@ -26,10 +26,10 @@
   "live_gameplay_tested": false,
   "potassium_staging_run": null,
   "gameplay_acceptance": "unverified",
-  "previous_renaissance_version": "15.5.0",
-  "previous_renaissance_source": "ecd087cabbafcea08a73b3dd56401faca1cdb6ca",
-  "rollback_commit": "e79a7d5a3102237b6282dbbc6f676c2f8c1731c7",
-  "release_report": "../feral-amber/docs/V0_5_1_RELEASE.md",
+  "previous_renaissance_version": "15.5.1",
+  "previous_renaissance_source": "e6f2bccf72efb75d736b64996e05bed1a95cefd3",
+  "rollback_commit": "87e036c846342e7b288f0a4977b9d69c565251b4",
+  "release_report": "../feral-amber/docs/V0_6_RELEASE.md",
   "limitations": [
     "Deterministic simulations and service mocks do not establish current live travel, gait acceptance, NPC damage, feeding rate, full-map retention or Amber/hour.",
     "Captured v2412 client configuration is read at runtime when available; later game changes can invalidate contracts.",
