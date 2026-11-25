@@ -4,9 +4,9 @@ from pathlib import Path
 import argparse
 import hashlib
 ROOT=Path(__file__).resolve().parent
-DEST=ROOT.parent/"feral-amber-autopilot-v0.1.lua"
+DEST=ROOT.parent/"feral-amber-autopilot-v0.2.lua"
 MODULES=("planner","nav","agent","bridge","ui")
-BOOT=r'''-- FERAL AMBER AUTOPILOT v0.1 — all-animal surface-route, territory and care engine.
+BOOT=r'''-- FERAL AMBER AUTOPILOT v0.2 — all-animal surface-route, territory and care engine.
 -- Native client observations only. No teleportation or fake resource changes.
 local EXPECTED_PLACE=108901361810209
 if game.PlaceId~=EXPECTED_PLACE then
@@ -43,7 +43,7 @@ local panel,why=UI.new(agent,bridge)
 if not panel then warn("[FERAL AMBER] "..tostring(why));return nil end
 local active=true
 local connection
-local handle={version="0.1.0",agent=agent,bridge=bridge,nav=nav,panel=panel}
+local handle={version="0.2.0",agent=agent,bridge=bridge,nav=nav,panel=panel}
 function handle.close()
     if not active then return end
     active=false
@@ -53,9 +53,24 @@ function handle.close()
 end
 function handle.setEnabled(on) agent:setEnabled(on==true) end
 function handle.status() return agent:status() end
+function handle.setPanelVisible(on) panel:setVisible(on) end
+function handle.togglePanel() panel:toggle() end
 local lastError=0
 connection=game:GetService("RunService").Heartbeat:Connect(function()
-    if not active or handle.working then return end
+    if not active then return end
+    -- Keep the native movement direction active every frame. The planner
+    -- itself runs less often and path computation may yield.
+    if agent.enabled then
+        local driven,driveErr=pcall(nav.drive,nav)
+        if not driven then
+            nav.lastReason="Navigation input error"
+            if os.clock()-lastError>4 then
+                lastError=os.clock()
+                warn("[FERAL AMBER] Native steering: "..tostring(driveErr))
+            end
+        end
+    end
+    if handle.working then return end
     handle.working=true
     local now=os.clock()
     if agent.enabled then
@@ -79,11 +94,11 @@ connection=game:GetService("RunService").Heartbeat:Connect(function()
     handle.working=false
 end)
 environment.FERAL_AMBER_ACTIVE=handle
-print("[FERAL AMBER 0.1] Ready. Select START in the small Amber panel; native walking, claim and care outcomes are observed, not presumed.")
+print("[FERAL AMBER 0.2] Ready. Select START in the small Amber panel; native walking, claim and care outcomes are observed, not presumed.")
 return handle
 '''
 def create():
-    chunks=['-- FERAL Amber Autopilot 0.1.0 | 2026-11-25 | all species | client-only outcomes',
+    chunks=['-- FERAL Amber Autopilot 0.2.0 | 2026-11-25 | all species | client-only outcomes',
             'local sources = {}']
     for name in MODULES:
         source=(ROOT/"src"/f"{name}.luau").read_text(encoding="utf-8")
@@ -100,5 +115,5 @@ def main():
         assert DEST.is_file() and DEST.read_text(encoding="utf-8")==data,"Candidate source differs from compiled modules"
     else:
         DEST.write_text(data,encoding="utf-8")
-    print(f"FERAL AMBER 0.1.0 sha256={hashlib.sha256(data.encode()).hexdigest()} bytes={len(data.encode())}")
+    print(f"FERAL AMBER 0.2.0 sha256={hashlib.sha256(data.encode()).hexdigest()} bytes={len(data.encode())}")
 if __name__=="__main__":main()

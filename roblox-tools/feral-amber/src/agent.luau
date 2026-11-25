@@ -84,9 +84,12 @@ function Agent.new(planner,adapter)
             end
             self.prevAmber=state.amber
         end
-        if state.menuOpen or state.manualInput or (state.combat and (not self.goal or self.goal.kind~="EAT"))
+        -- Panels being visible do not mean the player is steering; keep travel
+        -- active while checking progress in Renaissance or Amber. Yield only
+        -- to actual physical input, text focus and native game actions.
+        if state.manualInput or (state.combat and (not self.goal or self.goal.kind~="EAT"))
             or state.ability or state.pinned or state.resting or state.flying or state.swimming or state.underwater then
-            self.phase="PAUSED";self.reason="Yielding to native movement/combat/menu"
+            self.phase="PAUSED";self.reason="Yielding to manual movement/combat/ability"
             self.adapter:stop("native action / manual control")
             return
         end

@@ -15,7 +15,7 @@ function Bridge.new(nav)
     local player=assert(Players.LocalPlayer,"No local player")
     local b={player=player,Players=Players,Rep=Rep,Workspace=Workspace,
         UserInput=UserInput,nav=nav,hexes={},hexByKey={},
-        cfg=nil,spots=nil,territory=nil,refreshAt=0,lastString=nil,
+        cfg=nil,spots=nil,territoryInstance=nil,refreshAt=0,lastString=nil,
         lastBiome=nil,motionReason="Idle",manualUncertain=false,spotCache={},spotTry={}}
     local world=Rep:FindFirstChild("FeralWorld")
     local function config(name)
@@ -26,7 +26,7 @@ function Bridge.new(nav)
     end
     b.cfg=config("TerritoryConfig")
     b.spots=config("MapSpots")
-    b.territory=Rep:FindFirstChild("FeralTerritory")
+    b.territoryInstance=Rep:FindFirstChild("FeralTerritory")
     local function attr(object,key)
         if not object then return nil end
         local ok,value=pcall(function() return object:GetAttribute(key) end)
@@ -56,14 +56,14 @@ function Bridge.new(nav)
         return all
     end
     function b:refresh(now)
-        if not self.cfg or not self.territory then
+        if not self.cfg or not self.territoryInstance then
             world=Rep:FindFirstChild("FeralWorld")
             self.cfg=config("TerritoryConfig")
             self.spots=config("MapSpots")
-            self.territory=Rep:FindFirstChild("FeralTerritory")
-            if not self.cfg or not self.territory then return end
+            self.territoryInstance=Rep:FindFirstChild("FeralTerritory")
+            if not self.cfg or not self.territoryInstance then return end
         end
-        local text=attr(self.territory,"Hexes")
+        local text=attr(self.territoryInstance,"Hexes")
         local biome=attr(Workspace,"FeralBiome") or "WolfValley"
         if type(text)~="string" or #text==0 or type(self.cfg.parseHexes)~="function"
             or type(self.cfg.hexCenter)~="function" then return end
@@ -76,7 +76,8 @@ function Bridge.new(nav)
         for _,t in ipairs(parsed) do
             if type(t.key)=="string" and type(t.i)=="number" and type(t.j)=="number" then
                 local good,p=pcall(self.cfg.hexCenter,t.i,t.j)
-                if good and typeof(p)=="Vector2" then
+                if good and p and ((typeof(p)=="Vector2")
+                    or (type(p)=="table" and finite(p.X) and finite(p.Y))) then
                     local h={key=t.key,center={x=p.X,z=p.Y}}
                     table.insert(hexes,h);byKey[t.key]=h
                 end
@@ -99,11 +100,11 @@ function Bridge.new(nav)
         self.hexes,self.hexByKey=hexes,byKey
     end
     local function terrAttr(key,suffix)
-        local t=b.territory
+        local t=b.territoryInstance
         return attr(t,key.."_"..suffix)
     end
     function b:territory(key)
-        if not self.territory then return nil end
+        if not self.territoryInstance then return nil end
         local h=self.hexByKey[key]
         if not h then return nil end
         return {key=key,neutral=terrAttr(key,"neutral")==true,
@@ -155,6 +156,13 @@ function Bridge.new(nav)
     function b:territorySpot(key,state)
         local h=self.hexByKey[key]
         if not h then return nil end
+        -- Distant hex terrain is commonly unstreamed in Roblox. Travel toward
+        -- the replicated geometry first; only demand a physical claim spot
+        -- after the animal is near enough for the terrain to stream in.
+        local origin=state and state.position
+        if origin and dist(origin,h.spot or h.center)>210 then
+            return h.spot or h.center
+        end
         local cached=self.spotCache[key]
         if cached and (self.spotTry[key] or 0)==cached.index then return cached.pos end
         local c=player.Character
@@ -261,12 +269,18 @@ function Bridge.new(nav)
         local manual=typing
         for _,key in ipairs(movingKeys) do
             local ok,down=pcall(UserInput.IsKeyDown,UserInput,key)
-            if ok and down then manual=true;break end
+            -- Ignore the precise movement key currently owned by our navigator;
+            -- otherwise virtual W/A/S/D input would pause its own route.
+            if ok and down and not (self.nav.held and self.nav.held[key.Name]) then
+                manual=true;break
+            end
         end
         local combat=finite(nowServer) and finite(untilCombat) and untilCombat>nowServer or false
+        -- Never treat a merely present timestamp or false boolean as an
+        -- active ability: those attributes may persist for the animal's life.
         local power=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true
-            or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")~=nil
-            or attr(c,"FeralTumbleAt")~=nil or attr(c,"FeralDeathRollLocal")==true
+            or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")==true
+            or attr(c,"FeralDeathRollLocal")==true
         local amber=attr(player,"Amber")
         if not finite(amber) then
             local stats=player:FindFirstChild("leaderstats")
