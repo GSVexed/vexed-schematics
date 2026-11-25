@@ -338,6 +338,17 @@ function Agent.new(planner,adapter)
             self.goal=nil;self.adapter:stop("despawn");return
         end
         state.now=now;self.species,self.coat=state.species,state.coat
+        local changed=(self.lastCharacter and state.char~=self.lastCharacter)
+            or (self.lastPack~=nil and state.pack~=self.lastPack)
+            or (self.lastBiome~=nil and state.biome~=self.lastBiome)
+        if changed then
+            self.goal=nil
+            self.adapter:stop("animal / pack / map changed")
+            self.cooldown,self.recent={},{}
+            self.lastTerritoryKey=nil
+            self:log(now,"reset","Changed animal, pack or territory map")
+        end
+        self.lastCharacter,self.lastPack,self.lastBiome=state.char,state.pack,state.biome
         if state.pack==nil then
             self.phase="WAIT";self.reason="Join a pack to claim or scent territory"
             self.goal=nil;self.adapter:stop("no pack");return
@@ -826,6 +837,7 @@ function Bridge.new(nav)
             or hub and hub.policy and hub.policy.menuOpen==true
         return {alive=true,char=c,hum=h,root=r,position=point(r.Position),
             species=species,coat=coat,pack=attr(player,"FeralPack"),
+            biome=attr(Workspace,"FeralBiome") or "WolfValley",
             healthFraction=h.MaxHealth>0 and h.Health/h.MaxHealth or 0,
             hunger=attr(c,"Hunger"),thirst=attr(c,"Thirst"),feedCan=attr(c,"FeedCan"),
             feedMode=attr(c,"WolfFeed"),
