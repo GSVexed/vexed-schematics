@@ -77,7 +77,7 @@ local function world(native)
     return w,w.owner.territory
 end
 test("Renaissance contains Territory by default with one window and scheduler",function()
-    local w,h=world();eq(h.version,"0.6.0");eq(h.agent.enabled,false)
+    local w,h=world();eq(h.version,"0.6.1");eq(h.agent.enabled,false)
     eq(w:count("ScreenGui"),1);eq(w.run.Heartbeat:Count(),1)
     assert(w.owner.ui:selectTab("Territory"));assert(w.owner.ui.frame:FindFirstChild("TerritoryStart",true))
     w.owner:close()
@@ -133,7 +133,7 @@ test("COPY STATUS is available on the native page without other player names",fu
     local w,h=world();local copied;w.env.setclipboard=function(value)copied=value end
     w.owner.ui:selectTab("Territory");w.owner.ui.frame:FindFirstChild("TerritoryCopy",true).Activated:Fire()
     assert(copied);local data=w.env.game:GetService("HttpService"):JSONDecode(copied)
-    eq(data.version,"0.6.0");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
+    eq(data.version,"0.6.1");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
     w.owner:close()
 end)
 test("closing the hub invalidates deferred path computations",function()
@@ -267,6 +267,88 @@ test("core feeding cannot race Territory's owned stalled-session repair",functio
     w.owner.feeding:tick(s,w.time+5.1,true);eq(calls,0)
     w.owner.feeding:tick(s,w.time+5.2,false);eq(calls,1)
     w.owner:close()
+end)
+test("real bridge preserves false native gait attributes before requesting Burst",function()
+    local w,h=world();w.player:SetAttribute("HudBurst",false);w.player:SetAttribute("HudTrot",false)
+    w.player:SetAttribute("HudSprint",false);w.player.Character:SetAttribute("WolfBurst",false)
+    w.root.CFrame={LookVector=Mock.V3.new(1,0,0)}
+    local s=h.bridge:snapshot(w.time);eq(s.hudBurst,false);eq(s.hudTrot,false);eq(s.hudSprint,false)
+    h.bridge:move({x=350,z=0},s,{navKey="BURST_CHECK"})
+    w.root.Position=Mock.V3.new(4,3,0);w.root.CFrame={LookVector=Mock.V3.new(1,0,0)}
+    w.player:SetAttribute("HudSprint",true);w.time+=.3;s=h.bridge:snapshot(w.time)
+    h.bridge:move({x=350,z=0},s,{navKey="BURST_CHECK"})
+    eq(h.nav.gait,"BURST");assert(w.keys[w.env.Enum.KeyCode.X]);w.owner:close()
+end)
+test("real hunting geometry turns toward close stationary prey before a native attack",function()
+    local w,h=world(true);local V=Mock.V3
+    local prey,hp,root=w:npc(nil,V.new(6,3,0),false)
+    root.Size=V.new(2,2,4);hp.HipHeight=1
+    w.root.Position=V.new(8,3,2.6);w.root.CFrame={LookVector=V.new(1,0,0)}
+    w.nativeBiteTarget=prey;w.nativeDamage=10
+    w.player.Character:SetAttribute("Hunger",25);w.player.Character:SetAttribute("Thirst",100)
+    h.setEnabled(true)
+    for _=1,160 do
+        w.controls.moveFunction(w.player,V.new(),true)
+        local direction=w.hum.MoveDirection
+        if direction.Magnitude>.01 then
+            w.root.Position+=direction*8*.1;w.root.CFrame={LookVector=direction.Unit}
+        end
+        w:step(.1)
+        if hp.Health<100 then break end
+    end
+    assert(hp.Health<100,"No hit: "..tostring(h.agent.phase).." / "..tostring(h.agent.lastHunt and h.agent.lastHunt.result))
+    assert((w.nativeBites or 0)>0);w.owner:close()
+end)
+test("a rejected virtual mouse API falls back to one executor click",function()
+    local w,h=world();local prey={model={},position={x=4,z=0}}
+    h.bridge.checkPrey=function()return prey end;h.bridge.attackGeometry=function()return {valid=true}end
+    w.owner.bridge.tryNativeBite=function()return false end
+    local input=w.env.game:GetService("VirtualInputManager")
+    input.SendMouseButtonEvent=function()error("Virtual mouse unavailable")end
+    local clicks=0;w.env.mouse1click=function()clicks+=1 end
+    local s=h.bridge:snapshot(w.time)
+    eq(h.bridge:bite(s,prey),true);eq(clicks,1)
+    eq(h.bridge:bite(s,prey),false);eq(clicks,1);w.owner:close()
+end)
+test("accepted virtual mouse input does not also emit an executor click",function()
+    local w,h=world();local prey={model={},position={x=4,z=0}}
+    h.bridge.checkPrey=function()return prey end;h.bridge.attackGeometry=function()return {valid=true}end
+    w.owner.bridge.tryNativeBite=function()return false end
+    local clicks=0;w.env.mouse1click=function()clicks+=1 end
+    local s=h.bridge:snapshot(w.time);eq(h.bridge:bite(s,prey),true);eq(clicks,0)
+    eq(h.bridge:attackEvidence(s).backend,"VIRTUAL_MOUSE");eq(w.mouseDown,true)
+    w.owner:close();eq(w.mouseDown,false)
+end)
+test("executor paired mouse fallback releases and restores its cursor on unload",function()
+    local w,h=world();local prey={model={},position={x=4,z=0}}
+    h.bridge.checkPrey=function()return prey end;h.bridge.attackGeometry=function()return {valid=true}end
+    w.owner.bridge.tryNativeBite=function()return false end
+    w.env.game:GetService("VirtualInputManager").SendMouseButtonEvent=function()error("Unavailable")end
+    local gui=w.player:FindFirstChildOfClass("PlayerGui");local blocker=w.new("TextButton");blocker.Active=true
+    rawset(gui,"GetGuiObjectsAtPosition",function(_,x)return x>1000 and {blocker} or {}end)
+    local moves={};local pressed,released=0,0
+    w.env.mousemoveabs=function(x,y)table.insert(moves,{x=x,y=y})end
+    w.env.mouse1press=function()pressed+=1 end;w.env.mouse1release=function()released+=1 end
+    local original=w.uis:GetMouseLocation();local s=h.bridge:snapshot(w.time)
+    eq(h.bridge:bite(s,prey),true);eq(pressed,1);eq(released,0)
+    eq(h.bridge:attackEvidence(s).backend,"EXECUTOR_MOUSE");w.owner:close()
+    eq(released,1);eq(#moves,2);eq(moves[2].x,original.X);eq(moves[2].y,original.Y)
+end)
+test("real attack geometry ignores noncolliding triggers while retaining solid obstruction checks",function()
+    local w,h=world();local V=Mock.V3;local prey,hp,root=w:npc(nil,V.new(0,3,-3),false)
+    local trigger=w.new("Part");trigger.CanCollide=false;trigger.Parent=w.workspace
+    w.workspace.Raycast=function(_,_,_,params)
+        if not params.RespectCanCollide or trigger.CanCollide then return {Instance=trigger}end
+    end
+    local s=h.bridge:snapshot(w.time);local p=h.bridge:checkPrey({model=prey},s)
+    assert(p);eq(h.bridge:attackGeometry(s,p).clear,true)
+    trigger.CanCollide=true;eq(h.bridge:attackGeometry(s,p).clear,false);w.owner:close()
+end)
+test("hunt selection excludes NPCs rejected by the native combat protection policy",function()
+    local w,h=world();local prey=w:npc(nil,Mock.V3.new(0,3,-4),false)
+    prey:SetAttribute("FeralSafeUntil",w.time+1100)
+    local s=h.bridge:snapshot(w.time);eq(h.bridge:prey(s),nil)
+    prey:SetAttribute("FeralSafeUntil",nil);eq(h.bridge:prey(s).model,prey);w.owner:close()
 end)
 print(string.format("AMBER_LIFECYCLE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Integrated lifecycle regressions failed")

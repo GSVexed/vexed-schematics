@@ -11,7 +11,7 @@ end
 function Agent.new(planner,adapter,Hunt,Care)
     local a={planner=planner,adapter=adapter,Hunt=Hunt,Care=Care,enabled=false,phase="OFF",goal=nil,
         cooldown={},careCooldown={},recent={},waitingSince={},events={},ticks=0,earned=0,claimed=0,scented=0,
-        feeds=0,hunts=0,failures=0,nextTick=0,reason="Disabled",generation=0,returns={},version="0.6.0"}
+        feeds=0,hunts=0,failures=0,nextTick=0,reason="Disabled",generation=0,returns={},version="0.6.1"}
     function a:log(at,kind,msg)
         table.insert(self.events,{at=math.floor(at*10)/10,kind=kind,msg=msg})
         if kind=="confirmed" or kind=="deferred" or kind=="failed" then self.lastNotice=msg end
@@ -144,7 +144,10 @@ function Agent.new(planner,adapter,Hunt,Care)
             if finite(self.prevAmber) and state.amber>self.prevAmber then self.earned+=state.amber-self.prevAmber end
             self.prevAmber=state.amber
         end
-        if state.manualInput or state.gameMenu then self:pause(state,"Manual movement, typing or native menu");return end
+        if state.manualInput or state.gameMenu then
+            if self.goal then self.goal.manualInterventionObserved=true end
+            self:pause(state,"Manual movement, typing or native menu");return
+        end
         local ownRecovery=self.goal and self.goal.kind=="RECOVER" and state.automaticRest==true
         if state.ability or state.pinned or state.resting and not ownRecovery or state.flying or state.climbing or state.rescuing then
             self:pause(state,"Native ability, capture, Rest, flight or climbing");return
@@ -346,7 +349,8 @@ function Agent.new(planner,adapter,Hunt,Care)
         local kind=goal.kind=="DRINK" and "drink" or "eat"
         local careStatus,careReason=self.Care.step(goal,state,self.adapter)
         if careStatus=="COMPLETE" then
-            self.lastCare={kind=goal.kind,seconds=now-goal.start,phases=goal.durations,gain=goal.gain}
+            self.lastCare={kind=goal.kind,seconds=now-goal.start,phases=goal.durations,gain=goal.gain,
+                manualInterventionObserved=goal.manualInterventionObserved==true}
             if kind=="drink" then self.lastFullDrinkAt=now end
             self.feeds+=1;self.lastSuccess=careReason.." (+"..string.format("%.1f",goal.gain)..")"
             self:log(now,"confirmed",self.lastSuccess);self.goal=nil;self:resume(state)

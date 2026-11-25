@@ -56,7 +56,8 @@ function Bridge.new(nav)
     local function attr(object,key)
         if not object then return nil end
         local ok,value=pcall(function() return object:GetAttribute(key) end)
-        return ok and value or nil
+        if ok then return value end
+        return nil
     end
     local function validAnimal()
         local c=player.Character
@@ -660,6 +661,11 @@ function Bridge.new(nav)
         local profile=state.profile or self:profile(state.char,state.species)
         if not prey or not prey.model or not prey.model.Parent or not profile.hunts then return nil end
         if Players:GetPlayerFromCharacter(prey.model) then return nil end
+        local hub=self:hub()
+        if hub and type(hub.bridge.combatEligible)=="function" then
+            local ok,eligible=pcall(hub.bridge.combatEligible,hub.bridge,prey.model)
+            if not ok or not eligible then return nil end
+        end
         local pack=attr(prey.model,"FeralPack")
         if packKey(state.pack)~=nil and packKey(state.pack)==packKey(pack) then return nil end
         local root=prey.model:FindFirstChild("HumanoidRootPart")
@@ -715,23 +721,42 @@ function Bridge.new(nav)
         end
         local ok,gap=pcall(cfg.bodyGap,prey.root,planar)
         if not ok or not finite(gap) or look.Magnitude<.01 then return nil end
-        local box=attr(state.root,"FeralBoxFull") or state.root.Size.Z
+        local box=attr(state.root,"FeralBoxFull")
+        if not finite(box) or box<=0 then box=state.root.Size.Z end
         local reach=(box*.5+state.hum.HipHeight*cfg.REACH+cfg.SLACK)*cfg.HIT_SCALE*mult("reachMult",1)
         local angle=planar.Magnitude>.01 and look.Unit:Dot(planar.Unit) or 1
         local height=(state.hum.HipHeight+prey.hum.HipHeight)*cfg.MAX_DY*mult("dyMult",1)
         local cone=mult("coneFor",cfg.CONE)
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={state.char};params.IgnoreWater=true
+        params.RespectCanCollide=true
         local obstruction=Workspace:Raycast(state.root.Position,diff,params)
         local clear=not obstruction or obstruction.Instance and obstruction.Instance:IsDescendantOf(prey.model)
-        return {valid=gap<reach*.92 and angle>math.cos(math.rad(cone)) and math.abs(diff.Y)<height*.95 and clear,
-            inRange=gap<reach*.92 and math.abs(diff.Y)<height*.95,angle=angle,gap=gap,reach=reach,clear=clear}
+        local inRange=gap<reach*.92 and math.abs(diff.Y)<height*.95
+        local facing=angle>math.cos(math.rad(cone))
+        return {valid=inRange and facing and clear,inRange=inRange,facing=facing,
+            angle=angle,gap=gap,reach=reach,clear=clear,height=math.abs(diff.Y),heightLimit=height*.95,
+            reason=not inRange and "Outside native bite geometry" or not facing and "Facing away from prey"
+                or not clear and "Bite corridor obstructed" or "Native attack geometry ready"}
+    end
+    function b:attackEvidence(state)
+        if not self.lastAttackInput then return nil end
+        local record=table.clone(self.lastAttackInput)
+        record.age=state.now-record.at
+        record.sameCharacter=self.attackCharacter==state.char
+        local marker=record.sameCharacter and attr(state.char,"WolfBiteAt") or nil
+        record.markerNow=finite(marker) and marker or nil
+        record.markerAdvanced=record.sameCharacter and finite(marker)
+            and (not finite(record.markerBefore) or marker>record.markerBefore+.000001) or false
+        return record
     end
     function b:bite(state,prey)
         local p=self:checkPrey(prey,state)
         if not p then return false,"Prey unavailable" end
         local geometry=self:attackGeometry(state,p)
         if not geometry or not geometry.valid then return false,"Native range, facing or line of sight not ready" end
+        self.attackCharacter=state.char
+        self.lastAttackInput={at=state.now,markerBefore=attr(state.char,"WolfBiteAt"),sent=false,backend="NONE"}
         local hub=self:hub()
         if hub and type(hub.bridge.tryNativeBite)=="function" then
             if hub.recovery then hub.recovery:release("Amber hunt",state.now) end
@@ -741,7 +766,10 @@ function Bridge.new(nav)
             -- an attempt; the hunter observes actual HP separately.
             if hub.policy then hub.policy:input("attack",state.now) end
             local ok,sent=pcall(hub.bridge.tryNativeBite,hub.bridge,state.now)
-            if ok and sent then self.lastInput="Native tryBite requested";return true,self.lastInput end
+            if ok and sent then
+                self.lastAttackInput.sent=true;self.lastAttackInput.backend="NATIVE_CALLBACK"
+                self.lastInput="Native tryBite requested";return true,self.lastInput
+            end
         end
         local species=config("Species")
         local delay=1.35
@@ -751,32 +779,62 @@ function Bridge.new(nav)
         end
         if state.now<(self.nextBite or 0) then return false,"Native bite cooldown" end
         self.nextBite=state.now+delay
+        local original=UserInput:GetMouseLocation()
+        local m=original
+        local camera=Workspace.CurrentCamera
+        local gui=player:FindFirstChildOfClass("PlayerGui")
+        local function clearAt(x,y)
+            if not gui or type(gui.GetGuiObjectsAtPosition)~="function" then return true end
+            local checked,objects=pcall(gui.GetGuiObjectsAtPosition,gui,x,y)
+            if not checked then return false end
+            for _,object in ipairs(objects) do
+                if object.Active or object:IsA("GuiButton") or object:IsA("TextBox") then return false end
+            end
+            return true
+        end
+        if not clearAt(m.X,m.Y) then
+            local found=false
+            if camera and camera.ViewportSize then
+                for _,uv in ipairs({{.08,.45},{.92,.45},{.5,.5},{.5,.82}}) do
+                    local x,y=camera.ViewportSize.X*uv[1],camera.ViewportSize.Y*uv[2]
+                    if clearAt(x,y) then m={X=x,Y=y};found=true;break end
+                end
+            end
+            if not found then self.lastInput="Attack input blocked by interface";return false,self.lastInput end
+        end
         local ok,v=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and v then
             -- The owned WolfController callback above avoids UI hit testing.
             -- Fallback mouse input is reported as a request, never as damage.
-            local m=UserInput:GetMouseLocation()
-            local camera=Workspace.CurrentCamera
-            local gui=player:FindFirstChildOfClass("PlayerGui")
-            if camera and camera.ViewportSize and gui and type(gui.GetGuiObjectsAtPosition)=="function" then
-                local found=false
-                for _,uv in ipairs({{.08,.45},{.92,.45},{.5,.5},{.5,.82}}) do
-                    local x,y=camera.ViewportSize.X*uv[1],camera.ViewportSize.Y*uv[2]
-                    local checked,objects=pcall(gui.GetGuiObjectsAtPosition,gui,x,y)
-                    local blocked=not checked
-                    for _,object in ipairs(checked and objects or {}) do
-                        if object.Active or object:IsA("GuiButton") or object:IsA("TextBox") then blocked=true;break end
-                    end
-                    if not blocked then m={X=x,Y=y};found=true;break end
-                end
-                if not found then return false,"Attack input blocked by interface" end
+            local sent=pulse("M1",function()v:SendMouseButtonEvent(m.X,m.Y,0,true,game,0)end,
+                function()v:SendMouseButtonEvent(m.X,m.Y,0,false,game,0)end)
+            if sent then
+                self.lastAttackInput.sent=true;self.lastAttackInput.backend="VIRTUAL_MOUSE"
+                self.lastInput="Virtual mouse attack requested";return true,self.lastInput
             end
-            self.lastInput="Mouse attack requested"
-            return pulse("M1",function()v:SendMouseButtonEvent(m.X,m.Y,0,true,game,0)end,
-                function()v:SendMouseButtonEvent(m.X,m.Y,0,false,game,0)end),self.lastInput
+            self.lastAttackInput.virtualError="VIRTUAL_MOUSE_REJECTED"
         end
-        if type(mouse1click)=="function" then return pcall(mouse1click) end
-        return false,"Attack input unavailable"
+        local moved=false
+        local function positionCursor()
+            if math.abs(m.X-original.X)+math.abs(m.Y-original.Y)>.5 then
+                assert(type(mousemoveabs)=="function","Executor cursor positioning unavailable")
+                mousemoveabs(m.X,m.Y);moved=true
+            end
+        end
+        local function restoreCursor()
+            if moved and type(mousemoveabs)=="function" then mousemoveabs(original.X,original.Y);moved=false end
+        end
+        local sent=false
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then
+            sent=pulse("M1",function()positionCursor();mouse1press()end,function()
+                pcall(mouse1release);restoreCursor()
+            end)
+        elseif type(mouse1click)=="function" then
+            sent=pulse("M1",function()positionCursor();mouse1click()end,restoreCursor)
+        end
+        self.lastAttackInput.sent=sent;self.lastAttackInput.backend=sent and "EXECUTOR_MOUSE" or "UNAVAILABLE"
+        self.lastInput=sent and "Executor mouse attack requested" or "Attack input unavailable or rejected"
+        return sent,self.lastInput
     end
     function b:close()
         self:releaseInputs();self:stop("unloaded")

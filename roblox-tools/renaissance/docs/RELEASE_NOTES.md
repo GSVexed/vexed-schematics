@@ -1,3 +1,11 @@
+# Renaissance 15.6.1 — close-prey attacks and Burst state
+
+Preserve false native gait attributes, approach prey to correct close-range facing, and use supported executor mouse input when virtual mouse dispatch is rejected. Keep attack-blocker, native marker and manual-care evidence distinct from accepted damage. Validate colliding occlusion and paired input cleanup. All retained features and prior bundles remain.
+
+Official Luau: 223/223 Territory and 187/187 retained core cases, compilation, source parity and rollback checks. No direct live gameplay trial. See [patch report](../../feral-amber/docs/V0_6_1_RELEASE.md).
+
+---
+
 # Renaissance 15.6.0 — Territory autonomy overhaul
 
 Committed prey pursuit, original native attack dispatch without an advisory cooldown veto, slow-progress recognition, checked straight shortcuts, precise detours, terrain/drop checks, guarded Burst without stamina telemetry, stable resource searches, nested returns and coordinated survival care. All 21 core records remain.

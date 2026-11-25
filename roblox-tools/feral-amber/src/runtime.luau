@@ -1,5 +1,5 @@
 -- Built-in Territory engine. Renaissance owns scheduling, UI and shutdown.
-local Runtime={version="0.6.0"}
+local Runtime={version="0.6.1"}
 function Runtime.start(M,hub)
     assert(hub and hub.ui and type(hub.ui.registerPage)=="function","Update Renaissance for its built-in Territory page")
     local env=(type(getgenv)=="function" and getgenv()) or _G
