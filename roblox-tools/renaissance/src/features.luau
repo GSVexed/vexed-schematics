@@ -1,5 +1,25 @@
 -- Every shared client-config mutation goes through one lease manager.
 local Features = {}
+-- Native tables can alias the same consumption profile in several paths.
+-- Coalesce equal intents before the strict lease manager reserves a field.
+-- Conflicting values remain an error; never silently choose the last value.
+function Features.uniquePlan(plan)
+    local result,seen={},{}
+    for _,item in ipairs(plan) do
+        if type(item.target)~="table" or item.key==nil then return nil,"invalid stamina field" end
+        local fields=seen[item.target]
+        if not fields then fields={};seen[item.target]=fields end
+        local previous=fields[item.key]
+        if previous then
+            if previous.value~=item.value or previous.kind~=item.kind then
+                return nil,"conflicting aliased stamina field: "..tostring(item.key)
+            end
+        else
+            fields[item.key]=item;table.insert(result,item)
+        end
+    end
+    return result
+end
 function Features.new(Core, bridge, registry)
     local f = { leases = Core.leases(), originalCombat = nil, combat = nil, flag = nil,
         nextReconcile = 0, configIdentity = {}, failures = {} }
@@ -147,7 +167,7 @@ function Features.new(Core, bridge, registry)
             for _,key in ipairs({"SPRINT_DRAIN","OTHER_DRAIN","BITE_DRAIN"}) do zero(venom,key) end
             local status=bridge:config("StatusConfig")
             for _,key in ipairs({"STAMINA_BASE","STAMINA_PER_POINT"}) do zero(status and status.VENOM,key) end
-            return plan
+            return Features.uniquePlan(plan)
         elseif id == "recovery" then
             if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
             if n.HEALTH_REST_MULT < 1 then return nil,"native HP Rest multiplier unavailable" end

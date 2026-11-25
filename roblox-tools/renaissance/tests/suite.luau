@@ -1510,5 +1510,48 @@ test("a replaced minigame remote invalidates the cached controller identity",fun
     assert(current~=old);h:close()
 end)
 
+test("aliased native climb levels no longer reject the whole stamina profile",function()
+    local w=Mock.new();local shared={stamina="drain",drain=1}
+    w.configs.PassiveConfig.CLIMBER.levels={shared,shared,{stamina="walk"}}
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2)
+    eq(h.registry.byId.stamina.applied,true);eq(h.features.leases:valid("stamina"),true)
+    eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),true)
+    eq(w.configs.NeedsConfig.STAMINA_SPRINT_DRAIN,0);eq(shared.drain,0);eq(shared.stamina,"walk")
+    local seen={}
+    for _,entry in ipairs(h.features.leases.owners.stamina)do
+        seen[entry.target]=seen[entry.target] or {};eq(seen[entry.target][entry.key],nil);seen[entry.target][entry.key]=true
+    end
+    h:close();eq(shared.drain,1);eq(shared.stamina,"drain")
+    close(w.configs.NeedsConfig.STAMINA_SPRINT_DRAIN,.94);eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),nil)
+end)
+test("aliased species climb-sprint profiles share one reversible stamina field",function()
+    local w=Mock.new();local shared={DRAIN=.8,SPEED=1.5}
+    w.configs.PassiveConfig.CLIMBER.CLIMB_SPRINT={Python=shared,Eagle=shared}
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2)
+    eq(h.registry.byId.stamina.applied,true);eq(shared.DRAIN,0);eq(shared.SPEED,1.5)
+    h:set("stamina",false);eq(shared.DRAIN,.8);eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),nil);h:close()
+end)
+test("equal aliased stamina intents coalesce while genuinely conflicting values are rejected",function()
+    local M=modules();local t={drain=1}
+    local plan=M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="drain",value=0,kind="number"}})
+    eq(#plan,1);eq(t.drain,1)
+    local bad,why=M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="drain",value=1,kind="number"}})
+    eq(bad,nil);assert(why:find("conflicting aliased",1,true));eq(t.drain,1)
+end)
+test("case-distinct stamina fields remain separate and kind conflicts remain errors",function()
+    local M=modules();local t={drain=1,DRAIN=.8}
+    local p=M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="DRAIN",value=0,kind="number"}})
+    eq(#p,2)
+    eq(M.features.uniquePlan({{target=t,key="drain",value=0,kind="number"},{target=t,key="drain",value=0}}),nil)
+end)
+test("shared stamina profiles still release and rearm across a new animal",function()
+    local w=Mock.new();local shared={stamina="drain",drain=1}
+    w.configs.PassiveConfig.CLIMBER.levels={shared,shared,shared}
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2);local old=w.player.Character
+    w:spawn("Hippo");w:advance(.2);eq(old:GetAttribute("WolfDbgNoStamina"),nil)
+    eq(w.player.Character:GetAttribute("WolfDbgNoStamina"),true);eq(h.registry.byId.stamina.applied,true)
+    h:close();eq(shared.drain,1);eq(shared.stamina,"drain")
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

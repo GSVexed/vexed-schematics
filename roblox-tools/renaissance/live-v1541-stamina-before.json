@@ -1,0 +1,41 @@
+{
+  "applied": false,
+  "flag_false_samples": 61,
+  "plan_fields": 17,
+  "gameplay_requests": 0,
+  "out_samples": 0,
+  "ok": true,
+  "state_final": "UNAVAILABLE",
+  "reason": "duplicate field",
+  "attributes_written": 0,
+  "applied_final": false,
+  "plan_valid_final": false,
+  "requested": true,
+  "flag_final": false,
+  "species": "Hippo",
+  "stamina_max": 35,
+  "stamina_min": 30.2,
+  "game_version": 2412,
+  "stamina_last": 32.5,
+  "phase": "stamina-passive-check",
+  "client_plan_valid": false,
+  "hub_version": "15.4.0",
+  "samples": 61,
+  "flag_initial": false,
+  "flag_owner_matches": false,
+  "state": "UNAVAILABLE",
+  "flag_false_events": 0,
+  "decreases": 23,
+  "stamina_first": 30.2,
+  "frozen_plan_fields": [],
+  "modes": {
+    "LAND": {
+      "moving": 60,
+      "samples": 61,
+      "increase": 4.800000000000001,
+      "decrease": 2.5
+    }
+  },
+  "schema": 1541,
+  "flag_changes": 0
+}
