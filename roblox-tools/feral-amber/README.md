@@ -24,13 +24,22 @@ This is an **opt-in add-on** for Renaissance 15.4.3. It has its own small START/
 - Amber pay fields may not be replicated. Without real pay data, the planner optimises urgent scent, claim progress, proximity and route clustering, but cannot assert highest Amber per hour.
 - Running unattended remains at your own risk and may violate the game's rules. The system does not guarantee it looks human or that a low-population server means nobody is nearby.
 
-## Candidate entrypoint
+## Recommended combined launcher
+
+This launches Renaissance only if it is not already active, then opens the Amber control panel. Amber automation stays **OFF** until START is clicked.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber.lua"))()
+```
+
+## Standalone Amber add-on
+
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.1.lua"))()
 ```
 
-Development candidate only: do not promote to `main` until the complete module bundle compiles with the official pinned Luau toolchain, the regression suite passes and source parity is confirmed. This remains an experimental client-side game addon, not a proven Amber-income bot.
+This remains an experimental client-side game addon, not a proven Amber-income bot. Official Luau tests exercise simulated client contracts rather than live FERAL gameplay.
 
 ## Test gate
 
