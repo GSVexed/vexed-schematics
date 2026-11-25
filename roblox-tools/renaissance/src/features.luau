@@ -247,7 +247,8 @@ function Features.new(Core, bridge, registry)
                     local candidate=cfg.CrusherBite
                         or (type(cfg.Hippo)=="table" and cfg.Hippo.CrusherBite)
                         or cfg.CRUSHER
-                    if type(candidate)=="table" and candidate.SPEED_CAP=="trot" then
+                    if type(candidate)=="table" and (candidate.SPEED_CAP=="trot"
+                        or candidate==self.hippoProfile and candidate.SPEED_CAP=="sprint") then
                         profile=candidate;break
                     end
                 end
