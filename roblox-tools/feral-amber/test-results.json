@@ -1,0 +1,57 @@
+{
+  "version": "0.4.0",
+  "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+  "compiled": 19,
+  "total": 138,
+  "passed": 138,
+  "suites": [
+    {
+      "suite": "agent_suite.luau",
+      "total": 20,
+      "passed": 20
+    },
+    {
+      "suite": "bridge_suite.luau",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "suite": "care_suite.luau",
+      "total": 17,
+      "passed": 17
+    },
+    {
+      "suite": "driver_suite.luau",
+      "total": 10,
+      "passed": 10
+    },
+    {
+      "suite": "gait_suite.luau",
+      "total": 27,
+      "passed": 27
+    },
+    {
+      "suite": "hunt_suite.luau",
+      "total": 10,
+      "passed": 10
+    },
+    {
+      "suite": "lifecycle_suite.luau",
+      "total": 15,
+      "passed": 15
+    },
+    {
+      "suite": "nav_suite.luau",
+      "total": 19,
+      "passed": 19
+    },
+    {
+      "suite": "suite.luau",
+      "total": 16,
+      "passed": 16
+    }
+  ],
+  "bundle_sha256": "196222d3047782e40c3d51da918482b4c883097bda0e3b35f6ba631804d0613c",
+  "protected_releases": 5,
+  "live_gameplay_tested": false
+}

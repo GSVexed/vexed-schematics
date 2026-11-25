@@ -46,7 +46,7 @@ function UI.new(agent,bridge)
     local frame=Instance.new("Frame")
     frame.Name="AmberPanel"
     frame.Position=env.FERAL_AMBER_PANEL_POSITION or UDim2.new(1,-358,0,84)
-    frame.Size=UDim2.fromOffset(340,141)
+    frame.Size=UDim2.fromOffset(340,185)
     frame.BackgroundColor3=Color3.fromRGB(20,29,31)
     frame.BorderSizePixel=0
     frame.Active=true
@@ -60,32 +60,25 @@ function UI.new(agent,bridge)
     header.Active=true
     local mode=text(frame,11,12,34,320,21)
     local info=text(frame,11,12,56,320,21)
-    local reason=text(frame,10,12,77,320,22,Color3.fromRGB(184,207,201))
+    local care=text(frame,11,12,78,320,20)
+    local movement=text(frame,10,12,99,320,20)
+    local reason=text(frame,10,12,120,320,22,Color3.fromRGB(184,207,201))
     reason.TextTruncate=Enum.TextTruncate.AtEnd
     local ui={gui=gui,frame=frame,agent=agent,bridge=bridge,lastUpdate=0,
         collapsed=false,visible=true,connections={}}
     local start
-    start=button(frame,"START",12,106,87,function()
+    start=button(frame,"START",12,150,87,function()
         agent:setEnabled(not agent.enabled)
         start.Text=agent.enabled and "STOP" or "START"
     end)
-    local copyStatus=button(frame,"COPY STATUS",108,106,125,function()
+    local copyStatus=button(frame,"COPY STATUS",108,150,125,function()
         local status=agent:status()
         status.coat=type(status.coat)=="string" and status.coat or nil
-        status.events=agent.events
+        status.events={}
+        for i=math.max(1,#agent.events-11),#agent.events do table.insert(status.events,agent.events[i]) end
         status.gameVersion=game.PlaceVersion
-        status.territoryCount=#(bridge.hexes or {})
-        status.hexSummary=bridge:counts(bridge:snapshot(os.clock()))
-        status.navigation={
-            stage=bridge.nav.lastReason,input=bridge.nav.nativeInput,
-            gait=bridge.nav.gait,steering=bridge.nav.lastMode,
-            activeBurstAt=bridge.nav.lastBurstAt,
-            pathIndex=bridge.nav.index,pathCount=#(bridge.nav.points or {}),
-            lastGoal=bridge.nav.destination and {
-                x=math.floor(bridge.nav.destination.X),
-                z=math.floor(bridge.nav.destination.Z)} or nil,
-            failures=bridge.nav.failures,replans=bridge.nav.replans,
-        }
+        status.hexSummary=bridge:counts(agent.lastState or {now=os.clock()})
+        status.navigation=bridge.nav:status()
         status.savedPanelPosition=tostring(frame.Position)
         local ok,payload=pcall(function()
             return game:GetService("HttpService"):JSONEncode(status)
@@ -96,16 +89,16 @@ function UI.new(agent,bridge)
         end
     end)
     local collapse
-    collapse=button(frame,"MIN",244,106,84,function()
+    collapse=button(frame,"MIN",244,150,84,function()
         ui.collapsed=not ui.collapsed
         if ui.collapsed then
             frame.Size=UDim2.fromOffset(340,34)
-            start.Visible=false;copyStatus.Visible=false;mode.Visible=false;info.Visible=false;reason.Visible=false
+            start.Visible=false;copyStatus.Visible=false;mode.Visible=false;info.Visible=false;care.Visible=false;movement.Visible=false;reason.Visible=false
             collapse.Text="OPEN";collapse.Position=UDim2.fromOffset(258,3)
         else
-            frame.Size=UDim2.fromOffset(340,141)
-            start.Visible=true;copyStatus.Visible=true;mode.Visible=true;info.Visible=true;reason.Visible=true
-            collapse.Text="MIN";collapse.Position=UDim2.fromOffset(244,106)
+            frame.Size=UDim2.fromOffset(340,185)
+            start.Visible=true;copyStatus.Visible=true;mode.Visible=true;info.Visible=true;care.Visible=true;movement.Visible=true;reason.Visible=true
+            collapse.Text="MIN";collapse.Position=UDim2.fromOffset(244,150)
         end
     end)
     -- Right Shift is the same hub hotkey, not a separate keybinding to
@@ -168,20 +161,21 @@ function UI.new(agent,bridge)
         if now-self.lastUpdate<.75 then return end
         self.lastUpdate=now
         local st=agent:status()
-        local snap=bridge:snapshot(now)
+        local snap=agent.lastState or bridge:snapshot(now)
         start.Text=st.enabled and "STOP" or "START"
         mode.Text=(st.enabled and "RUNNING · " or "OFF · ")..st.phase
             ..(st.key and " · "..st.key or "")
         local counts=bridge:counts(snap)
         info.Text=string.format("Hexes %d/%d owned · %d fading · Amber +%.0f",
             counts.owned,counts.eligible,counts.fading,st.earned)
-        local species=tostring(st.species or snap.species or "No animal")
+        local function amount(v) return type(v)=="number" and string.format("%.0f",v) or "?" end
+        care.Text="Hunger "..amount(snap.hunger).." · Thirst "..amount(snap.thirst)
+            .." · "..tostring(st.species or snap.species or "No animal")
         local nav=bridge.nav
-        local diagnostic=st.phase=="TRAVEL" or st.phase=="TRAVEL_WATER"
-            or st.phase=="HUNT_APPROACH"
-        reason.Text=species.." · "..st.reason
-            ..(diagnostic and (" / "..tostring(nav.gait or "STOP").." · "..tostring(nav.lastReason or "routing")
-                .." · "..tostring(nav.nativeInput or "input pending")) or "")
+        movement.Text=tostring(nav.gaits.requested).." requested / "..tostring(nav.gaits.observed)
+            .." observed · "..tostring(nav.lastMode)
+        reason.Text=st.reason
+
     end
     function ui:close()
         agent:setEnabled(false)
