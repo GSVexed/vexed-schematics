@@ -1,35 +1,35 @@
 {
-  "version": "15.4.2",
+  "version": "15.4.3",
   "date": "2026-11-25",
-  "source_commit": "cbd9e84740538895f0f4c766b39604e10c014214",
-  "bundle_sha256": "022d9f06c5544eced1da971152243438b98f3b304743a95f3870d1ccc74e053a",
+  "source_commit": "60b8218912f8ff4b9bebec4e0a91bdc104f78b46",
+  "bundle_sha256": "e60fd51fabbd192ca6ff77ad0055b089a152a88304efb96aa59e46e6421e514e",
   "game_baseline": 2412,
   "retained_features": 21,
   "removed_features_reintroduced": 0,
   "module_count": 13,
   "compiled_files": 18,
   "regressions": {
-    "total": 185,
-    "passed": 185,
-    "failed": 0
+    "total": 187,
+    "passed": null,
+    "failed": null
   },
   "minigame_replay_subcases": 72,
-  "source_ci_run": 45677068683,
-  "source_ci_status": "success",
+  "source_ci_run": null,
+  "source_ci_status": "pending",
   "potassium_staging_run": null,
   "potassium_validation": "NOT_EXECUTED_FOR_15_4_2",
   "gameplay_acceptance": "unverified",
   "reproduced_stamina_defect": "duplicate field (15.4.0 actual live Hippo passive observation)",
   "stamina_plan_fix": "alias normalization retained from 15.4.1; actual sustained behavior unverified",
-  "hippo_crusher_speed": "trot to sprint in existing client CrusherBite profile while Hippo is selected; owner-scoped reversible lease",
+  "hippo_crusher_speed": "trot to burst (fastest observed native tier) in the existing client CrusherBite profile while Hippo is selected; reversible local lease",
   "hippo_server_acceptance": "unverified",
   "hippo_client_application": "not live tested",
-  "previous_renaissance_commit": "ef1544f25d37f071df90dd1da84b9fd5df60bdaf",
-  "previous_renaissance_version": "15.4.0",
+  "previous_renaissance_commit": "cbd9e84740538895f0f4c766b39604e10c014214",
+  "previous_renaissance_version": "15.4.2",
   "rollback_commit": "158474ba80c0d613c3427399f24059341369acc8",
   "previous_renaissance_hashes_unchanged": true,
   "clean_v14_hash_unchanged": true,
-  "source_parity": true,
+  "source_parity": "pending",
   "minigame_timing_comparison": {
     "baseline": "15.3.0",
     "reproduced_late_packet_wait_ms": [
@@ -48,6 +48,7 @@
     "The post-fix actual sustained Hippo stamina, injury/bleed/venom 4x clearance, moving Rest pose, Vulture movement recovery and live minigame rates remain unverified.",
     "If the game changes the Crusher Bite config schema, the Hippo-only change stays WAITING and no forced WalkSpeed or remote spam is used.",
     "Original release 15.4.0, CLEAN v14 and earlier Renaissance bundles remain available for rollback.",
-    "Raw native Right Shift polling may overlap sprint and streamed-out players are not displayed."
+    "Raw native Right Shift polling may overlap sprint and streamed-out players are not displayed.",
+    "A burst-tier cap does not enter the Burst gait or bypass native ability movement eligibility. Server-side validation and accepted travel speed are not established."
   ]
 }

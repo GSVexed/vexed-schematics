@@ -1,3 +1,28 @@
+# Renaissance 15.4.3 — highest native Hippo Crusher Bite cap
+
+Pinned candidate: [immutable source](https://github.com/GSVexed/vexed-schematics/blob/60b8218912f8ff4b9bebec4e0a91bdc104f78b46/roblox-tools/feral-renaissance-v15.4.3.lua).
+Automated official Luau validation and regressions will be recorded in `release.json`.
+
+- Hippo `CrusherBite.SPEED_CAP` is set to `"burst"` when an exactly compatible native client profile originally requests `"trot"`. This replaces 15.4.2's `"sprint"` client cap.
+- `BURST` and `WolfBurst` are distinct native locomotion signals in the captured v2412 client. No synthetic movement input or burst attribute is issued. Other animals' profiles and normal ability timing remain unchanged.
+- This client ceiling does not establish burst access or server-accepted running speed during Crusher Bite. Unknown or conflicting schemas remain untouched; native server constraints may still force trot.
+- The 15.4.1 alias-safe stamina application correction and 15.4.2 rollback protection, minigame scheduler and 21-feature hub remain.
+- The controller and UI both report the real `15.4.3` version.
+
+Run after release:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+```
+
+Rollback to 15.4.2:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/cbd9e84740538895f0f4c766b39604e10c014214/roblox-tools/feral-renaissance-v15.4.2.lua"))()
+```
+
+---
+
 # Renaissance 15.4.2 — Hippo Crusher Bite and stamina-plan repair
 
 Source: [immutable 15.4.2 bundle](https://github.com/GSVexed/vexed-schematics/blob/cbd9e84740538895f0f4c766b39604e10c014214/roblox-tools/feral-renaissance-v15.4.2.lua).

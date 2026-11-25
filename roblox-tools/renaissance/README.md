@@ -1,4 +1,28 @@
-# FERAL Project Renaissance 15.4.2
+# FERAL Project Renaissance 15.4.3
+
+The Hippo-only Crusher Bite speed ceiling now requests the **highest movement tier observed in the game's captured v2412 client: `burst`**. Previously, native config specified `trot` and 15.4.2 experimentally requested `sprint`. This is a reversible local `AbilityConfigBase`/`AbilityConfig` profile lease; it does not force the burst state or alter cooldown, charge timing, damage, other animals, or native remotes.
+
+**Server acceptance is not proven.** A client `SPEED_CAP="burst"` does *not* grant burst mode if the native server enforces eligibility or caps movement separately. Actual travel speed, continued correct ability behavior, and sustained stamina need observation in FERAL.
+
+The original 21 features, first-safe-Perfect-window minigames, permanent Bite Reach, moving Rest presentation safeguards, hollow ESP, Right Shift menu, all saved controls and earlier rollback source files are preserved.
+
+## Launcher
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+```
+
+## Previous v15.4.2 rollback
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/cbd9e84740538895f0f4c766b39604e10c014214/roblox-tools/feral-renaissance-v15.4.2.lua"))()
+```
+
+Read [release notes](docs/RELEASE_NOTES.md) and the [Hippo ability research](docs/HIPPO_CRUSHER_SPEED_RESEARCH.md).
+
+---
+
+## Previous README (15.4.2)
 
 **Published source gate:** [185/185 Luau regressions, 18 compile checks and deterministic bundle parity passed](https://github.com/GSVexed/vexed-schematics/actions/runs/45677068683). All 21 existing features, the compact four-tab UI, Right Shift, hollow outlines, saved settings, minigame timing and previous rollback files remain.
 
