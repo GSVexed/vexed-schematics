@@ -278,6 +278,7 @@ function Bridge.new(nav)
             or hub and hub.policy and hub.policy.menuOpen==true
         return {alive=true,char=c,hum=h,root=r,position=point(r.Position),
             species=species,coat=coat,pack=attr(player,"FeralPack"),
+            biome=attr(Workspace,"FeralBiome") or "WolfValley",
             healthFraction=h.MaxHealth>0 and h.Health/h.MaxHealth or 0,
             hunger=attr(c,"Hunger"),thirst=attr(c,"Thirst"),feedCan=attr(c,"FeedCan"),
             feedMode=attr(c,"WolfFeed"),
