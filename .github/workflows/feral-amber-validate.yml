@@ -4,11 +4,15 @@ on:
     branches: ['renaissance/**']
     paths:
       - 'roblox-tools/feral-amber/**'
-      - '.github/workflows/feral-feral-amber-validate.yml'
+      - 'roblox-tools/feral-amber.lua'
+      - 'roblox-tools/feral-amber-autopilot-v0.4.lua'
+      - '.github/workflows/feral-amber-validate.yml'
   pull_request:
     paths:
       - 'roblox-tools/feral-amber/**'
-      - '.github/workflows/feral-feral-amber-validate.yml'
+      - 'roblox-tools/feral-amber.lua'
+      - 'roblox-tools/feral-amber-autopilot-v0.4.lua'
+      - '.github/workflows/feral-amber-validate.yml'
 permissions:
   contents: read
 jobs:
@@ -27,3 +31,10 @@ jobs:
           python3 roblox-tools/feral-amber/run_tests.py \
             --luau /tmp/amber-luau/luau \
             --compiler /tmp/amber-luau/luau-compile
+      - name: Verify existing Renaissance regressions and unchanged source
+        run: |
+          python3 roblox-tools/renaissance/run_tests.py \
+            --luau /tmp/amber-luau/luau \
+            --compiler /tmp/amber-luau/luau-compile \
+            --output /tmp/amber-renaissance-tests.json
+          git diff --exit-code -- roblox-tools/renaissance roblox-tools/feral-renaissance.lua 'roblox-tools/feral-renaissance-v*.lua'

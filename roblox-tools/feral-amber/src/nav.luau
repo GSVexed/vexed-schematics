@@ -1,327 +1,347 @@
--- Surface-only FERAL animal navigation. Separate steering and native gait.
--- No position writes, teleports, CFrame turns, server remotes or velocity edits.
+-- Continuous native steering, cancellable streamed routes and measured progress.
 local Nav={}
 local function flat(a,b)
     local x,z=a.X-b.X,a.Z-b.Z
     return math.sqrt(x*x+z*z)
 end
-local function xyz(v) return {x=v.X,z=v.Z} end
-local function groundAt(workspace,pos,char)
-    local ray=RaycastParams.new()
-    ray.FilterType=Enum.RaycastFilterType.Exclude
-    ray.FilterDescendantsInstances={char}
-    ray.IgnoreWater=false
-    local result=workspace:Raycast(
-        Vector3.new(pos.X,math.max(90,pos.Y+95),pos.Z),
-        Vector3.new(0,-420,0),ray)
-    if result and result.Material~=Enum.Material.Water and result.Normal.Y>=.46 then
-        return result.Position+Vector3.new(0,2.5,0)
-    end
-    return nil
+local function p2(v) return {x=v.X,z=v.Z} end
+local function rayParams(char)
+    local p=RaycastParams.new()
+    p.FilterType=Enum.RaycastFilterType.Exclude
+    p.FilterDescendantsInstances={char};p.IgnoreWater=false
+    return p
 end
 function Nav.new(pathService,workspace,Gait)
-    local n={service=pathService,workspace=workspace,math=Gait,
-        destination=nil,body=nil,points={},index=1,
-        desiredPoint=nil,desiredRoot=nil,desiredHum=nil,
-        held={},nativeInput="UNTESTED",lastReason="IDLE",gait="STOP",
-        routeAt=0,lastAt=0,issued=0,failures=0,replans=0,
-        progressAt=0,progressDistance=nil,previousPosition=nil,
-        lastHeading=nil,lastGaitAt=0,lastBurstAt=-100,lastTrotAt=-100,
-        fallbackUntil=0,lastMode="WORLD",burstObserved=false}
-    local bindings={W=Enum.KeyCode.W,A=Enum.KeyCode.A,
-        S=Enum.KeyCode.S,D=Enum.KeyCode.D,
-        SHIFT=Enum.KeyCode.LeftShift,X=Enum.KeyCode.X,Z=Enum.KeyCode.Z}
-    local vkeys={W=0x57,A=0x41,S=0x53,D=0x44,SHIFT=0xA0,X=0x58,Z=0x5A}
-    local function key(name,on)
-        local code=bindings[name]
-        if not code then return false end
-        local ok,input=pcall(function()return game:GetService("VirtualInputManager")end)
-        if ok and input then
-            local fired=pcall(input.SendKeyEvent,input,on,code,false,game)
-            if fired then return true,"VirtualInputManager" end
+    local n={service=pathService,workspace=workspace,math=Gait,held={},backends={},gaitBackends={},
+        destination=nil,body=nil,points={},index=1,epoch=0,keyEpoch=0,
+        lastReason="IDLE",lastFailure=nil,gait="STOP",nativeInput="UNTESTED",
+        preferredStrategy="WORLD",steeringStrategy="WORLD",lastMode="WORLD",
+        failures=0,replans=0,routeFailures=0,stallsInRow=0,waterRoutes=0,
+        strategyChanges=0,inputVerified=false,inputAttempts=0,driveCalls=0,
+        travelled=0,distance=nil,speed=0,corrections=0,segmentCount=0,arrivalRadius=8,
+        lastBurstAt=-100,lastTrotAt=-100,nextRouteAt=0,closed=false}
+    local bindings={W=Enum.KeyCode.W,A=Enum.KeyCode.A,S=Enum.KeyCode.S,
+        D=Enum.KeyCode.D,SHIFT=Enum.KeyCode.LeftShift,X=Enum.KeyCode.X,Z=Enum.KeyCode.Z}
+    local codes={W=0x57,A=0x41,S=0x53,D=0x44,SHIFT=0xA0,X=0x58,Z=0x5A}
+    local function send(name,on,backend)
+        if backend~="EXECUTOR" then
+            local ok,v=pcall(function()return game:GetService("VirtualInputManager")end)
+            if ok and v and pcall(v.SendKeyEvent,v,on,bindings[name],false,game) then return true,"VIRTUAL" end
         end
-        local action=on and keypress or keyrelease
-        if type(action)=="function" then
-            local fired=pcall(action,vkeys[name])
-            if fired then return true,"ExecutorKey" end
-        end
-        return false,"Unavailable"
+        local fn=on and keypress or keyrelease
+        if type(fn)=="function" and pcall(fn,codes[name]) then return true,"EXECUTOR" end
+        return false,"UNAVAILABLE"
     end
     function n:hold(name,on)
-        local previous=self.held[name]==true
-        if previous==on then return previous end
-        if on then
-            local ok,via=key(name,true)
-            if ok then self.held[name]=true;self.nativeInput=via end
-            return ok
-        end
-        if previous then
-            key(name,false)
-            self.held[name]=nil
-        end
-        return true
+        if not bindings[name] then return false end
+        if (self.held[name]==true)==on then return true end
+        local ok,method=send(name,on,self.backends[name] or self.gaitBackends[name] or self.keyBackend)
+        if on and ok then
+            self.held[name]=true;self.backends[name]=method
+            self.nativeInput=method;self.inputAttempts+=1
+        elseif not on then self.held[name]=nil;self.backends[name]=nil end
+        return ok
     end
     function n:tap(name)
-        if not self:hold(name,true) then return false end
-        local owner=self
-        task.delay(.09,function()
-            -- A tap's release must not be held across stop/unload; release is
-            -- idempotent even if the controller was closed during the delay.
-            owner:hold(name,false)
-        end)
+        if self.held[name] or not self:hold(name,true) then return false end
+        local epoch=self.keyEpoch
+        task.delay(.09,function() if self.keyEpoch==epoch then self:hold(name,false) end end)
+        return true
+    end
+    function n:retryInput(name)
+        if type(keypress)~="function" or type(keyrelease)~="function" then return false end
+        self:hold(name,false);self.gaitBackends[name]="EXECUTOR"
         return true
     end
     function n:releaseSteering()
-        for _,name in ipairs({"W","A","S","D"}) do self:hold(name,false) end
+        for _,key in ipairs({"W","A","S","D"}) do self:hold(key,false) end
     end
     function n:releaseKeys()
-        for name in pairs(self.held) do self:hold(name,false) end
-        self.gait="STOP"
+        self.keyEpoch+=1
+        local keys={}
+        for k in pairs(self.held) do table.insert(keys,k) end
+        for _,k in ipairs(keys) do self:hold(k,false) end
     end
+    n.gaits=Gait.controller(n)
     function n:stop(hum,root,reason)
-        local wasNavigating=self.destination~=nil or self.desiredPoint~=nil
+        local active=self.desiredPoint~=nil or self.destination~=nil
+        self.epoch+=1;self.pending=nil
         self.desiredPoint,self.desiredRoot,self.desiredHum=nil,nil,nil
-        self:releaseKeys()
-        if wasNavigating and hum and root then
-            pcall(function() hum:Move(Vector3.zero,false) end)
-            pcall(function() hum:MoveTo(root.Position) end)
-        end
-        self.destination,self.body=nil,nil
-        self.points,self.index={},1
-        self.progressDistance=nil
+        if active then self.gaits:stop(self.lastState,self.lastAt or 0) end
+        self:releaseKeys();self.gait="STOP"
+        if active and hum then pcall(hum.Move,hum,Vector3.zero,false) end
+        self.destination,self.body,self.identity=nil,nil,nil
+        self.points,self.index={},1;self.lastPosition=nil
         self.lastReason=reason or "IDLE"
     end
-    function n:reset(destination,char,now)
-        self.destination,self.body=destination,char
-        self.points,self.index={},1
-        self:releaseSteering()
-        self:hold("SHIFT",false)
-        self.desiredPoint,self.desiredRoot,self.desiredHum=nil,nil,nil
-        self.routeAt=0;self.issued=0
-        self.progressAt=now;self.progressDistance=nil
-        self.lastReason="NEW_ROUTE"
-        self.previousPosition=nil;self.lastHeading=nil
-        self.fallbackUntil=0;self.lastMode="WORLD"
+    function n:reset(destination,char,now,identity)
+        self.epoch+=1;self.pending=nil
+        self.destination,self.body,self.identity=destination,char,identity
+        self.points,self.index={},1;self.nextRouteAt=now
+        self.desiredPoint=nil;self:releaseSteering()
+        self.lastProgressAt=now;self.lastPosition=nil;self.lastSampleAt=now
+        self.windowAt=now;self.windowOrigin=nil;self.windowTravel=0
+        self.stallsInRow,self.routeFailures,self.corrections=0,0,0
+        self.inputVerified=false;self.steeringStrategy=self.preferredStrategy
+        self.recoveryProgress=0
+        self.lastReason="NEW_ROUTE";self.goalStarted=now
     end
-    function n:route(root,hum,char,now)
-        local from=root.Position
-        local delta=self.destination-from
-        local distance=flat(from,self.destination)
-        if distance<9 then self.points={};return true end
-        -- Limit pathfinding to the streamed neighborhood; avoid directing an
-        -- animal into an unstreamed faraway waterfall or cliff.
-        local span=math.min(distance,75)
-        local direction=Vector3.new(delta.X/distance,0,delta.Z/distance)
-        local probes={Vector3.new(from.X+direction.X*span,from.Y,from.Z+direction.Z*span)}
-        for _,ang in ipairs({-math.pi/7,math.pi/7,-math.pi/3,math.pi/3}) do
-            local x=direction.X*math.cos(ang)-direction.Z*math.sin(ang)
-            local z=direction.X*math.sin(ang)+direction.Z*math.cos(ang)
-            table.insert(probes,Vector3.new(from.X+x*math.min(span,45),from.Y,
-                from.Z+z*math.min(span,45)))
+    function n:surface(pos,char,allowWater)
+        local hit=self.workspace:Raycast(pos+Vector3.new(0,100,0),Vector3.new(0,-420,0),rayParams(char))
+        if not hit then return nil end
+        local wet=hit.Material==Enum.Material.Water
+        if wet and not allowWater or not wet and hit.Normal.Y<.46 then return nil end
+        return hit.Position+Vector3.new(0,2.5,0),wet
+    end
+    function n:clearSegment(from,to,char,allowWater)
+        local distance=flat(from,to)
+        if distance<.1 then return true,false end
+        local params=rayParams(char);params.IgnoreWater=true
+        -- Terrain walls are obstacles too; never exempt Terrain from this ray.
+        local hit=self.workspace:Raycast(from+Vector3.new(0,1.5,0),to-from,params)
+        if hit and (not hit.Instance or hit.Instance.CanCollide~=false) then return false,false end
+        local perpendicular=Vector3.new(-(to.Z-from.Z)/distance,0,(to.X-from.X)/distance)
+        for _,side in ipairs({-1,1}) do
+            local offset=perpendicular*(self.clearance or 2)*side
+            local flank=self.workspace:Raycast(from+Vector3.new(0,1.5,0)+offset,to-from,params)
+            if flank and (not flank.Instance or flank.Instance.CanCollide~=false) then return false,false end
         end
-        local surface=nil
-        for _,probe in ipairs(probes) do
-            surface=groundAt(self.workspace,probe,char)
-            if surface then break end
+        local wet=false;local previous=nil
+        local steps=math.max(1,math.ceil(distance/10))
+        for step=0,steps do
+            local p=from+(to-from)*(step/steps)
+            local ground,water=self:surface(p,char,allowWater)
+            if not ground then return false,wet end
+            if previous and math.abs(ground.Y-previous.Y)>math.max(7,distance/steps*1.05) then return false,wet end
+            previous=ground;wet=wet or water
         end
-        if not surface then
-            self.lastReason="NO_STREAMED_GROUND"
-            return false
+        return true,wet
+    end
+    function n:compute(from,root,hum,char,state,goal,attempt)
+        local distance=flat(from,goal)
+        if distance<.01 then return {},"EMPTY_ROUTE" end
+        local delta=goal-from;local dir=Vector3.new(delta.X/distance,0,delta.Z/distance)
+        local span=math.min(distance,100)
+        local allowWater=state.allowWater==true
+        local angles={0,-.45,.45,-.9,.9}
+        if attempt%2==1 then angles={0,.45,-.45,.9,-.9} end
+        for _,angle in ipairs(angles) do
+            local length=angle==0 and span or math.min(span,55)
+            local x=dir.X*math.cos(angle)-dir.Z*math.sin(angle)
+            local z=dir.X*math.sin(angle)+dir.Z*math.cos(angle)
+            local surface,water=self:surface(from+Vector3.new(x*length,0,z*length),char,allowWater)
+            if surface then
+                local clear,crossesWater=self:clearSegment(from,surface,char,allowWater)
+                if clear then return {surface},(water or crossesWater or state.swimming) and "SWIM_ROUTE" or "CLEAR_SURFACE" end
+                if not water and not state.swimming then
+                    local ok,path=pcall(function()
+                        local result=self.service:CreatePath({
+                            AgentRadius=math.clamp(root.Size.X*.5+.65,2,12),
+                            AgentHeight=math.clamp(hum.HipHeight+root.Size.Y+1,4,30),
+                            AgentCanJump=false,AgentCanClimb=false,WaypointSpacing=16})
+                        result:ComputeAsync(from,surface)
+                        return result
+                    end)
+                    if ok and path.Status==Enum.PathStatus.Success then
+                        local points={}
+                        for _,p in ipairs(path:GetWaypoints()) do
+                            if typeof(p.Position)=="Vector3" and flat(p.Position,from)>2 then table.insert(points,p.Position) end
+                        end
+                        if #points>0 then return points,"PATH_SURFACE" end
+                    end
+                end
+            end
         end
-        local route,success=false,false
-        local ok=pcall(function()
-            local radius=math.clamp(math.max(root.Size.X,root.Size.Z)*.5+1.25,2,12)
-            local height=math.clamp(hum.HipHeight+root.Size.Y+1.5,4,30)
-            route=self.service:CreatePath({AgentRadius=radius,AgentHeight=height,
-                AgentCanJump=false,AgentCanClimb=false,WaypointSpacing=12})
-            route:ComputeAsync(from,surface)
-            success=route.Status==Enum.PathStatus.Success
+        return nil,"NO_STREAMED_SAFE_ROUTE"
+    end
+    function n:route(root,hum,char,now,state)
+        if self.pending or now<self.nextRouteAt then return end
+        local epoch=self.epoch
+        local request={at=now,epoch=epoch,origin=root.Position,goal=self.destination}
+        self.pending=request
+        task.spawn(function()
+            local ok,points,reason=pcall(self.compute,self,request.origin,root,hum,char,
+                table.clone(state or {}),request.goal,self.replans)
+            if self.closed or self.epoch~=epoch or self.pending~=request then return end
+            self.pending=nil
+            if not ok or not points then
+                self.routeFailures+=1;self.failures+=1
+                self.lastFailure=ok and reason or "PATH_COMPUTATION_ERROR"
+                self.lastReason=self.lastFailure;self.nextRouteAt=now+1.5
+                return
+            end
+            -- An old path cannot pull a moving animal back toward its old start.
+            if not root.Parent or self.body~=char then return end
+            self.points,self.index=points,1;self.routeOrigin=request.origin
+            self.segmentCount+=1;self.routeFailures=0
+            self.routeAt=now;self.lastReason=reason
+            self.routeWater=reason=="SWIM_ROUTE"
+            if self.routeWater then self.waterRoutes+=1 end
         end)
-        local points={}
-        if ok and success then
-            for _,p in ipairs(route:GetWaypoints()) do
-                if typeof(p.Position)=="Vector3" then table.insert(points,p.Position) end
-            end
-        end
-        if #points<2 then
-            -- Only make a short direct ground step when the ray has no physical
-            -- obstacles. Missing/unloaded obstacles must not become a blind TP.
-            local params=RaycastParams.new()
-            params.FilterType=Enum.RaycastFilterType.Exclude
-            params.FilterDescendantsInstances={char}
-            local hit=self.workspace:Raycast(from+Vector3.new(0,3,0),
-                surface-from,params)
-            if hit and hit.Instance and hit.Instance~=self.workspace.Terrain
-                and not hit.Instance:IsDescendantOf(char) then
-                self.lastReason="BLOCKED_SURFACE"
-                return false
-            end
-            points={surface}
-        end
-        self.points,self.index=points,1
-        self.routeOrigin=from
-        self.routeAt=now
-        self.progressAt=now
-        self.progressDistance=distance
-        self.lastReason=success and "PATH_SURFACE" or "SHORT_SURFACE"
-        return true
     end
-    function n:setGait(wanted,state,now)
-        local current=self.gait
-        if wanted~=current then
-            self.gait=wanted
-            self.lastGaitAt=now
-        end
-        -- Sprint uses the actual FERAL LeftShift input. Never use RightShift,
-        -- because it owns both hub menus.
-        local faster=wanted=="SPRINT" or wanted=="BURST"
-        self:hold("SHIFT",faster)
-        if wanted=="TROT" and not (state and state.hudTrot==true)
-            and now-self.lastTrotAt>9 then
-            if self:tap("Z") then self.lastTrotAt=now end
-        end
-        if wanted=="BURST" then
-            local observed=state and state.hudBurst==true
-            if not observed and now-self.lastBurstAt>8 then
-                if self:tap("X") then self.lastBurstAt=now end
-            end
-        end
+    function n:direction()
+        local root,hum,p=self.desiredRoot,self.desiredHum,self.desiredPoint
+        if not root or not hum or not p or not root.Parent or hum.Health<=0 then return nil end
+        local delta=Vector3.new(p.X-root.Position.X,0,p.Z-root.Position.Z)
+        if delta.Magnitude<=self.arrivalRadius and flat(root.Position,self.destination or p)<=self.arrivalRadius then return Vector3.zero end
+        if delta.Magnitude<.1 then return Vector3.zero end
+        return delta.Unit
     end
     function n:drive()
-        local root,hum,p=self.desiredRoot,self.desiredHum,self.desiredPoint
-        if not root or not hum or not p or not root.Parent or hum.Health<=0 then
-            self:releaseKeys()
-            return
+        self.driveCalls+=1
+        local direction=self:direction()
+        if not direction then self:releaseSteering();return end
+        if self.steeringStrategy=="WORLD" then
+            self:releaseSteering();self.desiredHum:Move(direction,false)
+            self.lastMode="WORLD";return
         end
-        local delta=Vector3.new(p.X-root.Position.X,0,p.Z-root.Position.Z)
-        if delta.Magnitude<6 then
-            self:releaseSteering()
-            pcall(function()hum:Move(Vector3.zero,false)end)
-            return
+        local camera=self.workspace.CurrentCamera
+        if not camera then self:releaseSteering();self.lastFailure="NO_CAMERA";return end
+        local f,r=camera.CFrame.LookVector,camera.CFrame.RightVector
+        f=Vector3.new(f.X,0,f.Z);r=Vector3.new(r.X,0,r.Z)
+        if f.Magnitude<.1 or r.Magnitude<.1 then self:releaseSteering();return end
+        local forward,side=direction:Dot(f.Unit),direction:Dot(r.Unit)
+        -- Eight directions avoid the four-direction fallback's square orbit.
+        local keys={W=forward>.38,S=forward<-.38,D=side>.38,A=side<-.38}
+        for key,on in pairs(keys) do self:hold(key,on) end
+        self.lastMode="NATIVE_KEYS"
+    end
+    function n:advance(root,radius)
+        local advanced=false
+        while self.index<=#self.points do
+            local p=self.points[self.index]
+            local last=self.index==#self.points
+            local goalNear=last and self.destination and flat(p,self.destination)<3
+            local reach=goalNear and self.arrivalRadius or radius
+            local near=flat(root.Position,p)<=reach
+            local prev=self.points[self.index-1] or self.routeOrigin
+            local passed=false
+            if prev and not goalNear then
+                local dx,dz=p.X-prev.X,p.Z-prev.Z;local len=math.sqrt(dx*dx+dz*dz)
+                if len>.1 then
+                    local beyond=((root.Position.X-p.X)*dx+(root.Position.Z-p.Z)*dz)/len
+                    local cross=math.abs((root.Position.X-p.X)*dz-(root.Position.Z-p.Z)*dx)/len
+                    passed=beyond>0 and cross<radius*1.4
+                end
+            end
+            if near or passed then self.index+=1;advanced=true else break end
         end
-        -- One authoritative steering stream. Never combine continuous WASD
-        -- with camera-relative world-space humanoid steering (orbit bug).
-        if os.clock()>=self.fallbackUntil then
-            self:releaseSteering()
-            local direction=delta.Unit
-            pcall(function()hum:Move(direction,false)end)
-            self.lastMode="WORLD"
-            return
-        end
-        -- An optional short-lived fallback when world-space movement was
-        -- demonstrably stationary. One camera-relative key at a time.
-        local cam=self.workspace.CurrentCamera
-        if not cam then return end
-        local look=cam.CFrame.LookVector
-        local right=cam.CFrame.RightVector
-        local f=Vector3.new(look.X,0,look.Z)
-        local r=Vector3.new(right.X,0,right.Z)
-        if f.Magnitude<.1 or r.Magnitude<.1 then return end
-        local fd=delta.Unit:Dot(f.Unit)
-        local rd=delta.Unit:Dot(r.Unit)
-        local which=math.abs(fd)>=math.abs(rd)
-            and (fd>=0 and "W" or "S")
-            or (rd>=0 and "D" or "A")
-        for _,name in ipairs({"W","A","S","D"}) do
-            self:hold(name,name==which)
-        end
-        self.lastMode="KEY_FALLBACK"
+        return advanced
     end
     function n:tick(destination,char,hum,root,now,otherPlayers,state)
-        if not destination or not char or not hum or not root or hum.Health<=0 then
+        state=state or {};self.lastState=state;self.lastAt=now
+        if self.closed or not destination or not char or not hum or not root or hum.Health<=0 then
             self:stop(hum,root,"NO_LIVING_ANIMAL");return "WAIT"
         end
-        if not self.destination or flat(destination,self.destination)>9 or self.body~=char then
-            self:reset(destination,char,now)
-        end
-        local total=flat(root.Position,destination)
-        if total<9 then self:stop(hum,root,"ARRIVED");return "REACHED" end
-        for _,pos in ipairs(otherPlayers or {}) do
-            if pos and type(pos.X)=="number" and type(pos.Z)=="number"
-                and flat(pos,root.Position)<115 then
+        local identity=state.navKey or "STATIC"
+        self.clearance=math.clamp(root.Size.X*.5+.65,2,12)
+        if not self.destination or self.body~=char or self.identity~=identity then self:reset(destination,char,now,identity) end
+        local targetShift=flat(destination,self.destination)
+        self.destination=destination
+        self.arrivalRadius=state.moveRadius or 8
+        local total=flat(root.Position,destination);self.distance=total
+        if total<=self.arrivalRadius then self:stop(hum,root,"ARRIVED");return "REACHED" end
+        for _,p in ipairs(otherPlayers or {}) do
+            if flat(root.Position,p)<(state.avoidRadius or 110) then
                 self:stop(hum,root,"PLAYER_NEARBY");return "BLOCKED"
             end
         end
-        if #self.points==0 or self.index>#self.points then
-            if not self:route(root,hum,char,now) then
-                self.failures+=1
-                if self.failures>3 then return "STUCK" end
-                return "WAIT"
+        local dt=now-(self.lastSampleAt or now)
+        if self.lastPosition and dt>0 then
+            local moved=flat(root.Position,self.lastPosition)
+            if moved>math.max(90,(self.speed or 0)*dt*3+35) then
+                self.corrections+=1;self.points={};self.epoch+=1;self.pending=nil
+                self.desiredPoint=nil;self:releaseSteering()
+                self.lastFailure="POSITION_CORRECTION";self.lastProgressAt=now
+                if self.corrections>=3 then self:stop(hum,root,"REPEATED_CORRECTIONS");return "STUCK" end
+            else
+                self.travelled+=moved;self.windowTravel+=moved
+                self.speed=self.speed*.6+math.min(180,moved/dt)*.4
+                local wp=self.points[self.index]
+                if wp and flat(self.lastPosition,wp)-flat(root.Position,wp)>.45 then
+                    self.lastProgressAt=now;self.inputVerified=true
+                    self.recoveryProgress+=moved
+                    if self.recoveryProgress>15 then self.stallsInRow=0 end
+                end
             end
         end
-        local currentPosition=xyz(root.Position)
-        local waypointRange=math.clamp(math.max(root.Size.X,root.Size.Z)*.6+5,8,14)
-        local check={}
-        for _,p in ipairs(self.points) do table.insert(check,xyz(p)) end
-        local newIndex=self.math.waypointIndex(check,self.index,currentPosition,waypointRange)
-        -- High-speed animals can overshoot a short path waypoint between
-        -- samples. Never turn them around to chase a point behind them:
-        -- advance when the animal has passed the waypoint along the segment.
-        while newIndex<=#self.points do
-            local p=self.points[newIndex]
-            local prev=self.points[newIndex-1] or self.routeOrigin
-            if not prev then break end
-            local sx,sz=p.X-prev.X,p.Z-prev.Z
-            local length=math.sqrt(sx*sx+sz*sz)
-            if length<=2 then newIndex+=1 else
-                local beyond=((root.Position.X-p.X)*sx
-                    +(root.Position.Z-p.Z)*sz)/length
-                if beyond>waypointRange*.5 then newIndex+=1 else break end
+        self.lastPosition=root.Position;self.lastSampleAt=now
+        self.windowOrigin=self.windowOrigin or root.Position
+        if now-self.windowAt>=6 then
+            if self.windowTravel>35 and flat(root.Position,self.windowOrigin)<6 then
+                self.lastProgressAt=math.min(self.lastProgressAt,now-6)
+                self.lastFailure="OSCILLATION"
             end
+            self.windowOrigin=root.Position;self.windowTravel=0;self.windowAt=now
         end
-        self.index=newIndex
-        if self.index>#self.points then
-            -- Do not leave a stale waypoint steering the animal backwards.
-            self.points={}
-            self.desiredPoint=nil
+        local advanced=self:advance(root,math.clamp(root.Size.X*.5+4,6,12))
+        if advanced then self.lastProgressAt=now;self.inputVerified=true end
+        if self.pending and now-self.pending.at>12 then
+            self.epoch+=1;self.pending=nil;self.routeFailures+=1
+            self.lastFailure="PATH_TIMEOUT"
+        end
+        if self.routeFailures>=4 then self:stop(hum,root,self.lastFailure);return "STUCK" end
+        if now-self.lastProgressAt>5 then
+            self.stallsInRow+=1;self.replans+=1;self.lastProgressAt=now
+            self.recoveryProgress=0
+            self.points={};self.epoch+=1;self.pending=nil;self.desiredPoint=nil
+            self:releaseSteering();self:hold("SHIFT",false)
+            self.lastFailure=self.lastFailure=="OSCILLATION" and self.lastFailure or "NO_PHYSICAL_PROGRESS"
+            if self.stallsInRow==1 and self.steeringStrategy=="WORLD" then
+                self.steeringStrategy="KEY";self.strategyChanges+=1
+            elseif self.stallsInRow==2 and type(keypress)=="function" then self.keyBackend="EXECUTOR" end
+            if self.stallsInRow>=4 then self:stop(hum,root,"BOUNDED_STUCK");return "STUCK" end
+        end
+        local exhausted=self.index>#self.points
+        if exhausted then
+            self.points={};self.index=1;self.desiredPoint=nil
             self:releaseSteering()
-            pcall(function()hum:Move(Vector3.zero,false)end)
-            self.lastReason="SEGMENT_COMPLETE"
-            return "MOVING"
         end
+        -- Prepare the next segment while following the current valid segment.
+        local tail=self.points[#self.points]
+        local prefetch=tail and flat(root.Position,tail)<math.max(24,self.speed*.85)
+            and flat(tail,destination)>15
+        if exhausted or prefetch or targetShift>14 and now-(self.routeAt or 0)>1.1 then
+            self:route(root,hum,char,now,state)
+        end
+        self:advance(root,math.clamp(root.Size.X*.5+4,6,12))
         local waypoint=self.points[self.index]
-        if self.progressDistance and now-self.progressAt>=5.5 then
-            local progress=self.math.progress(now,self.progressAt,self.progressDistance,total,5.5,3.5)
-            if progress=="STALLED" then
-                self.replans+=1
-                self.lastReason="STALL_REPLAN"
-                self:releaseSteering()
-                self.fallbackUntil=now+math.min(2.5,1+self.replans*.3)
-                self.progressAt=now
-                self.progressDistance=total
-                self.points={}
-                if self.replans>=4 then return "STUCK" end
-                return "WAIT"
-            end
-            self.progressAt=now
-            self.progressDistance=total
-            self.fallbackUntil=0
+        if not waypoint then
+            self.desiredPoint=nil;self:releaseSteering();self:hold("SHIFT",false)
+            self.lastReason=self.pending and "PLANNING" or self.lastFailure or "WAIT_ROUTE"
+            return "WAIT"
         end
-        -- Acceleration choice is based on full distance to the claimed hex
-        -- and the latest heading, not each small intermediate waypoint.
-        local turn=self.math.turn(self.previousPosition,currentPosition,xyz(destination))
-        if not self.lastHeading or self.math.distance(self.lastHeading,currentPosition)>7 then
-            self.previousPosition=self.lastHeading
-            self.lastHeading=currentPosition
+        -- Directly track a nearby moving target only over checked terrain.
+        if state.movingTarget and total<28 then
+            local clear=self:clearSegment(root.Position,destination,char,state.allowWater==true)
+            if clear then waypoint=destination end
         end
-        local reserve=state and state.staminaFraction or nil
-        -- Burst only on a nearly straight, sufficiently long LOCAL segment,
-        -- not simply because the distant territory is far away.
-        if flat(root.Position,waypoint)<34 then turn=math.max(turn,42) end
-        local wanted=self.math.select(total,turn,reserve,{
-            allowBurst=state and state.allowBurst~=false,
-            burstReady=not (state and state.hudBurstNo),
-            combat=state and state.combat,
-            ability=state and state.ability,
-        })
-        self:setGait(wanted,state,now)
+        local look=root.CFrame and root.CFrame.LookVector
+        local previous=look and {x=root.Position.X-look.X*5,z=root.Position.Z-look.Z*5} or nil
+        local turn=self.math.turn(previous,p2(root.Position),p2(waypoint))
+        local localRange=flat(root.Position,waypoint)
+        local nextPoint=self.points[self.index+1]
+        if nextPoint and self.math.turn(p2(root.Position),p2(waypoint),p2(nextPoint))>55 and localRange<35 then turn=math.max(turn,85) end
+        local wanted=self.math.select(state.hunting and total*2 or total,turn,state.staminaFraction,{
+            allowBurst=state.allowBurst~=false and self.inputVerified and localRange>=38,
+            burstReady=not state.hudBurstNo,swimming=state.swimming,
+            swimSprint=state.swimSprint,combat=state.combat,hunting=state.hunting,
+            preySpeed=state.preySpeed,ability=state.ability})
+        self.gait=self.gaits:step(wanted,state,now)
         self.desiredPoint,self.desiredRoot,self.desiredHum=waypoint,root,hum
-        if now-self.issued>=1.5 then
-            self.issued=now
-            pcall(function()hum:MoveTo(waypoint)end)
-        end
-        self.lastReason="FOLLOWING_"..wanted.."_"..self.lastMode
+        self.lastReason=(state.swimming and "SWIM_" or "FOLLOWING_")..self.gait
         return "MOVING"
+    end
+    function n:status()
+        return {stage=self.lastReason,failure=self.lastFailure,method=self.lastMode,
+            driverPath=self.driverPath,driverReason=self.driverReason,
+            requested=self.gaits.requested,observed=self.gaits.observed,
+            gaitReason=self.gaits.reason,gaitRequests=self.gaits.requests,
+            gaitConfirmations=self.gaits.confirmations,input=self.nativeInput,
+            inputVerified=self.inputVerified,distance=self.distance,
+            travelled=math.floor(self.travelled*10)/10,speed=math.floor(self.speed*10)/10,
+            replans=self.replans,failures=self.failures,waterRoutes=self.waterRoutes,
+            corrections=self.corrections,segments=self.segmentCount}
     end
     return n
 end

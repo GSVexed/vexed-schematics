@@ -35,7 +35,8 @@ function Planner.objective(hex,state,from,options)
         or (options.blockedUntil and (options.blockedUntil[hex.key] or 0)>(state.now or 0)) then return nil end
     local owned=hex.owner==state.pack
     local hold=finite(hex.hold) and clamp(hex.hold,0,1) or nil
-    local pay=finite(hex.pay) and clamp(hex.pay,1,20) or 2.5
+    local payKnown=finite(hex.pay)
+    local pay=payKnown and clamp(hex.pay,1,20) or 1
     local kind,priority
     if owned then
         if hold==nil or hold>= (options.scentThreshold or .84) then return nil end
@@ -59,12 +60,14 @@ function Planner.objective(hex,state,from,options)
     local deny,nearest=pathRisk(from,hex.center,state.players,options.avoidRadius or 120)
     if deny and options.avoidPlayers~=false then return nil end
     local recent=options.recent and options.recent[hex.key]
+    local waiting=options.waitingSince and options.waitingSince[hex.key]
+    if finite(waiting) then priority+=math.min(180,math.max(0,(state.now or 0)-waiting)/5) end
     if finite(recent) and (state.now or 0)-recent<120 then priority*=.65 end
     local routeCost=1+d/320
     local score=priority/(routeCost^.74)
     if not finite(score) then return nil end
     return {key=hex.key,kind=kind,score=score,base=priority,distance=d,
-        pay=pay,hold=hold,center=hex.center,nearestPlayer=nearest,
+        pay=payKnown and pay or nil,hold=hold,center=hex.center,nearestPlayer=nearest,
         urgency=owned and (1-(hold or 0)) or 0}
 end
 

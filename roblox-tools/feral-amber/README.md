@@ -1,91 +1,67 @@
-# FERAL Amber Autopilot 0.3 — all-animal strategic farming experiment
+# FERAL Amber Autopilot 0.4.0
 
-## v0.3 — native speed modes, route recovery and shared unload
-
-The 0.2 system could navigate in circles because it continuously combined a camera-relative WASD key stream with world-space `Humanoid:Move`, and it could turn back toward a waypoint **after running past it**. The navigation controller now uses one consistent world-space steering stream, with a temporary native-key fallback only when there is measured movement failure. It advances overshot waypoints instead of reversing, discards stale steering, attempts a fresh nearby terrain route, and cools down objectives after repeated genuine stalls.
-
-Locomotion is selected using distance, actual motion heading, route corners and the native `Stamina/StaminaMax` attributes:
-
-- **Burst** on long straight unobstructed ground with adequate stamina: attempts the game's native **X** input, at most once per 8 seconds, without fabricating server mode or repeated remotes.
-- **Sprint** on normal long/medium travel: holds the game's native **Left Shift** control. Right Shift remains exclusively the panel visibility hotkey.
-- **Trot** for close arrivals, turns, hazards and low stamina: releases sprint, optionally requests native **Z** trot mode with a cooldown.
-- **Stop / yield** at claim positions, near players, during native combat or after manual input, releasing all held movement and speed keys.
-
-If FERAL's current server controller does not accept a synthetic key input, these speed requests may not take effect in-game. No direct `WalkSpeed`, body velocity, CFrame, teleport, server state or gameplay remote modifications are performed. This is an **experiment**, not a claim of unrestricted server-accepted Burst.
-
-**Shared unload:** this addon captures its owning Renaissance hub instance; when that hub unloads or is replaced, the addon shuts down automatically, disconnects Heartbeat and UI event listeners, releases held movement keys, and destroys its entire Amber panel. Stopping Amber alone does not close Renaissance. The current `main` Renaissance hub is not changed.
-
-**COPY STATUS** now reports desired gait, selected steering method and Burst attempts, alongside route progress and stopped reasons. Old `feral-amber-autopilot-v0.2.lua` and `v0.1.lua` files are retained as rollbacks.
-
----
-
-## Version 0.2 — movement and panel fixes
-
-Version 0.1 could stay completely stationary: `territory` was both the live `ReplicatedStorage.FeralTerritory` instance and the per-hex read method. The method overwrote the data object, preventing the map's replicated `Hexes` from being read. The real object is now stored as `territoryInstance`, with a dedicated mocked-service regression.
-
-Two additional movement blockers are addressed: an open Renaissance menu previously paused the planner, and distant hexes were rejected when their terrain had not streamed in. Version 0.2 continues when menus are visible and travels toward the replicated hex coordinates first, evaluating safe ground when nearby.
-
-FERAL's custom animal controller may override `Humanoid:MoveTo`. Version 0.2 additionally uses native directional control (virtual/executor WASD where available), plus `Humanoid:Move`, releasing keys promptly on pause, death, manual input or shutdown. It remains **surface-only**, with no teleports, forced velocity, CFrame repositioning or direct gameplay remote calls. Game acceptance of movement remains unverified.
-
-**Right Shift** follows Renaissance's panel visibility; when used standalone, it toggles Amber's own panel. **Drag the title bar** to move the panel, and use MIN for a small collapsed view. Position is retained in the current executor session. Hiding the UI does not stop the farming task. The COPY STATUS report now includes navigation input and faults.
-
-The prior v0.1 bundle is preserved for rollback. All-species live farming, native sprint/burst and real Amber payments remain to be validated.
-
----
-
-This is an **opt-in add-on** for Renaissance 15.4.3. It has its own small START/STOP panel and does **not** replace the existing hub, its controls or its saved settings. It stops any older Territory Rush v4 auto controller to prevent competing teleports, but does not call its movement functions.
-
-## Intended gameplay
-
-1. Spawn as **any animal** (the first intended usage is `Species="Bear"`, `Coat="Spirit Bear"`), join a pack, execute the add-on and press **START**.
-2. Read only the existing `FeralTerritory.Hexes` list and its replicated `owner`, `hold`, `prog`, `by` and `neutral` attributes; derive physical claim spots from `TerritoryConfig` and `MapSpots`.
-3. Prioritise urgent owned scent restoration and progressing claims; rank candidates by replicated Amber pay information *if present*, distance, nearby-player exposure, and lookahead into the next territory cluster. Missing pay data is treated uniformly and **not** invented.
-4. Travel using **native Roblox PathfindingService + Humanoid:MoveTo** with segmented ground routes, raycast terrain checks, stuck/timeouts, and no `PivotTo`, underground hover, position snaps, or velocity writes.
-5. When at the claim spot, wait for **replicated owner/progress/hold changes** before counting a claim or rescent. Timeout and cool down a failed destination instead of looping.
-6. When thirst/hunger/health cross configurable thresholds, pause the territory objective. Move over ground to a named water source, press native E only when the game's `FeedCan` permits it, and watch for **actual attribute increases**. On low health, wait without forcing Rest.
-7. For species with known carnivorous/omnivorous feeding patterns (Bear, Wolf, Tiger, etc.), select **NPC prey only** from `Workspace.FeralNPCs`. Avoid pack-owned NPCs, players and markedly stronger prey. Approach by ground, face naturally, and submit native mouse attack input within geometric range; require confirmed prey HP loss/death and normal `FeedCan` before treating the hunt as successful. Other species remain eligible for territory routes but will only feed when native food opportunities are observed; they are not forced to hunt.
-8. Yield to manual movement, player proximity, the game's active abilities, flight, underwater travel, pinned states and the main hub's menu. Never claim to be invisible or undetectable. Nearby player detection is limited to replicated characters; distant players may be streamed out.
-9. Show a compact status panel and a privacy-limited **COPY STATUS** button. No automatic upload, webhooks or player-name logging.
-
-## Important limitations
-
-- **Native sprint and burst gait activation are not yet automated.** Ground travel is pathfinding plus `Humanoid:MoveTo`. The game may choose its ordinary travel gait; the code does not spoof `WolfBurst` or send repeated `WolfActions Burst` remotes. No promise about the maximum speed or anti-cheat interpretation is made.
-- Being underground, flying over a target or bypassing game movement authority is deliberately not attempted.
-- Native claim eligibility depends on correct biome, pack, animal and actual zone. Claim progress must be observed, not assumed.
-- NPC geometry and the native feeding prompt vary by animal. Hunting and feed results are *not* verified in live FERAL gameplay yet.
-- For flying or underwater animals, the agent pauses while in flight/underwater mode rather than forcing a ground route; species-specific navigation can be developed only with reliable native evidence.
-- Amber pay fields may not be replicated. Without real pay data, the planner optimises urgent scent, claim progress, proximity and route clustering, but cannot assert highest Amber per hour.
-- Running unattended remains at your own risk and may violate the game's rules. The system does not guarantee it looks human or that a low-population server means nobody is nearby.
-
-## Recommended combined launcher
-
-This launches Renaissance only if it is not already active, then opens the Amber control panel. Amber automation stays **OFF** until START is clicked.
+This continues the published Amber system and the unfinished `renaissance/amber-v0.4-reliability` branch. It uses continuous animal input, one objective coordinator and measured game-state changes.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber.lua"))()
 ```
 
-## Standalone Amber add-on
+Select **START** after spawning and joining a pack. The combined launcher loads Renaissance if needed. Amber starts disabled. **STOP** releases movement and owned pending inputs. **Right Shift** follows Renaissance's menu visibility. The header drags the panel; **MIN** and hiding the panel leave farming active. **COPY STATUS** copies a short report locally; no automatic upload occurs.
 
+The current reference is Bear with the Spirit Bear coat. Coat is display metadata. Native Species/Forage configuration supplies diet and swimming information for other animals. The strategic territory framework is shared; aerial travel and underwater route control are not implemented.
+
+## What changed
+
+- Steering passes through the detected PlayerModule `moveFunction` before FERAL's `WolfMove` reads movement input. Both PlayerScripts and the captured StarterPlayer layouts are supported. Unsupported or inaccessible layouts use native keys, with observed movement and bounded retries.
+- Streamed route segments are prefetched. Pending computations cannot resume after STOP, unload or character change. Progress survives moving-target updates and ordinary route replanning. Terrain walls, body width, sharp turns, overshot waypoints, circling and repeated position corrections are handled explicitly.
+- Ground/water transitions use sampled terrain and continuous horizontal input. Swimming no longer causes the main coordinator to pause. Difficult banks trigger alternative local probes and bounded route failure.
+- Gaits have separate requested and observed states. Sprint uses held Left Shift; Burst and trot use their native Begin toggles. Missing acknowledgements cause a bounded retry, an alternative input provider when available, and a slower fallback. A numeric `HudBurstNo` pulse expires correctly.
+- Hunts pursue eligible NPCs, lead moving targets, retain close pursuit speed, check native geometry/visibility and verify prey HP. Inputs alone never count as damage, death or a meal. Ineffective prey are abandoned and cooled down.
+- Food and water have approach, interaction and actual-resource verification. Pending native feeding owns its approach; repeated E cannot cancel it. Care remains latched through its target, and the suspended territory objective is resumed.
+- All current eligible hexes are considered, with ownership, scent, partial progress, known reward values, travel distance, player hazards, failed targets and waiting time affecting selection. No map-size constant is used.
+- Unloading/replacing Renaissance or re-executing Amber closes the previous companion, releases inputs, invalidates path jobs and restores its owned movement callback.
+
+## Verification and limits
+
+See [release report](docs/V0_4_RELEASE.md), [test results](test-results.json), and [static native contracts](docs/native-contracts.json).
+
+The official pinned Luau compiler/interpreter runs the component, simulated travel and complete-package lifecycle suites. Renaissance's separate regression suite is also run. These establish build and client-contract behavior; **live FERAL travel, gait acceptance, prey damage, feeding rates and Amber/hour have not been tested for 0.4.0**.
+
+Native HUD flags are client observations. HP/resource/territory changes are observations of the available game state; the addon cannot independently prove server persistence or causally attribute every change. The report preserves that distinction.
+
+### Remaining targeted gameplay check
+
+1. As Bear/Spirit Bear, join a pack and select START. Allow roughly a minute of territory travel, including a water crossing if the selected route has one. Check that the reported travelled distance grows.
+2. When a normal low need triggers care, check that the need actually rises and territory work resumes. NPC damage should appear as observed HP declines, not just attack requests.
+3. Select STOP, then unload Renaissance. Movement should return to normal and Amber's panel should disappear. If something stalls, click COPY STATUS before unloading and provide that single report.
+
+### Rollback
+
+The immutable `feral-amber-autopilot-v0.3.lua` bundle is retained. With Renaissance loaded:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.3.lua"))()
 ```
 
-This remains an experimental client-side game addon, not a proven Amber-income bot. Official Luau tests exercise simulated client contracts rather than live FERAL gameplay.
+The old v0.1/v0.2 bundles and Renaissance 15.4.3 are also protected by hashes. To revert the default, restore only `roblox-tools/feral-amber.lua` to its preceding v0.3 version.
 
-## Test gate
+## Modules and local validation
+
+| File | Responsibility |
+|---|---|
+| `src/agent.luau` | Objective ownership, care latch, interruption and territory evidence |
+| `src/planner.luau` | Pure strategic territory scoring |
+| `src/nav.luau` | Cancellable streamed routing and measured physical progress |
+| `src/driver.luau` | Runtime movement callback discovery and ownership restoration |
+| `src/gait.luau` | Gait decisions, acknowledgements, retry limits and toggles |
+| `src/hunt.luau` | Pursuit, interception, attack evidence and abandonment |
+| `src/bridge.luau` | Native config/state, food/water/NPC eligibility and inputs |
+| `src/ui.luau` | Compact controls and local status copying |
 
 ```bash
-python3 roblox-tools/feral-amber/run_tests.py --luau /path/to/luau --compiler /path/to/luau-compile
+python3 roblox-tools/feral-amber/build.py
+python3 roblox-tools/feral-amber/run_tests.py \
+  --luau /path/to/luau --compiler /path/to/luau-compile
 ```
 
-Published runs: see `.github/workflows/feral-amber-validate.yml`. Core tests simulate the client API but cannot validate multiplayer movement acceptance, actual NPC bite damage, game-side Amber payouts, or real prey/food availability.
-
-## Existing hub
-
-Use Renaissance 15.4.3 separately:
-
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
-```
+CI uses official Luau commit `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`. `build.py --check` requires byte-for-byte bundle parity. The gate also verifies rollback hashes and rejects direct resource, position, velocity, CFrame and gameplay-remote writers in Amber source.

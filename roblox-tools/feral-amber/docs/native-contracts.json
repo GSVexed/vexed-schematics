@@ -1,0 +1,151 @@
+{
+  "baseline": 2412,
+  "capture_archive_sha256": "63d728715793e69e5c91dcaa1a17fb511ade651a1a06feddbfa37b20b354e777",
+  "verified_catalog_payloads": 943,
+  "catalog_checksum_errors": 0,
+  "raw_capture_executed": false,
+  "raw_capture_published": false,
+  "live_motion_samples": 0,
+  "programs": {
+    "WolfController": {
+      "bytecode_sha256": "7ed422d081bac217084eda4fd6c3699a17973434dad31a52ee2688ed23903ccb",
+      "prototypes": 188
+    },
+    "TerritoryConfig": {
+      "bytecode_sha256": "d4da32af46fbfe1a96646ba821f01b6e6f42c8f53ed36456df60fe73ad318b86",
+      "prototypes": 15
+    },
+    "FeedFinder": {
+      "bytecode_sha256": "e4e018edb65bdb2725e1a786545233e4ac6b33301cdd3234308099b5840496a9",
+      "prototypes": 15
+    },
+    "CombatConfig": {
+      "bytecode_sha256": "b81ca362867ad87bdd9763a5898c4e31c0dcec652ea800e7f89541257497501f",
+      "prototypes": 16
+    },
+    "Species": {
+      "bytecode_sha256": "850dfabd0bbf3d14089cb1391e3751b66c2746ddd12b9acd0e054baaf7824aa0",
+      "prototypes": 19
+    },
+    "NeedsConfig": {
+      "bytecode_sha256": "cdb9998b28dc121ced2b8956089267d0b89ebfb4c10eaa5cb9b74eaf5c16df31",
+      "prototypes": 1
+    }
+  },
+  "contracts": [
+    {
+      "program": "WolfController",
+      "prototype": 187,
+      "word_range": [
+        1546,
+        1666
+      ],
+      "finding": "WolfMove binds at Enum.RenderPriority.Input.Value + 1; its callback is prototype 186."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 186,
+      "word_range": [
+        746,
+        784
+      ],
+      "finding": "Native movement reads Humanoid.MoveDirection before choosing direction magnitude."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 187,
+      "word_range": [
+        1047,
+        1129
+      ],
+      "finding": "X binds WolfBurst; Z/ButtonX binds WolfTrot; R/ButtonY binds WolfRest."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 90,
+      "word_range": [
+        0,
+        11
+      ],
+      "finding": "Burst inverts private requested state on input Begin, so releasing X is not a Burst cancellation."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 89,
+      "word_range": [
+        27,
+        83
+      ],
+      "finding": "Burst checks stamina and StaminaOut; denial sets player HudBurstNo to os.clock(), a numeric pulse."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 5,
+      "word_range": [
+        23,
+        62
+      ],
+      "finding": "syncTrotGait writes character WolfRunIntent and WolfTrot and issues its own native RunIntent/Trot actions."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 186,
+      "word_range": [
+        4494,
+        4560
+      ],
+      "finding": "Native controller publishes HudTrot/HudSprint/HudBurst on player. These are client observations, not server acceptance proof."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 22,
+      "word_range": [
+        0,
+        117
+      ],
+      "finding": "toggleFeed cancels a pending private mode on its first branch. Feeding approach can precede WolfFeed."
+    },
+    {
+      "program": "WolfController",
+      "prototype": 186,
+      "word_range": [
+        2406,
+        2549
+      ],
+      "finding": "Native swim transition and water-depth sprint gating are separate from the terrain path mesh."
+    },
+    {
+      "program": "FeedFinder",
+      "prototype": 12,
+      "word_range": [
+        0,
+        253
+      ],
+      "finding": "Food selection uses Species.get().diet, native Forage.canEat, FoodLeft, Consumed, TutorialOwner and FeralFood tags. Returns food item and position."
+    },
+    {
+      "program": "FeedFinder",
+      "prototype": 6,
+      "finding": "waterAround(char, root, probes) supplies a native nearby water search; actual FeedCan remains required before input."
+    },
+    {
+      "program": "TerritoryConfig",
+      "prototype": 14,
+      "word_range": [
+        39,
+        45
+      ],
+      "finding": "Captured reference CLAIM_RADIUS=120 and CLAIM_TIME=20; runtime config/Hexes are read instead of hardcoding a map count."
+    },
+    {
+      "capture_script_id": 15373,
+      "capture_path": "game/StarterPlayer/PlayerModule/ControlModule",
+      "finding": "Captured platform script metadata shows the newer PlayerModule location. Its source was not supplied as a game program."
+    }
+  ],
+  "official_platform_references": [
+    "https://devforum.roblox.com/t/full-release-input-action-system-ias-newly-converted-player-scripts/4678416",
+    "https://github.com/Roblox/avatar/blob/main/ReferenceBodyCreator/StarterPlayerScripts/PlayerModule/ControlModule/init.lua"
+  ],
+  "interpretation": "These are static client contracts and metadata. They do not establish server authority, live path success, actual accepted attacks or farm yield."
+}

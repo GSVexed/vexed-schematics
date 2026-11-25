@@ -16,13 +16,33 @@ function Bridge.new(nav)
     local b={player=player,Players=Players,Rep=Rep,Workspace=Workspace,
         UserInput=UserInput,nav=nav,hexes={},hexByKey={},
         cfg=nil,spots=nil,territoryInstance=nil,refreshAt=0,lastString=nil,
-        lastBiome=nil,motionReason="Idle",manualUncertain=false,spotCache={},spotTry={}}
+        lastBiome=nil,motionReason="Idle",manualUncertain=false,spotCache={},spotTry={},
+        configs={},waterBlocked={},preyBlocked={},foodBlocked={},connections={},inputEpoch=0}
     local world=Rep:FindFirstChild("FeralWorld")
     local function config(name)
+        if b.configs[name] then return b.configs[name] end
         local module=world and world:FindFirstChild(name)
         if not module or not module:IsA("ModuleScript") then return nil end
         local ok,value=pcall(require,module)
-        return ok and type(value)=="table" and value or nil
+        if ok and type(value)=="table" then b.configs[name]=value;return value end
+        return nil
+    end
+    b.config=config
+    function b:hub()
+        local h=(type(getgenv)=="function" and getgenv() or _G).FERAL_RENAISSANCE_ACTIVE
+        return type(h)=="table" and not h.closed and h.bridge and h.bridge.player==player and h or nil
+    end
+    function b:prepare(now,enabled,goal)
+        local h=self:hub()
+        if not enabled or not h then return end
+        if h.walk and type(h.stopWalk)=="function" then h:stopWalk("Amber movement owner") end
+        h.nextWalk=now+90
+        -- Coordinate with existing recovery instead of letting it start Rest
+        -- during travel, feeding approach or hunt preparation.
+        if not goal or goal.kind~="RECOVER" then
+            if h.policy then h.policy.actionUntil=math.max(h.policy.actionUntil or 0,now+.6) end
+            if h.recovery and type(h.recovery.release)=="function" then h.recovery:release("Amber objective",now) end
+        end
     end
     b.cfg=config("TerritoryConfig")
     b.spots=config("MapSpots")
@@ -68,10 +88,10 @@ function Bridge.new(nav)
         if type(text)~="string" or #text==0 or type(self.cfg.parseHexes)~="function"
             or type(self.cfg.hexCenter)~="function" then return end
         if text==self.lastString and biome==self.lastBiome then return end
-        self.lastString,self.lastBiome=text,biome
-        self.spotCache,self.spotTry={},{}
         local ok,parsed=pcall(self.cfg.parseHexes,text)
         if not ok or type(parsed)~="table" then return end
+        self.lastString,self.lastBiome=text,biome
+        self.spotCache,self.spotTry={},{}
         local hexes,byKey={},{}
         for _,t in ipairs(parsed) do
             if type(t.key)=="string" and type(t.i)=="number" and type(t.j)=="number" then
@@ -107,10 +127,11 @@ function Bridge.new(nav)
         if not self.territoryInstance then return nil end
         local h=self.hexByKey[key]
         if not h then return nil end
-        return {key=key,neutral=terrAttr(key,"neutral")==true,
+        local pay=terrAttr(key,"pay") or terrAttr(key,"income") or terrAttr(key,"amber")
+        return {key=key,neutral=terrAttr(key,"neutral")==true or self.cfg and self.cfg.ON==false,
             owner=terrAttr(key,"owner"),by=terrAttr(key,"by"),
             prog=terrAttr(key,"prog"),hold=terrAttr(key,"hold"),
-            pay=terrAttr(key,"pay") or terrAttr(key,"income") or terrAttr(key,"amber"),
+            pay=finite(pay) and pay or nil,
             fade=terrAttr(key,"fade"),center=h.center,spot=h.spot}
     end
     function b:territories(state)
@@ -198,7 +219,7 @@ function Bridge.new(nav)
                     matching=hexKey==key
                 end
             end
-            if matching and (not h.spot or dist(p,h.spot)<108) then
+            if matching and (not h.spot or dist(p,h.spot)<math.max(10,(self.cfg.CLAIM_RADIUS or 120)-12)) then
                 local ground=groundAt(p.x,p.z,c)
                 if ground then
                     local q=point(ground)
@@ -223,201 +244,391 @@ function Bridge.new(nav)
         self.spotTry[key]=math.min(3,(self.spotTry[key] or 0)+1)
         self.spotCache[key]=nil
     end
+    function b:manualInput()
+        if UserInput:GetFocusedTextBox() then return true end
+        for _,name in ipairs({"W","A","S","D","Up","Down","Left","Right","Space"}) do
+            local key=Enum.KeyCode[name]
+            if key then
+                local ok,down=pcall(UserInput.IsKeyDown,UserInput,key)
+                if ok and down and not self.nav.held[name] then return true end
+            end
+        end
+        return false
+    end
+    local function safePosition(p,state,radius)
+        for _,other in ipairs(state.players or {}) do
+            if dist(p,other)<(radius or state.avoidRadius or 110) then return false end
+        end
+        return true
+    end
+    local function surfaceAt(x,z,state,waterAllowed)
+        local params=RaycastParams.new()
+        params.FilterType=Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances={state.char};params.IgnoreWater=false
+        local hit=Workspace:Raycast(Vector3.new(x,state.root.Position.Y+120,z),Vector3.new(0,-460,0),params)
+        if not hit then return nil end
+        local water=hit.Material==Enum.Material.Water
+        if water and not waterAllowed or not water and hit.Normal.Y<.5 then return nil end
+        return point(hit.Position),water
+    end
+    function b:avoidWater(position,now)
+        if position then
+            local key=string.format("%d:%d",math.floor(position.x/12),math.floor(position.z/12))
+            self.waterBlocked[key]=now+90
+        end
+        self.waterCache=nil;self.waterAt=0
+    end
     function b:water(state)
-        local char=player.Character
-        local biome=attr(Workspace,"FeralBiome") or "WolfValley"
-        local landmarks=self.spots and (self.spots[biome] or self.spots.WolfValley)
-        if type(landmarks)~="table" then return nil end
-        local best,bestScore=nil,math.huge
-        for _,spot in ipairs(landmarks) do
-            local name=string.lower(tostring(spot.name or spot.key or ""))
-            if typeof(spot.pos)=="Vector2" and
-                (name:find("water",1,true) or name:find("lake",1,true)
-                or name:find("pond",1,true) or name:find("river",1,true)
-                or name:find("falls",1,true) or name:find("spring",1,true)) then
-                for k=0,11 do
-                    local angle=k*math.pi/6
-                    local x=spot.pos.X+math.cos(angle)*22
-                    local z=spot.pos.Y+math.sin(angle)*22
-                    local land=groundAt(x,z,char)
-                    if land then
-                        local candidate=point(land)
-                        local d=dist(candidate,state.position)
-                        local blocked=false
-                        for _,p in ipairs(state.players or {}) do
-                            if dist(p,candidate)<120 then blocked=true;break end
+        if self.waterCache and state.now<(self.waterAt or 0)+3 then return self.waterCache end
+        local best,score=nil,math.huge
+        local coarse,coarseDistance=nil,math.huge
+        local function consider(candidate)
+            local key=string.format("%d:%d",math.floor(candidate.x/12),math.floor(candidate.z/12))
+            if (self.waterBlocked[key] or 0)>state.now or not safePosition(candidate,state,120) then return end
+            local d=dist(candidate,state.position)
+            if d<score then best,score=candidate,d end
+        end
+        -- FeedCanPos is the real current native offer, not a guessed landmark.
+        if state.feedCan=="drink" and state.feedPosition then consider(state.feedPosition) end
+        local finder=config("FeedFinder")
+        local needs=config("NeedsConfig")
+        if finder and type(finder.waterAround)=="function" then
+            local ok,p=pcall(finder.waterAround,state.char,state.root,needs and needs.WATER_PROMPT_PROBES)
+            if ok and typeof(p)=="Vector3" then consider(point(p)) end
+        end
+        -- Find actual nearby terrain water. Also sample progressively larger
+        -- landmark rings: a lake's centre is not necessarily its shoreline.
+        local origins={{x=state.position.x,z=state.position.z,rings={10,24,48,90,150}}}
+        local biome=state.biome
+        local spots=self.spots and (self.spots[biome] or self.spots.WolfValley)
+        for _,spot in ipairs(type(spots)=="table" and spots or {}) do
+            local name=string.lower(tostring(spot.key or spot.name or ""))
+            if typeof(spot.pos)=="Vector2" and (spot.drinkR or name:find("water",1,true)
+                or name:find("lake",1,true) or name:find("pond",1,true) or name:find("river",1,true)
+                or name:find("creek",1,true) or name:find("marsh",1,true) or name:find("fall",1,true)) then
+                table.insert(origins,{x=spot.pos.X,z=spot.pos.Y,rings={0,30,80,160,spot.drinkR or 240}})
+                local p={x=spot.pos.X,z=spot.pos.Y}
+                local d=dist(p,state.position)
+                local key=string.format("%d:%d",math.floor(p.x/12),math.floor(p.z/12))
+                if d<coarseDistance and safePosition(p,state,120) and (self.waterBlocked[key] or 0)<=state.now then
+                    coarse,coarseDistance=p,d
+                end
+            end
+        end
+        for _,origin in ipairs(origins) do
+            for _,radius in ipairs(origin.rings) do
+                for k=0,7 do
+                    local a=k*math.pi/4
+                    local x,z=origin.x+math.cos(a)*radius,origin.z+math.sin(a)*radius
+                    local pos,wet=surfaceAt(x,z,state,true)
+                    if pos and wet then
+                        -- A shallow native swim route may approach the water;
+                        -- native E retains the final mouth/shore positioning.
+                        consider(pos)
+                        for _,reach in ipairs({7,15}) do
+                            local bank=surfaceAt(x-math.cos(a)*reach,z-math.sin(a)*reach,state,false)
+                            if bank and dist(bank,pos)<=reach+1 then consider(bank) end
                         end
-                        if not blocked and d<bestScore then best,bestScore=candidate,d end
                     end
                 end
             end
         end
-        return best
+        self.waterEvidence=best and "TERRAIN_OR_NATIVE_OFFER" or coarse and "LANDMARK_APPROACH" or "NONE"
+        self.waterCache,self.waterAt=best or coarse,state.now
+        return self.waterCache
+    end
+    function b:profile(char,species)
+        local cfg=config("Species")
+        local known=cfg and cfg.List and cfg.List[species]
+        if not known then return {known=false,hunts=false,swim=true} end
+        local forage=config("Forage")
+        local hunts=known.diet=="carnivore" or known.diet=="omnivore"
+        if forage and type(forage.canEat)=="function" then
+            local ok,value=pcall(forage.canEat,known.diet,"meat")
+            if ok then hunts=value==true end
+        end
+        return {known=true,diet=known.diet,swim=true,swimSprint=finite(known.swimSprint) and known.swimSprint>0,
+            hunts=hunts,
+            native=known}
     end
     function b:snapshot(now)
         local c,h,r=validAnimal()
         local species,coat=fullStats(c)
         local alive=c~=nil and c.Parent~=nil and h~=nil and r~=nil and h.Health>0
-        if not alive then return {alive=false,species=species,coat=coat} end
+        if not alive then return {alive=false,species=species,coat=coat,now=now} end
         self:refresh(now)
-        local nowServer
-        pcall(function() nowServer=Workspace:GetServerTimeNow() end)
+        local at;pcall(function()at=Workspace:GetServerTimeNow()end)
         local untilCombat=attr(player,"FeralCombatUntil")
-        local typing=UserInput:GetFocusedTextBox()~=nil
-        local movingKeys={Enum.KeyCode.W,Enum.KeyCode.A,Enum.KeyCode.S,Enum.KeyCode.D,
-            Enum.KeyCode.Up,Enum.KeyCode.Down,Enum.KeyCode.Left,Enum.KeyCode.Right}
-        local manual=typing
-        for _,key in ipairs(movingKeys) do
-            local ok,down=pcall(UserInput.IsKeyDown,UserInput,key)
-            -- Ignore the precise movement key currently owned by our navigator;
-            -- otherwise virtual W/A/S/D input would pause its own route.
-            if ok and down and not (self.nav.held and self.nav.held[key.Name]) then
-                manual=true;break
-            end
+        local stamina,maximum=attr(c,"Stamina"),attr(c,"StaminaMax")
+        local reserve=finite(stamina) and finite(maximum) and maximum>0 and math.clamp(stamina/maximum,0,1) or nil
+        local burstNo=attr(player,"HudBurstNo")
+        local profile=self:profile(c,species)
+        local hub=self:hub()
+        local feed,feedStarted,feedKnown
+        if hub and type(hub.bridge.nativeFeedState)=="function" then
+            local ok,mode,started,known=pcall(hub.bridge.nativeFeedState,hub.bridge,now)
+            if ok then feed,feedStarted,feedKnown=mode,started,known end
         end
-        local combat=finite(nowServer) and finite(untilCombat) and untilCombat>nowServer or false
-        -- Never treat a merely present timestamp or false boolean as an
-        -- active ability: those attributes may persist for the animal's life.
-        local power=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true
-            or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")==true
-            or attr(c,"FeralDeathRollLocal")==true
-        local stamina,maxStamina=attr(c,"Stamina"),attr(c,"StaminaMax")
-        local staminaFraction=finite(stamina) and finite(maxStamina)
-            and maxStamina>0 and math.clamp(stamina/maxStamina,0,1) or nil
-        local hudBurst=attr(player,"HudBurst")==true
-            or attr(c,"WolfBurst")==true
-        local hudBurstNo=attr(player,"HudBurstNo")==true
-        local hudTrot=attr(player,"HudTrot")==true
-        local hudSprint=attr(player,"HudSprint")==true
+        local offer=attr(c,"FeedCanPos")
         local amber=attr(player,"Amber")
         if not finite(amber) then
             local stats=player:FindFirstChild("leaderstats")
             local v=stats and stats:FindFirstChild("Amber")
-            if v and typeof(v.Value)=="number" then amber=v.Value end
+            if v and finite(v.Value) then amber=v.Value end
         end
-        local hub=(type(getgenv)=="function" and getgenv() or _G).FERAL_RENAISSANCE_ACTIVE
-        local menu=attr(player,"FeralMenuOpen")==true
-            or hub and hub.policy and hub.policy.menuOpen==true
+        local pack=attr(player,"FeralPack")
+        if pack==0 or pack=="" or pack=="0" or pack==false then pack=nil end
+        local swimming=attr(c,"FeralSwimLocal")==true
+        local ok,humState=pcall(h.GetState,h)
+        if ok and Enum.HumanoidStateType and humState==Enum.HumanoidStateType.Swimming then swimming=true end
+        local fly=attr(c,"FeralFlyLocal")==true
+        local hudBurst=attr(player,"HudBurst")
+        if type(hudBurst)~="boolean" then hudBurst=attr(c,"WolfBurst") end
+        local hudTrot=attr(player,"HudTrot")
+        if type(hudTrot)~="boolean" then hudTrot=attr(c,"WolfTrot") end
         return {alive=true,char=c,hum=h,root=r,position=point(r.Position),
-            species=species,coat=coat,pack=attr(player,"FeralPack"),
-            biome=attr(Workspace,"FeralBiome") or "WolfValley",
-            healthFraction=h.MaxHealth>0 and h.Health/h.MaxHealth or 0,
+            species=species,coat=coat,profile=profile,pack=pack,
+            biome=attr(Workspace,"FeralBiome") or "WolfValley",healthFraction=h.MaxHealth>0 and h.Health/h.MaxHealth or 0,
             hunger=attr(c,"Hunger"),thirst=attr(c,"Thirst"),feedCan=attr(c,"FeedCan"),
-            feedMode=attr(c,"WolfFeed"),
-            staminaFraction=staminaFraction,
-            hudBurst=hudBurst,hudBurstNo=hudBurstNo,
-            hudTrot=hudTrot,hudSprint=hudSprint,
-            allowBurst=finite(staminaFraction) and staminaFraction>=.56,
-            amber=amber,now=now,unixNow=os.time(),players=self:otherPlayerPositions(),
-            avoidRadius=110,claimRadius=17,careTarget=65,menuOpen=menu or typing,
-            manualInput=manual,combat=combat,pinned=attr(c,"FeralPinned")==true
-                or attr(c,"FeralDragged")==true or attr(c,"FeralCarried")==true,
-            ability=power,resting=attr(c,"WolfRest")==true,
-            flying=attr(c,"FeralFlyLocal")==true,
-            swimming=attr(c,"FeralSwimLocal")==true,
-            underwater=attr(c,"FeralUnderwater")==true}
+            feedMode=attr(c,"WolfFeed"),nativeFeedMode=feed,nativeFeedKnown=feedKnown,feedStarted=feedStarted,
+            feedPosition=typeof(offer)=="Vector3" and point(offer) or nil,
+            staminaFraction=reserve,hudBurst=hudBurst,hudTrot=hudTrot,hudSprint=attr(player,"HudSprint"),
+            hudBurstNo=burstNo==true or finite(burstNo) and now>=burstNo and now-burstNo<1.7,
+            runIntent=attr(c,"WolfRunIntent"),allowBurst=reserve~=nil and reserve>=.56,
+            allowWater=profile.swim==true,swimSprint=profile.swimSprint==true,
+            amber=amber,now=now,serverNow=at,unixNow=os.time(),players=self:otherPlayerPositions(),
+            avoidRadius=110,claimRadius=15,careTarget=72,
+            gameMenu=attr(player,"FeralMenuOpen")==true,menuOpen=UserInput:GetFocusedTextBox()~=nil,
+            manualInput=self:manualInput(),combat=finite(at) and finite(untilCombat) and untilCombat>at or false,
+            pinned=attr(c,"FeralPinned")==true or attr(c,"FeralDragged")==true or attr(c,"FeralCarried")==true,
+            ability=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true or attr(c,"FeralVenomDown")==true
+                or attr(c,"FeralTalonLock")~=nil and attr(c,"FeralTalonLock")~=false
+                or attr(c,"FeralDeathRollLocal")==true or attr(c,"FeralDiveBomb")==true
+                or hub and hub.grab and hub.grab.active==true,
+            rescuing=hub and hub.rescue and hub.rescue.pending~=nil,
+            resting=attr(c,"WolfRest")==true,flying=fly,swimming=swimming,
+            climbing=attr(c,"FeralClimbLocal")==true,underwater=attr(c,"FeralUnderwater")==true}
     end
-    function b:move(destination,state)
+    function b:move(destination,state,options)
         if not destination then return "WAIT" end
-        -- Pathfinding and Humanoid:MoveTo are the only movement writers.
+        options=options or {}
+        local s=table.clone(state)
+        for key,value in pairs(options) do s[key]=value end
         local target=Vector3.new(destination.x,state.root.Position.Y,destination.z)
         local players={}
-        for _,p in ipairs(state.players or {}) do
-            table.insert(players,Vector3.new(p.x,state.root.Position.Y,p.z))
-        end
-        local result=self.nav:tick(target,state.char,state.hum,state.root,state.now,players,state)
+        for _,p in ipairs(state.players or {}) do table.insert(players,Vector3.new(p.x,state.root.Position.Y,p.z)) end
+        local result=self.nav:tick(target,state.char,state.hum,state.root,state.now,players,s)
         self.motionReason=self.nav.lastReason
         return result
     end
     function b:stop(reason)
         self.motionReason=reason
-        local c,h,r=validAnimal()
+        local _,h,r=validAnimal()
         self.nav:stop(h,r,reason)
     end
+    function b:releaseInputs()
+        self.inputEpoch+=1
+        for name,release in pairs(self.pendingInputs or {}) do pcall(release);self.pendingInputs[name]=nil end
+    end
+    local function pulse(name,begin,finish)
+        b.pendingInputs=b.pendingInputs or {}
+        if b.pendingInputs[name] then return false end
+        local ok=pcall(begin)
+        if not ok then pcall(finish);return false end
+        b.pendingInputs[name]=finish
+        local epoch=b.inputEpoch
+        task.delay(.07,function()
+            if b.inputEpoch==epoch and b.pendingInputs[name]==finish then
+                pcall(finish);b.pendingInputs[name]=nil
+            end
+        end)
+        return true
+    end
     function b:feed(state,kind)
-        if state.feedCan~=kind then return false end
-        if state.menuOpen or state.manualInput then return false end
-        local ok,virtual=pcall(function() return game:GetService("VirtualInputManager") end)
-        if ok and virtual then
-            local sent=pcall(function()
-                virtual:SendKeyEvent(true,Enum.KeyCode.E,false,game)
-                task.wait(.07)
-                virtual:SendKeyEvent(false,Enum.KeyCode.E,false,game)
-            end)
-            if sent then return true end
+        if state.feedCan~=kind or state.nativeFeedMode or state.feedMode==kind or state.feedMode==true
+            or state.menuOpen or state.manualInput then return false end
+        local hub=self:hub()
+        if hub and type(hub.bridge.toggleNativeFeed)=="function" and state.nativeFeedKnown then
+            local ok,sent=pcall(hub.bridge.toggleNativeFeed,hub.bridge,state.now)
+            self.lastInput=ok and sent and "Native toggleFeed requested" or "Native toggleFeed unavailable"
+            return ok and sent==true
+        end
+        local ok,v=pcall(function()return game:GetService("VirtualInputManager")end)
+        if ok and v then
+            self.lastInput="E input requested"
+            return pulse("E",function()v:SendKeyEvent(true,Enum.KeyCode.E,false,game)end,
+                function()v:SendKeyEvent(false,Enum.KeyCode.E,false,game)end)
         end
         if type(keypress)=="function" and type(keyrelease)=="function" then
-            return pcall(function() keypress(0x45);task.wait(.07);keyrelease(0x45) end)
+            return pulse("E",function()keypress(0x45)end,function()keyrelease(0x45)end)
         end
         return false
     end
-    local function alliedNPC(model)
-        local mine=attr(player,"FeralPack")
-        local pack=attr(model,"FeralPack")
-        return mine~=nil and pack~=nil and mine==pack
-    end
-    local hunters={Bear=true,Wolf=true,Tiger=true,Lion=true,Jaguar=true,Cobra=true,
-        KingCobra=true,Crocodile=true,SaltwaterCrocodile=true,Alligator=true,
-        BaldEagle=true,Eagle=true,Vulture=true,Leopard=true,Hyena=true,
-        Fox=true,Python=true,Otter=true}
-    function b:checkPrey(prey,state)
-        if not prey or not prey.model or not prey.model.Parent
-            or not hunters[state.species] then return nil end
-        if Players:GetPlayerFromCharacter(prey.model) then return nil end
-        local root=prey.model:FindFirstChild("HumanoidRootPart")
-        local hum=prey.model:FindFirstChildOfClass("Humanoid")
-        if not root or not hum or hum.Health<=0 or attr(prey.model,"FeralDead")==true
-            or alliedNPC(prey.model) then return nil end
-        if hum.MaxHealth>state.hum.MaxHealth*1.2 then return nil end
-        local position=point(root.Position)
-        for _,p in ipairs(state.players or {}) do
-            if dist(position,p)<100 then return nil end
+    function b:cancelFeed(state)
+        local hub=self:hub()
+        if hub and type(hub.bridge.stopNativeFeed)=="function" then
+            local ok,sent=pcall(hub.bridge.stopNativeFeed,hub.bridge,state.now)
+            return ok and sent==true
         end
-        prey.position=position;prey.root=root;prey.hum=hum
-        return prey
+        return false
     end
-    function b:prey(state)
-        if not hunters[state.species] then return nil end
-        local folder=Workspace:FindFirstChild("FeralNPCs")
-        if not folder then return nil end
-        local best,bestDist=nil,math.huge
-        for i,npc in ipairs(folder:GetChildren()) do
-            if i>96 then break end
-            if npc:IsA("Model") then
-                local p=self:checkPrey({model=npc},state)
-                if p then
-                    local d=dist(p.position,state.position)
-                    if d<270 and d<bestDist then best,bestDist=p,d end
+    function b:food(state)
+        local finder=config("FeedFinder")
+        if finder and type(finder.food)=="function" then
+            local ok,item,pos=pcall(finder.food,state.char,state.root)
+            if ok and item and typeof(pos)=="Vector3" and safePosition(point(pos),state) then
+                return {position=point(pos),model=item}
+            end
+        end
+        local profile=state.profile or self:profile(state.char,state.species)
+        local forage=config("Forage")
+        if not profile.diet or not forage or type(forage.canEat)~="function" then return nil end
+        if forage.PLANT_DIETS and forage.PLANT_DIETS[profile.diet] and type(forage.nearest)=="function" then
+            local ok,entry,pos=pcall(forage.nearest,state.root.Position,300)
+            if ok and entry and typeof(pos)=="Vector3" and safePosition(point(pos),state) then
+                local item
+                if type(forage.handle)=="function" then
+                    local valid,result=pcall(forage.handle,entry)
+                    if valid then item=result end
+                end
+                if item and (self.foodBlocked[item] or 0)<=state.now then return {model=item,position=point(pos)} end
+            end
+        end
+        local ok,collection=pcall(function()return game:GetService("CollectionService")end)
+        if not ok or not collection then return nil end
+        local best,score=nil,math.huge
+        for _,item in ipairs(collection:GetTagged("FeralFood")) do
+            local left=attr(item,"FoodLeft")
+            local owner=attr(item,"TutorialOwner")
+            local valid,edible=pcall(forage.canEat,profile.diet,attr(item,"Diet"))
+            if item.Parent and item:IsDescendantOf(Workspace) and attr(item,"Consumed")~=true and valid and edible
+                and (not finite(left) or left>.01) and (owner==nil or owner==player.UserId)
+                and (self.foodBlocked[item] or 0)<=state.now then
+                local pos=attr(item,"FoodPos")
+                if typeof(pos)~="Vector3" then
+                    if item:IsA("Model") then
+                        local good,cf=pcall(item.GetBoundingBox,item)
+                        if good then pos=cf.Position end
+                    elseif item:IsA("BasePart") then pos=item.Position end
+                end
+                if typeof(pos)=="Vector3" then
+                    local p=point(pos);local d=dist(p,state.position)
+                    if d<400 and d<score and safePosition(p,state) then best,score={position=p,model=item},d end
                 end
             end
         end
         return best
     end
+    function b:checkPrey(prey,state)
+        local profile=state.profile or self:profile(state.char,state.species)
+        if not prey or not prey.model or not prey.model.Parent or not profile.hunts then return nil end
+        if Players:GetPlayerFromCharacter(prey.model) then return nil end
+        local pack=attr(prey.model,"FeralPack")
+        if state.pack~=nil and state.pack==pack then return nil end
+        local root=prey.model:FindFirstChild("HumanoidRootPart")
+        local hum=prey.model:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health<=0 or attr(prey.model,"FeralDead")==true
+            or hum.MaxHealth>state.hum.MaxHealth*.8 or (self.preyBlocked[prey.model] or 0)>state.now then return nil end
+        local position=point(root.Position)
+        if not safePosition(position,state,120) then return nil end
+        local velocity=root.AssemblyLinearVelocity
+        prey.position=position;prey.root=root;prey.hum=hum
+        prey.velocity=velocity and point(velocity) or {x=0,z=0}
+        prey.health=hum.Health
+        prey.attackRange=math.clamp((state.root.Size.Z+root.Size.Z)*.35,4,12)
+        return prey
+    end
+    function b:prey(state)
+        local folder=Workspace:FindFirstChild("FeralNPCs")
+        if not folder then return nil end
+        local best,score=nil,math.huge
+        for _,npc in ipairs(folder:GetChildren()) do
+            if npc:IsA("Model") then
+                local p=self:checkPrey({model=npc},state)
+                if p then
+                    local d=dist(p.position,state.position)
+                    local speed=math.sqrt(p.velocity.x^2+p.velocity.z^2)
+                    local rank=d+speed*3+p.health*.05
+                    if d<330 and rank<score then best,score=p,rank end
+                end
+            end
+        end
+        return best
+    end
+    function b:attackGeometry(state,prey)
+        local hub=self:hub()
+        local cfg=hub and hub.features and hub.features.originalCombat or config("CombatConfig")
+        if not cfg then return nil end
+        local diff=prey.root.Position-state.root.Position
+        local planar=Vector3.new(diff.X,0,diff.Z)
+        local look=state.root.CFrame.LookVector
+        look=Vector3.new(look.X,0,look.Z)
+        if type(cfg.bodyGap)~="function" or not finite(cfg.REACH) or not finite(cfg.SLACK)
+            or not finite(cfg.HIT_SCALE) or not finite(cfg.MAX_DY) or not finite(cfg.CONE) then return nil end
+        if type(cfg.biteLook)=="function" then
+            local ok,v=pcall(cfg.biteLook,state.char,look.Unit)
+            if ok and typeof(v)=="Vector3" then look=Vector3.new(v.X,0,v.Z) end
+        end
+        local function mult(name,default)
+            if type(cfg[name])~="function" then return default end
+            local ok,value=pcall(cfg[name],state.char)
+            return ok and finite(value) and value or default
+        end
+        local ok,gap=pcall(cfg.bodyGap,prey.root,planar)
+        if not ok or not finite(gap) or look.Magnitude<.01 then return nil end
+        local box=attr(state.root,"FeralBoxFull") or state.root.Size.Z
+        local reach=(box*.5+state.hum.HipHeight*cfg.REACH+cfg.SLACK)*cfg.HIT_SCALE*mult("reachMult",1)
+        local angle=planar.Magnitude>.01 and look.Unit:Dot(planar.Unit) or 1
+        local height=(state.hum.HipHeight+prey.hum.HipHeight)*cfg.MAX_DY*mult("dyMult",1)
+        local cone=mult("coneFor",cfg.CONE)
+        local params=RaycastParams.new()
+        params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={state.char};params.IgnoreWater=true
+        local obstruction=Workspace:Raycast(state.root.Position,diff,params)
+        local clear=not obstruction or obstruction.Instance and obstruction.Instance:IsDescendantOf(prey.model)
+        return {valid=gap<reach*.92 and angle>math.cos(math.rad(cone)) and math.abs(diff.Y)<height*.95 and clear,
+            inRange=gap<reach*.92 and math.abs(diff.Y)<height*.95,angle=angle,gap=gap,reach=reach,clear=clear}
+    end
     function b:bite(state,prey)
         local p=self:checkPrey(prey,state)
-        if not p then return false end
-        local direction=p.root.Position-state.root.Position
-        local planar=Vector3.new(direction.X,0,direction.Z)
-        if planar.Magnitude<.1 or planar.Magnitude>22 then return false end
-        local forward=state.root.CFrame.LookVector
-        local flat=Vector3.new(forward.X,0,forward.Z)
-        if flat.Magnitude<.1 or flat.Unit:Dot(planar.Unit)<.35 then
-            -- Natural rotation occurs during a MoveTo approach, never PivotTo.
-            self:move(p.position,state)
-            return false
+        if not p then return false,"Prey unavailable" end
+        local geometry=self:attackGeometry(state,p)
+        if not geometry or not geometry.valid then return false,"Native range, facing or line of sight not ready" end
+        local hub=self:hub()
+        if hub and type(hub.bridge.tryNativeBite)=="function" then
+            if hub.recovery then hub.recovery:release("Amber hunt",state.now) end
+            local s=hub.snapshot
+            if s and s.char==state.char and type(hub.bridge.biteReadiness)=="function" then
+                local ready=hub.bridge:biteReadiness(s,state.now,hub.policy)
+                if ready.known and not ready.ready then return false,ready.reason end
+            end
+            if hub.policy then hub.policy:input("attack",state.now) end
+            local ok,sent=pcall(hub.bridge.tryNativeBite,hub.bridge,state.now)
+            if ok and sent then self.lastInput="Native tryBite requested";return true,self.lastInput end
         end
-        local ok,virtual=pcall(function() return game:GetService("VirtualInputManager") end)
-        if ok and virtual then
+        local species=config("Species")
+        local delay=1.35
+        if species and type(species.biteCooldown)=="function" then
+            local ok,value=pcall(species.biteCooldown,state.species,attr(state.char,"Growth") or 1)
+            if ok and finite(value) then delay=math.clamp(value,.15,10) end
+        end
+        if state.now<(self.nextBite or 0) then return false,"Native bite cooldown" end
+        self.nextBite=state.now+delay
+        local ok,v=pcall(function()return game:GetService("VirtualInputManager")end)
+        if ok and v then
+            -- The owned WolfController callback above avoids UI hit testing.
+            -- Fallback mouse input is reported as a request, never as damage.
             local m=UserInput:GetMouseLocation()
-            local sent=pcall(function()
-                virtual:SendMouseButtonEvent(m.X,m.Y,0,true,game,0)
-                task.wait(.04)
-                virtual:SendMouseButtonEvent(m.X,m.Y,0,false,game,0)
-            end)
-            if sent then return true end
+            self.lastInput="Mouse attack requested"
+            return pulse("M1",function()v:SendMouseButtonEvent(m.X,m.Y,0,true,game,0)end,
+                function()v:SendMouseButtonEvent(m.X,m.Y,0,false,game,0)end),self.lastInput
         end
         if type(mouse1click)=="function" then return pcall(mouse1click) end
-        return false
+        return false,"Attack input unavailable"
+    end
+    function b:close()
+        self:releaseInputs();self:stop("unloaded")
+        for _,c in ipairs(self.connections) do c:Disconnect() end
+        self.connections={}
     end
     return b
 end

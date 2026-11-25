@@ -1,4 +1,5 @@
 local Planner=assert(loadstring(PLANNER_SRC,"=amber_planner"))()
+local Hunt=assert(loadstring(HUNT_SRC))()
 local Agent=assert(loadstring(AGENT_SRC,"=amber_agent"))()
 local total,passed=0,0
 local function eq(a,b,msg) assert(a==b,(msg or "compare")..": got "..tostring(a).." expected "..tostring(b)) end
@@ -34,10 +35,11 @@ local function world()
     function w:feed(s,kind) table.insert(self.feeds,kind);return true end
     function w:checkPrey(prey) return prey end
     function w:prey()
-        if self.preyMode then return {position={x=6,z=0},attackRange=9} end
+        if self.preyMode then return {model={},position={x=6,z=0},attackRange=9,health=50,velocity={x=0,z=0}} end
     end
+    function w:attackGeometry() return {valid=true,inRange=true} end
     function w:bite() self.bites+=1;return true end
-    return w,Agent.new(Planner,w)
+    return w,Agent.new(Planner,w,Hunt)
 end
 test("Spirit Bear is Bear species with coat shown only as metadata",function()
     local w,a=world()
@@ -86,7 +88,8 @@ test("successful drinking requires actual thirst increase",function()
     a:setEnabled(true);a:tick(10)
     eq(a.feeds,0)
     w.state.thirst=24;a:tick(11)
-    eq(a.feeds,1)
+    eq(a.feeds,0)
+    w.state.thirst=72;a:tick(12);eq(a.feeds,1)
 end)
 test("low health pauses movement without claiming fabricated healing",function()
     local w,a=world();w.state.healthFraction=.19
@@ -106,7 +109,7 @@ end)
 test("NPC hunting is native-click only and never a player attack",function()
     local w,a=world();w.state.hunger=12;w.preyMode=true
     a:setEnabled(true);a:tick(10)
-    eq(a:status().phase,"HUNT_ATTACK")
+    eq(a:status().phase,"HUNT_VERIFY")
     eq(w.bites,1)
     eq(a.hunts,0)
 end)
@@ -152,7 +155,7 @@ test("claim stall retries a different ground position inside same eligible hex",
     w.state.position={x=p.x,z=p.z}
     a:tick(11)
     eq(a:status().phase,"CLAIMING")
-    a:tick(33)
+    a:tick(34)
     eq(a:status().phase,"REPOSITION")
     eq(w.alternate,1)
     eq(a.goal.key,key)
