@@ -2,7 +2,7 @@
 
 The v2412 client hub retains all 21 approved functions in one compact four-tab interface. Right Shift, permanent Bite Reach, hollow-only outlines and schema-15 saved settings are preserved.
 
-The 15.3.0 candidate adds recent recovery trends, native bite-readiness checks, bounded callback-only discovery, deferred background work during pending strikes, fewer repeated ESP writes and guarded Vulture release/resume handling. It passes 128 scenarios and 18 compile checks locally. See docs/V15_3_IMPROVEMENTS.md for operation counts and live limits.
+The 15.3.0 candidate adds recent recovery trends, native bite-readiness checks, bounded callback-only discovery, deferred background work during pending strikes, fewer repeated ESP writes and guarded Vulture release/resume handling. It passes 137 scenarios and 18 compile checks locally. See docs/V15_3_IMPROVEMENTS.md for operation counts and live limits.
 
 The retained recovery correction preserves native Rest factors, removes false recurrence pauses, keeps automatic-response provenance, separates camera input from attacks, and resets the owned native animation blend. Actual HP increases and unchanged windows are distinguished; sustained 2x/4x gameplay effects remain unverified. See docs/V15_2_1_RECOVERY.md.
 

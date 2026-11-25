@@ -221,8 +221,11 @@ function Roblox.new(Core, environment)
                     local valid,env=pcall(getfenv,fn)
                     if valid and type(env)=="table" and env.script~=nil then owned=env.script==wolf or env.script==grab end
                 end
-                if not owned then continue end
-                table.insert(scan.functions,fn)
+                -- Executors may expose a vendor wrapper as the signal root.
+                -- Inspect one root hop, but accept only validated own-script
+                -- functions; never descend through an unrelated child chain.
+                if not owned and depth~=0 then continue end
+                if owned then table.insert(scan.functions,fn) end
                 local count=0
                 for _,value in pairs(self:upvalues(fn)) do
                     count+=1;if count>64 then break end
@@ -281,6 +284,25 @@ function Roblox.new(Core, environment)
         if not ownScript then self.wolfActions,self.wolfDiscovery = nil,nil;return nil end
         if self.wolfActions and self.wolfActions.script ~= ownScript then self.wolfActions,self.wolfDiscovery = nil,nil end
         local native = self.wolfActions
+        if not native then
+            -- Preserve validated handles already held by our previous release.
+            -- This reads the existing owner; it never enumerates another VM.
+            local previous=self.env.FERAL_RENAISSANCE_ACTIVE
+            local cached=previous and previous.bridge and previous.bridge.wolfActions
+            local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+            if cached and cached.script==ownScript and type(cached.tryBite)=="function" then
+                local t=self:upvalues(cached.tryBite)
+                local d=type(t[5])=="function" and self:upvalues(t[5]) or {}
+                local named,name=pcall(debug.info,t[4],"n")
+                if t[1]==self.player and d[1]==self.player and remote and d[8]==remote
+                    and type(t[4])=="function" and named and name=="biteCooldown" then
+                    native={script=ownScript,tryBite=cached.tryBite,doBite=t[5],biteCooldown=t[4]}
+                    local f=type(cached.toggleFeed)=="function" and self:upvalues(cached.toggleFeed) or {}
+                    if f[5]==self.player and f[6]==remote then native.toggleFeed=cached.toggleFeed end
+                    self.wolfActions=native
+                end
+            end
+        end
         if native and native.tryBite and native.toggleFeed then return native end
         if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then return native end
         if self.deferNativeDiscovery or type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
@@ -389,7 +411,26 @@ function Roblox.new(Core, environment)
         end
         local native=self.wolfActions
         if not native or not native.tryBite or not native.doBite or not native.biteCooldown then
-            return result(false,"native timing unavailable",false)
+            -- Primary-input connections may be VM-isolated. The captured
+            -- cooldown calculation and own SafeTime bite marker remain useful,
+            -- but do not establish the inaccessible private Rest/input state.
+            local species=self:config("Species")
+            local passive=self:config("PassiveConfig")
+            local at=self:attribute(s.char,"WolfBiteAt")
+            if not species or type(species.biteCooldown)~="function" or not s.serverNow or not Core.finite(at)
+                or at>s.serverNow+1 then return result(false,"native timing unavailable",false) end
+            local ok,cd=pcall(species.biteCooldown,self:attribute(s.char,"Species") or species.DEFAULT,self:attribute(s.char,"Growth") or 1)
+            local mult=1
+            if passive and passive.biteCdMult~=nil then
+                local valid,value=pcall(passive.biteCdMult,s.char)
+                if not valid or not Core.finite(value) or value<=0 then return result(false,"native cooldown unknown",false) end
+                mult=value
+            end
+            if not ok or not Core.finite(cd) or cd*mult<.03 or cd*mult>30 then return result(false,"native cooldown unknown",false) end
+            local r=result(s.serverNow-at>=cd*mult,s.serverNow-at>=cd*mult
+                and "visible client checks clear; private state unverified" or "native cooldown")
+            r.timingSource="native config and own bite marker";r.privateStateKnown=false
+            return r
         end
         local timing=self.biteTiming
         if not timing or timing.native~=native or now>=timing.nextAt then
@@ -411,7 +452,9 @@ function Roblox.new(Core, environment)
         end
         if timing.resting or now-timing.lastRest<self:restLock(s.char) then return result(false,"native Rest lock") end
         if now-timing.lastBite<timing.cd then return result(false,"native cooldown") end
-        return result(true,"client checks clear; gameplay unverified")
+        local r=result(true,"client checks clear; gameplay unverified")
+        r.privateStateKnown=true;r.timingSource="validated own native closures"
+        return r
     end
     function b:io()
         return {
@@ -882,7 +925,7 @@ function Roblox.new(Core, environment)
             end
             if state == Enum.UserInputState.Begin then hub:preInput(input) end
             return Enum.ContextActionResult.Pass
-        end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.Z,Enum.KeyCode.X,
+        end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.ButtonY,Enum.KeyCode.Z,Enum.KeyCode.X,
             Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
             Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
             Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
@@ -893,7 +936,7 @@ function Roblox.new(Core, environment)
             if not ok then hub:fault(err) end
         end)
         local renderName = actionName .. "_RENDER"
-        self.RunService:BindToRenderStep(renderName,90,function(dt)
+        self.RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value+3,function(dt)
             if hub.active and not hub.closed then
                 local ok,err = pcall(hub.render,hub,dt)
                 if not ok then hub:fault(err) end

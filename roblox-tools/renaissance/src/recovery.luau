@@ -24,12 +24,16 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:guardPose(now)
         if self.pose and (policy.manualRest or self.pose.char ~= bridge.player.Character
-            or bridge:attribute(self.pose.char,"FeralDowned") == true
-            or not self.owned and now >= (self.poseUntil or 0)) then self:clearPose() end
+            or bridge:attribute(self.pose.char,"FeralDowned") == true) then self:clearPose() end
         if self.owned and not self:holdPose(self.owned,now) then
             self:release("native pose control unavailable",now)
             self.backoffUntil = now+3
         end
+    end
+    function r:afterAnimationFrame(now)
+        -- Expiry is processed after native WolfAnim (Camera+2), never before
+        -- its first frame after a hitch. Time alone is not a rendered frame.
+        if self.pose and not self.owned and now >= (self.poseUntil or 0) then self:clearPose() end
     end
     function r:release(reason, now)
         local char = self.owned
@@ -142,6 +146,20 @@ function Recovery.new(bridge, policy, ledger)
         self:guardPose(now)
         if s and s.alive then self:observe(s,now) end
         if policy.manualRest then
+            if self.enabled and s and s.alive and s.rest and s.hum.MoveDirection.Magnitude>.13
+                and not s.captured and not s.grab and not s.ability and now>policy.manualIntentUntil then
+                -- Walking is an explicit exit from stationary manual Rest.
+                -- End that action once, then let ordinary recovery policy run.
+                policy.manualRest,policy.manualIntentUntil=false,0
+                self.lastAutomaticCharacter=s.char
+                self:holdPose(s.char,now);self.poseUntil=now+.35
+                bridge:rest(s.char,false);bridge:maskRest(s.char)
+                self.releaseAt,policy.lastRestRelease=now,now
+                self.backoffUntil=math.max(self.backoffUntil,now+.75)
+                self.state="manual Rest ended by movement"
+                ledger:event("manual_rest_exit_by_movement",now)
+                return
+            end
             if not s or not s.alive or not s.rest then
                 if s and s.alive and now <= policy.manualIntentUntil then self.state="MANUAL";return end
                 policy.manualRest = false

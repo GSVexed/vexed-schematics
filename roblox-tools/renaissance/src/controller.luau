@@ -191,8 +191,10 @@ function Controller.new(M,bridge,options)
                 for _ = 1,4 do
                     if not node then break end
                     local body = node.Name
-                    if node:IsA("TextButton") or node:IsA("TextLabel") then body ..= " " .. node.Text end
-                    if string.find(string.lower(body),"rest",1,true) then return true end
+                    if node:IsA("TextButton") or node:IsA("TextLabel") then body = node.Text end
+                    body=string.upper(body):match("^%s*(.-)%s*$")
+                    if node.Name=="FeralRestTap" or node.Name=="WolfRest" or node.Name=="RestButton"
+                        or body=="REST" or body=="REST [R]" or body=="REST (R)" or body=="STAND UP" then return true end
                     node = node.Parent
                 end
             end
@@ -246,7 +248,7 @@ function Controller.new(M,bridge,options)
         if click and self.ui:contains(point) then return end
         local s = bridge:snapshot(now,false)
         if s.gameMenu then return end
-        if key == Enum.KeyCode.R or key == Enum.KeyCode.Z or key == Enum.KeyCode.X
+        if key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonY
             or ((primary or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
             self.policy:input("rest",now)
             self.recovery:manual(now)
@@ -278,6 +280,7 @@ function Controller.new(M,bridge,options)
                 self.combatInput:input(s,now)
             end
         elseif key == Enum.KeyCode.E or key == Enum.KeyCode.F or key == Enum.KeyCode.G
+            or key==Enum.KeyCode.Z or key==Enum.KeyCode.X
             or key == Enum.KeyCode.Q or key == Enum.KeyCode.Space then
             self.policy:input("action",now)
             self.recovery:release("manual native action",now)
@@ -646,6 +649,7 @@ function Controller.new(M,bridge,options)
     function h:render(dt)
         self:maskPose()
         self.ui:render(dt,bridge.clock())
+        self.recovery:afterAnimationFrame(bridge.clock())
     end
     function h:fault(errorValue)
         self.notice = "Controller paused · reload or use CLEAN v14"

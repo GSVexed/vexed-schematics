@@ -1,6 +1,6 @@
 {
   "version": "15.3.0",
-  "bundle_sha256": "2b925a7d1930cfd61be086ac01d27bd4de67c12dea6e5563e1015532ff6a022f",
+  "bundle_sha256": "af3439173cf2e848c4441b967b0a6144397467fcc6750f9611b43bb60432f6e8",
   "compiled": [
     "core.luau",
     "settings.luau",
@@ -24,8 +24,8 @@
   "module_parity": true,
   "rollback_hashes_unchanged": true,
   "regressions": {
-    "total": 128,
-    "passed": 128,
+    "total": 137,
+    "passed": 137,
     "failed": 0
   },
   "runtime_exit_code": 0,
@@ -270,6 +270,25 @@
     "PASS Vulture recovery never restarts an active, anchored, captured or deliberately stationary flight",
     "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
     "PASS flight restart timeout and disable restore only owned intents",
-    "RENAISSANCE_TEST_RESULT total=128 passed=128 failed=0"
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS vendor-wrapped input callbacks still reveal validated own native bite functions",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS visible native cooldown remains useful when primary-input handlers are VM-isolated",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS hot reload preserves validated native bite handles without a heap search",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS Z and X never transfer automatic recovery into manual Rest",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS gamepad Y is handed to native manual Rest before its action callback",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS a pose-release frame hitch cannot remove the reset before the native animator uses it",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS actual walking ends stationary manual Rest once before recovery takes over",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS an inherited moving Rest pose cannot stay classified as stationary manual Rest",
+    "[FERAL Renaissance 15.3.0] Ready \u00b7 Right Shift \u00b7 client effects and gameplay outcomes tracked separately",
+    "PASS Forest GUI text is never mistaken for a manual Rest control",
+    "RENAISSANCE_TEST_RESULT total=137 passed=137 failed=0"
   ]
 }

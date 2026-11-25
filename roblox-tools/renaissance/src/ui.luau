@@ -275,7 +275,8 @@ function UI.mount(hub, bridge, scope)
         assign(footer,"Text",hub.rescue.pending and hub.rescue.status
             or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu")
         if self.combatReadout then
-            assign(self.combatReadout,"Text",(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.rescue.status)
+            assign(self.combatReadout,"Text",(hub.biteReadiness and hub.biteReadiness.reason or "Native timing unmeasured")
+                .."\n"..(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.rescue.status)
         end
         if self.finderReadout then
             assign(self.finderReadout,"Text",string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range))

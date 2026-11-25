@@ -1043,5 +1043,112 @@ test("flight restart timeout and disable restore only owned intents",function()
     eq(h.flightRepair,nil);h:close()
 end)
 
+test("vendor-wrapped input callbacks still reveal validated own native bite functions",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    local original=w.env.getconnections;local wrappers={}
+    w.env.getconnections=function(event)
+        local connections=original(event)
+        if event~=w.uis.InputBegan then return connections end
+        local result={}
+        for _,connection in ipairs(connections)do
+            local fn=connection.Function
+            if not wrappers[fn] then
+                local wrapper=function()return fn end
+                w:registerNative(wrapper,"VendorWrapper","wrap",function()return {fn}end)
+                wrappers[fn]=wrapper
+            end
+            table.insert(result,{Function=wrappers[fn]})
+        end
+        return result
+    end
+    w.env.getgc=function()error("heap enumeration forbidden")end
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.8)
+    assert(h.bridge.grabController);assert(h.bridge.wolfActions.tryBite);assert(h.bridge.wolfActions.toggleFeed)
+    assert(h.bridge.wolfActions.biteCooldown);eq(w.nativeBites,nil);h:close()
+end)
+
+test("visible native cooldown remains useful when primary-input handlers are VM-isolated",function()
+    local w=Mock.new();w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w.configs.PassiveConfig.biteCdMult=function()return .8 end
+    local h=load(w,{settings={states={}}});w:advance(.1);eq(h.biteReadiness.known,false)
+    w.player.Character:SetAttribute("WolfBiteAt",w.time+1000);w:advance(.1)
+    eq(h.biteReadiness.ready,false);eq(h.biteReadiness.reason,"native cooldown")
+    w:advance(.5);eq(h.biteReadiness.ready,true);eq(h.biteReadiness.privateStateKnown,false)
+    eq(h.biteReadiness.timingSource,"native config and own bite marker");eq(w.nativeBites,nil);h:close()
+end)
+test("hot reload preserves validated native bite handles without a heap search",function()
+    local w=Mock.new();w:enableNativeActions();local old=load(w,{settings={states={}}});w:advance(.2)
+    assert(old.bridge.wolfActions.tryBite)
+    local original=w.env.getconnections
+    w.env.getconnections=function(event)if event==w.uis.InputBegan then return {} end;return original(event)end
+    w.env.getgc=function()error("heap search")end
+    local h=load(w,{settings={states={}}});w:advance(.2)
+    eq(h.bridge.wolfActions.tryBite,old.bridge.wolfActions.tryBite)
+    eq(h.biteReadiness.ready,true);eq(old.closed,true);h:close()
+end)
+
+test("Z and X never transfer automatic recovery into manual Rest",function()
+    local w=Mock.new();w:enableNativePose();w.nativeRestEcho=true;w.hum.Health=60
+    w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.2)
+    for _,key in ipairs({E.KeyCode.Z,E.KeyCode.X})do
+        w:input(key);eq(h.policy.manualRest,false);w:advance(1.7)
+        eq(h.policy.manualRest,false);eq(h.recovery.owned,w.player.Character)
+        eq(w.nativePose.sit,0);eq(w.nativePose.lie,0)
+    end
+    h:close()
+end)
+test("gamepad Y is handed to native manual Rest before its action callback",function()
+    local w=Mock.new();w:enableNativePose();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.2)
+    w.cas:BindActionAtPriority("WolfRest",function(_,state)
+        if state==E.UserInputState.Begin then
+            eq(h.policy.manualRest,true);eq(w.player.Character:GetAttribute("WolfDbgRestP"),nil)
+            w.player.Character:SetAttribute("WolfRest",true)
+        end
+        return E.ContextActionResult.Sink
+    end,false,3000,E.KeyCode.ButtonY)
+    w:input(E.KeyCode.ButtonY,E.UserInputType.Gamepad1);w:advance(.3)
+    eq(h.policy.manualRest,true);eq(h.recovery.owned,nil);assert(w.nativePose.sit>0);h:close()
+end)
+test("a pose-release frame hitch cannot remove the reset before the native animator uses it",function()
+    local w=Mock.new();w:enableNativePose();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.2)
+    w.nativePose.sit,w.nativePose.lie=1,1
+    h:set("recovery",false)
+    local original=w.renders.WolfAnim.fn;local observed=false
+    w.renders.WolfAnim.fn=function(dt)
+        observed=w.player.Character:GetAttribute("WolfDbgRestP")~=nil
+        original(dt)
+    end
+    w:step(.6)
+    eq(observed,true);eq(w.nativePose.sit,0);eq(w.nativePose.lie,0)
+    eq(w.player.Character:GetAttribute("WolfDbgRestP"),nil);h:close()
+end)
+test("actual walking ends stationary manual Rest once before recovery takes over",function()
+    local w=Mock.new();w:enableNativePose();w.nativeRestEcho=true;w.hum.Health=60
+    w.player.Character:SetAttribute("WolfRest",true)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.3);eq(h.policy.manualRest,true)
+    w.hum.MoveDirection=Mock.V3.new(1,0,0);w:advance(1.2)
+    eq(h.policy.manualRest,false);eq(h.ledger.counts.manual_rest_exit_by_movement,1)
+    eq(h.recovery.owned,w.player.Character);eq(w.nativePose.sit,0);eq(w.nativePose.lie,0)
+    local releases=0;for _,call in ipairs(w.calls)do if call.args[1]=="Rest" and call.args[2]==false then releases+=1 end end
+    eq(releases,1);h:close()
+end)
+test("an inherited moving Rest pose cannot stay classified as stationary manual Rest",function()
+    local w=Mock.new();w:enableNativePose();w.nativeRestEcho=true;w.hum.Health=60
+    w.player.Character:SetAttribute("WolfRest",true);w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.3)
+    eq(h.policy.manualRest,false);eq(w.nativePose.sit,0);eq(w.nativePose.lie,0)
+    eq(h.ledger.counts.manual_rest_exit_by_movement,1);h:close()
+end)
+test("Forest GUI text is never mistaken for a manual Rest control",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=60
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.2)
+    local button=w.env.Instance.new("TextButton");button.Name="Forest";button.Text="Forest map";button.Parent=w.player:FindFirstChildOfClass("PlayerGui")
+    w.guiHits={button};w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.policy.manualRest,false);eq(h.ledger.counts.attack_intent,1);h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

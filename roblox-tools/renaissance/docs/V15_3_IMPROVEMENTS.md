@@ -8,15 +8,21 @@ HP, injury, bleed and venom each use their own trailing six-second window, sampl
 
 This measures recent values. It does not establish 2× HP or 4× condition efficacy, causal attribution or private-server authority. The native factors retained in 15.2.1 remain intact.
 
+## Moving Rest corrections
+
+The actual v2412 native Rest keys are R and ButtonY. Z/X were incorrectly classified as manual Rest, which could relinquish automatic masking and leave the native Rest session active. Z/X now yield briefly as ordinary actions; real R/Y and native Rest taps retain manual ownership. Exact Rest control labels replace a substring check that could match Forest UI text. With recovery enabled, actual walking exits a stationary manual Rest once and then yields to the normal recovery policy. Mere sliding or knockback does not count as walking.
+
+A timed pose reset is now restored after the native animation frame, rather than before it. PreAnimation and immediate echo handling maintain the owned reset. The single hub render callback runs at Camera+3, after captured WolfAnim at Camera+2, and performs expiry afterward. A frame hitch longer than the grace interval can no longer delete the reset before its next native animation update. Tests reproduce this ordering failure, the Z/X ownership error, inherited moving Rest, gamepad Y priority and the Forest false match. Actual visual resolution of the reported live pose remains to be established separately from this client contract.
+
 ## Native bite guidance
 
-The small marker is grey for known capture/carry, Rest/stand-up, feeding, ability and timed bite/recoil restrictions, native cooldown, unknown native timing or stale range geometry. Current WolfController prototypes 16, 17 and 19 ground these checks. The original pure biteCooldown calculation is read through the own-script callback chain only after its function identity and player/remote/upvalue layout are validated. No attack is invoked by the guide. Missing or changed layouts remain unknown.
+The small marker is grey for known capture/carry, Rest/stand-up, feeding, ability and timed bite/recoil restrictions, native cooldown, unknown native timing or stale range geometry. Current WolfController prototypes 16, 17 and 19 ground these checks. Where available, the original pure biteCooldown calculation is read only after its function identity and player/remote/upvalue layout are validated. Primary-input handlers can be VM-isolated in Potassium. In that case, the guide uses the captured native Species/Passive cooldown calculation and the own SafeTime WolfBiteAt marker; it explicitly reports private input/Rest state as unverified. Missing timestamps or schemas remain grey. Existing validated handles can be retained across hot reload. No attack is invoked by the guide.
 
 Teal and amber still distinguish stock-reference and extended client geometry. A clear client check is not accepted server range or confirmed damage. Native attacks, their cooldown and the existing bounded post-Rest bite buffer retain their normal guards.
 
 ## Work bounds and minigames
 
-Whole-heap enumeration is removed from the runtime, including the old fallback. The compiler gate rejects a getgc call in the bundle. Discovery walks the existing InputBegan, FeralFeedTap and FeralGrabV2 callbacks, restricted to the own WolfController/FeralGrabV2UI scripts. The shared resumable queue examines at most 32 entries in a roughly 2 ms slice, with 96 connections per signal, depth four, 256 accepted functions and 512 queued entries. A single executor API call itself cannot be pre-empted. Missing capability is reported; it never triggers an unbounded heap search.
+Whole-heap enumeration is removed from the runtime, including the old fallback. The compiler gate rejects a getgc call in the bundle. Discovery walks the existing InputBegan, FeralFeedTap and FeralGrabV2 callbacks, restricted to the own WolfController/FeralGrabV2UI scripts. A signal-root vendor wrapper may be inspected for one direct function hop; unrelated child chains are never followed. The shared resumable queue examines at most 32 entries in a roughly 2 ms slice, with 96 connections per signal, depth four, 256 accepted functions and 512 queued entries. A single executor API call itself cannot be pre-empted. Missing capability is reported; it never triggers an unbounded heap search.
 
 An active pending strike suspends native discovery, target rebuilding, terrain-heavy flight/AFK work, config reconciliation and nonurgent combat classification. Native timing, genuine input, pose ownership, action cleanup and the actual press remain responsive. A strike recovered from native UI state protects that same frame. Background work resumes after the press/window; missed centres can still use a later genuine crossing. Actual timestamps, session/strike IDs, own-character grade rules and simultaneous ordinary bites are preserved.
 
@@ -48,6 +54,6 @@ The reported freeze itself was not captured: the passive live check found the us
 
 ## Validation and rollback
 
-128 service-boundary scenarios and 18 compile checks pass locally, including eight overlapping-attacker strikes with frame hitches and concurrent native bites. The operation comparison is a regression gate. Module/bundle parity and exact hashes protect CLEAN v14 and complete 15.0.0, 15.1.0, 15.2.0 and 15.2.1 bundles. The current loader is promoted only after the published source gate and exact candidate validation.
+137 service-boundary scenarios and 18 compile checks pass locally, including eight overlapping-attacker strikes with frame hitches and concurrent native bites. The operation comparison is a regression gate. Module/bundle parity and exact hashes protect CLEAN v14 and complete 15.0.0, 15.1.0, 15.2.0 and 15.2.1 bundles. The current loader is promoted only after the published source gate and exact candidate validation.
 
 Prior 15.2.1 source: bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17. Its bundle SHA256 is d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9. CLEAN v14 rollback remains 158474ba80c0d613c3427399f24059341369acc8.

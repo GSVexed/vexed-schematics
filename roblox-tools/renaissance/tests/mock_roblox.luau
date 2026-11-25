@@ -40,6 +40,7 @@ local enum = setmetatable({}, {__index=function(t,k)
     local group = setmetatable({}, {__index=function(g,v) local value=k.."."..v;rawset(g,v,value);return value end})
     rawset(t,k,group);return group
 end})
+enum.RenderPriority.Camera={Value=200}
 local function kind(v) return type(v)=="table" and v._type or type(v) end
 function Mock.new()
     local w = { time=10,objects={},calls={},configs={},renders={},bindings={},bindingInfo={},parts={},

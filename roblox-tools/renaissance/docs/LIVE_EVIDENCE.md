@@ -2,7 +2,7 @@
 
 ## Version 15.3.0 candidate
 
-128 local regressions and 18 compile checks pass, including deterministic operation comparison against preserved 15.2.1. Exact candidate staging and published CI are pending. A passive movement check through the existing Potassium runner (run 45512958870) returned the exact marker. The current hub was 15.2.1 in FERAL 2412; the user was moving normally as a Bison, not in the reported Vulture freeze. No attributes or gameplay inputs were changed. This does not establish the cause or resolution of that earlier freeze.
+137 local regressions and 18 compile checks pass, including deterministic operation comparison against preserved 15.2.1. The earlier 128-scenario candidate at 79bb078 passed published source CI run 45514494808. Its exact live staging run 45514618046 found native feeding and minigame handlers but not the private bite handler, so it was not promoted. A bounded metadata check (45515551711) found 58 of 59 primary-input callbacks were foreign-state connections. The revised candidate preserves available validated handles and uses an explicitly limited native-config/own-marker guide when private state is inaccessible. Exact revised staging and CI are pending. A passive movement check through the existing Potassium runner (run 45512958870) returned the exact marker. The current hub was 15.2.1 in FERAL 2412; the user was moving normally as a Bison, not in the reported Vulture freeze. No attributes or gameplay inputs were changed. This does not establish the cause or resolution of that earlier freeze.
 
 ## Version 15.2.1 recovery correction
 
