@@ -75,6 +75,16 @@ function UI.new(agent,bridge)
         status.events=agent.events
         status.gameVersion=game.PlaceVersion
         status.territoryCount=#(bridge.hexes or {})
+        status.hexSummary=bridge:counts(bridge:snapshot(os.clock()))
+        status.navigation={
+            stage=bridge.nav.lastReason,input=bridge.nav.nativeInput,
+            pathIndex=bridge.nav.index,pathCount=#(bridge.nav.points or {}),
+            lastGoal=bridge.nav.destination and {
+                x=math.floor(bridge.nav.destination.X),
+                z=math.floor(bridge.nav.destination.Z)} or nil,
+            failures=bridge.nav.failures,replans=bridge.nav.replans,
+        }
+        status.savedPanelPosition=tostring(frame.Position)
         local ok,payload=pcall(function()
             return game:GetService("HttpService"):JSONEncode(status)
         end)
