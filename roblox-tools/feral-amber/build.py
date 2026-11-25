@@ -55,11 +55,12 @@ function handle.setEnabled(on) agent:setEnabled(on==true) end
 function handle.status() return agent:status() end
 local lastError=0
 connection=game:GetService("RunService").Heartbeat:Connect(function()
-    if not active then return end
+    if not active or handle.working then return end
+    handle.working=true
     local now=os.clock()
     if agent.enabled then
         local hub=environment.FERAL_RENAISSANCE_ACTIVE
-        if type(hub)=="table" and type(hub.stopWalk)=="function" then
+        if type(hub)=="table" and hub.walk and type(hub.stopWalk)=="function" then
             pcall(hub.stopWalk,hub,"Amber surface-navigation owner")
         end
     end
@@ -75,6 +76,7 @@ connection=game:GetService("RunService").Heartbeat:Connect(function()
     end
     local good,uierr=pcall(panel.tick,panel,now)
     if not good and now-lastError>4 then lastError=now;warn("[FERAL AMBER] UI: "..tostring(uierr)) end
+    handle.working=false
 end)
 environment.FERAL_AMBER_ACTIVE=handle
 print("[FERAL AMBER 0.1] Ready. Select START in the small Amber panel; native walking, claim and care outcomes are observed, not presumed.")
