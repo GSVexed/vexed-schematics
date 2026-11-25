@@ -1609,5 +1609,11 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
+test("Renaissance 15.4.3 presents its actual version in the active controller",function()
+    local w=Mock.new();local h=load(w)
+    eq(h.version,"15.4.3")
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
