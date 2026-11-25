@@ -14,7 +14,7 @@ def main():
     agent=ROOT/"src/agent.luau"
     nav=ROOT/"src/nav.luau"
     bridge=ROOT/"src/bridge.luau"
-    suites=[ROOT/"tests/suite.luau",ROOT/"tests/agent_suite.luau"]
+    suites=[ROOT/"tests/suite.luau",ROOT/"tests/agent_suite.luau",ROOT/"tests/bridge_suite.luau"]
     bundle=ROOT.parent/"feral-amber-autopilot-v0.1.lua"
     launcher=ROOT.parent/"feral-amber.lua"
     subprocess.run(["python3",str(ROOT/"build.py"),"--check"],check=True)
@@ -33,7 +33,7 @@ def main():
     for path in (planner,agent,nav,bridge,*suites):
         subprocess.run([args.compiler,str(path)],check=True,stdout=subprocess.DEVNULL)
     sources={}
-    for name,path in (("PLANNER_SRC",planner),("AGENT_SRC",agent)):
+    for name,path in (("PLANNER_SRC",planner),("AGENT_SRC",agent),("BRIDGE_SRC",bridge)):
         source=path.read_text(encoding="utf-8")
         assert "]====]" not in source
         nl=chr(10)
