@@ -158,5 +158,18 @@ test("claim stall retries a different ground position inside same eligible hex",
     eq(a.goal.key,key)
 end)
 
+test("open Renaissance panel does not stop active Amber travel",function()
+    local w,a=world()
+    w.state.menuOpen=true
+    a:setEnabled(true);a:tick(10)
+    eq(a:status().phase,"TRAVEL")
+    assert(#w.moves>0,"Movement must continue while menus are visible")
+end)
+test("actual manual movement still pauses Amber and releases navigation",function()
+    local w,a=world();a:setEnabled(true);a:tick(10)
+    w.state.manualInput=true;a:tick(11)
+    eq(a:status().phase,"PAUSED")
+    assert(#w.stops>0)
+end)
 print(string.format("AMBER_AGENT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Amber agent tests failed")
