@@ -1,0 +1,29 @@
+name: FERAL Grizzly Amber planner compile and regression gate
+on:
+  push:
+    branches: ['renaissance/grizzly-amber-*']
+    paths:
+      - 'roblox-tools/grizzly-amber/**'
+      - '.github/workflows/feral-grizzly-amber-validate.yml'
+  pull_request:
+    paths:
+      - 'roblox-tools/grizzly-amber/**'
+      - '.github/workflows/feral-grizzly-amber-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the pinned official Luau compiler and interpreter
+        run: |
+          git clone https://github.com/luau-lang/luau.git /tmp/amber-luau
+          git -C /tmp/amber-luau checkout 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/amber-luau config=release -j2 luau luau-compile
+      - name: Validate pure planner and replay cases
+        run: |
+          python3 roblox-tools/grizzly-amber/run_tests.py \
+            --luau /tmp/amber-luau/luau \
+            --compiler /tmp/amber-luau/luau-compile
