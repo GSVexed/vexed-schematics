@@ -155,6 +155,13 @@ function Bridge.new(nav)
     function b:territorySpot(key,state)
         local h=self.hexByKey[key]
         if not h then return nil end
+        -- Distant hex terrain is commonly unstreamed in Roblox. Travel toward
+        -- the replicated geometry first; only demand a physical claim spot
+        -- after the animal is near enough for the terrain to stream in.
+        local origin=state and state.position
+        if origin and dist(origin,h.spot or h.center)>210 then
+            return h.spot or h.center
+        end
         local cached=self.spotCache[key]
         if cached and (self.spotTry[key] or 0)==cached.index then return cached.pos end
         local c=player.Character
@@ -261,7 +268,11 @@ function Bridge.new(nav)
         local manual=typing
         for _,key in ipairs(movingKeys) do
             local ok,down=pcall(UserInput.IsKeyDown,UserInput,key)
-            if ok and down then manual=true;break end
+            -- Ignore the precise movement key currently owned by our navigator;
+            -- otherwise virtual W/A/S/D input would pause its own route.
+            if ok and down and not (self.nav.held and self.nav.held[key.Name]) then
+                manual=true;break
+            end
         end
         local combat=finite(nowServer) and finite(untilCombat) and untilCombat>nowServer or false
         local power=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true
