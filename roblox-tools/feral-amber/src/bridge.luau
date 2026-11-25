@@ -281,6 +281,14 @@ function Bridge.new(nav)
         local power=attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true
             or attr(c,"FeralVenomDown")==true or attr(c,"FeralTalonLock")==true
             or attr(c,"FeralDeathRollLocal")==true
+        local stamina,maxStamina=attr(c,"Stamina"),attr(c,"StaminaMax")
+        local staminaFraction=finite(stamina) and finite(maxStamina)
+            and maxStamina>0 and math.clamp(stamina/maxStamina,0,1) or nil
+        local hudBurst=attr(player,"HudBurst")==true
+            or attr(c,"WolfBurst")==true
+        local hudBurstNo=attr(player,"HudBurstNo")==true
+        local hudTrot=attr(player,"HudTrot")==true
+        local hudSprint=attr(player,"HudSprint")==true
         local amber=attr(player,"Amber")
         if not finite(amber) then
             local stats=player:FindFirstChild("leaderstats")
@@ -296,6 +304,10 @@ function Bridge.new(nav)
             healthFraction=h.MaxHealth>0 and h.Health/h.MaxHealth or 0,
             hunger=attr(c,"Hunger"),thirst=attr(c,"Thirst"),feedCan=attr(c,"FeedCan"),
             feedMode=attr(c,"WolfFeed"),
+            staminaFraction=staminaFraction,
+            hudBurst=hudBurst,hudBurstNo=hudBurstNo,
+            hudTrot=hudTrot,hudSprint=hudSprint,
+            allowBurst=finite(staminaFraction) and staminaFraction>=.56,
             amber=amber,now=now,unixNow=os.time(),players=self:otherPlayerPositions(),
             avoidRadius=110,claimRadius=17,careTarget=65,menuOpen=menu or typing,
             manualInput=manual,combat=combat,pinned=attr(c,"FeralPinned")==true
@@ -313,7 +325,7 @@ function Bridge.new(nav)
         for _,p in ipairs(state.players or {}) do
             table.insert(players,Vector3.new(p.x,state.root.Position.Y,p.z))
         end
-        local result=self.nav:tick(target,state.char,state.hum,state.root,state.now,players)
+        local result=self.nav:tick(target,state.char,state.hum,state.root,state.now,players,state)
         self.motionReason=self.nav.lastReason
         return result
     end

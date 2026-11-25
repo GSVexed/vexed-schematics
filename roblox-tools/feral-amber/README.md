@@ -1,4 +1,23 @@
-# FERAL Amber Autopilot 0.2 — all-animal strategic farming experiment
+# FERAL Amber Autopilot 0.3 — all-animal strategic farming experiment
+
+## v0.3 — native speed modes, route recovery and shared unload
+
+The 0.2 system could navigate in circles because it continuously combined a camera-relative WASD key stream with world-space `Humanoid:Move`, and it could turn back toward a waypoint **after running past it**. The navigation controller now uses one consistent world-space steering stream, with a temporary native-key fallback only when there is measured movement failure. It advances overshot waypoints instead of reversing, discards stale steering, attempts a fresh nearby terrain route, and cools down objectives after repeated genuine stalls.
+
+Locomotion is selected using distance, actual motion heading, route corners and the native `Stamina/StaminaMax` attributes:
+
+- **Burst** on long straight unobstructed ground with adequate stamina: attempts the game's native **X** input, at most once per 8 seconds, without fabricating server mode or repeated remotes.
+- **Sprint** on normal long/medium travel: holds the game's native **Left Shift** control. Right Shift remains exclusively the panel visibility hotkey.
+- **Trot** for close arrivals, turns, hazards and low stamina: releases sprint, optionally requests native **Z** trot mode with a cooldown.
+- **Stop / yield** at claim positions, near players, during native combat or after manual input, releasing all held movement and speed keys.
+
+If FERAL's current server controller does not accept a synthetic key input, these speed requests may not take effect in-game. No direct `WalkSpeed`, body velocity, CFrame, teleport, server state or gameplay remote modifications are performed. This is an **experiment**, not a claim of unrestricted server-accepted Burst.
+
+**Shared unload:** this addon captures its owning Renaissance hub instance; when that hub unloads or is replaced, the addon shuts down automatically, disconnects Heartbeat and UI event listeners, releases held movement keys, and destroys its entire Amber panel. Stopping Amber alone does not close Renaissance. The current `main` Renaissance hub is not changed.
+
+**COPY STATUS** now reports desired gait, selected steering method and Burst attempts, alongside route progress and stopped reasons. Old `feral-amber-autopilot-v0.2.lua` and `v0.1.lua` files are retained as rollbacks.
+
+---
 
 ## Version 0.2 — movement and panel fixes
 
@@ -50,7 +69,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schemat
 
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.2.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.3.lua"))()
 ```
 
 This remains an experimental client-side game addon, not a proven Amber-income bot. Official Luau tests exercise simulated client contracts rather than live FERAL gameplay.

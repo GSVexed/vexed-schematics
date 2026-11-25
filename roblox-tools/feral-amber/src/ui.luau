@@ -78,6 +78,8 @@ function UI.new(agent,bridge)
         status.hexSummary=bridge:counts(bridge:snapshot(os.clock()))
         status.navigation={
             stage=bridge.nav.lastReason,input=bridge.nav.nativeInput,
+            gait=bridge.nav.gait,steering=bridge.nav.lastMode,
+            activeBurstAt=bridge.nav.lastBurstAt,
             pathIndex=bridge.nav.index,pathCount=#(bridge.nav.points or {}),
             lastGoal=bridge.nav.destination and {
                 x=math.floor(bridge.nav.destination.X),
@@ -178,7 +180,7 @@ function UI.new(agent,bridge)
         local diagnostic=st.phase=="TRAVEL" or st.phase=="TRAVEL_WATER"
             or st.phase=="HUNT_APPROACH"
         reason.Text=species.." · "..st.reason
-            ..(diagnostic and (" / "..tostring(nav.lastReason or "routing")
+            ..(diagnostic and (" / "..tostring(nav.gait or "STOP").." · "..tostring(nav.lastReason or "routing")
                 .." · "..tostring(nav.nativeInput or "input pending")) or "")
     end
     function ui:close()

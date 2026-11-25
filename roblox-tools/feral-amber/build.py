@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Deterministically package one standalone five-module all-animal Amber addon."""
+"""Deterministically package one standalone six-module all-animal Amber addon."""
 from pathlib import Path
 import argparse
 import hashlib
 ROOT=Path(__file__).resolve().parent
-DEST=ROOT.parent/"feral-amber-autopilot-v0.2.lua"
-MODULES=("planner","nav","agent","bridge","ui")
-BOOT=r'''-- FERAL AMBER AUTOPILOT v0.2 — all-animal surface-route, territory and care engine.
+DEST=ROOT.parent/"feral-amber-autopilot-v0.3.lua"
+MODULES=("planner","gait","nav","agent","bridge","ui")
+BOOT=r'''-- FERAL AMBER AUTOPILOT v0.3 — all-animal surface-route, territory and care engine.
 -- Native client observations only. No teleportation or fake resource changes.
 local EXPECTED_PLACE=108901361810209
 if game.PlaceId~=EXPECTED_PLACE then
@@ -26,6 +26,7 @@ local function module(name)
     return fn()
 end
 local Planner=module("planner")
+local Gait=module("gait")
 local Nav=module("nav")
 local Agent=module("agent")
 local Bridge=module("bridge")
@@ -36,18 +37,25 @@ local gui=player:WaitForChild("PlayerGui",18)
 if not gui then warn("[FERAL AMBER] PlayerGui unavailable. Spawn first.");return nil end
 local path=game:GetService("PathfindingService")
 local workspace=game:GetService("Workspace")
-local nav=Nav.new(path,workspace)
+local nav=Nav.new(path,workspace,Gait)
 local bridge=Bridge.new(nav)
 local agent=Agent.new(Planner,bridge)
 local panel,why=UI.new(agent,bridge)
 if not panel then warn("[FERAL AMBER] "..tostring(why));return nil end
 local active=true
 local connection
-local handle={version="0.2.0",agent=agent,bridge=bridge,nav=nav,panel=panel}
+-- Closing Renaissance also closes all companion territory automation.
+-- This watches the specific hub instance so replacing/unloading it never
+-- leaves an orphan Amber controller, panel or synthetic held keys.
+local ownerHub=environment.FERAL_RENAISSANCE_ACTIVE
+local handle={version="0.3.0",agent=agent,bridge=bridge,nav=nav,panel=panel,
+    ownerHub=ownerHub}
 function handle.close()
     if not active then return end
     active=false
     if connection then connection:Disconnect();connection=nil end
+    pcall(agent.setEnabled,agent,false)
+    pcall(nav.releaseKeys,nav)
     panel:close()
     if environment.FERAL_AMBER_ACTIVE==handle then environment.FERAL_AMBER_ACTIVE=nil end
 end
@@ -58,6 +66,11 @@ function handle.togglePanel() panel:toggle() end
 local lastError=0
 connection=game:GetService("RunService").Heartbeat:Connect(function()
     if not active then return end
+    if ownerHub and (ownerHub.closed==true
+        or environment.FERAL_RENAISSANCE_ACTIVE~=ownerHub) then
+        handle.close()
+        return
+    end
     -- Keep the native movement direction active every frame. The planner
     -- itself runs less often and path computation may yield.
     if agent.enabled then
@@ -94,11 +107,11 @@ connection=game:GetService("RunService").Heartbeat:Connect(function()
     handle.working=false
 end)
 environment.FERAL_AMBER_ACTIVE=handle
-print("[FERAL AMBER 0.2] Ready. Select START in the small Amber panel; native walking, claim and care outcomes are observed, not presumed.")
+print("[FERAL AMBER 0.3] Ready. Select START in the small Amber panel; native walking, claim and care outcomes are observed, not presumed.")
 return handle
 '''
 def create():
-    chunks=['-- FERAL Amber Autopilot 0.2.0 | 2026-11-25 | all species | client-only outcomes',
+    chunks=['-- FERAL Amber Autopilot 0.3.0 | 2026-11-25 | all species | client-only outcomes',
             'local sources = {}']
     for name in MODULES:
         source=(ROOT/"src"/f"{name}.luau").read_text(encoding="utf-8")
@@ -115,5 +128,5 @@ def main():
         assert DEST.is_file() and DEST.read_text(encoding="utf-8")==data,"Candidate source differs from compiled modules"
     else:
         DEST.write_text(data,encoding="utf-8")
-    print(f"FERAL AMBER 0.2.0 sha256={hashlib.sha256(data.encode()).hexdigest()} bytes={len(data.encode())}")
+    print(f"FERAL AMBER 0.3.0 sha256={hashlib.sha256(data.encode()).hexdigest()} bytes={len(data.encode())}")
 if __name__=="__main__":main()
