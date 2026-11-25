@@ -235,7 +235,8 @@ function Features.new(Core, bridge, registry)
     end
     -- Hippo Crusher Bite has a v2412 native SPEED_CAP="trot" profile.
     -- A separate owner avoids touching other species or requiring a new toggle.
-    -- This only removes a client-side cap; the server may still impose a slow.
+    -- Use the fastest native locomotion tier (burst) as the client-side cap.
+    -- This does not activate a burst gait; the server may still impose a slow.
     function f:reconcileHippo(s)
         local hippo=s.alive and s.species=="Hippo"
         local ability=hippo and bridge:config("AbilityConfig")
@@ -248,7 +249,7 @@ function Features.new(Core, bridge, registry)
                         or (type(cfg.Hippo)=="table" and cfg.Hippo.CrusherBite)
                         or cfg.CRUSHER
                     if type(candidate)=="table" and (candidate.SPEED_CAP=="trot"
-                        or candidate==self.hippoProfile and candidate.SPEED_CAP=="sprint") then
+                        or candidate==self.hippoProfile and candidate.SPEED_CAP=="burst") then
                         profile=candidate;break
                     end
                 end
@@ -273,7 +274,7 @@ function Features.new(Core, bridge, registry)
         -- The native speed tier is read from the same scoped Crusher Bite
         -- profile. Do not force Humanoid.WalkSpeed or manipulate ability remotes.
         local applied=self.leases:apply("hippoCrush",{
-            entry(profile,"SPEED_CAP","sprint","string")
+            entry(profile,"SPEED_CAP","burst","string")
         })
         self.hippoStatus=applied and "CLIENT" or "WAITING"
         if applied then self.hippoProfile,self.hippoCharacter=profile,s.char end

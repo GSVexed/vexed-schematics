@@ -78,6 +78,8 @@ def main():
     stable_hashes["feral-renaissance-v15.2.1.lua"] = "d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9"
     stable_hashes["feral-renaissance-v15.3.0.lua"] = "af3439173cf2e848c4441b967b0a6144397467fcc6750f9611b43bb60432f6e8"
     stable_hashes["feral-renaissance-v15.4.0.lua"] = "cb0c9c840eff287bb82bcda212aa9a986f06bf44dedf920777d753c40606ed6f"
+    stable_hashes["feral-renaissance-v15.4.1.lua"] = "22903a4f0ea88fbfdc5965104d511c3c73251ae706b3aa0c3db7e2f1e00ea6c5"
+    stable_hashes["feral-renaissance-v15.4.2.lua"] = "022d9f06c5544eced1da971152243438b98f3b304743a95f3870d1ccc74e053a"
     for name, digest in stable_hashes.items():
         assert hashlib.sha256((ROOT.parent/name).read_bytes()).hexdigest() == digest, f"rollback changed: {name}"
     source = DEST.read_text()

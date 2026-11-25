@@ -1,3 +1,13 @@
+## 15.4.3 update — fastest native movement ceiling
+
+The captured v2412 `WolfController` has a distinct `BURST` state and `WolfBurst` input/attribute, above normal running, while `CrusherBite.SPEED_CAP` is a lowercase string originally set to `"trot"`. Version 15.4.2 experimentally set the client ceiling to `"sprint"`, but did **not** enable burst. At the user's request, 15.4.3 now sets the isolated existing Hippo-only client `SPEED_CAP` to `"burst"`, the highest native movement tier observed. This is **not** proof that the ability accepts that string as a speed-cap value or that the server accepts full burst movement during charging.
+
+The patch preserves the existing ability charge, timing, damage, remotes and cooldowns; it does not set `WolfBurst`, force `WalkSpeed`, grant additional stamina or rewrite server state. The config lease restores exactly `"trot"` upon exit/respawn and avoids overwriting external edits. The new automated test checks the cap change and verifies `WolfBurst` is untouched.
+
+The game may ignore or reject the unfamiliar `"burst"` cap. Live Hippo gameplay confirmation is still essential; if movement slows, the client config is not sufficient to override the authoritative ability rules. Do not report unrestricted sprint/burst as validated.
+
+---
+
 # Hippo Crusher Bite movement slowdown — v2412 evidence
 
 Date: 2026-11-25. Research only; no live movement mutation was attempted.
