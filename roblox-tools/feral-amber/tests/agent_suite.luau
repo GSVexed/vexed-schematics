@@ -24,6 +24,7 @@ local function world()
         for _,hex in ipairs(self.hex) do if hex.key==key then return hex end end
     end
     function w:territorySpot(key) local h=self:territory(key);return h and h.center end
+    function w:advanceSpot(key) self.alternate=(self.alternate or 0)+1 end
     function w:move(to,s)
         table.insert(self.moves,{to=to,from=s.position})
         return "MOVING"
@@ -125,5 +126,37 @@ test("missing terrain triggers bounded retry and cooldown",function()
     a:setEnabled(true);a:tick(10)
     eq(a:status().kind,"NONE");assert(a.cooldown[a.lastTerritoryKey]>10)
 end)
+test("changing packs resets active territory objective instead of claiming for former pack",function()
+    local w,a=world()
+    a:setEnabled(true);a:tick(10)
+    local before=a.goal
+    w.state.pack=12
+    a:tick(11)
+    assert(a.goal~=before,"Old pack claim should not persist")
+    eq(a.lastPack,12)
+end)
+test("changing animal from Spirit Bear to another species resets navigation and replans",function()
+    local w,a=world();w.state.char={}
+    a:setEnabled(true);a:tick(10)
+    local oldGoal=a.goal
+    w.state.char={};w.state.species="Wolf";w.state.coat=nil
+    a:tick(11)
+    eq(a.species,"Wolf")
+    assert(a.goal~=oldGoal,"Changed animal must not continue old claim")
+end)
+test("claim stall retries a different ground position inside same eligible hex",function()
+    local w,a=world()
+    a:setEnabled(true);a:tick(10)
+    local key=a.goal.key
+    local p=w:territory(key).center
+    w.state.position={x=p.x,z=p.z}
+    a:tick(11)
+    eq(a:status().phase,"CLAIMING")
+    a:tick(33)
+    eq(a:status().phase,"REPOSITION")
+    eq(w.alternate,1)
+    eq(a.goal.key,key)
+end)
+
 print(string.format("AMBER_AGENT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Amber agent tests failed")
