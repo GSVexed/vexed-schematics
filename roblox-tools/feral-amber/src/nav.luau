@@ -41,8 +41,11 @@ function Nav.new(pathService,workspace)
         end
         local path
         local ok=pcall(function()
-            path=self.service:CreatePath({AgentRadius=5,AgentHeight=10,AgentCanJump=false,
-                AgentCanClimb=false,WaypointSpacing=14})
+            local half=math.max(root.Size.X,root.Size.Z)*.5
+            local radius=math.clamp(half+1.5,2,12)
+            local height=math.clamp(hum.HipHeight+root.Size.Y+2,5,30)
+            path=self.service:CreatePath({AgentRadius=radius,AgentHeight=height,
+                AgentCanJump=false,AgentCanClimb=false,WaypointSpacing=14})
             path:ComputeAsync(from,surface)
         end)
         local points={}
