@@ -6,7 +6,7 @@ local function flat(a,b)
     return math.sqrt(x*x+z*z)
 end
 local function xyz(v) return {x=v.X,z=v.Z} end
-local function groundAt(workspace,pos,char)
+local function groundAt(workspace,pos,char,allowWater)
     local ray=RaycastParams.new()
     ray.FilterType=Enum.RaycastFilterType.Exclude
     ray.FilterDescendantsInstances={char}
@@ -14,7 +14,8 @@ local function groundAt(workspace,pos,char)
     local result=workspace:Raycast(
         Vector3.new(pos.X,math.max(90,pos.Y+95),pos.Z),
         Vector3.new(0,-420,0),ray)
-    if result and result.Material~=Enum.Material.Water and result.Normal.Y>=.46 then
+    if result and (allowWater and result.Material==Enum.Material.Water
+        or result.Material~=Enum.Material.Water and result.Normal.Y>=.46) then
         return result.Position+Vector3.new(0,2.5,0)
     end
     return nil
@@ -28,6 +29,8 @@ function Nav.new(pathService,workspace,Gait)
         progressAt=0,progressDistance=nil,previousPosition=nil,
         lastHeading=nil,lastGaitAt=0,lastBurstAt=-100,lastTrotAt=-100,
         fallbackUntil=0,lastMode="WORLD",burstObserved=false,
+        steeringStrategy="WORLD",strategyChanges=0,inputVerified=false,
+        lastAdvance=0,modeHoldUntil=0,lastInputChange=0,waterRoutes=0,
         keyEpoch=0,inputAttempts=0,stallsInRow=0,segmentCount=0,driveCalls=0,
         lastPhysicalDistance=nil,lastPhysicalAt=0,lastRoot=nil,goalStart=0}
     local bindings={W=Enum.KeyCode.W,A=Enum.KeyCode.A,
@@ -113,9 +116,10 @@ function Nav.new(pathService,workspace,Gait)
         self.lastRoot=nil;self.lastPhysicalDistance=nil
         self.lastReason="NEW_ROUTE"
         self.previousPosition=nil;self.lastHeading=nil
+        self.steeringStrategy="WORLD";self.modeHoldUntil=0
         self.fallbackUntil=0;self.lastMode="WORLD"
     end
-    function n:route(root,hum,char,now)
+    function n:route(root,hum,char,now,state)
         -- Never keep steering toward the previous segment while ComputeAsync
         -- yields. Set the new segment only after the path is ready.
         self.desiredPoint=nil
@@ -138,7 +142,7 @@ function Nav.new(pathService,workspace,Gait)
         end
         local surface=nil
         for _,probe in ipairs(probes) do
-            surface=groundAt(self.workspace,probe,char)
+            surface=groundAt(self.workspace,probe,char,state and state.allowWater==true)
             if surface then break end
         end
         if not surface then
@@ -146,7 +150,10 @@ function Nav.new(pathService,workspace,Gait)
             return false
         end
         local route,success=false,false
-        local ok=pcall(function()
+        local waterSurface=self.workspace:Raycast(surface+Vector3.new(0,8,0),Vector3.new(0,-35,0))
+        local wet=waterSurface and waterSurface.Material==Enum.Material.Water
+        if state and state.swimming then wet=true end
+        local ok=not wet and pcall(function()
             local radius=math.clamp(math.max(root.Size.X,root.Size.Z)*.5+1.25,2,12)
             local height=math.clamp(hum.HipHeight+root.Size.Y+1.5,4,30)
             route=self.service:CreatePath({AgentRadius=radius,AgentHeight=height,
@@ -161,7 +168,12 @@ function Nav.new(pathService,workspace,Gait)
             end
         end
         if #points<2 then
-            if flat(from,surface)>48 then
+            if wet then
+                -- Water is a separate navigation lane: swim toward a short
+                -- horizontal point using native animal input. No terrain path
+                -- mesh is expected in the water and no Y forcing is used.
+                self.waterRoutes+=1
+            elseif flat(from,surface)>48 then
                 self.lastReason="NO_SAFE_PATH"
                 return false
             end
@@ -227,15 +239,16 @@ function Nav.new(pathService,workspace,Gait)
         end
         -- One authoritative steering stream. Never combine continuous WASD
         -- with camera-relative world-space humanoid steering (orbit bug).
-        if os.clock()>=self.fallbackUntil then
+        if self.steeringStrategy=="WORLD" then
             self:releaseSteering()
             local direction=delta.Unit
             pcall(function()hum:Move(direction,false)end)
             self.lastMode="WORLD"
             return
         end
-        -- An optional short-lived fallback when world-space movement was
-        -- demonstrably stationary. One camera-relative key at a time.
+        -- KEY lane is activated only after observed physical non-progress.
+        -- Keep it stable while progress is measurable; no simultaneous
+        -- Humanoid:Move and camera-relative keyboard controls.
         local cam=self.workspace.CurrentCamera
         if not cam then return end
         local look=cam.CFrame.LookVector
@@ -251,7 +264,7 @@ function Nav.new(pathService,workspace,Gait)
         for _,name in ipairs({"W","A","S","D"}) do
             self:hold(name,name==which)
         end
-        self.lastMode="KEY_FALLBACK"
+        self.lastMode="NATIVE_KEYS"
     end
     function n:tick(destination,char,hum,root,now,otherPlayers,state)
         if not destination or not char or not hum or not root or hum.Health<=0 then
@@ -269,7 +282,7 @@ function Nav.new(pathService,workspace,Gait)
             end
         end
         if #self.points==0 or self.index>#self.points then
-            if not self:route(root,hum,char,now) then
+            if not self:route(root,hum,char,now,state) then
                 self.failures+=1
                 if self.failures>3 then return "STUCK" end
                 return "WAIT"
@@ -307,14 +320,18 @@ function Nav.new(pathService,workspace,Gait)
             return "MOVING"
         end
         local waypoint=self.points[self.index]
-        if self.progressDistance and now-self.progressAt>=5.5 then
-            local progress=self.math.progress(now,self.progressAt,self.progressDistance,total,5.5,3.5)
+        if self.progressDistance and now-self.progressAt>=4.8 then
+            local progress=self.math.progress(now,self.progressAt,self.progressDistance,total,4.8,3.5)
             if progress=="STALLED" then
                 self.replans+=1
                 self.stallsInRow+=1
                 self.lastReason="STALL_REPLAN"
                 self:releaseSteering()
-                self.fallbackUntil=now+math.min(2.5,1+self.replans*.3)
+                self:hold("SHIFT",false)
+                self.steeringStrategy=self.steeringStrategy=="WORLD" and "KEY" or "WORLD"
+                self.strategyChanges+=1
+                self.lastMode=self.steeringStrategy
+                self.modeHoldUntil=now+8
                 self.progressAt=now
                 self.progressDistance=total
                 self.points={}
@@ -324,7 +341,8 @@ function Nav.new(pathService,workspace,Gait)
             self.progressAt=now
             self.progressDistance=total
             self.stallsInRow=0
-            self.fallbackUntil=0
+            self.inputVerified=true
+            self.lastAdvance=now
         end
         -- Acceleration choice is based on full distance to the claimed hex
         -- and the latest heading, not each small intermediate waypoint.
@@ -338,11 +356,17 @@ function Nav.new(pathService,workspace,Gait)
         -- not simply because the distant territory is far away.
         if flat(root.Position,waypoint)<34 then turn=math.max(turn,42) end
         local wanted=self.math.select(total,turn,reserve,{
-            allowBurst=state and state.allowBurst~=false,
+            allowBurst=state and state.allowBurst~=false
+                and self.inputVerified and self.lastAdvance>0,
             burstReady=not (state and state.hudBurstNo),
             combat=state and state.combat,
             ability=state and state.ability,
         })
+        -- Limit non-emergency gait oscillation; leave high speed when close
+        -- to the objective, turning, swimming, or under combat pressure.
+        local forcedSlow=total<32 or turn>80 or state and (state.combat or state.ability)
+        if wanted~=self.gait and not forcedSlow and now-self.lastGaitAt<2.25
+            and self.gait~="STOP" then wanted=self.gait end
         self:setGait(wanted,state,now)
         self.desiredPoint,self.desiredRoot,self.desiredHum=waypoint,root,hum
         -- No simultaneous MoveTo: the per-frame Humanoid:Move stream is the
