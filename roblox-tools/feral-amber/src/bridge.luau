@@ -217,6 +217,7 @@ function Bridge.new(nav)
                 or attr(c,"FeralDragged")==true or attr(c,"FeralCarried")==true,
             ability=power,resting=attr(c,"WolfRest")==true,
             flying=attr(c,"FeralFlyLocal")==true,
+            swimming=attr(c,"FeralSwimLocal")==true,
             underwater=attr(c,"FeralUnderwater")==true}
     end
     function b:move(destination,state)
