@@ -89,5 +89,35 @@ test("missing need values do not trigger unsupportable food requests",function()
     local state=s();state.hunger=nil;state.thirst=nil
     eq(Planner.need(state),"TERRITORY")
 end)
+test("complete 71-hex map discovers every one of 69 eligible territories across route batches",function()
+    local state=s()
+    local hexes={}
+    for i=1,71 do
+        table.insert(hexes,h("H"..i,30*(i%9),38*math.floor(i/9),
+            i%2==0 and 2.5 or 5,nil,nil,{neutral=i==12 or i==53}))
+    end
+    local first=Planner.plan(hexes,state,{maxStops=16})
+    eq(#first,16)
+    local seen={}
+    for pass=1,6 do
+        local route=Planner.plan(hexes,state,{maxStops=16,exclude=seen})
+        if #route==0 then break end
+        for _,spot in ipairs(route) do
+            assert(not seen[spot.key],"No territory may be scheduled twice")
+            assert(spot.key~="H12" and spot.key~="H53","Neutral hex cannot enter a route")
+            seen[spot.key]=true
+        end
+    end
+    local count=0
+    for _ in pairs(seen) do count+=1 end
+    eq(count,69)
+end)
+test("territory exclusion never leaks over to the next plan's distinct eligible hexes",function()
+    local state=s()
+    local hexes={h("A",20,0,5,nil,nil),h("B",50,0,5,nil,nil)}
+    eq(Planner.plan(hexes,state,{maxStops=1,exclude={A=true}})[1].key,"B")
+    eq(Planner.plan(hexes,state,{maxStops=1,exclude={B=true}})[1].key,"A")
+end)
+
 print(string.format("AMBER_PLANNER_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Amber planner tests failed")
