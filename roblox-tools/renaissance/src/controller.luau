@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.6.1", tokenIdentity = tokenIdentity,
+    local h = { version = "15.6.2", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -23,6 +23,7 @@ function Controller.new(M,bridge,options)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
     h.rescue = M.rescue.new(bridge,h.ledger)
+    h.zoom = M.zoom.new(bridge.player)
     h.settingsAvailable = bridge:io().available ~= false
     function h:save()
         if self.closed then return false end
@@ -490,6 +491,9 @@ function Controller.new(M,bridge,options)
     end
     function h:ackLocal(s)
         local r = self.registry
+        local zoom=r.byId.zoom
+        local zoomApplied=self.zoom:set(self.active and zoom.requested)
+        r:ack("zoom",zoomApplied,not zoom.requested and "OFF" or zoomApplied and "CLIENT" or "UNAVAILABLE",self.zoom.reason)
         for _,id in ipairs({"combat","colours","finder","menu"}) do
             r:ack(id,true,id == "combat" and "ARMED" or "CLIENT",r.byId[id].detail)
         end
@@ -774,6 +778,7 @@ function Controller.new(M,bridge,options)
         assert(self.ready and not self.closed,"candidate not staged")
         self.ui:activate()
         self.active = true
+        self.zoom:set(self.registry.byId.zoom.requested)
         if M.amber_runtime then self.territory=M.amber_runtime.start(M,self) end
         self.registry:ack("settings",true,"CLIENT","loaded settings; full reconciliation pending")
         return self
@@ -785,6 +790,7 @@ function Controller.new(M,bridge,options)
         self.cleanupErrors = {}
         for _,cleanup in ipairs({
             function() if self.territory then self.territory.close() end end,
+            function() self.zoom:close() end,
             function() self:cancelGrabWake() end,
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,

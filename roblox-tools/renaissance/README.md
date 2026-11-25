@@ -1,6 +1,6 @@
-# FERAL Project Renaissance 15.6.1
+# FERAL Project Renaissance 15.6.2
 
-Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records and Amber 0.6.1.
+Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records plus Zoom Unlock and Amber 0.6.1.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
@@ -10,11 +10,11 @@ Open **Territory** and select **START FARMING** after spawning and joining a pac
 
 The update adds strategic 3×3 region sweeps and local routes, contested-hex skipping, stable claim completion, interrupted/full drinking, faster bounded tree recovery, sustained sprint/Burst and trailing NPC pursuit. See the [complete 15.5 / Amber 0.5 report](../feral-amber/docs/V0_5_RELEASE.md) for exact behavior and bounds.
 
-**Validation:** 187/187 retained Renaissance regressions plus 223/223 Amber regressions pass with the pinned official Luau compiler/interpreter. All 23 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
+**Validation:** 193/193 retained Renaissance regressions plus 223/223 Amber regressions pass with the pinned official Luau compiler/interpreter. All 24 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
 
 **Live gameplay remains unverified for this version.** No current Roblox/Potassium session is available here. Tests do not establish accepted speed, NPC damage, full-map retention, income, sustained stamina or recovery effects. Previous core features retain their earlier limits.
 
-The [15.6.1 patch report](../feral-amber/docs/V0_6_1_RELEASE.md) covers false native gait flags, close-prey facing, rejected virtual mouse fallback and retained attack evidence. The broader 0.6 navigation and survival overhaul remains.
+The [15.6.1 Territory patch report](../feral-amber/docs/V0_6_1_RELEASE.md) covers false native gait flags, close-prey facing, rejected virtual mouse fallback and retained attack evidence. The broader 0.6 navigation and survival overhaul remains.
 
 ## Build
 
@@ -45,3 +45,7 @@ The 15.5.0 rollback already includes its Territory page. Earlier companion relea
 - [Native territory/input contracts](../feral-amber/docs/native-contracts.json), [previous live evidence](docs/LIVE_EVIDENCE.md).
 
 There is no diagnostics tab or automatic report upload. Territory has an optional local COPY STATUS button.
+
+### Zoom Unlock (15.6.2)
+
+Enabled by default; use **Movement → Zoom Unlock** to switch it off. The normal mouse wheel can zoom from 0.5 to 100,000 studs where the standard camera supports it. Native limit changes are observed and reapplied, with current game defaults restored on OFF/unload. Scripted camera poses, collision behavior, camera subject and FOV stay under the existing camera controller. No extra overlay or keybind. Territory remains 0.6.1.
