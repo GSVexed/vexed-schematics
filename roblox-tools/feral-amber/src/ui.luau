@@ -64,7 +64,7 @@ function UI.new(agent,bridge)
         agent:setEnabled(not agent.enabled)
         start.Text=agent.enabled and "STOP" or "START"
     end)
-    button(frame,"COPY STATUS",108,106,125,function()
+    local copyStatus=button(frame,"COPY STATUS",108,106,125,function()
         local status=agent:status()
         status.coat=type(status.coat)=="string" and status.coat or nil
         status.events=agent.events
@@ -83,11 +83,11 @@ function UI.new(agent,bridge)
         ui.collapsed=not ui.collapsed
         if ui.collapsed then
             frame.Size=UDim2.fromOffset(340,34)
-            start.Visible=false;mode.Visible=false;info.Visible=false;reason.Visible=false
+            start.Visible=false;copyStatus.Visible=false;mode.Visible=false;info.Visible=false;reason.Visible=false
             collapse.Text="OPEN";collapse.Position=UDim2.fromOffset(258,3)
         else
             frame.Size=UDim2.fromOffset(340,141)
-            start.Visible=true;mode.Visible=true;info.Visible=true;reason.Visible=true
+            start.Visible=true;copyStatus.Visible=true;mode.Visible=true;info.Visible=true;reason.Visible=true
             collapse.Text="HIDE";collapse.Position=UDim2.fromOffset(244,106)
         end
     end)
