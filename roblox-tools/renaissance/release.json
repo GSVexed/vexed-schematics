@@ -1,37 +1,68 @@
 {
-  "version": "15.2.1",
-  "date": "2026-11-24",
-  "source_commit": "bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17",
-  "bundle_sha256": "d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9",
+  "version": "15.3.0",
+  "date": "2026-11-25",
+  "source_commit": "1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b",
+  "bundle_sha256": "af3439173cf2e848c4441b967b0a6144397467fcc6750f9611b43bb60432f6e8",
   "game_baseline": 2412,
   "retained_features": 21,
   "removed_features_reintroduced": 0,
   "module_count": 13,
-  "compiled_files": 17,
+  "compiled_files": 18,
   "regressions": {
-    "total": 113,
-    "passed": 113,
+    "total": 137,
+    "passed": 137,
     "failed": 0
   },
-  "source_ci_run": 45505688605,
+  "source_ci_run": 45632821703,
   "source_ci_status": "success",
-  "potassium_staging_run": 45505790776,
-  "potassium_runtime_run": null,
-  "potassium_validation": "EXACT_SOURCE_HIDDEN_STAGE_AND_LOCAL_POSE_ROUNDTRIP_PASSED",
-  "current_transport": "MCP_SCRIPT_CONSOLE_CONFIRMED",
-  "passive_observer_run": 45505057539,
-  "passive_observer_version": "15.2.0",
+  "potassium_staging_run": null,
+  "potassium_staging_attempt": 45633163610,
+  "late_result_pickup": 45633541410,
+  "potassium_validation": "FINAL_SOURCE_RESULT_UNCONFIRMED",
+  "initial_request_status": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED",
+  "late_pickup_status": "CONSOLE_MARKER_WITHOUT_VALID_RESULT",
+  "earlier_unpromoted_candidate": "79bb078885dbf4e6457234a2b3f3e9135bcdf7dd",
+  "earlier_candidate_run": 45514618046,
+  "native_input_shape_run": 45515551711,
+  "vulture_passive_observer_run": 45512958870,
   "gameplay_acceptance": "unverified",
   "rollback_commit": "158474ba80c0d613c3427399f24059341369acc8",
-  "previous_renaissance_commit": "21da4732f05897c7225fde2ffd6ea81d02be6b1b",
-  "clean_v14_hash_unchanged": true,
+  "previous_renaissance_commit": "bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17",
   "previous_renaissance_hashes_unchanged": true,
+  "clean_v14_hash_unchanged": true,
   "source_parity": true,
+  "performance_comparison": {
+    "baseline": "15.2.1",
+    "frames": 120,
+    "players": 24,
+    "highlight_writes": [
+      11520,
+      0
+    ],
+    "label_position_writes": [
+      2880,
+      0
+    ],
+    "idle_upvalue_reads": [
+      240,
+      96
+    ],
+    "pending_strike_target_scans": [
+      15,
+      0
+    ],
+    "pending_strike_binding_queries": [
+      120,
+      20
+    ],
+    "actual_fps_measured": false
+  },
   "limitations": [
-    "Live sustained 2x HP regeneration and 4x injury/bleed/venom clearance are unverified.",
-    "Native pose-attribute ownership passed live staging; the final rendered moving pose and other-player view remain unverified.",
-    "The passive existing-hub sample had full HP and growth throughout, so it is not a healing-rate test.",
-    "Native action and combat exclusions remain; no HP or condition resource is overwritten.",
-    "Earlier feeding, reach, carry, stamina and minigame gameplay limits still apply."
+    "Final-source live execution did not return a validated result.",
+    "The latest moving Rest paths pass contract tests; final visual behavior remains live-unconfirmed.",
+    "The Vulture freeze was not reproduced live; native release/relaunch effectiveness is unconfirmed.",
+    "Private bite timing may be inaccessible across executor VMs. Visible cooldown uses the native config and own bite marker while private state remains explicitly unverified.",
+    "A scripted post-Rest retry needs an available validated native handle; ordinary native inputs remain unchanged.",
+    "Sustained real 2x HP and 4x injury/bleed/venom rates, extra accepted reach and previous server-dependent outcomes remain unverified."
   ]
 }

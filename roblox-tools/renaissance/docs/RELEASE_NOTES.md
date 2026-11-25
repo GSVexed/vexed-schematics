@@ -1,3 +1,42 @@
+# Renaissance 15.3.0 — timing and moving Rest corrections
+
+Immutable source: [1905fbe](https://github.com/GSVexed/vexed-schematics/blob/1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b/roblox-tools/feral-renaissance-v15.3.0.lua). Published source [CI 45632821703](https://github.com/GSVexed/vexed-schematics/actions/runs/45632821703) passes all 137 scenarios, 18 compile checks, deterministic packaging and rollback gates.
+
+- Correct native Rest controls to R/gamepad Y. Z/X no longer surrender automatic pose ownership; exact control labels avoid the Forest substring error.
+- Keep the owned pose reset through the next native animation frame, including long hitches. Actual walking can end stationary manual Rest once before ordinary recovery resumes; mere sliding does not.
+- Use independent recent six-second HP/injury/bleed/venom measurements so an earlier gain cannot remain labelled as current progress forever.
+- Combine range guidance with native-visible cooldown and action restrictions. If private callbacks are isolated, use the game's own cooldown calculation and bite marker, with private state explicitly unverified. Preserve available validated handles across reload.
+- Remove whole-heap discovery. Bound callback inspection, skip unchanged ESP writes and protect pending minigame strikes from target/config/terrain work. Normal bites and actual server grade rules remain.
+- Recognise native talon/dive session IDs. Add one bounded retry of a real Vulture let-go intent and a guarded native flight restart after an observed session ends and movement stalls. Native anchoring, capture, positions, velocities and movers are not overwritten.
+
+The deterministic 24-player/120-frame comparison reduces repeated highlight writes from 11,520 to zero, stationary label-position writes from 2,880 to zero, idle upvalue reads from 240 to 96, pending-strike target scans from 15 to zero and binding queries from 120 to 20. These are operation counts, not measured game FPS.
+
+## Live boundaries
+
+The exact final execution request (private run 45633163610) was acknowledged without its validated result. A read-only late pickup (45633541410) found a marker without a matching source result. No additional game script was executed by that pickup. Final-source in-game compatibility, the rendered moving pose, Vulture-freeze resolution and sustained 2× HP/4× condition rates remain unconfirmed. The earlier candidate exposed the native-input VM-isolation limit; it was not promoted. Details and exact evidence are in LIVE_EVIDENCE.md and V15_3_IMPROVEMENTS.md.
+
+All 21 feature records, compact tabs, Right Shift, schema-15 settings, hollow health-coloured player-only ESP and permanent Bite Reach remain. CLEAN v14 and complete 15.0.0/15.1.0/15.2.0/15.2.1 bundles remain unchanged. No removed feature or extra visible diagnostics control returns.
+
+## Apply
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+
+Re-run the complete loader to apply this release. Hidden validation did not replace the running hub.
+
+## Rollback
+
+Complete 15.2.1:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17/roblox-tools/feral-renaissance-v15.2.1.lua"))()
+
+Original CLEAN v14:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/158474ba80c0d613c3427399f24059341369acc8/roblox-tools/feral-nova-v14.0-clean-reach-core.lua"))()
+
+A complete loader retires the existing Renaissance owner. Avoid stacking separate legacy modules. Earlier release records follow.
+
+---
+
 # Renaissance 15.2.1 — recovery correction
 
 Pinned source: [bdfd2fc](https://github.com/GSVexed/vexed-schematics/blob/bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17/roblox-tools/feral-renaissance-v15.2.1.lua). The complete 15.2.0 bundle and CLEAN v14 remain unchanged.

@@ -54,6 +54,6 @@ The reported freeze itself was not captured: the passive live check found the us
 
 ## Validation and rollback
 
-137 service-boundary scenarios and 18 compile checks pass locally, including eight overlapping-attacker strikes with frame hitches and concurrent native bites. The operation comparison is a regression gate. Module/bundle parity and exact hashes protect CLEAN v14 and complete 15.0.0, 15.1.0, 15.2.0 and 15.2.1 bundles. The current loader is promoted only after the published source gate and exact candidate validation.
+137 service-boundary scenarios and 18 compile checks pass locally, including eight overlapping-attacker strikes with frame hitches and concurrent native bites. The operation comparison is a regression gate. Module/bundle parity and exact hashes protect CLEAN v14 and complete 15.0.0, 15.1.0, 15.2.0 and 15.2.1 bundles. The loader is promoted after the published source and final-pin regression gates. Exact final-source execution and one late result pickup were attempted, but no validated final result was recovered; the live behavior limits remain open and are recorded in LIVE_EVIDENCE.md.
 
 Prior 15.2.1 source: bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17. Its bundle SHA256 is d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9. CLEAN v14 rollback remains 158474ba80c0d613c3427399f24059341369acc8.

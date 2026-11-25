@@ -2,7 +2,7 @@
 
 The v2412 client hub retains all 21 approved functions in one compact four-tab interface. Right Shift, permanent Bite Reach, hollow-only outlines and schema-15 saved settings are preserved.
 
-The 15.3.0 candidate adds recent recovery trends, native bite-readiness checks, bounded callback-only discovery, deferred background work during pending strikes, fewer repeated ESP writes and guarded Vulture release/resume handling. It passes 137 scenarios and 18 compile checks locally. See docs/V15_3_IMPROVEMENTS.md for operation counts and live limits.
+This release adds recent recovery trends, native bite-readiness checks, bounded callback-only discovery, deferred background work during pending strikes, fewer repeated ESP writes and guarded Vulture release/resume handling. It passes 137 scenarios and 18 compile checks locally. See docs/V15_3_IMPROVEMENTS.md for operation counts and live limits.
 
 The retained recovery correction preserves native Rest factors, removes false recurrence pauses, keeps automatic-response provenance, separates camera input from attacks, and resets the owned native animation blend. Actual HP increases and unchanged windows are distinguished; sustained 2x/4x gameplay effects remain unverified. See docs/V15_2_1_RECOVERY.md.
 
@@ -14,7 +14,7 @@ CLEAN v14, its clean loader and complete 15.0.0/15.1.0/15.2.0/15.2.1 bundles rem
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-The preceding stable launcher still pins immutable 15.2.1 source [bdfd2fc](https://github.com/GSVexed/vexed-schematics/blob/bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17/roblox-tools/feral-renaissance-v15.2.1.lua). All 113 service-boundary regressions, 17 compile checks, source parity and rollback checks pass locally. The [published source gate](https://github.com/GSVexed/vexed-schematics/actions/runs/45505688605) passed the same gates. Actual Potassium hidden staging confirmed the exact candidate, all 13 modules, the native pose-attribute roundtrip, cleanup and preservation of the existing active hub. Sustained 2x/4x gameplay rates and the final rendered pose remain unconfirmed.
+The launcher pins immutable source [1905fbe](https://github.com/GSVexed/vexed-schematics/blob/1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b/roblox-tools/feral-renaissance-v15.3.0.lua). All 137 regressions, 18 compile checks, source parity and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45632821703). Final execution was acknowledged without a matching validated result, including one read-only late pickup. Final rendered-pose behavior, Vulture recovery and sustained 2x/4x gameplay rates remain unconfirmed.
 
 ## Build and test
 
