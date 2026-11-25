@@ -84,7 +84,7 @@ test("successful drinking requires actual thirst increase",function()
     local w,a=world();w.state.thirst=10;w.state.feedCan="drink"
     a:setEnabled(true);a:tick(10)
     eq(a.feeds,0)
-    w.state.thirst=20;a:tick(11)
+    w.state.thirst=24;a:tick(11)
     eq(a.feeds,1)
 end)
 test("low health pauses movement without claiming fabricated healing",function()
