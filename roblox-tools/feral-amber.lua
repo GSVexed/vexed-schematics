@@ -12,6 +12,6 @@ if type(env.FERAL_RENAISSANCE_ACTIVE)~="table" then
     fn()
 end
 local source=game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.3.lua")
-local fn,why=loadstring(source,"=FERAL_Amber_0_2")
+local fn,why=loadstring(source,"=FERAL_Amber_0_3")
 if not fn then error(tostring(why),0) end
 return fn()
