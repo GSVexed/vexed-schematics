@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile Grizzly Amber modules with official Luau and run deterministic planner tests."""
+"""Compile all-animal FERAL Amber modules and execute deterministic Luau suites."""
 import argparse
 import subprocess
 import tempfile
@@ -21,8 +21,8 @@ def main():
     for name,path in (("PLANNER_SRC",planner),("AGENT_SRC",agent)):
         source=path.read_text(encoding="utf-8")
         assert "]====]" not in source
-        sources[name]='local '+name+'=[====[\\n'+source+'\\n]====]\\n'
-    prelude=''.join(sources.values()).replace('\\n','\\n')
+        sources[name]='local '+name+'=[====[\n'+source+'\n]====]\n'
+    prelude=''.join(sources.values())
     with tempfile.TemporaryDirectory(prefix="feral-amber-") as temp:
         for suite in suites:
             merged=prelude+suite.read_text(encoding="utf-8")
