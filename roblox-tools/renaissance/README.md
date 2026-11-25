@@ -12,7 +12,7 @@ CLEAN v14, its clean loader and complete 15.0.0/15.1.0/15.2.0/15.2.1/15.3.0/15.4
 
 ## Start
 
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/64c3487b111a7f3075004d645c9b18e23daa744e/roblox-tools/feral-renaissance-v15.4.1.lua"))()
 
 The launcher pins immutable source [64c3487](https://github.com/GSVexed/vexed-schematics/blob/64c3487b111a7f3075004d645c9b18e23daa744e/roblox-tools/feral-renaissance-v15.4.1.lua). All 181 regressions, 18 compile checks, source parity and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45647825543). A passive live check confirmed the 15.4.0 failure: equal aliased native fields rejected the entire stamina plan, preventing the no-drain flag from being enabled. This patch normalizes that plan before strict lease validation. Live repair results remain unconfirmed; sustained stamina efficacy is not established. See docs/V15_4_1_STAMINA_FIX.md. Earlier exact 15.4.0 staging remains recorded separately in LIVE_EVIDENCE.md.
 

@@ -11,3 +11,5 @@ Five added regressions cover aliased native climb levels, shared species sprint 
 This fixes a reproduced configuration-application defect. Actual sustained stamina efficacy must be measured separately after applying the fix; it is not established by plan compatibility or a green toggle. The existing private bite-access limitation and all other release boundaries remain. No removed feature returns.
 
 The exact candidate passes published source CI 45647825543. Active repair run 45648152224 and read-only late pickup 45648691978 were acknowledged without their matching result; live application and sustained efficacy remain unconfirmed. Further executor probes stopped.
+
+Distribution: the complete patch and records are published on a release branch. Main-branch ref updates and pull-request creation failed through the connector; the browser fallback had no signed-in GitHub session. Use the immutable 64c3487 loader above the historical release notes. The main loader remains at 15.4.0.

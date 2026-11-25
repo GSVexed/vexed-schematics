@@ -8,7 +8,7 @@ The configuration-application failure is confirmed. A live repair request and on
 
 Apply the patch using the full loader and your saved settings:
 
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/64c3487b111a7f3075004d645c9b18e23daa744e/roblox-tools/feral-renaissance-v15.4.1.lua"))()
 
 Complete 15.4.0 rollback:
 

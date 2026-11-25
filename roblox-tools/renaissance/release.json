@@ -46,5 +46,8 @@
   "stamina_failure_animal": "Hippo",
   "stamina_repair_attempt": 45648152224,
   "stamina_late_pickup": 45648691978,
-  "stamina_repair_result": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED"
+  "stamina_repair_result": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED",
+  "distribution": "immutable_source_and_release_branch",
+  "stable_launcher_promoted": false,
+  "publishing_limitation": "GitHub ref-update and pull-request endpoints failed. Browser fallback was not signed in."
 }
