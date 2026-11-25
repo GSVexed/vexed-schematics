@@ -79,9 +79,10 @@ function Nav.new(pathService,workspace,Gait)
         self.gait="STOP"
     end
     function n:stop(hum,root,reason)
+        local wasNavigating=self.destination~=nil or self.desiredPoint~=nil
         self.desiredPoint,self.desiredRoot,self.desiredHum=nil,nil,nil
         self:releaseKeys()
-        if hum and root then
+        if wasNavigating and hum and root then
             pcall(function() hum:Move(Vector3.zero,false) end)
             pcall(function() hum:MoveTo(root.Position) end)
         end
