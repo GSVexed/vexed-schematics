@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "ui", "controller")
-VERSION = "15.4.1"
+VERSION = "15.4.2"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
@@ -91,7 +91,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.4.1] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.4.2] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 
