@@ -10,6 +10,31 @@ MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feed
 VERSION = "15.4.1"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
+# Immutable known-good releases. Validate before writing a new bundle or manifest.
+PROTECTED_HASHES = {
+    "feral-nova-v14.0-clean-reach-core.lua": "7ce435099acf823c0f92a406a8febf0260fb9fcfbdde54d9c4a084f8190ce93c",
+    "feral-nova-clean.lua": "d34847e2cb11c822177071e109fc2c8bc9e13e3ce7aa7ade02fd732b192e2952",
+    "feral-renaissance-v15.0.0.lua": "bc388ccfdc8bae19e7fe2dca7c24bf2fbd3f97266c205c38544735e81ea3e12f",
+    "feral-renaissance-v15.1.0.lua": "7c289fd74de07c86537476e1c7fa760f3422ff8d305737bb5e19ab3e546cb093",
+    "feral-renaissance-v15.2.0.lua": "435265c032d1c200157e2004021ab491dc7c317317c5792e0070c2b1fffc8ceb",
+    "feral-renaissance-v15.2.1.lua": "d1aa528c9b3ec3dfa7aaf69991786cbfbaa75f75703e39408eaf11be3f8c59b9",
+    "feral-renaissance-v15.3.0.lua": "af3439173cf2e848c4441b967b0a6144397467fcc6750f9611b43bb60432f6e8",
+    "feral-renaissance-v15.4.0.lua": "cb0c9c840eff287bb82bcda212aa9a986f06bf44dedf920777d753c40606ed6f",
+}
+
+
+def verify_protected_artifacts(directory=None):
+    """Fail closed before packaging if any known-good rollback is absent or changed."""
+    folder = Path(directory) if directory is not None else ROOT.parent
+    for name, expected in PROTECTED_HASHES.items():
+        try:
+            actual = hashlib.sha256((folder / name).read_bytes()).hexdigest()
+        except OSError as exc:
+            raise RuntimeError(f"Protected rollback missing or unreadable: {name}") from exc
+        if actual != expected:
+            raise RuntimeError(f"Protected rollback hash mismatch: {name}")
+
+
 BOOT = '''
 local M = {}
 for _, name in ipairs(moduleOrder) do
@@ -72,6 +97,7 @@ return candidate
 
 
 def build():
+    verify_protected_artifacts()  # Do not overwrite the bundle/manifest on a damaged baseline.
     chunks = [f"-- FERAL Project Renaissance {VERSION} | v2412 client baseline",
               "-- Gameplay acceptance is unverified unless independently observed.",
               "local options = ...",
