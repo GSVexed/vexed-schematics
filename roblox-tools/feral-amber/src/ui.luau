@@ -99,8 +99,9 @@ function UI.new(agent,bridge)
         start.Text=st.enabled and "STOP" or "START"
         mode.Text=(st.enabled and "RUNNING · " or "OFF · ")..st.phase
             ..(st.key and " · "..st.key or "")
-        info.Text=string.format("Claims %d  |  Scent %d  |  Feeds %d  |  Amber +%.0f",
-            st.claimed,st.scented,st.feeds,st.earned)
+        local counts=bridge:counts(snap)
+        info.Text=string.format("Hexes %d/%d owned · %d fading · Amber +%.0f",
+            counts.owned,counts.eligible,counts.fading,st.earned)
         local species=tostring(st.species or snap.species or "No animal")
         reason.Text=species.." · "..st.reason
     end
