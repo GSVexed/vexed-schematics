@@ -12,10 +12,11 @@ def main():
     args=p.parse_args()
     planner=ROOT/"src/planner.luau"
     agent=ROOT/"src/agent.luau"
+    gait=ROOT/"src/gait.luau"
     nav=ROOT/"src/nav.luau"
     bridge=ROOT/"src/bridge.luau"
-    suites=[ROOT/"tests/suite.luau",ROOT/"tests/agent_suite.luau",ROOT/"tests/bridge_suite.luau"]
-    bundle=ROOT.parent/"feral-amber-autopilot-v0.2.lua"
+    suites=[ROOT/"tests/suite.luau",ROOT/"tests/agent_suite.luau",ROOT/"tests/bridge_suite.luau",ROOT/"tests/gait_suite.luau",ROOT/"tests/nav_suite.luau"]
+    bundle=ROOT.parent/"feral-amber-autopilot-v0.3.lua"
     launcher=ROOT.parent/"feral-amber.lua"
     subprocess.run(["python3",str(ROOT/"build.py"),"--check"],check=True)
     for file in (bundle,launcher):
@@ -30,10 +31,10 @@ def main():
             if not line.strip().startswith("--"))
         for pattern in forbidden:
             assert pattern not in executable, f"Forbidden movement or remote primitive {pattern} in {source}"
-    for path in (planner,agent,nav,bridge,*suites):
+    for path in (planner,gait,agent,nav,bridge,*suites):
         subprocess.run([args.compiler,str(path)],check=True,stdout=subprocess.DEVNULL)
     sources={}
-    for name,path in (("PLANNER_SRC",planner),("AGENT_SRC",agent),("BRIDGE_SRC",bridge)):
+    for name,path in (("PLANNER_SRC",planner),("GAIT_SRC",gait),("NAV_SRC",nav),("AGENT_SRC",agent),("BRIDGE_SRC",bridge)):
         source=path.read_text(encoding="utf-8")
         assert "]====]" not in source
         nl=chr(10)
