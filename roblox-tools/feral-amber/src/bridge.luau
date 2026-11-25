@@ -121,6 +121,23 @@ function Bridge.new(nav)
         end
         return list
     end
+    function b:counts(state)
+        local pack=state and state.pack or attr(player,"FeralPack")
+        local result={total=0,eligible=0,neutral=0,owned=0,other=0,fading=0}
+        for _,hex in ipairs(self:territories(state or {now=os.clock()})) do
+            result.total+=1
+            if hex.neutral then
+                result.neutral+=1
+            else
+                result.eligible+=1
+                if pack~=nil and hex.owner==pack then
+                    result.owned+=1
+                    if finite(hex.hold) and hex.hold<.84 then result.fading+=1 end
+                else result.other+=1 end
+            end
+        end
+        return result
+    end
     local function groundAt(x,z,c)
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude
