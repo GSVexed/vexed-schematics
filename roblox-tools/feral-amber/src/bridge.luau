@@ -76,7 +76,8 @@ function Bridge.new(nav)
         for _,t in ipairs(parsed) do
             if type(t.key)=="string" and type(t.i)=="number" and type(t.j)=="number" then
                 local good,p=pcall(self.cfg.hexCenter,t.i,t.j)
-                if good and typeof(p)=="Vector2" then
+                if good and p and ((typeof(p)=="Vector2")
+                    or (type(p)=="table" and finite(p.X) and finite(p.Y))) then
                     local h={key=t.key,center={x=p.X,z=p.Y}}
                     table.insert(hexes,h);byKey[t.key]=h
                 end
