@@ -251,7 +251,8 @@ test("actual HP progress is distinct from a confirmed 2x multiplier",function()
     local h=load(w,{settings={states={recovery=true}}});w:advance(.5)
     w.hum.Health=61;w:advance(.4)
     assert(h.recovery.observations.hp.change>0)
-    assert(h.registry.byId.recovery.reason:find("HP rising; 2× unverified",1,true))
+    assert(h.registry.byId.recovery.reason:find("HP rising",1,true))
+    assert(h.registry.byId.recovery.reason:find(string.format("%.2f/s; 2× unverified",h.recovery.observations.hp.rate),1,true))
     w.player:SetAttribute("FeralCombatUntil",w.time+1100);w:advance(.5)
     eq(h.recovery.owned,nil);eq(h.recovery.observations.hp,nil);h:close()
 end)
@@ -641,7 +642,7 @@ test("missing the first timing crossing reschedules the next valid crossing",fun
     g:event("begin",{f=27},100,1,.32,2.5)
     g:event("strike",{f=27,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215},100,1,.32,2.5)
     g:tick(100.7,1,true,function()error("off-centre press")end);assert(g.pending)
-    eq(g.retimed,1);close(g.pending.at,101.5)
+    eq(g.retimed,1);close(g.pending.at,101.5-.215*.5*.32*.88)
     local sent=0;g:tick(101.5,1,true,function(_,_,now)eq(now,101.5);sent+=1;return true end)
     eq(sent,1);eq(g.grades.perfect,0)
 end)
@@ -1148,6 +1149,365 @@ test("Forest GUI text is never mistaken for a manual Rest control",function()
     local button=w.env.Instance.new("TextButton");button.Name="Forest";button.Text="Forest map";button.Parent=w.player:FindFirstChildOfClass("PlayerGui")
     w.guiHits={button};w:input(nil,E.UserInputType.MouseButton1)
     eq(h.policy.manualRest,false);eq(h.ledger.counts.attack_intent,1);h:close()
+end)
+
+test("rapid timing schedules the first safe Perfect entry in either direction",function()
+    local M=modules()
+    for _,speed in ipairs({.786,1,1.156,2,10}) do
+        for _,from in ipairs({0,1}) do
+            for _,zone in ipairs({.12,.35,.65,.88}) do
+                local g=M.grab.new();g.enabled=true
+                g:event("begin",{f=71},100,1,.32,2.5)
+                g:event("strike",{f=71,k=1,t0=100,spd=speed,from=from,zc=zone,zw=.215},100,1,.32,2.5)
+                assert(g.pending);local p=g.pending
+                local centre=100+(from==0 and zone or 1-zone)/speed
+                close(p.at,centre-p.half*.88/speed)
+                local sent=0
+                g:tick(p.at-.0001,1,true,function()error("early press")end)
+                g:tick(p.at,1,true,function(_,_,at)
+                    local phase=(at-100)*speed
+                    local x=math.abs((phase+1)%2-1);if from==1 then x=1-x end
+                    assert(math.abs(x-zone)<=.215*.5*.32)
+                    sent+=1;return true
+                end)
+                eq(sent,1);eq(g.firstWindows,1);eq(g.grades.perfect,0)
+            end
+        end
+    end
+end)
+test("a packet arriving twenty milliseconds before centre does not lose its first pass",function()
+    local M,w=modules();local old=assert(w.env.loadstring(PREVIOUS))({inspect=true})
+    local before=old.grab.new();before.enabled=true
+    local after=M.grab.new();after.enabled=true
+    for _,g in ipairs({before,after}) do
+        g:event("begin",{f=72},100,1,.32,2.5)
+        g:event("strike",{f=72,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215},100.48,1,.32,2.5)
+    end
+    close(before.pending.at,101.5);close(after.pending.at,100.48)
+    local sent=0;after:tick(100.48,1,true,function()sent+=1;return true end);eq(sent,1)
+    print(string.format("MINIGAME_TIMING_BENCH old_late_packet_wait_ms=%.2f new_late_packet_wait_ms=0 early_window_gain_ms=%.3f",(before.pending.at-100.48)*1000,.215*.5*.32*.88*1000))
+end)
+test("arrival in the latter half of a Perfect interval is pressed immediately",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    g:event("begin",{f=73},100,1,.32,2.5)
+    g:event("strike",{f=73,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215},100.52,1,.32,2.5)
+    close(g.pending.at,100.52);local sent=0
+    g:tick(100.52,1,true,function()sent+=1;return true end);eq(sent,1)
+end)
+test("a future native strike never generates an anticipated timestamp",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    g:event("begin",{f=74},100,1,.32,2.5)
+    g:event("strike",{f=74,k=1,t0=100.8,spd=1,from=0,zc=.5,zw=.215},100,1,.32,2.5)
+    local sent=0
+    for tick=100,101.25,.005 do g:tick(tick,1,true,function()sent+=1;return true end) end
+    eq(sent,0);g:tick(101.28,1,true,function(_,_,at)close(at,101.28);sent+=1;return true end);eq(sent,1)
+end)
+test("window search remains valid beyond thirty-two elapsed triangle periods",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    g:event("begin",{f=75},109.8,1,.32,2.5)
+    g:event("strike",{f=75,k=1,t0=100,spd=100,from=0,zc=.5,zw=.215,dur=10},109.8,1,.32,2.5)
+    assert(g.pending);assert(g.pending.at<109.81)
+    local at=g.pending.at;g:tick(at,1,true,function()return true end);eq(g.presses,1)
+end)
+test("render timing can dispatch a strike between heartbeat updates",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local remote=w:remote("FeralGrabV2");local start=w.time+1000
+    remote.OnClientEvent:Fire("begin",{f=76,role="prey"})
+    remote.OnClientEvent:Fire("strike",{f=76,k=1,t0=start,spd=1,from=0,zc=.5,zw=.215})
+    local p=h.grab.pending;w.time+=p.at-start+.0001
+    for _,record in pairs(w.renders) do record.fn(.016) end
+    eq(h.grab.presses,1)
+    for _,call in ipairs(w.calls)do if call.name=="FeralGrabV2" then close(call.args[4],call.at+1000) end end
+    w:advance(.2);eq(h.grab.presses,1);h:close()
+end)
+test("a strike already inside Perfect is dispatched from its native event",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=77,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=77,k=1,t0=w.time+1000-.48,spd=1,from=0,zc=.5,zw=.215})
+    eq(h.grab.presses,1);eq(w.nativeGrabState().strike.pressed,true);eq(h.grab.grades.perfect,0)
+    w:input(E.KeyCode.Space);eq(w.nativeManualPresses,nil);eq(h.grab.presses,1);h:close()
+end)
+test("a matching own game result cancels its pending strike while other hunters do not",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    g:event("begin",{f=78},100,1,.32,2.5)
+    g:event("strike",{f=78,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215},100,1,.32,2.5)
+    eq(g:event("res",{f=78,k=1,mine=false,tier="perfect"},100.2,1,.32,2.5),false);assert(g.pending)
+    eq(g:event("res",{f=78,k=1,mine=true,tier="miss"},100.3,1,.32,2.5),true);eq(g.pending,nil)
+    g:tick(100.5,1,true,function()error("press after final result")end);eq(g.grades.miss,1)
+end)
+test("reentrant game replies and session replacement retain their real provenance",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    g:event("begin",{f=79},100,1,.32,2.5)
+    g:event("strike",{f=79,k=1,t0=100,spd=1,from=0,zc=.5,zw=.215},100,1,.32,2.5)
+    g:tick(100.48,1,true,function()
+        g:event("res",{f=79,k=1,mine=true,tier="perfect"},100.48,1,.32,2.5)
+        g:event("begin",{f=80},100.48,1,.32,2.5);return true
+    end)
+    eq(g.grades.perfect,1);eq(g.session,80);eq(next(g.submitted),nil);eq(g.status,"native session observed")
+end)
+test("long native sessions bound strike history and reject evicted old packets",function()
+    local M=modules();local g=M.grab.new();g.enabled=true;g:event("begin",{f=81},100,1,.32,2.5)
+    for k=1,300 do
+        local now=100+k
+        g:event("strike",{f=81,k=k,t0=now,spd=1,from=0,zc=.5,zw=.215},now,1,.32,2.5)
+        g:tick(now+.48,1,true,function()return true end)
+    end
+    eq(#g.history,128);eq(#g.dispatches,32);eq(g.presses,300)
+    eq(g:event("strike",{f=81,k=1,t0=401,spd=1,from=0,zc=.5,zw=.215},401,1,.32,2.5),false)
+end)
+test("replayed native zones produce valid actual-time presses across frame rates and hunter widths",function()
+    local M=modules();local cases=0
+    for _,fps in ipairs({30,60,144}) do
+        for _,width in ipairs({.215,.215*.85,.215*.85*.85}) do
+            for _,from in ipairs({0,1}) do
+                for _,zone in ipairs({.15,.4,.7,.9}) do
+                    local g=M.grab.new();g.enabled=true;local start=100
+                    g:event("begin",{f=82,role="prey",n=3},start,1,.32,2.5)
+                    g:event("strike",{f=82,k=1,t0=start+.8,spd=1.156,from=from,zc=zone,zw=width},start,1,.32,2.5)
+                    local actual
+                    for frame=1,math.ceil(4*fps)do
+                        local at=start+frame/fps
+                        g:tick(at,1,true,function(_,_,stamp)
+                            close(stamp,at);actual=at;return true
+                        end)
+                        if actual then break end
+                    end
+                    assert(actual,"native interval missed")
+                    local phase=(actual-start-.8)*1.156
+                    local position=math.abs((phase+1)%2-1);if from==1 then position=1-position end
+                    assert(math.abs(position-zone)<=width*.5*.32,"press outside native Perfect")
+                    eq(g.grades.perfect,0)
+                    g:event("res",{f=82,k=1,mine=true,tier="perfect"},actual,1,.32,2.5)
+                    eq(g.grades.perfect,1);cases+=1
+                end
+            end
+        end
+    end
+    print("MINIGAME_REPLAY_CASES "..cases.." native-contract simulations; gameplay unverified")
+end)
+test("native abilities preempt owned Rest immediately before the next heartbeat",function()
+    for _,key in ipairs({"FeralTalonLock","FeralDiveLocal","FeralPinned","FeralClimbLocal","FeralFlyLocal","WolfFeed"}) do
+        local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+        local h=load(w,{settings={states={recovery=true}}});w:advance(.2);assert(h.recovery.owned)
+        w.player.Character:SetAttribute(key,key=="WolfFeed" and "eat" or true)
+        eq(h.recovery.owned,nil);h:close()
+    end
+end)
+test("the action coordinator gives minigames, capture and actual attack the proper priority",function()
+    local M=modules();local p=M.policy.new();local s={alive=true,combat=false,grab=true,captured=true,ability=true,feeding=true,attackHeld=true}
+    eq(p:activity(s,10),"minigame");s.grab=false;eq(p:activity(s,10),"capture")
+    s.captured=false;eq(p:activity(s,10),"attack");s.attackHeld=false;eq(p:activity(s,10),"ability")
+    s.ability=false;eq(p:activity(s,10),"feeding");s.feeding=false;s.swimming=true
+    eq(p:allowed("recovery",s,10,"health"),false)
+end)
+test("stamina covers native swim, climb and venom consumption inputs with exact restoration",function()
+    local w=Mock.new();local n=w.configs.NeedsConfig;n.SWIM_DRAIN_MULT=1.15;n.WATER_DRAIN_NONSWIM=1.5
+    local climb=w.configs.PassiveConfig.CLIMBER
+    climb.levels={{stamina="drain",drain=1},{stamina="trot"},{stamina="walk"}}
+    climb.CLIMB_SPRINT={Python={DRAIN=.8,SPEED=1.5}}
+    w:addConfig("VenomConfig",{SPRINT_DRAIN=.15,OTHER_DRAIN=.06,BITE_DRAIN=.025})
+    local v=w.configs.StatusConfig.VENOM;v.STAMINA_BASE=.1;v.STAMINA_PER_POINT=.02
+    local h=load(w,{settings={states={stamina=true,climb=true}}});w:advance(.2)
+    eq(n.SWIM_DRAIN_MULT,0);eq(n.WATER_DRAIN_NONSWIM,0);eq(climb.levels[1].stamina,"walk")
+    eq(climb.levels[1].drain,0);eq(climb.CLIMB_SPRINT.Python.DRAIN,0);eq(climb.CLIMB_SPRINT.Python.SPEED,1.5)
+    eq(w.configs.VenomConfig.BITE_DRAIN,0);eq(v.STAMINA_PER_POINT,0);eq(w.player.Character:GetAttribute("Stamina"),80)
+    h:close();eq(n.SWIM_DRAIN_MULT,1.15);eq(n.WATER_DRAIN_NONSWIM,1.5);eq(climb.levels[1].stamina,"drain")
+    eq(climb.levels[1].drain,1);eq(climb.CLIMB_SPRINT.Python.DRAIN,.8);eq(v.STAMINA_PER_POINT,.02)
+end)
+test("nested native climbing replacement retires the old stamina profile",function()
+    local w=Mock.new();local old={{stamina="drain",drain=1}}
+    w.configs.PassiveConfig.CLIMBER.levels=old
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2);eq(old[1].drain,0)
+    local replacement={{stamina="drain",drain=2}};w.configs.PassiveConfig.CLIMBER.levels=replacement;w:advance(1.4)
+    eq(old[1].drain,1);eq(old[1].stamina,"drain");eq(replacement[1].drain,0)
+    h:close();eq(replacement[1].drain,2)
+end)
+test("recent stamina measurements expire and exclude gait, species and capacity transitions",function()
+    local M=modules();local l=M.core.ledger();local char={}
+    local function sample(now,value,locomotion,species,maximum)
+        l:sample({char=char,now=now,hp=50,maxHP=100,combat=false,moving=true,
+            species=species or "Wolf",locomotion=locomotion or "LAND",stamina=value,maxStamina=maximum or 100},"NO_SIGNAL")
+    end
+    sample(1,80);sample(1.5,78);close(l.staminaObservation.rate,-4)
+    sample(2,78,"CLIMB");eq(l.staminaObservation,nil)
+    sample(2.5,77,"CLIMB");assert(l.staminaObservation)
+    sample(3,77,"CLIMB","Eagle");eq(l.staminaObservation,nil)
+    sample(3.5,77,"CLIMB","Eagle",120);eq(l.staminaObservation,nil)
+    for i=1,20 do sample(3.5+i*.5,77,"CLIMB","Eagle",120)end
+    close(l.staminaObservation.rate,0);assert(#l.staminaObservation.samples<=32)
+end)
+test("loss of the native food offer blocks a stale-session restart",function()
+    local w=Mock.new();w:enableNativeActions();local c=w.player.Character;c:SetAttribute("FeedCan","drink");c:SetAttribute("Thirst",40)
+    local h=load(w,{settings={states={}}});w:advance(.2);w:input(E.KeyCode.E);w:advance(1)
+    c:SetAttribute("FeedCan",nil);w:advance(6)
+    eq(w.nativeFeedToggles,1);eq(h.feeding.restart,nil);assert(h.feeding.status:find("offer lost",1,true));h:close()
+end)
+test("an ability cannot be interrupted by an automatic stalled-feeding repair",function()
+    local w=Mock.new();w:enableNativeActions();local c=w.player.Character;c:SetAttribute("FeedCan","eat");c:SetAttribute("Hunger",40)
+    local h=load(w,{settings={states={}}});w:advance(.2);w:input(E.KeyCode.E);w:advance(3)
+    c:SetAttribute("FeralDiveLocal",84);w:advance(3)
+    eq(w.nativeFeedToggles,1);eq(h.feeding.restart,nil);eq(h.feeding.busy,false);h:close()
+end)
+test("the selected bite guide updates current geometry between target scans",function()
+    local w,h=boot({biteHelper=true});local _,char,hum,root=w:enemy(2,Mock.V3.new(0,3,-6));w:advance(.2)
+    assert(h.guide);h.nextScan=w.time+10
+    root.Position=Mock.V3.new(0,30,-6);w:step(.016);eq(h.guide.extended.valid,false);eq(h.guide.blocked,true)
+    root.Position=Mock.V3.new(0,3,-6);w:step(.016);eq(h.guide.extended.valid,true);eq(h.guide.blocked,false)
+    hum.Health=0;w:step(.016);eq(h.guide.invalid,true);h:close()
+end)
+test("small distance fluctuations do not flip the rear assist target",function()
+    local w,h=boot();local _,a,_,ar=w:enemy(2,Mock.V3.new(0,3,6));local _,b,_,br=w:enemy(2,Mock.V3.new(0,3,6.2));w:advance(.2)
+    eq(h.bridge.reachTarget.char,a);br.Position=Mock.V3.new(0,3,5.8);w:advance(.2);eq(h.bridge.reachTarget.char,a)
+    br.Position=Mock.V3.new(0,3,4.8);w:advance(.2);eq(h.bridge.reachTarget.char,b);h:close()
+end)
+test("a native positive damage reply stays distinct from unconfirmed target HP",function()
+    local w=Mock.new();w:enableNativeActions();local _,char=w:enemy(2);w.nativeBiteTarget=char;w.nativeDamage=0
+    local h=load(w,{settings={states={}}});w:advance(.2);w:input(nil,E.UserInputType.MouseButton1);w:advance(.4)
+    w:remote("FeralHit").OnClientEvent:Fire("hit",{a=w.player.Character,v=char,dmg=12})
+    w:advance(.8);assert(h.combatStatus:find("reports 12.0 damage",1,true));assert(h.combatStatus:find("HP change unconfirmed",1,true));h:close()
+end)
+test("an idle walk stops when its previously safe route develops a hole",function()
+    local w,h=boot({survivalAFK=true});h.ui:toggle();w:advance(91);assert(h.walk)
+    w.hole=true;w:advance(.3);eq(h.walk,nil);h:close()
+end)
+test("low frame rate reduces idle scans while active combat retains its scan cadence",function()
+    local w,h=boot();for _=1,20 do w:step(.1)end
+    h.nextScan=0;w:step(.1);assert(h.nextScan-w.time>.25)
+    w.player:SetAttribute("FeralCombatUntil",w.time+1100);h.nextScan=0;w:step(.1);close(h.nextScan-w.time,.12);h:close()
+end)
+test("validated native minigame handles survive hot reload without a new callback search",function()
+    local w=Mock.new();w:enableNativeGrab();local old=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local native=old.bridge.grabController;assert(native)
+    local prior=w.env.getconnections;w.env.getconnections=function()error("unnecessary rediscovery")end
+    local h=load(w,{settings={states={minigame=true}}});eq(h.bridge.grabController,native)
+    w.env.getconnections=prior;w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=83,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=83,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    w:advance(.5);eq(h.grab.presses,1);eq(old.closed,true);h:close()
+end)
+test("flight-eligible dive cancellation has the same guarded restart as a talon handoff",function()
+    local w=Mock.new();w:enableVultureFlight();local c=w.player.Character;c:SetAttribute("Species","Eagle")
+    w.configs.FlightConfig.canFly=function(char)return char==c end
+    local h=load(w,{settings={states={flight=true}}});w:advance(.2)
+    c:SetAttribute("FeralDiveLocal",91);assert(h.flightEpisode);c:SetAttribute("FeralDiveLocal",nil)
+    w:advance(.85);eq(h.ledger.counts.post_attack_native_flight_restart,1)
+    for _,call in ipairs(w.calls) do assert(call.args[1]~="release","no fabricated let-go intent") end
+    h:close();eq(c:GetAttribute("FeralFlyDrop"),nil)
+end)
+test("ordinary ground abilities never create a later flight-restart episode",function()
+    local w,h=boot({flight=true});w.player.Character:SetAttribute("FeralDiveLocal",91)
+    w:advance(.2);w.player.Character:SetAttribute("FeralDiveLocal",nil);w:advance(1)
+    eq(h.flightEpisode,nil);eq(h.ledger.counts.post_attack_native_flight_restart,nil);h:close()
+end)
+test("a player body that loses real-player ownership loses its overlays immediately",function()
+    local w,h=boot({esp=true,tags=true});local player,char=w:enemy(2);w:advance(.2)
+    local rec=h.ui.records[char];assert(rec.highlight.Enabled);assert(rec.label.Visible)
+    h.nextScan=w.time+10;player.Character=nil;w:step(.016)
+    eq(rec.highlight.Enabled,false);eq(rec.label.Visible,false);h:close()
+end)
+test("the small bite marker starts at a new target instead of gliding across unrelated bodies",function()
+    local w,h=boot({biteHelper=true});local _,a,_,ar=w:enemy(2,Mock.V3.new(0,3,-5));w:advance(.2)
+    local _,b,_,br=w:enemy(2,Mock.V3.new(3,3,-3));ar.Position=Mock.V3.new(0,3,-100);w:advance(.2)
+    eq(h.guide.target.char,b)
+    h.ui.lastTarget=a;h.ui.lastPoint=Mock.V2.new(-100,-100);h.ui:render(.016,w.time)
+    local point=w.workspace.CurrentCamera:WorldToViewportPoint(br.Position)
+    close(h.ui.lastPoint.X,point.X);close(h.ui.lastPoint.Y,point.Y);h:close()
+end)
+test("one deadline wake dispatches at the valid opening without waiting for heartbeat or render",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");local start=w.time+1000
+    r.OnClientEvent:Fire("begin",{f=84,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=84,k=1,t0=start,spd=1,from=0,zc=.5,zw=.215})
+    local p=h.grab.pending;assert(h.grabWake);eq(p.wakes,1)
+    w.time+=p.at-start+.0001;w:runTimers()
+    eq(h.grab.presses,1);eq(h.grabWake,nil);eq(next(w.timers),nil)
+    w:advance(.2);eq(h.grab.presses,1);h:close()
+end)
+test("disable, session end, respawn and close cancel all pending deadline work",function()
+    for _,action in ipairs({"disable","end","respawn","close"})do
+        local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+        local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=85,role="prey"})
+        r.OnClientEvent:Fire("strike",{f=85,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215});assert(h.grabWake)
+        if action=="disable"then h:set("minigame",false)
+        elseif action=="end"then r.OnClientEvent:Fire("end",{f=85})
+        elseif action=="respawn"then w:spawn("Wolf")else h:close()end
+        eq(h.grabWake,nil);eq(next(w.timers),nil);w:advance(.6);eq(h.grab.presses,0);h:close()
+    end
+end)
+test("a delayed deadline wake schedules a later genuine crossing with its actual timestamp",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");local start=w.time+1000
+    r.OnClientEvent:Fire("begin",{f=86,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=86,k=1,t0=start,spd=1,from=0,zc=.5,zw=.215})
+    w.time+=.7;w:runTimers();eq(h.grab.presses,0);eq(h.grab.retimed,1);assert(h.grabWake)
+    local p=h.grab.pending;w.time=p.at-1000+.0001;w:runTimers();eq(h.grab.presses,1)
+    for _,call in ipairs(w.calls)do if call.name=="FeralGrabV2"then close(call.args[4],call.at+1000)end end
+    h:close()
+end)
+test("deadline wakes respect focused text and retain the next valid opportunity",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=87,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=87,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    w.chat={};w:advance(.7);eq(h.grab.presses,0);assert(h.grab.pending)
+    w.chat=nil;w:advance(.9);eq(h.grab.presses,1);h:close()
+end)
+test("missing task scheduling retains the frame-based minigame path",function()
+    local w=Mock.new();w:enableNativeGrab();w.env.task={}
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=88,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=88,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    eq(h.grabWake,nil);w:advance(.5);eq(h.grab.presses,1);h:close()
+end)
+test("pathologically early scheduler wakes stay bounded instead of spinning",function()
+    local w=Mock.new();w:enableNativeGrab();local schedule=w.env.task.delay
+    w.env.task.delay=function(_,fn)return schedule(0,fn)end
+    local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=89,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=89,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    for _=1,8 do w:runTimers()end
+    eq(h.grab.pending.wakes,4);eq(h.grab.presses,0);eq(next(w.timers),nil)
+    w:advance(.5);eq(h.grab.presses,1);h:close()
+end)
+test("a transient unreadable native closure does not abandon a genuine pending strike",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=90,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=90,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    local record=w.nativeRecords[h.bridge.grabController.press];local values=record.values
+    record.values=function()return {}end
+    w:advance(.5);eq(h.grab.active,true);eq(h.grab.presses,1);assert(h.grabInput.lease)
+    record.values=values;w:advance(.1);eq(w.nativeGrabState().strike.pressed,true);h:close()
+end)
+test("a readable native closure with no live session still cancels an obsolete strike",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=92,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=92,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    local record=w.nativeRecords[h.bridge.grabController.press];local values=record.values
+    record.values=function()return {[2]=w.configs.GrabV2Config,[3]=r}end
+    w:advance(.5);eq(h.grab.active,false);eq(h.grab.presses,0);eq(h.grabWake,nil)
+    record.values=values;h:close()
+end)
+test("disabling during a temporary native read failure restores the active manual binding",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local r=w:remote("FeralGrabV2");r.OnClientEvent:Fire("begin",{f=93,role="prey"})
+    r.OnClientEvent:Fire("strike",{f=93,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215})
+    local record=w.nativeRecords[h.bridge.grabController.press];record.values=function()return {}end
+    h:set("minigame",false);assert(w.cas:GetAllBoundActionInfo().FeralGrabV2Press)
+    w:advance(.5);eq(h.grab.presses,0);eq(next(w.timers),nil);h:close()
+end)
+test("replacing one native level retires its old stamina lease without changing the other levels",function()
+    local w=Mock.new();local levels={{stamina="drain",drain=1},{stamina="trot"}}
+    w.configs.PassiveConfig.CLIMBER.levels=levels
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2);local old=levels[1]
+    levels[1]={stamina="drain",drain=2};w:advance(1.4)
+    eq(old.drain,1);eq(old.stamina,"drain");eq(levels[1].drain,0);eq(levels[2].stamina,"trot")
+    h:close();eq(levels[1].drain,2)
+end)
+test("a replaced minigame remote invalidates the cached controller identity",function()
+    local w=Mock.new();w:enableNativeGrab();local h=load(w,{settings={states={minigame=true}}});w:advance(.2)
+    local old=h.bridge.grabController;assert(old);local r=w:remote("FeralGrabV2");r:Destroy()
+    local replacement=w.new("RemoteEvent");replacement.Name="FeralGrabV2";replacement.Parent=w.rs
+    local current=h.bridge:nativeGrabController(w.time)
+    assert(current~=old);h:close()
 end)
 
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))

@@ -127,7 +127,7 @@ function Recovery.new(bridge, policy, ledger)
         local hp = self.observations.hp
         local message = self.owned and "Recovery requested" or self.state
         if self.owned and self.previous and self.previous.combat==false then
-            message ..= hp and hp.change > .02 and " · HP rising; 2× unverified"
+            message ..= hp and hp.change > .02 and string.format(" · HP rising %.2f/s; 2× unverified",hp.rate)
                 or hp and hp.seconds >= 5.9 and " · no HP rise observed; 2× unverified"
                 or " · watching HP; 2× unverified"
         else message ..= " · gameplay unverified" end
@@ -137,7 +137,7 @@ function Recovery.new(bridge, policy, ledger)
         local pieces={}
         for _,key in ipairs({"injury","bleed","venom"}) do
             local item=self.observations[key]
-            table.insert(pieces,key..": "..(not item and "unmeasured" or item.change>0 and "easing"
+            table.insert(pieces,key..": "..(not item and "unmeasured" or item.change>0 and string.format("easing %.2f/s",item.rate)
                 or item.seconds>=5.9 and "no recent decrease" or "watching"))
         end
         return table.concat(pieces," · ").." · 4× unverified"

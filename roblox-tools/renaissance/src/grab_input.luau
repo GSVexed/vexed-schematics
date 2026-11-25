@@ -9,8 +9,9 @@ function GrabInput.new(bridge,token)
         local lease = self.lease
         self.lease = nil
         if not lease then return end
-        local current = lease.controller.state()
-        if current == lease.state and current.ended ~= true and not bridge:nativeGrabBound()
+        local current,known = lease.controller.state()
+        local same=current==lease.state or current==nil and known~=true
+        if same and lease.state.ended ~= true and not bridge:nativeGrabBound()
             and (not lease.controller.script or lease.controller.script.Parent ~= nil)
             and bridge.player.Character == lease.character then
             pcall(lease.controller.bind,true)
@@ -28,6 +29,12 @@ function GrabInput.new(bridge,token)
         native = native or self:controller(now)
         state = state or native and native.state()
         if not state or state.ended or tostring(state.id) ~= tostring(grab.session) then
+            local lease=self.lease
+            if not state and lease and lease.controller==native and not lease.state.ended
+                and tostring(lease.state.id)==tostring(grab.session) and bridge.player.Character==lease.character then
+                self.status="native state temporarily unreadable; timing retained"
+                return true
+            end
             if self.lease then self:release() end
             self.status = "native input isolation unavailable"
             return false

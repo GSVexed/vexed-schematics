@@ -7,6 +7,14 @@ function Roblox.new(Core, environment)
         "ContextActionService","HttpService","Workspace" }) do b[name] = game:GetService(name) end
     b.player = assert(b.Players.LocalPlayer,"LocalPlayer unavailable")
     b.clock = os.clock
+    function b:delay(seconds,fn)
+        if type(task)~="table" or type(task.delay)~="function" then return nil end
+        local ok,handle=pcall(task.delay,seconds,fn)
+        return ok and handle or nil
+    end
+    function b:cancelDelay(handle)
+        if handle and type(task)=="table" and type(task.cancel)=="function" then pcall(task.cancel,handle) end
+    end
     function b:serverNow()
         local ok, now = pcall(function() return self.Workspace:GetServerTimeNow() end)
         return ok and Core.finite(now) and now or nil
@@ -73,6 +81,14 @@ function Roblox.new(Core, environment)
         return self.UserInputService:GetFocusedTextBox() ~= nil
             or self:attribute(self.player,"FeralMenuOpen") == true
     end
+    function b:grabSnapshot(now)
+        local char=self.player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        return {now=now,serverNow=self:serverNow(),char=char,generation=self.generation,
+            alive=char~=nil and char.Parent~=nil and hum~=nil and hum.Health>0,
+            chat=self.UserInputService:GetFocusedTextBox()~=nil,
+            gameMenu=self:attribute(self.player,"FeralMenuOpen")==true}
+    end
     function b:unbindGrabManual(name)
         self.ContextActionService:UnbindAction(name)
     end
@@ -85,6 +101,10 @@ function Roblox.new(Core, environment)
     function b:nativeGrabController(now)
         local scripts = self.player:FindFirstChild("PlayerScripts")
         local scriptObject = scripts and scripts:FindFirstChild("FeralGrabV2UI")
+        local currentRemote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+        if self.grabController and self.grabController.remote~=currentRemote then
+            self.grabController,self.grabDiscovery,self.nextGrabDiscovery=nil,nil,0
+        end
         if self.grabController and self.grabController.script == scriptObject and scriptObject.Parent then
             return self.grabController
         end
@@ -124,6 +144,19 @@ function Roblox.new(Core, environment)
             end
             return owned and name or nil
         end
+        local previous=self.env.FERAL_RENAISSANCE_ACTIVE
+        local inherited=previous and previous.bridge and previous.bridge.grabController
+        if inherited and inherited.script==scriptObject and type(inherited.press)=="function"
+            and type(inherited.state)=="function" and type(inherited.bind)=="function"
+            and nativeName(inherited.press)=="serverPress" then
+            local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+            for _,value in pairs(upvalues(inherited.press)) do
+                if remote and value==remote then
+                    inherited.remote=remote
+                    self.grabController=inherited;return inherited
+                end
+            end
+        end
         local pool,source=self:nativeFunctions(now)
         if not pool then return nil end
         if not self.grabDiscovery or self.grabDiscovery.source~=source then
@@ -143,17 +176,20 @@ function Roblox.new(Core, environment)
                     if remote ~= nil and value == remote then matched = true end
                 end
                 if matched then
-                    local native = { press = fn,script = scriptObject }
+                    local native = { press = fn,script = scriptObject,remote=remote }
                     native.state = function()
-                        for _,value in pairs(upvalues(fn)) do
+                        local values=upvalues(fn)
+                        local readable=false
+                        for _,value in pairs(values) do if value==remote then readable=true end end
+                        for _,value in pairs(values) do
                             if type(value) == "table" and value.id ~= nil
                                 and (value.role == "prey" or value.role == "hunter") then
                                 if native.lastState ~= value then native.lastState,native.ownerCharacter = value,self.player.Character end
-                                if native.ownerCharacter ~= self.player.Character then return nil end
-                                return value
+                                if native.ownerCharacter ~= self.player.Character then return nil,true end
+                                return value,true
                             end
                         end
-                        return nil
+                        return nil,readable
                     end
                     native.bind = function(on)
                         local cas = self.ContextActionService
@@ -504,7 +540,8 @@ function Roblox.new(Core, environment)
         local combat = nil
         if at and (deadline == nil or Core.finite(deadline)) then combat = (deadline or 0) > at end
         local s = { now = now, serverNow = at, char = char, hum = hum, root = root,
-            generation = self.generation, alive = char ~= nil and char.Parent ~= nil and hum ~= nil and root ~= nil and hum.Health > 0,
+            generation = self.generation, species=self:attribute(char,"Species"),
+            alive = char ~= nil and char.Parent ~= nil and hum ~= nil and root ~= nil and hum.Health > 0,
             hp = hum and hum.Health or 0, maxHP = hum and hum.MaxHealth or 0,
             chat = self.UserInputService:GetFocusedTextBox() ~= nil,
             gameMenu = self:attribute(self.player,"FeralMenuOpen") == true,
@@ -512,6 +549,7 @@ function Roblox.new(Core, environment)
             feeding = false, captured = false, moving = false, locomotion = "NONE",
             injury = self:attribute(char,"FeralInjury"), bleed = self:attribute(char,"FeralBleed"),
             venom = self:attribute(char,"FeralVenomAmt"), stamina = self:attribute(char,"Stamina"),
+            maxStamina=self:attribute(char,"StaminaMax"),
             hunger = self:attribute(char,"Hunger"), thirst = self:attribute(char,"Thirst"),
             survival = self:attribute(self.player,"FeralSurvival") }
         if not s.alive then return s end
@@ -736,6 +774,7 @@ function Roblox.new(Core, environment)
         return hit ~= nil and not hit.Instance:IsDescendantOf(target.char)
     end
     function b:select(s, baseline, changed, all)
+        local previousAssist=self.reachTarget
         self.treeTarget = nil
         self.reachTarget = nil
         local best,score = nil,math.huge
@@ -755,6 +794,7 @@ function Roblox.new(Core, environment)
                     local stock = self:geometry(baseline,s,target)
                     local rank = target.distance+(target.affiliation == "unknown" and .5 or 0)
                         -(stock and stock.valid and .75 or 0)
+                    if previousAssist and previousAssist.char==target.char then rank-=.65 end
                     if rank < assistScore and (target.sameTree or not self:occluded(s,target)) then
                         assisted,assistScore = target,rank
                     end
@@ -769,8 +809,23 @@ function Roblox.new(Core, environment)
                     if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
                 end
         end
-        if best then best.blocked = best.target.protected or self:occluded(s,best.target) end
+        if best then
+            best.obstruction=best.target.protected or self:occluded(s,best.target)
+            best.blocked=best.obstruction
+        end
         return best
+    end
+    function b:refreshGuide(s,baseline,changed,guide)
+        local target=guide.target
+        if not s.alive or not target or not self:combatEligible(target.char) then
+            guide.blocked,guide.invalid=true,true;return
+        end
+        guide.invalid=false
+        guide.baseline=self:geometry(baseline,s,target)
+        guide.extended=self:geometry(changed,s,target)
+        -- A guide tracks the current selected body every frame. Target search
+        -- and obstacle queries remain bounded background work.
+        guide.blocked=guide.obstruction or not guide.extended or not guide.extended.valid
     end
     function b:friendlyCarry(s)
         if not s.carried or s.pinned then return false end
@@ -858,6 +913,26 @@ function Roblox.new(Core, environment)
         end
         return nil
     end
+    function b:routeSafe(s,goal)
+        if not s.alive or not goal or s.hum.FloorMaterial==Enum.Material.Air
+            or s.hum.FloorMaterial==Enum.Material.Water then return false end
+        local vector=goal-s.root.Position
+        vector=Vector3.new(vector.X,0,vector.Z)
+        if vector.Magnitude>8.1 then return false end
+        if vector.Magnitude<.05 then return true end
+        local params=RaycastParams.new()
+        params.FilterType,params.FilterDescendantsInstances=Enum.RaycastFilterType.Exclude,{s.char}
+        params.IgnoreWater=false
+        local groundY
+        for distance=0,vector.Magnitude+1.25,1 do
+            local point=s.root.Position+vector.Unit*distance
+            local hit=self.Workspace:Raycast(point+Vector3.new(0,8,0),Vector3.new(0,-35,0),params)
+            if not hit or hit.Material==Enum.Material.Water or hit.Normal.Y<=.86 then return false end
+            groundY=groundY or hit.Position.Y
+            if math.abs(hit.Position.Y-groundY)>1.1 then return false end
+        end
+        return self.Workspace:Raycast(s.root.Position+Vector3.new(0,1,0),vector,params)==nil
+    end
     function b:walk(s,goal)
         if s.char ~= self.player.Character or not s.hum or not s.root then return false end
         s.hum:MoveTo(goal or s.root.Position)
@@ -886,7 +961,9 @@ function Roblox.new(Core, environment)
             self.character = char
             hub:characterChanged(self.generation)
             if not char then return end
-            for _, key in ipairs({"WolfRest","WolfBiteAt"}) do
+            for _, key in ipairs({"WolfRest","WolfBiteAt","WolfFeed","FeralPinned","FeralCarried",
+                "FeralDragged","FeralTalonLock","FeralDiveLocal","FeralDeathRollLocal","FeralRolling",
+                "FeralDowned","FeralVenomDown","FeralTumbleAt","FeralClimbLocal","FeralFlyLocal","FeralUnderwater"}) do
                 local c = char:GetAttributeChangedSignal(key):Connect(function()
                     if hub.active and not hub.closed and char == self.player.Character then hub:nativeAttribute(key) end
                 end)

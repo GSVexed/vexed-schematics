@@ -30,7 +30,8 @@ function Feeding.new(bridge,policy,ledger)
         end
     end
     function f:tick(s,now)
-        local invalid = not s.alive or s.chat or s.gameMenu or s.captured or s.grab or s.holding
+        local invalid = not s.alive or s.chat or s.gameMenu or s.captured or s.grab or s.holding or s.ability
+            or s.flying or s.climbing
             or s.attackHeld or now < policy.attackUntil
         if invalid then
             if self.intent or self.session or self.restart or self.busy then self:cancel("feeding yielded to native action",now) end
@@ -86,6 +87,10 @@ function Feeding.new(bridge,policy,ledger)
         if type(maximum) ~= "number" then maximum=100 end
         if value >= maximum-.5 or now-session.progressAt < 4.5 then return end
         self.status="Feeding stalled; no resource increase observed"
+        if bridge:attribute(s.char,"FeedCan")~=active then
+            self.status="Feeding stalled; native food/water offer lost"
+            return
+        end
         if session.retried or s.moving or not known or mode ~= active or not started then return end
         session.retried=true
         self.restart={char=s.char,kind=active,at=now+.18,untilAt=now+1.3}

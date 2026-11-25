@@ -160,9 +160,22 @@ function Core.ledger(limit)
     function l:sample(s, mode)
         local previous = self.previous
         self.previous = s
+        if previous and previous.char==s.char and previous.species==s.species
+            and previous.locomotion==s.locomotion and previous.maxStamina==s.maxStamina
+            and previous.moving==s.moving and previous.combat==s.combat
+            and Core.finite(previous.stamina) and Core.finite(s.stamina)
+            and s.now-previous.now>=.1 and s.now-previous.now<=1.5 then
+            local item=self.staminaObservation or {samples={}}
+            self.staminaObservation=item
+            table.insert(item.samples,{from=previous.now,to=s.now,change=s.stamina-previous.stamina})
+            while #item.samples>0 and (item.samples[1].to<=s.now-6 or #item.samples>32) do table.remove(item.samples,1) end
+            item.seconds,item.change=0,0
+            for _,sample in ipairs(item.samples) do item.seconds+=sample.to-sample.from;item.change+=sample.change end
+            item.rate,item.locomotion,item.species=item.change/item.seconds,s.locomotion,s.species
+        else self.staminaObservation=nil end
         if not previous or previous.char ~= s.char or previous.mode ~= mode
             or previous.combat ~= s.combat or previous.moving ~= s.moving
-            or previous.maxHP ~= s.maxHP or s.now-previous.now < .1
+            or previous.species ~= s.species or previous.maxHP ~= s.maxHP or s.now-previous.now < .1
             or s.now-previous.now > 1.5 then s.mode = mode; return end
         s.mode = mode
         local dt = s.now-previous.now

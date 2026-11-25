@@ -17,27 +17,32 @@ function Grab.triangle(at, t0, speed, from)
     return from == 0 and wave or 1-wave
 end
 function Grab.crossing(now, p)
+    -- First safe entry into the native Perfect interval, not its centre.
+    -- The old 25 ms look-ahead could skip a crossing that was about to arrive.
+    -- Inspect only the current and next triangle periods, even after a hitch.
     local target = p.from == 0 and p.target or 1-p.target
-    local best
-    if now >= p.t0 and now < p.ends-.02
-        and math.abs(Grab.triangle(now,p.t0,p.speed,p.from)-p.target) <= p.half*.5 then return now end
-    for cycle = 0, math.min(32, math.ceil((p.ends-p.t0)*p.speed/2)+1) do
-        for _, phase in ipairs({ target, 2-target }) do
-            local t = p.t0+(2*cycle+phase)/p.speed
-            if t >= math.max(now+.025,p.t0+.008) and t < p.ends-.02
-                and (not best or t < best) then best = t end
+    local half = p.safeHalf or p.half*.88
+    local low,high = math.max(0,target-half),math.min(1,target+half)
+    local earliest = math.max(now,p.t0)
+    local cycle = math.floor(math.max(0,(earliest-p.t0)*p.speed)/2)
+    for period = cycle,cycle+1 do
+        for _,range in ipairs({{low,high},{2-high,2-low}}) do
+            local opens = p.t0+(2*period+range[1])/p.speed
+            local closes = math.min(p.ends-.002,p.t0+(2*period+range[2])/p.speed)
+            local at = math.max(earliest,opens)
+            if at <= closes then return at,closes end
         end
     end
-    return best
 end
 function Grab.new()
     local g = { enabled = false, active = false, pending = nil, session = nil,
         seen = {}, results = {}, grades = { perfect = 0, good = 0, miss = 0 },
         status = "OFF", rejected = 0, presses = 0, lastAt = 0, sequence = 0,
-        highestStrike = 0, hunters = 1, pauseUntil = 0, retimed = 0, nativeResumes = 0 }
+        highestStrike = 0, hunters = 1, pauseUntil = 0, retimed = 0, nativeResumes = 0,
+        submitted = {}, history = {}, firstWindows = 0, dispatches = {} }
     function g:reset(reason)
         self.active, self.pending, self.session = false, nil, nil
-        self.seen, self.results = {}, {}
+        self.seen, self.results, self.submitted, self.history = {}, {}, {}, {}
         self.highestStrike,self.pauseUntil = 0,0
         self.status = reason or "waiting for native session"
         self.sequence += 1
@@ -82,6 +87,7 @@ function Grab.new()
             if self.grades[data.tier] == nil then self.rejected += 1; return false end
             self.results[key] = true
             self.grades[data.tier] += 1
+            if self.pending and tostring(self.pending.strike)==key then self.pending=nil end
             self.status = "game reply: " .. data.tier
             self.lastAt = now
             return true
@@ -105,11 +111,18 @@ function Grab.new()
         -- Remember every accepted native strike even after manual takeover.
         -- Replayed packets may never generate a second press.
         self.seen[tostring(data.k)] = true
+        table.insert(self.history,tostring(data.k))
+        if #self.history > 128 then
+            local old = table.remove(self.history,1)
+            self.seen[old],self.results[old],self.submitted[old] = nil,nil,nil
+        end
         self.highestStrike = math.max(self.highestStrike,data.k)
         local p = { session = session, strike = data.k, generation = generation,
             t0 = data.t0, ends = data.t0+duration, speed = data.spd, from = data.from,
             target = data.zc, half = data.zw*.5*perfect }
-        p.at = Grab.crossing(math.max(now,self.pauseUntil), p)
+        p.safeHalf = p.half*.88
+        p.at,p.closes = Grab.crossing(math.max(now,self.pauseUntil), p)
+        p.firstAt,p.received = p.at,now
         self.pending = p.at and p or nil
         self.lastAt = now
         self.status = p.at and "native strike scheduled; grade unknown" or "no safe crossing"
@@ -145,6 +158,11 @@ function Grab.new()
             self.pending = nil -- native bite/end cleanup wins over an old observer packet
             return
         end
+        if self.submitted[tostring(strike.k)] then
+            -- Native callbacks can run after our observer in the same event.
+            -- Mark only an input that was actually submitted for this strike.
+            strike.pressed = true
+        end
         if strike.pressed then
             self.seen[tostring(strike.k)] = true
             if self.pending and self.pending.strike == strike.k then self:manual() end
@@ -162,25 +180,31 @@ function Grab.new()
         local p = self.pending
         if not allowed then self.status = "input paused; native timing retained"; return end
         if now < self.pauseUntil then return end
-        if not p or now < p.at-.005 then return end
-        if now >= p.ends-.01 then self.pending = nil; self.status = "strike expired"; return end
+        if not p or now+1e-7 < p.at then return end
+        if now >= p.ends-.002 then self.pending = nil; self.status = "strike expired"; return end
         local error = math.abs(Grab.triangle(now,p.t0,p.speed,p.from)-p.target)
-        if error > p.half*.88 then
-            if now > p.at+p.half/p.speed then
-                local nextAt = Grab.crossing(now,p)
+        if error > (p.safeHalf or p.half*.88)+1e-7 then
+            if now > (p.closes or p.at) then
+                local nextAt,closes = Grab.crossing(now,p)
                 if nextAt then
-                    p.at = nextAt
+                    p.at,p.closes,p.later = nextAt,closes,true
                     self.retimed += 1
                     self.status = "next native crossing scheduled"
                 else self.pending = nil; self.status = "no valid crossing left" end
             end
             return
         end
+        local sequence=self.sequence
         self.pending = nil -- clear before calling out, including re-entrant replies
         local ok, sent = pcall(send, p.session, p.strike, now)
         if ok and sent == true then
             self.presses += 1
-            self.status = "press sent; game grade unknown"
+            if self.sequence==sequence then self.submitted[tostring(p.strike)] = true end
+            if not p.later then self.firstWindows += 1 end
+            table.insert(self.dispatches,{delay=now-p.received,afterOpening=now-p.at,
+                later=p.later==true,error=error,perfectHalf=p.half})
+            if #self.dispatches>32 then table.remove(self.dispatches,1) end
+            if self.sequence==sequence and not self.results[tostring(p.strike)] then self.status = "press sent; game grade unknown" end
         else self.status = "native press unavailable" end
         self.lastAt = now
     end

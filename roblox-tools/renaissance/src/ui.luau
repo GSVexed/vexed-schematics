@@ -67,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.3",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.4",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -208,7 +208,8 @@ function UI.mount(hub, bridge, scope)
         local registry = hub.registry.byId
         for char,record in pairs(self.records) do
             local target = record.target
-            local valid = char.Parent ~= nil and target.root.Parent ~= nil and target.hum.Parent ~= nil and target.hum.Health > 0
+            local valid = target.player and target.player.Parent~=nil and target.player.Character==char
+                and char.Parent ~= nil and target.root.Parent ~= nil and target.hum.Parent ~= nil and target.hum.Health > 0
             local colour = palette[target.affiliation] or palette.unknown
             assign(record.highlight,"FillTransparency",1)
             if registry.esp.requested then
@@ -241,10 +242,11 @@ function UI.mount(hub, bridge, scope)
         end
         local guide = hub.guide
         local dotVisible=false
-        if registry.biteHelper.requested and guide and guide.target.root.Parent then
+        if registry.biteHelper.requested and guide and not guide.invalid and guide.target.root.Parent then
             local point,onScreen = camera:WorldToViewportPoint(guide.target.root.Position)
             if onScreen and point.Z > 0 then
                 local desired = Vector2.new(point.X,point.Y)
+                if self.lastTarget~=guide.target.char then self.lastPoint=nil;self.lastTarget=guide.target.char end
                 self.lastPoint = self.lastPoint and self.lastPoint:Lerp(desired,1-math.exp(-22*math.min(dt,.1))) or desired
                 if self.dotX~=self.lastPoint.X or self.dotY~=self.lastPoint.Y then
                     self.dotX,self.dotY=self.lastPoint.X,self.lastPoint.Y
@@ -258,7 +260,7 @@ function UI.mount(hub, bridge, scope)
                 elseif guide.baseline and guide.baseline.valid then assign(dotStroke,"Color",palette.same)
                 else assign(dotStroke,"Color",palette.unknown) end
             end
-        else self.lastPoint = nil end
+        else self.lastPoint,self.lastTarget = nil,nil end
         assign(dot,"Visible",dotVisible)
         if not self.visible then return end
         if now < self.nextText then return end

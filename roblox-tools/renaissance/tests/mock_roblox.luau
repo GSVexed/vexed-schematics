@@ -43,7 +43,7 @@ end})
 enum.RenderPriority.Camera={Value=200}
 local function kind(v) return type(v)=="table" and v._type or type(v) end
 function Mock.new()
-    local w = { time=10,objects={},calls={},configs={},renders={},bindings={},bindingInfo={},parts={},
+    local w = { time=10,objects={},calls={},configs={},renders={},bindings={},bindingInfo={},parts={},timers={},timerSerial=0,
         nativeRestEcho=false,localEnvironment={},failure=nil,waterY=nil,blocked=false,
         metrics={writes={},projections=0,connections=0,info=0,upvalues=0,heap=0,boundInfo=0} }
     function w:resetMetrics()
@@ -237,6 +237,11 @@ function Mock.new()
         UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end},
         Instance={new=new},RaycastParams={new=function()return {}end},OverlapParams={new=function()return {}end},
         typeof=kind,os=mockOS,
+        task={delay=function(seconds,fn)
+            w.timerSerial+=1
+            local timer={id=w.timerSerial,at=w.time+seconds,fn=fn}
+            w.timers[timer.id]=timer;return timer
+        end,cancel=function(timer)w.timers[timer.id]=nil end},
         getgenv=function()return w.localEnvironment end,
         readfile=function(path)assert(stored[path],"file absent");return stored[path]end,
         writefile=function(path,value) if w.writeBlocked then error("disk unavailable") end;stored[path]=value end,
@@ -524,12 +529,21 @@ function Mock.new()
                 self.nativeHitResponses=(self.nativeHitResponses or 0)+1
             end
         end
+        self:runTimers()
         run.PreAnimation:Fire()
         run.Heartbeat:Fire(dt or .05)
         local renders={}
         for _,record in pairs(self.renders) do table.insert(renders,record) end
         table.sort(renders,function(a,b)return a.priority<b.priority end)
         for _,record in ipairs(renders) do record.fn(dt or .05) end
+    end
+    function w:runTimers()
+        local ready={}
+        for _,timer in pairs(self.timers)do if timer.at<=self.time then table.insert(ready,timer) end end
+        table.sort(ready,function(a,b)return a.at<b.at end)
+        for _,timer in ipairs(ready)do
+            if self.timers[timer.id]==timer then self.timers[timer.id]=nil;timer.fn() end
+        end
     end
     function w:advance(seconds)
         for _=1,math.ceil(seconds/.02) do self:step(.02) end

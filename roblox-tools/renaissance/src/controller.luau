@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.3.0", tokenIdentity = tokenIdentity,
+    local h = { version = "15.4.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -70,6 +70,7 @@ function Controller.new(M,bridge,options)
                     self.flightEpisode=q
                 end
                 q.cancelAt=now
+                q.airborne=q.airborne or s.flying or s.hum.FloorMaterial==Enum.Material.Air
                 return
             end
         end
@@ -85,17 +86,24 @@ function Controller.new(M,bridge,options)
                 self:releaseFlightRepair()
             end
         end
-        if not self.registry.byId.flight.requested or not s.alive or bridge:attribute(s.char,"Species")~="Vulture" then
+        if not self.registry.byId.flight.requested or not s.alive then self.flightEpisode=nil;return end
+        local config=bridge:config("FlightConfig")
+        if not config or type(config.canFly)~="function" then self.flightEpisode=nil;return end
+        local compatible,eligible=pcall(config.canFly,s.char)
+        if not compatible or eligible~=true then
             self.flightEpisode=nil;return
         end
         local q=self.flightEpisode
-        if s.talonLock~=nil then
-            if not q or q.char~=s.char or q.lock~=s.talonLock then
-                q={char=s.char,generation=s.generation,lock=s.talonLock,at=now};self.flightEpisode=q
+        local lock,kind=s.talonLock,"talon"
+        if lock==nil then lock,kind=s.diveLock,"dive" end
+        if lock~=nil then
+            if not q or q.char~=s.char or q.lock~=lock or q.kind~=nil and q.kind~=kind then
+                q={char=s.char,generation=s.generation,lock=lock,kind=kind,at=now};self.flightEpisode=q
             end
+            q.airborne=q.airborne or s.flying or s.hum.FloorMaterial==Enum.Material.Air
             -- Replay only an actual native let-go intent, once for this session.
             -- Server/native cleanup owns anchoring and capture restrictions.
-            if q.cancelAt and not q.releaseRetried and now-q.cancelAt>=1 and now-q.cancelAt<3
+            if kind=="talon" and q.cancelAt and not q.releaseRetried and now-q.cancelAt>=1 and now-q.cancelAt<3
                 and not s.grab and not s.captured and not s.chat and not s.gameMenu then
                 q.releaseRetried=true
                 local sent=bridge:fire("FeralLunge","release")
@@ -105,6 +113,7 @@ function Controller.new(M,bridge,options)
             return
         end
         if not q or q.char~=s.char or q.generation~=s.generation then self.flightEpisode=nil;return end
+        if not q.airborne then self.flightEpisode=nil;return end
         q.ended=q.ended or now
         if now-q.ended>4 then self.flightEpisode=nil;return end
         if s.grab or s.captured or s.ability or s.chat or s.gameMenu or s.underwater or s.swimming
@@ -135,7 +144,7 @@ function Controller.new(M,bridge,options)
         if id == "recovery" and not on then self.recovery.enabled = false; self.recovery:release("OFF",now) end
         if id == "minigame" then
             self.grab.enabled = on == true
-            if not on then self.grab:reset("OFF"); self.grabInput:release() end
+            if not on then self.grab:reset("OFF"); self.grabInput:release();self:cancelGrabWake() end
         end
         if id == "survivalAFK" and not on then self:stopWalk("disabled") end
         if id == "flight" and not on then self:clearFlight() end
@@ -157,6 +166,7 @@ function Controller.new(M,bridge,options)
         bridge.biteTiming,bridge.deferNativeDiscovery=nil,false
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.grab:reset("animal changed")
+        self:cancelGrabWake()
         self.grabInput:release()
         self.feeding:close(now)
         self.combatInput:cancel()
@@ -167,6 +177,7 @@ function Controller.new(M,bridge,options)
         self.features.nextReconcile = 0
         self.climbQueue,self.guide,self.transactions,self.lastIntent = nil,nil,{},nil
         self.ledger.previous = nil
+        self.ledger.staminaObservation=nil
         self.anchor,self.anchorChar = nil,nil
         self.ledger:event("character_generation",now,{generation = generation})
         self.nextWalk = now+90
@@ -257,6 +268,7 @@ function Controller.new(M,bridge,options)
         end
         if self.grab.active and (key == Enum.KeyCode.Space or key == Enum.KeyCode.ButtonA or key == Enum.KeyCode.ButtonR2) then
             self.grab:manual()
+            self:cancelGrabWake()
             return
         end
         if key==Enum.KeyCode.Space or key==Enum.KeyCode.ButtonB then self:noteFlightCancel(input,s,now) end
@@ -329,6 +341,18 @@ function Controller.new(M,bridge,options)
                 end
             end
             self.ledger:event("native_bite_marker",now,{requestObserved = false,claimObserved = false})
+        else
+            -- Native actions can begin between heartbeats. Release competing
+            -- automation on the actual state change, preserving manual input.
+            s.grab,s.rescuing = self.grab.active,self.rescue.pending~=nil
+            s.feeding = s.feeding or self.feeding.busy
+            local allowed,why=self.policy:allowed("recovery",s,now,self.recovery.purpose)
+            if self.recovery.owned and not allowed then self.recovery:release(why,now) end
+            if s.captured or s.grab or s.ability or s.flying or s.climbing or s.feeding then
+                self:stopWalk("native action began")
+                if s.captured or s.ability or s.flying then self.climbQueue=nil end
+            end
+            if key=="FeralTalonLock" or key=="FeralDiveLocal" then self:stepFlightHandoff(s,now) end
         end
     end
     function h:nativeEvent(kind,event,data)
@@ -379,7 +403,60 @@ function Controller.new(M,bridge,options)
             bridge.deferNativeDiscovery=self.grab.enabled and self.grab.pending~=nil
             if event=="begin" or event=="strike" then self.grabInput.nextBindingCheck=0 end
             self.grabInput:update(self.grab,bridge.clock())
+            if event=="strike" then self:pumpGrab(bridge:grabSnapshot(bridge.clock()),false) end
+            self:updateGrabWake()
         end
+    end
+    function h:cancelGrabWake()
+        local wake=self.grabWake;self.grabWake=nil
+        if wake then bridge:cancelDelay(wake.handle) end
+    end
+    function h:updateGrabWake()
+        local p=self.grab.pending
+        local wake=self.grabWake
+        if wake and wake.pending==p and wake.at==p.at then return end
+        self:cancelGrabWake()
+        if not self.active or self.closed or not self.grab.enabled or not p or (p.wakes or 0)>=4 then return end
+        local now=bridge:serverNow()
+        if not now or p.at<=now then return end
+        wake={pending=p,at=p.at};self.grabWake=wake
+        wake.handle=bridge:delay(math.max(.001,p.at-now),function()
+            if self.grabWake~=wake then return end
+            self.grabWake=nil
+            if self.active and not self.closed and self.grab.enabled and self.grab.pending==p then
+                self:pumpGrab(bridge:grabSnapshot(bridge.clock()),true)
+                self:updateGrabWake()
+            end
+        end)
+        if wake.handle then p.wakes=(p.wakes or 0)+1 else self.grabWake=nil end
+    end
+    function h:pumpGrab(s,sync)
+        if self.closed or not self.active or not self.grab.enabled or not self.grab.active then return end
+        local now,clock=s.now,s.serverNow
+        if not clock or not s.alive then return end
+        local native=bridge.grabController
+        if sync and native then
+            local state,known=native.state()
+            local cfg=bridge:config("GrabV2Config")
+            if state or known==true then
+                self.grab:syncNative(state,clock,s.generation,cfg and cfg.PERFECT or .32,cfg and cfg.PASSES or 2.5,now)
+            end
+        end
+        local p=self.grab.pending
+        if not p then return end
+        if self.lastGrabClock==clock and self.lastGrabPending==p then return end
+        self.lastGrabClock,self.lastGrabPending=clock,p
+        s.grab=true
+        self.grab:tick(clock,s.generation,self.policy:allowed("grab",s,now),function(session,strike)
+            -- Native-issued IDs and the actual current server clock only.
+            -- Recheck after inspection; never backdate or anticipate a press.
+            local at=bridge:serverNow()
+            if not at or at<p.t0 or at>=p.ends-.002
+                or math.abs(M.grab.triangle(at,p.t0,p.speed,p.from)-p.target)>p.half*.98 then return false end
+            local sent=bridge:fire("FeralGrabV2","press",session,strike,at)
+            if sent then bridge:markGrabPress(session,strike,now) end
+            return sent
+        end)
     end
     function h:requestFlight()
         local now = bridge.clock()
@@ -453,6 +530,16 @@ function Controller.new(M,bridge,options)
             perfect = self.grab.grades.perfect,good = self.grab.grades.good,miss = self.grab.grades.miss,
             source = "matching native res replies only",
         }
+        if r.byId.minigame.requested and self.grab.active then
+            r.byId.minigame.reason=string.format("P %d · G %d · M %d · %d presses · native grades only",
+                self.grab.grades.perfect,self.grab.grades.good,self.grab.grades.miss,self.grab.presses)
+        end
+        if r.byId.stamina.requested and r.byId.stamina.applied then
+            local item=self.ledger.staminaObservation
+            r.byId.stamina.reason=(s.locomotion or "Animal").." client profile"
+                ..(item and item.seconds>=1 and string.format(" · observed %+.2f/s",item.rate) or " · watching stamina")
+            r.byId.stamina.observed=item or "unmeasured"
+        end
         r.byId.flight.observed = s.flying and "native local flight flag" or "unknown"
         r.byId.climb.observed = s.climbing and "native local climb flag" or "unknown"
         r.byId.survivalAFK.observed = (self.ledger.counts.survival_value_advanced or 0) > 0
@@ -482,7 +569,10 @@ function Controller.new(M,bridge,options)
                     local ok,hum=pcall(function()return char and char:FindFirstChildOfClass("Humanoid")end)
                     local before=char and tx.hpBefore and tx.hpBefore[char]
                     local drop=ok and hum and hum.Parent and before and hum.MaxHealth==before.maxHP and hum.Health<before.hp-.05
+                    local damage=tx.feedback and tx.feedback.dmg
                     self.combatStatus = tx.feedback and tx.feedback.safe==true and "Game reply: target protected"
+                        or Core.finite(damage) and damage>0 and (string.format("Game reply reports %.1f damage",damage)
+                            ..(drop and " · HP decline correlated" or " · HP change unconfirmed"))
                         or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
                         or drop and "Target HP fell after native marker · attribution unverified"
                         or "Native marker observed · no matching HP decline observed"
@@ -520,6 +610,8 @@ function Controller.new(M,bridge,options)
             if (s.root.Position-self.walk.goal).Magnitude < 1.3 then
                 self.ledger:event("afk_displacement_observed",now)
                 self:stopWalk("goal reached")
+            elseif not bridge:routeSafe(s,self.walk.goal) then
+                self:stopWalk("ground route changed")
             end
             return
         end
@@ -568,9 +660,12 @@ function Controller.new(M,bridge,options)
             self.ledger:event("native_escape_requested",now,{action = action,sent = sent})
         end
     end
-    function h:tick()
+    function h:tick(dt)
         if not self.active or self.closed then return end
         local now = bridge.clock()
+        if Core.finite(dt) and dt>0 then
+            self.frameInterval=(self.frameInterval or dt)*.85+math.min(dt,.25)*.15
+        end
         local slow = now >= self.nextSlow
         local critical=self.registry.byId.minigame.requested and self.grab.active and self.grab.pending~=nil
         self.timingCritical,bridge.deferNativeDiscovery=critical,critical
@@ -581,11 +676,11 @@ function Controller.new(M,bridge,options)
         if clock then
             local cfg = self.grab.enabled and bridge:config("GrabV2Config")
             local native = self.grab.enabled and self.grabInput:controller(now)
-            local nativeState
+            local nativeState,nativeKnown
             if native and (self.grab.active or now >= (self.nextGrabPoll or 0)) then
-                nativeState=native.state();self.nextGrabPoll=now+.25
+                nativeState,nativeKnown=native.state();self.nextGrabPoll=now+.25
             end
-            if native and s.alive then
+            if native and s.alive and (nativeState or nativeKnown==true) then
                 self.grab:syncNative(nativeState,clock,s.generation,cfg and cfg.PERFECT or .32,
                     cfg and cfg.PASSES or 2.5,now)
             end
@@ -594,17 +689,14 @@ function Controller.new(M,bridge,options)
             if not s.alive and self.grab.active then self.grab:reset("animal unavailable") end
             s.grab,s.afkWalking = self.grab.active,self.walk ~= nil
             self.grabInput:update(self.grab,now,native,nativeState)
-            self.grab:tick(clock,s.generation,s.alive and self.policy:allowed("grab",s,now),
-                function(session,strike,at)
-                    local sent = bridge:fire("FeralGrabV2","press",session,strike,at)
-                    if sent then bridge:markGrabPress(session,strike,now) end
-                    return sent
-                end)
+            self:pumpGrab(s,false)
+            self:updateGrabWake()
         else self.grab.pending = nil; s.grab,s.afkWalking = self.grab.active,self.walk ~= nil end
         if not critical and now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
         self.feeding:tick(s,now)
         self:stepFlightHandoff(s,now)
         self.rescue:tick(s,now)
+        self.activity=self.policy:activity(s,now)
         self.combatInput:tick(s,now)
         if not critical then self.features:reconcile(s,now) end
         self.recovery.enabled = self.registry.byId.recovery.requested
@@ -614,7 +706,8 @@ function Controller.new(M,bridge,options)
         if not critical then self:stepCombat(s,now) end
         self.biteReadiness=bridge:biteReadiness(s,now,self.policy)
         if not critical and now >= self.nextScan then
-            self.nextScan = now+.12
+            self.nextScan = now+((s.combat==true or s.attackHeld) and .12
+                or math.clamp((self.frameInterval or .02)*6,.12,.3))
             local candidates = bridge:candidates(s,self.settings.range)
             if self.features.originalCombat and self.features.leases:valid("reach") then
                 self.guide = bridge:select(s,self.features.originalCombat,self.features.combat,candidates)
@@ -647,7 +740,14 @@ function Controller.new(M,bridge,options)
         end
     end
     function h:render(dt)
+        if self.grab.enabled and self.grab.pending then
+            self:pumpGrab(bridge:grabSnapshot(bridge.clock()),true)
+            self:updateGrabWake()
+        end
         self:maskPose()
+        if self.guide and self.snapshot and self.features.leases:valid("reach") then
+            bridge:refreshGuide(self.snapshot,self.features.originalCombat,self.features.combat,self.guide)
+        end
         self.ui:render(dt,bridge.clock())
         self.recovery:afterAnimationFrame(bridge.clock())
     end
@@ -681,6 +781,7 @@ function Controller.new(M,bridge,options)
         self.closed = true
         self.cleanupErrors = {}
         for _,cleanup in ipairs({
+            function() self:cancelGrabWake() end,
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,
             function() self.feeding:close(bridge.clock()) end,

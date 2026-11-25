@@ -74,7 +74,8 @@
       "capture_id": 4659,
       "bytecode_sha256": "2259c18b15f7bd5d2b8fdc434924e2520a87349a9bbb92276c644aa80ec7df23",
       "prototypes": 97,
-      "suffix_bytes": 24
+      "suffix_bytes": 24,
+      "reviewed_rapid_timing": "prototypes 2/3/71: actual-time triangle position, zw/2*PERFECT and press; practice is excluded; server strike cadence is not rewritten"
     },
     {
       "name": "FeralLungeUI",
@@ -122,7 +123,8 @@
       "capture_id": 39,
       "bytecode_sha256": "a4474c7d28642aeebc3c73784ac7aae403606b3fdc8219de59f23c1d116f723f",
       "prototypes": 1,
-      "suffix_bytes": 24
+      "suffix_bytes": 24,
+      "reviewed_rapid_timing": "PERFECT=0.32, ZONE_W=0.215; SPEED/PASSES/NEXT_GAP and native pauses are retained"
     },
     {
       "name": "JumpLeapConfig",
@@ -146,7 +148,8 @@
       "capture_id": 50,
       "bytecode_sha256": "3bae7c3263be8b7e8dc774b168592fddf20c0ee8f67a358a99d55f002efc194a",
       "prototypes": 5,
-      "suffix_bytes": 24
+      "suffix_bytes": 24,
+      "reviewed_stamina": "CLIMBER.levels drain/walk/trot stamina modes and CLIMB_SPRINT.Python.DRAIN; abilities and movement speeds are retained"
     },
     {
       "name": "StatusConfig",
@@ -170,7 +173,8 @@
       "capture_id": 75,
       "bytecode_sha256": "99ce8a3dd278401e531098a386c5a804ad41878bd4731c584c17097f6528bb61",
       "prototypes": 3,
-      "suffix_bytes": 24
+      "suffix_bytes": 24,
+      "reviewed_stamina": "SPRINT_DRAIN, OTHER_DRAIN and BITE_DRAIN are client consumption inputs; no immunity claim"
     },
     {
       "name": "WolfController",
@@ -180,7 +184,8 @@
       "prototypes": 188,
       "suffix_bytes": 24,
       "reviewed_recovery_input": "prototype 95 accepts MouseButton1/ButtonR2; no MouseButton2 attack branch",
-      "reviewed_native_rest_keys": "main prototype 187 words 1080-1098: WolfRest uses R and ButtonY, not Z/X"
+      "reviewed_native_rest_keys": "main prototype 187 words 1080-1098: WolfRest uses R and ButtonY, not Z/X",
+      "reviewed_stamina": "prototypes 170/171/172/186: venom, per-level/per-species climbing, flight and swimming costs; no resource values are overwritten"
     },
     {
       "name": "CarryConfig",

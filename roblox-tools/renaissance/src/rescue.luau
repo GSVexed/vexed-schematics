@@ -8,7 +8,8 @@ function Rescue.new(bridge,ledger)
     end
     function r:input(s,now)
         if self.pending then self:cancel("Cub rescue cancelled");return true end
-        if now<self.nextAt or not s.alive or s.chat or s.gameMenu or s.holding or s.captured or s.feeding or s.grab then return false end
+        if now<self.nextAt or not s.alive or s.chat or s.gameMenu or s.holding or s.captured or s.feeding or s.grab
+            or s.ability or s.flying or s.climbing then return false end
         local target=bridge:waterCub(s)
         if not target then return false end -- leave ordinary native G untouched
         self.nextAt=now+.6
@@ -19,6 +20,7 @@ function Rescue.new(bridge,ledger)
     function r:tick(s,now)
         local p=self.pending
         if not p then return end
+        if not s.alive or p.char~=s.char or p.generation~=s.generation then self:cancel("Cub rescue animal changed");return end
         if bridge:carrying(s,p.target.char) then
             ledger:event("native_cub_carry_observed",now)
             self:cancel("Native cub carry observed")

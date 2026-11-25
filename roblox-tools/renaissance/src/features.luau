@@ -82,7 +82,8 @@ function Features.new(Core, bridge, registry)
                 end
                 local target = bridge.reachTarget
                 local root = char and char:FindFirstChild("HumanoidRootPart")
-                if target and target.char and target.char.Parent and target.root.Parent and root then
+                if target and target.char and target.char.Parent and target.root.Parent and root
+                    and bridge:combatEligible(target.char) then
                     local diff = target.root.Position-root.Position
                     local flat = Vector3.new(diff.X,0,diff.Z)
                     local look = Vector3.new(native.X,0,native.Z)
@@ -117,6 +118,35 @@ function Features.new(Core, bridge, registry)
             }
             local flight = bridge:config("FlightConfig")
             if numeric(flight, { "FLAP_DRAIN" }) then table.insert(plan,entry(flight,"FLAP_DRAIN",0,"number")) end
+            -- v2412 WolfController has distinct swim, climb and venom paths.
+            -- Change only recognised consumption inputs; preserve native
+            -- species abilities, immunity, resource values and damage rules.
+            local function zero(t,key)
+                if type(t)=="table" and Core.finite(t[key]) and t[key]>=0 then
+                    table.insert(plan,entry(t,key,0,"number"))
+                end
+            end
+            zero(n,"SWIM_DRAIN_MULT");zero(n,"WATER_DRAIN_NONSWIM")
+            local passive=bridge:config("PassiveConfig")
+            local climber=passive and passive.CLIMBER
+            if type(climber)=="table" then
+                for level=1,3 do
+                    local profile=type(climber.levels)=="table" and climber.levels[level]
+                    if type(profile)=="table" then
+                        zero(profile,"drain")
+                        if profile.stamina=="drain" then table.insert(plan,entry(profile,"stamina","walk","string")) end
+                    end
+                end
+                if type(climber.CLIMB_SPRINT)=="table" then
+                    for species,profile in pairs(climber.CLIMB_SPRINT) do
+                        if type(species)=="string" then zero(profile,"DRAIN") end
+                    end
+                end
+            end
+            local venom=bridge:config("VenomConfig")
+            for _,key in ipairs({"SPRINT_DRAIN","OTHER_DRAIN","BITE_DRAIN"}) do zero(venom,key) end
+            local status=bridge:config("StatusConfig")
+            for _,key in ipairs({"STAMINA_BASE","STAMINA_PER_POINT"}) do zero(status and status.VENOM,key) end
             return plan
         elseif id == "recovery" then
             if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
@@ -188,7 +218,7 @@ function Features.new(Core, bridge, registry)
         self.nextReconcile = now+1.25
         for _, id in ipairs({ "reach","stamina","recovery","effects","mobility","speed","leap","climb" }) do
             local dependencies = {
-                reach = {"CombatConfig"},stamina = {"NeedsConfig","FlightConfig"},
+                reach = {"CombatConfig"},stamina = {"NeedsConfig","FlightConfig","PassiveConfig","VenomConfig","StatusConfig"},
                 recovery = {"NeedsConfig"},effects = {"StatusConfig"},
                 mobility = {"NeedsConfig","StatusConfig"},speed = {"NeedsConfig"},
                 leap = {"JumpLeapConfig"},climb = {"PassiveConfig"},
@@ -197,6 +227,22 @@ function Features.new(Core, bridge, registry)
             for _,name in ipairs(dependencies[id]) do
                 identity[name] = bridge:config(name) or false
                 if self.configIdentity[id] and self.configIdentity[id][name] ~= identity[name] then changed = true end
+            end
+            if id=="stamina" then
+                local passive=identity.PassiveConfig
+                local climb=type(passive)=="table" and type(passive.CLIMBER)=="table" and passive.CLIMBER
+                identity.climb=climb or false
+                identity.levels=climb and climb.levels or false
+                identity.sprint=climb and climb.CLIMB_SPRINT or false
+                identity.venom=type(identity.StatusConfig)=="table" and identity.StatusConfig.VENOM or false
+                for _,name in ipairs({"climb","levels","sprint","venom"}) do
+                    if self.configIdentity[id] and self.configIdentity[id][name]~=identity[name] then changed=true end
+                end
+                for level=1,3 do
+                    local name="climbLevel"..level
+                    identity[name]=climb and type(climb.levels)=="table" and climb.levels[level] or false
+                    if self.configIdentity[id] and self.configIdentity[id][name]~=identity[name] then changed=true end
+                end
             end
             if changed then self.leases:release(id);self.failures[id] = nil end
             self.configIdentity[id] = identity
