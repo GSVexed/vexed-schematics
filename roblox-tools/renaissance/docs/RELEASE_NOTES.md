@@ -1,3 +1,11 @@
+# Renaissance 15.6.2 — normal camera zoom unlock
+
+Adds one saved **Movement → Zoom Unlock** control, enabled by default while respecting saved OFF. Expands Player camera limits to 0.5–100,000 studs and Classic mode. Native default changes are observed; OFF/unload restores the latest values still owned by this feature. Does not replace CameraType, CFrame, subject, FOV or the camera controller. Cinematics/custom camera code may still impose their own behavior; the limit range is not a live-tested universal camera guarantee.
+
+193 retained-core and 223 Territory regressions pass, including camera staging, restore, native default changes, reload ownership, scripted pose preservation and failed observer cleanup. Official compilation, parity and rollback checks pass. Territory code remains 0.6.1; the dedicated Territory efficiency preparation is a separate deliverable.
+
+Official property reference: https://create.roblox.com/docs/reference/engine/classes/Player#CameraMaxZoomDistance and https://create.roblox.com/docs/reference/engine/classes/Player#CameraMinZoomDistance.
+
 # Renaissance 15.6.1 — close-prey attacks and Burst state
 
 Preserve false native gait attributes, approach prey to correct close-range facing, and use supported executor mouse input when virtual mouse dispatch is rejected. Keep attack-blocker, native marker and manual-care evidence distinct from accepted damage. Validate colliding occlusion and paired input cleanup. All retained features and prior bundles remain.

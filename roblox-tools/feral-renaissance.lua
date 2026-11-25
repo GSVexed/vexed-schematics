@@ -1,5 +1,5 @@
--- Renaissance 15.6.1 with the built-in Territory farming engine.
-local source=game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/19c07c3311836be8d5f2bb2aedd8099c2dbc55a1/roblox-tools/feral-renaissance-v15.6.1.lua")
-local fn,why=loadstring(source,"=FERAL_Renaissance_15_6_1")
+-- Renaissance 15.6.2 with built-in Territory 0.6.1 and Zoom Unlock.
+local source=game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/c4cbd5a5c088c85c273f5735afc68ceb46cfc90e/roblox-tools/feral-renaissance-v15.6.2.lua")
+local fn,why=loadstring(source,"=FERAL_Renaissance_15_6_2")
 assert(fn,why)
 return fn()

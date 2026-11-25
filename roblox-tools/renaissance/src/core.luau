@@ -110,6 +110,7 @@ Core.specs = {
     { "mobility", "Movement", "Movement Assistance", "Reversible local injury slowdown inputs" },
     { "speed", "Movement", "Speed Assistance", "1.15x local land and swimming inputs" },
     { "leap", "Movement", "Jump / Leap Assistance", "1.15x local leap inputs; native exclusions retained" },
+    { "zoom", "Movement", "Zoom Unlock", "Normal mouse-wheel zoom, from close-up to a distant view", default = true },
     { "esp", "Vision", "Outline ESP", "Hollow outlines for replicated characters" },
     { "colours", "Vision", "Faction / Health Colours", "Health-coloured hollow outlines; pack-coloured names", permanent = true },
     { "tags", "Vision", "Name Tags", "Small labels with independent visibility" },

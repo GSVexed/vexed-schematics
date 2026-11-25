@@ -67,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.6.1",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.6.2",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -147,7 +147,7 @@ function UI.mount(hub, bridge, scope)
         else
             local order = u.tab == "Survival"
                 and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
-                or {"climb","flight","mobility","speed","leap"}
+                or {"climb","flight","mobility","speed","leap","zoom"}
             for i,id in ipairs(order) do row(id,(i-1)*57) end
         end
         for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end

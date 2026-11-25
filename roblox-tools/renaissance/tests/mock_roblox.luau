@@ -80,6 +80,8 @@ function Mock.new()
                     if v then assert(not v._destroyed,"parent was destroyed");table.insert(v._children,self) end
                 end
                 self._props[k]=v
+                local changed=self._signals["property:"..k]
+                if changed then changed:Fire() end
             end,
         })
         table.insert(w.objects,o)
@@ -89,6 +91,11 @@ function Mock.new()
         return self.ClassName==class or class=="Instance"
             or class=="BasePart" and (self.ClassName=="Part" or self.ClassName=="MeshPart")
             or class=="GuiButton" and (self.ClassName=="TextButton" or self.ClassName=="ImageButton")
+    end
+    function methods:GetPropertyChangedSignal(key)
+        local name="property:"..key
+        self._signals[name]=self._signals[name] or signal()
+        return self._signals[name]
     end
     function methods:GetChildren() return table.clone(self._children) end
     function methods:GetDescendants()
@@ -163,6 +170,7 @@ function Mock.new()
     end
     function workspace:GetPartBoundsInRadius() return w.parts end
     local player=new("Player");player.Parent=root;player.Name="LocalPlayer";player.DisplayName="Local";player.UserId=1
+    player.CameraMinZoomDistance=.5;player.CameraMaxZoomDistance=128;player.CameraMode=enum.CameraMode.Classic
     local pg=new("PlayerGui");pg.Parent=player
     player.CharacterAdded,player.CharacterRemoving,player.Idled=signal(),signal(),signal()
     player:SetAttribute("FeralCombatUntil",0);player:SetAttribute("FeralPack",1);player:SetAttribute("FeralSurvival",0)

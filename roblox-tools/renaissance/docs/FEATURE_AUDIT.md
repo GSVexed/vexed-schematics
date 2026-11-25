@@ -66,3 +66,7 @@ The user reports a Rhino fight with multiple Honey Badgers. The regression model
 15.3.0 adds bounded callback-only discovery, native bite guidance, recent recovery windows, strike work protection and reversible Vulture handoff requests. All 21 records remain; original Vulture-freeze resolution and recovery multipliers remain live-unverified. See V15_3_IMPROVEMENTS.md.
 
 15.4.0 adds first-safe-window scheduling, bounded deadline wakes, transient-read resilience, native action preemption, native swim/climb/venom stamina profiles, per-frame selected geometry, assist-target stability, ownership-checked player overlays and dynamic idle-route checks. The complete upgrade decision table is V15_4_UPGRADES.md. Its 176 passing code-level scenarios include a separate 72-case timing matrix; neither establishes live Perfect rates, accepted extra reach, sustained recovery or universal stamina.
+
+## Addendum: 15.6.2 Zoom Unlock
+
+The original 21 feature records remain, with Zoom Unlock as record 22. It owns only Player camera min/max zoom and Classic mode, observes game limit changes, and releases its three observers and still-owned values on OFF/unload. Enabled by default; explicit OFF is saved. The Movement page fits six controls without scrolling. Territory remains 0.6.1. Camera pose, subject, CameraType and FOV are preserved.

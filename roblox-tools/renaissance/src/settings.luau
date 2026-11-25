@@ -9,7 +9,7 @@ function Settings.sanitize(raw, specs)
         if not spec.permanent and not spec.linked then
             local value = src[spec[1]]
             if spec[1] == "stamina" and value == nil then value = src.endurance end
-            result.states[spec[1]] = value == true
+            result.states[spec[1]] = value == true or value == nil and spec.default == true
         end
     end
     if raw.range == 300 or raw.range == 600 or raw.range == 900 then result.range = raw.range end

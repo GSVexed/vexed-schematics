@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Deterministically package thirteen core and ten integrated Territory modules."""
+"""Deterministically package fourteen core and ten integrated Territory modules."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "ui", "controller")
+CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "zoom", "ui", "controller")
 AMBER_MODULES=("planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
 MODULES=(*CORE_MODULES,*("amber_"+name for name in AMBER_MODULES))
 def module_path(name):
@@ -14,11 +14,12 @@ def module_path(name):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "15.6.1"
+VERSION = "15.6.2"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
+    "feral-renaissance-v15.6.1.lua": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",
     "feral-renaissance-v15.6.0.lua": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
     "feral-renaissance-v15.5.1.lua": "771e130b2a1afae4b70d5334fd40fdf1363fd690682350f6d9c012b65d637b69",
     "feral-renaissance-v15.5.0.lua": "e58a4e7dadbb1f1ceeb8f4e16f612ea33d72f26ca9519dc48b908c0b03a3f975",
@@ -60,7 +61,7 @@ end
 for _, pair in ipairs({
     {"core","scope"},{"core","leases"},{"settings","sanitize"},{"policy","new"},
     {"grab","new"},{"grab_input","new"},{"recovery","new"},{"feeding","new"},{"combat_input","new"},{"rescue","new"},{"features","new"},{"roblox","new"},
-    {"ui","mount"},{"controller","new"},
+    {"zoom","new"},{"ui","mount"},{"controller","new"},
 }) do
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
@@ -104,7 +105,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.6.1] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.6.2] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 

@@ -27,9 +27,9 @@ local function boot(settings)
 end
 local E=Mock.Enum
 
-test("exactly 21 retained features and permanent reach",function()
+test("22 features retain the original set and permanent reach",function()
     local M=modules();local r=M.core.registry()
-    eq(#r.order,21);r:request("reach",false);eq(r.byId.reach.requested,true)
+    eq(#r.order,22);r:request("reach",false);eq(r.byId.reach.requested,true)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
 end)
@@ -87,8 +87,10 @@ test("corrupt primary settings fall back to backup",function()
     end},M.core.specs)
     eq(origin,"migrated");eq(p.states.tags,false);eq(p.states.esp,true);eq(p.range,300)
 end)
-test("boot reconciles every false state and all 21 have statuses",function()
-    local w,h=boot()
+test("boot reconciles every explicit false state and all features have statuses",function()
+    local M=modules();local states={}
+    for _,spec in ipairs(M.core.specs) do if not spec.permanent and not spec.linked then states[spec[1]]=false end end
+    local w,h=boot(states)
     for _,f in ipairs(h.registry.order) do
         if not f.permanent then eq(f.requested,false);eq(f.applied,false) end
         assert(f.state~="" and f.reason~="")
@@ -1609,10 +1611,56 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.6.1 presents its actual version in the active controller",function()
+test("Renaissance 15.6.2 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.6.1")
+    eq(h.version,"15.6.2")
     h:close()
+end)
+
+test("zoom defaults on while a saved explicit OFF survives sanitization",function()
+    local M=modules()
+    eq(M.settings.sanitize({},M.core.specs).states.zoom,true)
+    eq(M.settings.sanitize({states={zoom=false}},M.core.specs).states.zoom,false)
+    local w,h=boot();eq(w.player.CameraMaxZoomDistance,100000);eq(w.player.CameraMinZoomDistance,.5)
+    eq(h.registry.byId.zoom.applied,true);h:close();eq(w.player.CameraMaxZoomDistance,128)
+end)
+test("zoom staging leaves the current camera untouched and OFF restores owned limits",function()
+    local w=Mock.new();w.player.CameraMinZoomDistance=6;w.player.CameraMaxZoomDistance=75
+    w.player.CameraMode=E.CameraMode.LockFirstPerson
+    local h=load(w,{stageOnly=true})
+    eq(w.player.CameraMinZoomDistance,6);eq(w.player.CameraMaxZoomDistance,75)
+    h:activate();eq(w.player.CameraMode,E.CameraMode.Classic);eq(w.player.CameraMaxZoomDistance,100000)
+    h:set("zoom",false);eq(w.player.CameraMinZoomDistance,6);eq(w.player.CameraMaxZoomDistance,75)
+    eq(w.player.CameraMode,E.CameraMode.LockFirstPerson)
+    h:close();eq(w:connections(),0)
+end)
+test("native zoom changes are reapplied and the new defaults return on unload",function()
+    local w,h=boot()
+    w.player.CameraMaxZoomDistance=40;eq(w.player.CameraMaxZoomDistance,100000)
+    w.player.CameraMinZoomDistance=4;eq(w.player.CameraMinZoomDistance,.5)
+    h:close();eq(w.player.CameraMaxZoomDistance,40);eq(w.player.CameraMinZoomDistance,4)
+    w.player.CameraMaxZoomDistance=90;eq(w.player.CameraMaxZoomDistance,90);eq(w:connections(),0)
+end)
+test("zoom reload does not stack observers or capture the expanded limit as the original",function()
+    local w,h=boot();local count=w:connections()
+    local nextHub=load(w)
+    eq(h.closed,true);eq(w:connections(),count);eq(w.player.CameraMaxZoomDistance,100000)
+    nextHub:close();eq(w.player.CameraMaxZoomDistance,128);eq(w:connections(),0)
+end)
+test("zoom never changes camera pose, subject or scripted camera type",function()
+    local w=Mock.new();local camera=w.workspace.CurrentCamera
+    camera.CameraType=E.CameraType.Scriptable;local pose=camera.CFrame;local subject=camera.CameraSubject
+    local h=load(w);eq(camera.CameraType,E.CameraType.Scriptable);eq(camera.CFrame,pose);eq(camera.CameraSubject,subject)
+    h:close();eq(camera.CameraType,E.CameraType.Scriptable);eq(camera.CFrame,pose)
+end)
+test("zoom partial observer failure unwinds without leaving camera writes",function()
+    local M,w=modules();local called=0
+    rawset(w.player,"GetPropertyChangedSignal",function()
+        called+=1;if called==2 then error("observation unavailable") end
+        return {Connect=function()return {Disconnect=function()called+=10 end}end}
+    end)
+    local z=M.zoom.new(w.player);eq(z:set(true),false)
+    eq(z.active,false);eq(w.player.CameraMaxZoomDistance,128);eq(called,12);z:close()
 end)
 
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
