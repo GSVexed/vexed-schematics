@@ -21,7 +21,8 @@ def main():
     for name,path in (("PLANNER_SRC",planner),("AGENT_SRC",agent)):
         source=path.read_text(encoding="utf-8")
         assert "]====]" not in source
-        sources[name]='local '+name+'=[====[\n'+source+'\n]====]\n'
+        nl=chr(10)
+        sources[name]="local "+name+"=[====["+nl+source+nl+"]====]"+nl
     prelude=''.join(sources.values())
     with tempfile.TemporaryDirectory(prefix="feral-amber-") as temp:
         for suite in suites:
