@@ -1,7 +1,7 @@
 # Renaissance 15.4.3 — highest native Hippo Crusher Bite cap
 
 Pinned candidate: [immutable source](https://github.com/GSVexed/vexed-schematics/blob/60b8218912f8ff4b9bebec4e0a91bdc104f78b46/roblox-tools/feral-renaissance-v15.4.3.lua).
-Automated official Luau validation and regressions will be recorded in `release.json`.
+[Official Luau validation](https://github.com/GSVexed/vexed-schematics/actions/runs/45679132920) passed **187/187 regressions**, all **18 compilation checks**, deterministic packaging and preserved rollback hashes.
 
 - Hippo `CrusherBite.SPEED_CAP` is set to `"burst"` when an exactly compatible native client profile originally requests `"trot"`. This replaces 15.4.2's `"sprint"` client cap.
 - `BURST` and `WolfBurst` are distinct native locomotion signals in the captured v2412 client. No synthetic movement input or burst attribute is issued. Other animals' profiles and normal ability timing remain unchanged.

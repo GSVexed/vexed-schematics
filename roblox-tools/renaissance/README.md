@@ -1,6 +1,6 @@
 # FERAL Project Renaissance 15.4.3
 
-The Hippo-only Crusher Bite speed ceiling now requests the **highest movement tier observed in the game's captured v2412 client: `burst`**. Previously, native config specified `trot` and 15.4.2 experimentally requested `sprint`. This is a reversible local `AbilityConfigBase`/`AbilityConfig` profile lease; it does not force the burst state or alter cooldown, charge timing, damage, other animals, or native remotes.
+The official Luau [compile and regression gate](https://github.com/GSVexed/vexed-schematics/actions/runs/45679132920) passed **187/187 regressions**, all **18 compilation checks**, and deterministic bundle parity.\n\nThe Hippo-only Crusher Bite speed ceiling now requests the **highest movement tier observed in the game's captured v2412 client: `burst`**. Previously, native config specified `trot` and 15.4.2 experimentally requested `sprint`. This is a reversible local `AbilityConfigBase`/`AbilityConfig` profile lease; it does not force the burst state or alter cooldown, charge timing, damage, other animals, or native remotes.
 
 **Server acceptance is not proven.** A client `SPEED_CAP="burst"` does *not* grant burst mode if the native server enforces eligibility or caps movement separately. Actual travel speed, continued correct ability behavior, and sustained stamina need observation in FERAL.
 
