@@ -47,7 +47,7 @@ function UI.new(engine,hub)
                 progress.Text=s.strategy.area.." · "..tostring(s.strategy.owned or 0).."/"..tostring(s.strategy.total or 0).." owned"
                     ..(type(value)=="number" and (" · Native progress "..amount(value*100).."%") or "")
             end
-            last.Text=s.lastSkip or s.lastSuccess or "Select START FARMING. Hiding the hub keeps farming active."
+            last.Text=s.lastNotice or s.lastSuccess or s.lastSkip or "Select START FARMING. Hiding the hub keeps farming active."
         end
         function v:close()end
         v:tick(os.clock());return v

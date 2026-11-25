@@ -14,11 +14,12 @@ def module_path(name):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "15.5.0"
+VERSION = "15.5.1"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
+    "feral-renaissance-v15.5.0.lua": "e58a4e7dadbb1f1ceeb8f4e16f612ea33d72f26ca9519dc48b908c0b03a3f975",
     "feral-nova-v14.0-clean-reach-core.lua": "7ce435099acf823c0f92a406a8febf0260fb9fcfbdde54d9c4a084f8190ce93c",
     "feral-nova-clean.lua": "d34847e2cb11c822177071e109fc2c8bc9e13e3ce7aa7ade02fd732b192e2952",
     "feral-renaissance-v15.0.0.lua": "bc388ccfdc8bae19e7fe2dca7c24bf2fbd3f97266c205c38544735e81ea3e12f",
@@ -101,7 +102,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.5.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.5.1] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 
