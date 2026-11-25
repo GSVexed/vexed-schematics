@@ -1,3 +1,11 @@
+# Renaissance 15.5.1 — farming flow corrections
+
+Preserve active claim positions across replication gaps, bound incremental water searches, repair low-throttle digital pursuit, release owned automatic recovery at its farming handoff, revalidate suspended objectives and return after urgent scent maintenance. A failing Territory cleanup remains inside its fault boundary. Manual Rest, full drinking, the built-in page and all original features remain.
+
+Validation: 188/188 Territory and 187/187 retained hub cases, official Luau compilation, deterministic parity and protected 15.5.0/0.5.0 rollback bundles. Live gameplay remains unverified. See the [patch report](../../feral-amber/docs/V0_5_1_RELEASE.md).
+
+---
+
 # Renaissance 15.5.0 — integrated Territory farming
 
 Amber 0.5.0 now runs inside the native Territory tab, with one main window and scheduler. Existing 21 feature records and earlier versioned bundles are retained. This release adds region completion sweeps, non-pack occupied-hex deferral, stable claim verification, near-finish protection, interrupted/full drinking, body-sized tree recovery, immediate eligible Burst upgrades and trailing NPC hunts.

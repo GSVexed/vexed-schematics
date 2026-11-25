@@ -70,7 +70,7 @@ local function world()
     return w,w.owner.territory
 end
 test("Renaissance contains Territory by default with one window and scheduler",function()
-    local w,h=world();eq(h.version,"0.5.0");eq(h.agent.enabled,false)
+    local w,h=world();eq(h.version,"0.5.1");eq(h.agent.enabled,false)
     eq(w:count("ScreenGui"),1);eq(w.run.Heartbeat:Count(),1)
     assert(w.owner.ui:selectTab("Territory"));assert(w.owner.ui.frame:FindFirstChild("TerritoryStart",true))
     w.owner:close()
@@ -126,7 +126,7 @@ test("COPY STATUS is available on the native page without other player names",fu
     local w,h=world();local copied;w.env.setclipboard=function(value)copied=value end
     w.owner.ui:selectTab("Territory");w.owner.ui.frame:FindFirstChild("TerritoryCopy",true).Activated:Fire()
     assert(copied);local data=w.env.game:GetService("HttpService"):JSONDecode(copied)
-    eq(data.version,"0.5.0");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
+    eq(data.version,"0.5.1");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
     w.owner:close()
 end)
 test("closing the hub invalidates deferred path computations",function()
@@ -167,6 +167,57 @@ test("one hub fault boundary keeps other Renaissance features alive",function()
     h.bridge.snapshot=function()error("simulated territory data failure")end
     w:step(.25);eq(h.agent.phase,"ERROR");eq(h.agent.enabled,false);eq(w.owner.closed,false)
     eq(w:count("ScreenGui"),1);w.owner:close()
+end)
+test("empty water searches scan bounded chunks and retain negative results briefly",function()
+    local w,h=world();h.bridge.spots=nil;h.bridge.configs.FeedFinder={}
+    local calls=0;w.workspace.Raycast=function()calls+=1;return nil end
+    local s=h.bridge:snapshot(w.time)
+    eq(h.bridge:water(s),nil);eq(calls,24)
+    s.now+=.2;eq(h.bridge:water(s),nil);eq(calls,40)
+    s.now+=.2;eq(h.bridge:water(s),nil);eq(calls,40)
+    s.feedCan="drink";s.feedPosition={x=8,z=0};local offered=h.bridge:water(s)
+    eq(offered.x,8);eq(calls,40);w.owner:close()
+end)
+test("incremental water search continues to farther rings instead of restarting",function()
+    local w,h=world();h.bridge.spots=nil;h.bridge.configs.FeedFinder={}
+    local calls=0
+    w.workspace.Raycast=function(_,origin)
+        calls+=1
+        if origin.X>85 and math.abs(origin.Z)<1 then
+            return {Position=Mock.V3.new(origin.X,0,origin.Z),Normal={Y=1},Material=w.env.Enum.Material.Water}
+        end
+    end
+    local s=h.bridge:snapshot(w.time)
+    eq(h.bridge:water(s),nil);eq(calls,24);s.now+=.2
+    local p=h.bridge:water(s);assert(p and p.x>=90);assert(calls<=72);w.owner:close()
+end)
+test("new native water offers take precedence over a cached distant landmark",function()
+    local w,h=world();local s=h.bridge:snapshot(w.time)
+    h.bridge.waterCache={x=500,z=0};h.bridge.waterAt=s.now
+    s.feedCan="drink";s.feedPosition={x=4,z=0}
+    eq(h.bridge:water(s).x,4);w.owner:close()
+end)
+test("automatic recovery releases at its farming handoff threshold",function()
+    local w,h=world();local c=w.player.Character
+    w.hum.Health=w.hum.MaxHealth*.8;h.ownerHub.recovery.owned=c;c:SetAttribute("WolfRest",true)
+    h.bridge:prepare(w.time,true,{kind="RECOVER"})
+    eq(w.owner.recovery.owned,nil);assert(w.owner.policy.actionUntil>w.time)
+    eq(h.bridge:snapshot(w.time).resting,false);w.owner:close()
+end)
+test("manual Rest is preserved at the automatic recovery handoff threshold",function()
+    local w,h=world();local c=w.player.Character
+    w.hum.Health=w.hum.MaxHealth*.8;w.owner.recovery.owned=c;w.owner.policy.manualRest=true;c:SetAttribute("WolfRest",true)
+    h.bridge:prepare(w.time,true,{kind="RECOVER"})
+    eq(w.owner.recovery.owned,c);eq(c:GetAttribute("WolfRest"),true)
+    eq(h.bridge:snapshot(w.time).automaticRest,false);w.owner:close()
+end)
+test("a failing Territory stop cannot escape into the shared hub tick",function()
+    local w,h=world();h.setEnabled(true);w:step(.25)
+    h.bridge.snapshot=function()error("data failure")end
+    h.bridge.stop=function()error("stop failure")end
+    w.time+=.25;local ok=pcall(w.owner.tick,w.owner,.25);eq(ok,true)
+    eq(h.agent.phase,"ERROR");eq(h.agent.enabled,false);eq(h.nav.desiredPoint,nil);eq(next(h.nav.held),nil)
+    eq(w.owner.closed,false);assert(w.owner.snapshot);w.owner:close()
 end)
 print(string.format("AMBER_LIFECYCLE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Integrated lifecycle regressions failed")

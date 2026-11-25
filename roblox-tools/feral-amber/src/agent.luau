@@ -11,9 +11,10 @@ end
 function Agent.new(planner,adapter,Hunt,Care)
     local a={planner=planner,adapter=adapter,Hunt=Hunt,Care=Care,enabled=false,phase="OFF",goal=nil,
         cooldown={},careCooldown={},recent={},waitingSince={},events={},ticks=0,earned=0,claimed=0,scented=0,
-        feeds=0,hunts=0,failures=0,nextTick=0,reason="Disabled",generation=0,version="0.5.0"}
+        feeds=0,hunts=0,failures=0,nextTick=0,reason="Disabled",generation=0,version="0.5.1"}
     function a:log(at,kind,msg)
         table.insert(self.events,{at=math.floor(at*10)/10,kind=kind,msg=msg})
+        if kind=="confirmed" or kind=="deferred" or kind=="failed" then self.lastNotice=msg end
         while #self.events>35 do table.remove(self.events,1) end
     end
     function a:setEnabled(on)
@@ -51,8 +52,10 @@ function Agent.new(planner,adapter,Hunt,Care)
         local g=self.suspended;self.suspended=nil
         if g and g.kind=="TERRITORY" then
             local current=self.adapter:territory(g.key,state)
-            if current and not current.neutral and not (state.contested and state.contested[g.key]) then
+            local detail=current and self.planner.objective(current,state,state.position,{blockedUntil=self.cooldown})
+            if detail then
                 g.start=state.now;g.progressAt=state.now;g.interactAt=nil
+                g.detail=detail;g.finishUntil=nil;g.completeAt=nil;g.inHexProgressAt=nil
                 self.goal=g;self.phase="RESUME";self.reason="Resuming "..g.key
                 return
             end
@@ -70,7 +73,7 @@ function Agent.new(planner,adapter,Hunt,Care)
             targetProgress=g and {action=g.detail and g.detail.kind,progress=g.lastProg,hold=g.lastHold,alternates=g.alternates,
                 needBaseline=g.baseline,needGain=g.gain},hunt=g and g.hunt and g.hunt:status() or self.lastHunt,
             input=self.adapter.lastInput,error=self.lastError,strategy=self.strategy,deferred=self.deferred or 0,
-            lastSkip=self.lastSkip,travelled=self.adapter.nav and self.adapter.nav.travelled,
+            lastSkip=self.lastSkip,lastNotice=self.lastNotice,travelled=self.adapter.nav and self.adapter.nav.travelled,
             waitSeconds=self.goal and self.goal.interactAt and s.now-self.goal.interactAt or 0}
     end
     function a:pause(state,reason)
@@ -104,7 +107,8 @@ function Agent.new(planner,adapter,Hunt,Care)
             self.prevAmber=state.amber
         end
         if state.manualInput or state.gameMenu then self:pause(state,"Manual movement, typing or native menu");return end
-        if state.ability or state.pinned or state.resting or state.flying or state.climbing or state.rescuing then
+        local ownRecovery=self.goal and self.goal.kind=="RECOVER" and state.automaticRest==true
+        if state.ability or state.pinned or state.resting and not ownRecovery or state.flying or state.climbing or state.rescuing then
             self:pause(state,"Native ability, capture, Rest, flight or climbing");return
         end
         if (feeding(state,"eat") or feeding(state,"drink")) and (not self.goal or self.goal.kind=="TERRITORY") then
@@ -122,6 +126,7 @@ function Agent.new(planner,adapter,Hunt,Care)
             self.pausedAt=nil
         end
         local need=self.planner.need(state)
+        if not self.goal and self.suspended and need=="TERRITORY" then self:resume(state) end
         local goal=self.goal
         if goal and goal.kind=="TERRITORY" and state.contested and state.contested[goal.key] then
             self.cooldown[goal.key]=now+15
@@ -148,6 +153,24 @@ function Agent.new(planner,adapter,Hunt,Care)
             end
         end
         if protected then need="TERRITORY" end
+        -- Re-evaluate urgent scent during travel, without abandoning active or
+        -- nearly finished work. Preserve the region cursor and return target.
+        if goal and goal.kind=="TERRITORY" and need=="TERRITORY" and not self.suspended
+            and not goal.nativeStarted and now>=(self.nextUrgentCheck or 0) then
+            self.nextUrgentCheck=now+1
+            local current=self.adapter:territory(goal.key,state)
+            local almostDone=current and current.by==state.pack and finite(current.prog) and current.prog>=.72
+            local urgentGoal=goal.detail.kind=="SCENT" and current and finite(current.hold) and current.hold<.28
+            if not almostDone and not urgentGoal and flat(state.position,goal.detail.center)>(state.claimRadius or 15) then
+                local route,strategy=self.planner.strategy(self.adapter:territories(state),state,{
+                    blockedUntil=self.cooldown,regionCursor=self.regionCursor,maxStops=1})
+                if strategy.phase=="URGENT_SCENT" and route[1] and route[1].key~=goal.key then
+                    self.suspended=goal;self.strategy=strategy
+                    self:takeGoal(state,"TERRITORY",route[1]);goal=self.goal
+                    self.reason="Maintaining critical scent before resuming the area sweep"
+                end
+            end
+        end
         -- Care is latched to its completion target. Crossing its trigger does
         -- not cancel a native feeding session or lose the suspended territory.
         if goal and goal.kind=="RECOVER" and state.healthFraction>=.72 then
@@ -217,7 +240,9 @@ function Agent.new(planner,adapter,Hunt,Care)
                 self.recent[goal.key]=now;self.lastSuccess="Observed "..goal.detail.kind.." "..goal.key
                 self.waitingSince[goal.key]=nil
                 self:log(now,"confirmed",self.lastSuccess);self.adapter:stop("replicated complete")
-                self.goal=nil;self.phase="CONFIRMED";self.reason=self.lastSuccess;return
+                self.goal=nil;self.phase="CONFIRMED";self.reason=self.lastSuccess
+                if self.suspended then self:resume(state) end
+                return
             end
             goal.completeAt=nil
             local waypoint=self.adapter:territorySpot(goal.key,state)
@@ -226,7 +251,12 @@ function Agent.new(planner,adapter,Hunt,Care)
                 or owned and finite(native.hold) and finite(goal.lastHold) and native.hold>goal.lastHold+.002
             if progressing then goal.progressAt=now;goal.nativeStarted=true end
             goal.lastProg,goal.lastHold=native.prog,native.hold
-            local localProgress=progressing and (not state.currentHex or state.currentHex==goal.key)
+            local inHex=state.currentHex==goal.key or not state.currentHex and flat(state.position,waypoint)<=(state.claimRadius or 15)
+            if progressing and inHex then goal.inHexProgressAt=now end
+            -- Replication arrives less often than this coordinator ticks. Stay
+            -- put between progressing samples rather than restarting travel.
+            local localProgress=inHex and (owned or native.by==state.pack)
+                and goal.inHexProgressAt and now-goal.inHexProgressAt<2.5
             if flat(state.position,waypoint)>(state.claimRadius or 15) and not localProgress then
                 self.phase="TRAVEL";self.reason=goal.detail.kind.." "..goal.key
                 local result=self.adapter:move(waypoint,state,{navKey="HEX:"..goal.key,moveRadius=10})
@@ -316,6 +346,7 @@ function Agent.new(planner,adapter,Hunt,Care)
         end
         local food=self.adapter.food and self.adapter:food(state)
         if food then
+            if not goal.food or goal.food.model~=food.model then goal.foodArrived=nil end
             goal.food=food;self.phase="TRAVEL_FOOD";self.reason="Approaching native edible food"
             local result=self.adapter:move(food.position,state,{navKey=food.model or "FOOD",moveRadius=2})
             if result=="REACHED" then goal.foodArrived=goal.foodArrived or now end

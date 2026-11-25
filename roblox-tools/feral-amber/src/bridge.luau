@@ -39,7 +39,13 @@ function Bridge.new(nav)
         h.nextWalk=now+90
         -- Coordinate with existing recovery instead of letting it start Rest
         -- during travel, feeding approach or hunt preparation.
-        if not goal or goal.kind~="RECOVER" then
+        local recovering=goal and goal.kind=="RECOVER"
+        if recovering and h.recovery and h.recovery.owned==player.Character
+            and not (h.policy and h.policy.manualRest) then
+            local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+            recovering=not (hum and hum.MaxHealth>0 and hum.Health/hum.MaxHealth>=.72)
+        end
+        if not recovering then
             if h.policy then h.policy.actionUntil=math.max(h.policy.actionUntil or 0,now+.6) end
             if h.recovery and type(h.recovery.release)=="function" then h.recovery:release("Amber objective",now) end
         end
@@ -293,7 +299,7 @@ function Bridge.new(nav)
     local function surfaceAt(x,z,state,waterAllowed)
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude
-        params.FilterDescendantsInstances={state.char};params.IgnoreWater=false
+        params.FilterDescendantsInstances={state.char};params.IgnoreWater=false;params.RespectCanCollide=true
         local hit=Workspace:Raycast(Vector3.new(x,state.root.Position.Y+120,z),Vector3.new(0,-460,0),params)
         if not hit then return nil end
         local water=hit.Material==Enum.Material.Water
@@ -305,10 +311,9 @@ function Bridge.new(nav)
             local key=string.format("%d:%d",math.floor(position.x/12),math.floor(position.z/12))
             self.waterBlocked[key]=now+90
         end
-        self.waterCache=nil;self.waterAt=0
+        self.waterCache=nil;self.waterAt=0;self.waterScan=nil;self.waterMissUntil=nil
     end
     function b:water(state)
-        if self.waterCache and state.now<(self.waterAt or 0)+3 then return self.waterCache end
         local best,score=nil,math.huge
         local coarse,coarseDistance=nil,math.huge
         local function consider(candidate)
@@ -325,9 +330,11 @@ function Bridge.new(nav)
             local ok,p=pcall(finder.waterAround,state.char,state.root,needs and needs.WATER_PROMPT_PROBES)
             if ok and typeof(p)=="Vector3" then consider(point(p)) end
         end
-        if best and score<25 then
+        if best then
             self.waterEvidence="NATIVE_OFFER";self.waterCache,self.waterAt=best,state.now;return best
         end
+        if self.waterCache and state.now<(self.waterAt or 0)+3 then return self.waterCache end
+        if self.waterMissUntil and state.now<self.waterMissUntil then return nil end
         -- Find actual nearby terrain water. Also sample progressively larger
         -- landmark rings: a lake's centre is not necessarily its shoreline.
         local origins={{x=state.position.x,z=state.position.z,rings={10,24,48,90,150}}}
@@ -347,23 +354,40 @@ function Bridge.new(nav)
                 end
             end
         end
-        for _,origin in ipairs(origins) do
-            for _,radius in ipairs(origin.rings) do
-                for k=0,7 do
-                    local a=k*math.pi/4
-                    local x,z=origin.x+math.cos(a)*radius,origin.z+math.sin(a)*radius
-                    local pos,wet=surfaceAt(x,z,state,true)
-                    if pos and wet then
-                        -- A shallow native swim route may approach the water;
-                        -- native E retains the final mouth/shore positioning.
-                        consider(pos)
-                        for _,reach in ipairs({7,15}) do
-                            local bank=surfaceAt(x-math.cos(a)*reach,z-math.sin(a)*reach,state,false)
-                            if bank and dist(bank,pos)<=reach+1 then consider(bank) end
-                        end
+        table.sort(origins,function(a,b)return dist(a,state.position)<dist(b,state.position)end)
+        local scan=self.waterScan
+        if not scan or scan.char~=state.char or scan.biome~=state.biome
+            or state.now-scan.at>6 or dist(scan.position,state.position)>100 then
+            scan={at=state.now,char=state.char,biome=state.biome,position={x=state.position.x,z=state.position.z},points={},index=1}
+            for _,origin in ipairs(origins) do
+                for _,radius in ipairs(origin.rings) do
+                    for k=0,(radius==0 and 0 or 7) do
+                        local a=k*math.pi/4
+                        table.insert(scan.points,{x=origin.x+math.cos(a)*radius,z=origin.z+math.sin(a)*radius,
+                            dx=math.cos(a),dz=math.sin(a)})
                     end
                 end
             end
+            self.waterScan=scan
+        end
+        -- Bound terrain work per coordinator tick. Resume unfinished searches
+        -- instead of repeating the whole map scan after an empty result.
+        local stop=math.min(#scan.points,scan.index+23)
+        for index=scan.index,stop do
+            local probe=scan.points[index]
+            local x,z=probe.x,probe.z
+            local pos,wet=surfaceAt(x,z,state,true)
+            if pos and wet then
+                consider(pos)
+                for _,reach in ipairs({7,15}) do
+                    local bank=surfaceAt(x-probe.dx*reach,z-probe.dz*reach,state,false)
+                    if bank and dist(bank,pos)<=reach+1 then consider(bank) end
+                end
+            end
+        end
+        scan.index=stop+1
+        if scan.index>#scan.points then
+            self.waterScan=nil;self.waterMissUntil=state.now+1.2
         end
         self.waterEvidence=best and "TERRAIN_OR_NATIVE_OFFER" or coarse and "LANDMARK_APPROACH" or "NONE"
         self.waterCache,self.waterAt=best or coarse,state.now
@@ -452,7 +476,9 @@ function Bridge.new(nav)
                 or attr(c,"FeralDeathRollLocal")==true or attr(c,"FeralDiveBomb")==true
                 or hub and hub.grab and hub.grab.active==true,
             rescuing=hub and hub.rescue and hub.rescue.pending~=nil,
-            resting=attr(c,"WolfRest")==true,flying=fly,swimming=swimming,
+            resting=attr(c,"WolfRest")==true,
+            automaticRest=hub and hub.recovery and hub.recovery.owned==c and not (hub.policy and hub.policy.manualRest),
+            flying=fly,swimming=swimming,
             climbing=attr(c,"FeralClimbLocal")==true,underwater=attr(c,"FeralUnderwater")==true}
     end
     function b:move(destination,state,options)

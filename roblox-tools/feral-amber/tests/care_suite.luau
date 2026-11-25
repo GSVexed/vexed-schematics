@@ -164,5 +164,66 @@ test("missing water with an available search route keeps moving and looking",fun
     b.resourceSearch=function()return {x=100,z=100}end
     a:tick(10);eq(a.phase,"SEARCH_WATER");eq(b.moves,1);eq(b.options.navKey,"WATER_SCOUT")
 end)
+test("gaps between native claim updates do not restart movement inside the target hex",function()
+    local b,a=world();b.state.position={x=190,z=0};b.state.currentHex="H";b.hex.by=2;b.hex.prog=.2
+    a:tick(10);b.hex.prog=.3;a:tick(10.5);local moves=b.moves
+    a:tick(10.8);a:tick(11.2);eq(a.phase,"CLAIMING");eq(b.moves,moves)
+    a:tick(13.2);eq(a.phase,"TRAVEL");assert(b.moves>moves)
+end)
+test("pack progress in a different hex cannot stop this animal's travel",function()
+    local b,a=world();b.state.currentHex="OTHER";b.hex.by=2;b.hex.prog=.2
+    a:tick(10);b.hex.prog=.4;a:tick(10.5);eq(a.phase,"TRAVEL");eq(b.moves,2)
+end)
+test("scent replication gaps retain a valid local maintenance position",function()
+    local b,a=world();b.hex.owner=2;b.hex.hold=.5;b.state.currentHex="H";b.state.position={x=190,z=0}
+    a:tick(10);b.hex.hold=.6;a:tick(10.5);local moves=b.moves
+    a:tick(11);eq(a.phase,"CLAIMING");eq(b.moves,moves)
+end)
+test("owned automatic Rest stays in recovery instead of a generic paused state",function()
+    local b,a=world();b.state.healthFraction=.4;a:tick(10);eq(a.goal.kind,"RECOVER")
+    b.state.resting=true;b.state.automaticRest=true;a:tick(11);eq(a.phase,"RECOVER")
+    b.state.automaticRest=false;a:tick(12);eq(a.phase,"PAUSED")
+end)
+test("a failed care release still resumes needed territory after needs recover",function()
+    local b,a=world();a:tick(10);local territory=a.goal
+    b.state.thirst=25;b.state.feedCan="drink";a:tick(11)
+    b.state.thirst=100;b.state.nativeFeedMode="drink";a:tick(12);a:tick(14.2);eq(a.failures,1)
+    b.state.nativeFeedMode=nil;b.state.feedCan=nil;a:tick(14.5)
+    eq(a.goal,territory);eq(a.suspended,nil);eq(a.phase,"TRAVEL")
+end)
+test("resuming care skips a suspended hex that the pack already finished",function()
+    local b,a=world();a:tick(10);b.state.thirst=25;b.state.feedCan="drink";a:tick(11)
+    b.hex.owner=2;b.hex.hold=1;b.state.thirst=100;a:tick(12)
+    eq(a.goal,nil);eq(a.suspended,nil);eq(a.feeds,1)
+end)
+test("a newly selected food item gets its own arrival window",function()
+    local b,a=world();b.state.hunger=25;local first={model={},position={x=0,z=0}}
+    b.foodBlocked={};b.food=function()return first end
+    b.move=function(self)self.moves+=1;return "REACHED"end
+    a:tick(10);local second={model={},position={x=1,z=0}};b.food=function()return second end
+    a:tick(13);eq(b.foodBlocked[second.model],nil);eq(a.goal.food,second);eq(a.goal.foodArrived,13)
+end)
+test("critical scent can interrupt travel and then return to the same area target",function()
+    local b,a=world();b.state.regionGrid=3;b.hex.region=1
+    local scent={key="S",region=9,center={x=0,z=100},owner=2,hold=.6}
+    function b:territories()return {self.hex,scent}end
+    function b:territory(key)return key=="S" and scent or self.hex end
+    function b:territorySpot(key)return self:territory(key).center end
+    a:tick(10);local original=a.goal;eq(original.key,"H")
+    scent.hold=.1;a:tick(11.2);eq(a.goal.key,"S");eq(a.suspended,original);eq(a.regionCursor,1)
+    scent.hold=1;a:tick(12);a:tick(12.6)
+    eq(a.goal,original);eq(a.suspended,nil);eq(a.regionCursor,1)
+end)
+test("critical scent does not steal a nearly finished current claim",function()
+    local b,a=world();b.state.regionGrid=3;b.hex.region=1
+    local scent={key="S",region=9,center={x=0,z=100},owner=2,hold=.6}
+    function b:territories()return {self.hex,scent}end
+    a:tick(10);b.hex.by=2;b.hex.prog=.9;scent.hold=.1;a:tick(11.2)
+    eq(a.goal.key,"H");eq(a.suspended,nil)
+end)
+test("a later success replaces the last skipped-hex notice",function()
+    local b,a=world();a:log(10,"deferred","Old skipped target");a:log(11,"confirmed","Finished another target")
+    eq(a:status().lastNotice,"Finished another target")
+end)
 print(string.format("AMBER_CARE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Care transition regressions failed")

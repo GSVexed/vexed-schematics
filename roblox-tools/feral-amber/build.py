@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse
 import hashlib
 ROOT=Path(__file__).resolve().parent
-DEST=ROOT.parent/"feral-amber-autopilot-v0.5.lua"
+DEST=ROOT.parent/"feral-amber-autopilot-v0.5.1.lua"
 MODULES=("planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
 BOOT=r'''-- The Territory engine is part of Renaissance; this versioned entry reuses it.
 if game.PlaceId~=108901361810209 then return nil end
@@ -14,7 +14,7 @@ if not hub or hub.closed or not hub.ui or type(hub.ui.registerPage)~="function" 
     warn("[FERAL TERRITORY] Run the current combined Amber/Renaissance launcher first.")
     return nil
 end
-if hub.territory and hub.territory.version=="0.5.0" and not hub.territory.closed then return hub.territory end
+if hub.territory and hub.territory.version=="0.5.1" and not hub.territory.closed then return hub.territory end
 local M={}
 for name,source in pairs(sources) do
     local fn,why=loadstring(source,"=FERAL_TERRITORY_"..name)
@@ -23,7 +23,7 @@ end
 return M.runtime.start(M,hub)
 '''
 def create():
-    chunks=['-- FERAL Amber Autopilot 0.5.0 | 2026-11-25 | all species | client-only outcomes',
+    chunks=['-- FERAL Amber Autopilot 0.5.1 | 2026-11-25 | all species | client-only outcomes',
             'local sources = {}']
     for name in MODULES:
         source=(ROOT/"src"/f"{name}.luau").read_text(encoding="utf-8")
@@ -40,5 +40,5 @@ def main():
         assert DEST.is_file() and DEST.read_text(encoding="utf-8")==data,"Candidate source differs from compiled modules"
     else:
         DEST.write_text(data,encoding="utf-8")
-    print(f"FERAL AMBER 0.5.0 sha256={hashlib.sha256(data.encode()).hexdigest()} bytes={len(data.encode())}")
+    print(f"FERAL AMBER 0.5.1 sha256={hashlib.sha256(data.encode()).hexdigest()} bytes={len(data.encode())}")
 if __name__=="__main__":main()

@@ -1,6 +1,6 @@
-# FERAL Project Renaissance 15.5.0
+# FERAL Project Renaissance 15.5.1
 
-Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records and Amber 0.5.0.
+Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records and Amber 0.5.1.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
@@ -10,9 +10,11 @@ Open **Territory** and select **START FARMING** after spawning and joining a pac
 
 The update adds strategic 3×3 region sweeps and local routes, contested-hex skipping, stable claim completion, interrupted/full drinking, faster bounded tree recovery, sustained sprint/Burst and trailing NPC pursuit. See the [complete 15.5 / Amber 0.5 report](../feral-amber/docs/V0_5_RELEASE.md) for exact behavior and bounds.
 
-**Validation:** 187/187 retained Renaissance regressions plus 170/170 Amber regressions pass with the pinned official Luau compiler/interpreter. All 23 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
+**Validation:** 187/187 retained Renaissance regressions plus 188/188 Amber regressions pass with the pinned official Luau compiler/interpreter. All 23 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
 
 **Live gameplay remains unverified for this version.** No current Roblox/Potassium session is available here. Tests do not establish accepted speed, NPC damage, full-map retention, income, sustained stamina or recovery effects. Previous core features retain their earlier limits.
+
+The [15.5.1 patch report](../feral-amber/docs/V0_5_1_RELEASE.md) covers claim-position stability, bounded water work, recovery handoffs, urgent scent resumption and fault isolation. The previous broad overhaul remains documented separately.
 
 ## Build
 
@@ -28,13 +30,13 @@ Official Luau commit: `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`. The complete b
 
 ## Rollback
 
-All prior versioned bundles remain unchanged. Previous Renaissance 15.4.3:
+All prior versioned bundles remain unchanged. Previous Renaissance 15.5.0 with integrated Amber 0.5.0:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/4dbf0780ca10aad757dd64631293b823cd4e7eed/roblox-tools/feral-renaissance-v15.4.3.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/ecd087cabbafcea08a73b3dd56401faca1cdb6ca/roblox-tools/feral-renaissance-v15.5.0.lua"))()
 ```
 
-To restore the companion Amber 0.4 as well, follow its [rollback instructions](../feral-amber/README.md#rollback).
+The 15.5.0 rollback already includes its Territory page. Earlier companion releases remain unchanged.
 
 ## Records
 

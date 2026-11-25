@@ -1,12 +1,14 @@
-# FERAL Amber Autopilot 0.5.0
+# FERAL Amber Autopilot 0.5.1
 
-Territory farming is now a permanent **Territory** page in Renaissance 15.5.0. The hub owns its window, scheduler, controls and shutdown.
+Territory farming is now a permanent **Territory** page in Renaissance 15.5.1. The hub owns its window, scheduler, controls and shutdown.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber.lua"))()
 ```
 
 Spawn, join a pack and select **START FARMING**. The engine starts disabled. **STOP FARMING** releases owned movement and feeding input. **Right Shift** opens or hides the main hub; hiding it or changing tabs keeps farming active. **SKIP TARGET** defers the current hex. **COPY STATUS** copies a local report and performs no upload.
+
+The 0.5.1 patch keeps a valid claim position between replication updates, bounds water scans, repairs low-throttle key steering, improves recovery/resume handoffs and contains cleanup failures. See the [patch report](docs/V0_5_1_RELEASE.md).
 
 ## Farming behavior
 
@@ -22,7 +24,7 @@ Native Species/Forage configuration supplies diet and capabilities. Bear/Spirit 
 
 ## Verification
 
-The pinned official Luau toolchain passes **170/170 Amber regressions** and **187/187 retained Renaissance regressions**. Both bundles have exact source parity; previous versioned bundles remain hash protected. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
+The pinned official Luau toolchain passes **188/188 Amber regressions** and **187/187 retained Renaissance regressions**. Both bundles have exact source parity; previous versioned bundles remain hash protected. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
 
 These are deterministic simulations and service mocks. **Current live FERAL travel, gait acceptance, NPC damage, feeding rates and Amber/hour are unverified for this release.** Configuration and local observations cannot independently prove server persistence or reward attribution.
 
@@ -56,9 +58,10 @@ Official toolchain commit: `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`. Amber int
 
 ## Rollback
 
-The prior complete Renaissance 15.4.3 and companion Amber 0.4 bundles remain unchanged. To use the old pair, load Renaissance 15.4.3 followed by Amber 0.4:
+The previous complete 15.5.0 / Amber 0.5.0 integrated bundle remains unchanged:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/4dbf0780ca10aad757dd64631293b823cd4e7eed/roblox-tools/feral-renaissance-v15.4.3.lua"))()
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/4dbf0780ca10aad757dd64631293b823cd4e7eed/roblox-tools/feral-amber-autopilot-v0.4.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/ecd087cabbafcea08a73b3dd56401faca1cdb6ca/roblox-tools/feral-renaissance-v15.5.0.lua"))()
 ```
+
+Earlier companion and core bundles remain hash protected. Historical rollout details are in the [0.5 report](docs/V0_5_RELEASE.md).

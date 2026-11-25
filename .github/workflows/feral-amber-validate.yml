@@ -5,7 +5,7 @@ on:
     paths:
       - 'roblox-tools/feral-amber/**'
       - 'roblox-tools/feral-amber.lua'
-      - 'roblox-tools/feral-amber-autopilot-v0.5.lua'
+      - 'roblox-tools/feral-amber-autopilot-v*.lua'
       - 'roblox-tools/renaissance/**'
       - 'roblox-tools/feral-renaissance*'
       - '.github/workflows/feral-amber-validate.yml'
@@ -13,7 +13,7 @@ on:
     paths:
       - 'roblox-tools/feral-amber/**'
       - 'roblox-tools/feral-amber.lua'
-      - 'roblox-tools/feral-amber-autopilot-v0.5.lua'
+      - 'roblox-tools/feral-amber-autopilot-v*.lua'
       - 'roblox-tools/renaissance/**'
       - 'roblox-tools/feral-renaissance*'
       - '.github/workflows/feral-amber-validate.yml'

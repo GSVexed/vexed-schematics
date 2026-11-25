@@ -84,6 +84,7 @@ function Nav.new(pathService,workspace,Gait)
         self.stallsInRow,self.routeFailures,self.corrections=0,0,0
         self.inputVerified=false;self.steeringStrategy=self.preferredStrategy
         self.recoveryProgress=0;self.overlapAt=nil;self.overlapParts=nil
+        self.detourUntil=nil;self.lastObstacleProbe=nil
         self.lastReason="NEW_ROUTE";self.goalStarted=now
     end
     function n:surface(pos,char,allowWater)
@@ -267,6 +268,10 @@ function Nav.new(pathService,workspace,Gait)
         end
         local camera=self.workspace.CurrentCamera
         if not camera then self:releaseSteering();self.lastFailure="NO_CAMERA";return end
+        if direction.Magnitude<.01 then self:releaseSteering();return end
+        -- Keys are digital: an analog following scale must not fall below
+        -- every direction threshold and silently stop a moving pursuit.
+        direction=direction.Unit
         local f,r=camera.CFrame.LookVector,camera.CFrame.RightVector
         f=Vector3.new(f.X,0,f.Z);r=Vector3.new(r.X,0,r.Z)
         if f.Magnitude<.1 or r.Magnitude<.1 then self:releaseSteering();return end

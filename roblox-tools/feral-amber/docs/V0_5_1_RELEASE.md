@@ -1,0 +1,22 @@
+# Renaissance 15.5.1 / Amber 0.5.1 reliability patch
+
+Date: 25 November 2026. Base main: `e79a7d5a3102237b6282dbbc6f676c2f8c1731c7`.
+
+This patch follows the integrated Territory release. The same combined launcher, native Territory tab, START/STOP controls, full drinking, region sweep and original 21 feature records remain.
+
+| Defect found in review | Change | Bound / evidence |
+|---|---|---|
+| Claim updates arrive less often than the coordinator ticks. A single missing update could restart movement toward the centre, even while already claiming from a valid position in the target hex. | Latch observed local progress across short replication gaps. Resume positioning if progress disappears, or if this animal is in a different hex. | Local progress expires after 2.5 s; contest handling still overrides it. Claim and scent gap regressions cover both retention and expiry. Remote pack progress cannot stop this animal. |
+| Following scales below the keyboard threshold produced no W/A/S/D input in digital fallback. | Normalize the intended direction before selecting digital keys. Keep analog magnitude on the PlayerModule/world path. | Digital steering uses native gait selection for speed; it does not promise exact analog matching. A 0.15 diagonal-following regression verifies nonzero keys. |
+| Empty water results repeated the complete multi-ring search every tick. Cached distant positions could also hide a new nearby native offer. | Search at most 24 candidate positions per call, retain the cursor across calls, briefly cache a completed empty search, and check native offers before cached positions. | At most 72 explicit terrain rays per call including bank probes, plus the game's native finder. Empty completion cools down for 1.2 s; offers bypass that wait. Character/map change, 100-stud movement, six-second age and rejected accesses invalidate the search. |
+| Automatic Rest could keep recovery in a generic paused state or hold farming past its 72% HP resume threshold. | Recognize owned automatic recovery, release that owned Rest at the farming handoff threshold, and preserve manual Rest. | Uses the existing native recovery owner; no HP or resource writer. Real healing efficacy remains unverified. |
+| Failed care release could lose a suspended target, or resume a hex the pack had already finished. | Revalidate suspended objectives, resume still-needed work after recovery, and discard completed targets. | Existing contest and failure cooldowns apply. Food target replacement receives a fresh arrival window. |
+| Urgent scent was only evaluated when choosing a new target. | Re-evaluate once per second during unstarted travel, temporarily maintain critical scent, then return to the same suspended target and region cursor. | Does not steal an active/nearly finished claim, current urgent scent work, or survival care. Critical scent remains the configured planner priority below 28% hold. |
+| An error in Territory's normal stop path could escape its fault boundary into the shared main tick. | Protect shutdown operations independently, release navigation/input, and disable only Territory. | Fault injection makes both data reading and the normal stop fail; the actual combined hub still completes its tick. |
+| The latest success could remain hidden behind an old skipped-target notice. | Show the latest completion/defer/failure notice while retaining history in optional COPY STATUS. | No new panel, diagnostics tab or automatic upload. |
+
+Validation uses official Luau `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`: **188/188 Amber cases** and **187/187 retained Renaissance cases**, 21 Amber and 28 Renaissance compilation targets, exact generated-source parity and all earlier rollback hashes. Eighteen new cases cover the review defects and real combined-bundle lifecycle. Previous complete 15.5.0 and Amber 0.5.0 versioned bundles remain unchanged and protected.
+
+These cases are deterministic simulations and service mocks. No current live Roblox/Potassium connection is available; actual accepted travel, feeding, damage, full-map retention, native healing and Amber/hour remain unverified. The [0.5 report](V0_5_RELEASE.md) retains the underlying static contract evidence and scope limits. Published Actions checks identify the exact tested release head. The stable launcher pins the complete patched bundle to immutable source.
+
+Use the existing combined launcher, then Territory → START FARMING. The [README](../README.md#rollback) provides the preserved integrated rollback.
