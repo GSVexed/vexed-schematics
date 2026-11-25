@@ -1,4 +1,28 @@
-# FERAL Project Renaissance 15.4.0
+# FERAL Project Renaissance 15.4.2
+
+**Published source gate:** [185/185 Luau regressions, 18 compile checks and deterministic bundle parity passed](https://github.com/GSVexed/vexed-schematics/actions/runs/45677068683). All 21 existing features, the compact four-tab UI, Right Shift, hollow outlines, saved settings, minigame timing and previous rollback files remain.
+
+This release repairs the reproduced stamina configuration rejection and adds a reversible, **Hippo-only** Crusher Bite movement-cap adjustment: the original client `SPEED_CAP="trot"` becomes `"sprint"` when the Hippo-specific native profile is compatible and your own animal is Hippo. It is automatically restored on species change, profile replacement or shutdown. The new build gate rejects tampered/missing known-good rollback bundles before packaging.
+
+**Important:** The official CI tests verify client behaviour but not server-authoritative gameplay. Actual accepted Hippo speed, sustained infinite stamina, healing/condition multipliers, minigame win rate and Vulture flight recovery are still unverified for 15.4.2. No direct client resource refill, repeated WalkSpeed writer or extra ability remotes were introduced.
+
+## Run the hub
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+```
+
+## Restore previous version 15.4.0
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua"))()
+```
+
+See [15.4.2 release notes](docs/RELEASE_NOTES.md) and [Hippo capture evidence](docs/HIPPO_CRUSHER_SPEED_RESEARCH.md).
+
+---
+
+## Previous version (15.4.0)
 
 The v2412 client hub retains all 21 approved functions in one compact four-tab interface. Right Shift, permanent Bite Reach, hollow-only outlines and schema-15 saved settings are preserved.
 
