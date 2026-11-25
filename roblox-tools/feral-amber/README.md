@@ -27,7 +27,7 @@ This is an **opt-in add-on** for Renaissance 15.4.3. It has its own small START/
 ## Candidate entrypoint
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/renaissance/grizzly-amber-v1/roblox-tools/feral-amber-autopilot-v0.1.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.1.lua"))()
 ```
 
 Development candidate only: do not promote to `main` until the complete module bundle compiles with the official pinned Luau toolchain, the regression suite passes and source parity is confirmed. This remains an experimental client-side game addon, not a proven Amber-income bot.
