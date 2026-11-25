@@ -11,12 +11,14 @@ function Hunt.new(adapter)
             if self.adapter.preyBlocked then self.adapter.preyBlocked[self.target.model]=now+80 end
         end
         self.target,self.pending=nil,nil
+        self.lastBlockedReason=self.lastBlockedReason or self.lastResult
         self.blockedAt=now;self.abandonReason=why
         self.lastResult=why;self.nextSelect=now+.25
         self.adapter:stop(why)
     end
     function h:tick(s)
         local now=s.now
+        if self.adapter.attackEvidence then self.inputEvidence=self.adapter:attackEvidence(s) end
         local prey=self.target
         if prey and prey.hum and prey.hum.Health<=0 then
             self.kills+=1;self.lastResult="Observed NPC HP reached zero; attribution unverified"
@@ -53,6 +55,7 @@ function Hunt.new(adapter)
             elseif now-p.at>1.1 then
                 self.misses+=1;self.missesOnTarget+=1
                 self.lastResult="No prey HP decline observed"
+                self.lastBlockedReason=self.lastResult;self.lastBlockedAt=now
                 self.pending=nil;self.repositionUntil=now+.55
             end
         end
@@ -74,6 +77,12 @@ function Hunt.new(adapter)
         local lead=math.clamp(d/math.max(20,(s.travelSpeed or 35)+speed),.08,.85)
         local geometry=type(self.adapter.attackGeometry)=="function" and self.adapter:attackGeometry(s,prey) or nil
         local valid=geometry and geometry.valid
+        self.geometry=geometry
+        if not valid then
+            self.lastBlockedReason=geometry and geometry.reason or "Native bite geometry unavailable"
+            self.lastBlockedAt=now
+            self.lastResult=self.lastBlockedReason
+        end
         if not valid then self.blockedSince=nil end
         local heading=speed>1 and {x=velocity.x/speed,z=velocity.z/speed} or prey.forward
         local standoff=math.clamp((prey.attackRange or 7)*.65,2.4,8)
@@ -97,10 +106,11 @@ function Hunt.new(adapter)
         -- must never freeze a hunter while its prey runs out of range.
         if valid and now>=self.nextAttack and not self.pending and now>=(self.repositionUntil or 0) then
             local sent,why=self.adapter:bite(s,prey)
+            if self.adapter.attackEvidence then self.inputEvidence=self.adapter:attackEvidence(s) end
             self.lastResult=why or (sent and "Attack requested; awaiting prey HP" or "Native attack not ready")
             self.nextAttack=now+(sent and (s.attackCooldown or .9) or .25)
             if sent then self.blockedSince=nil;self.noDamageAt=self.noDamageAt or now
-            else self.blockedSince=self.blockedSince or now end
+            else self.blockedSince=self.blockedSince or now;self.lastBlockedReason=self.lastResult;self.lastBlockedAt=now end
             if sent and finite(health) then
                 self.attacks+=1;self.pending={at=now,health=health}
             end
@@ -112,7 +122,12 @@ function Hunt.new(adapter)
         if valid and speed<2 and not self.repositionUntil then
             self.adapter:stop("valid stationary attack position")
         else
-            if geometry and geometry.inRange and not valid or now<(self.repositionUntil or 0) then
+            if geometry and geometry.inRange and geometry.facing==false and geometry.clear~=false then
+                -- Walking toward a parking point behind prey can end with our
+                -- animal facing away and no remaining movement. Approach the
+                -- prey itself until native movement turns us toward it.
+                target={x=prey.position.x,z=prey.position.z}
+            elseif geometry and geometry.inRange and not valid or now<(self.repositionUntil or 0) then
                 local dx,dz=prey.position.x-s.position.x,prey.position.z-s.position.z
                 local len=math.max(1,math.sqrt(dx*dx+dz*dz))
                 local side=(self.missesOnTarget%2==0) and 1 or -1
@@ -150,7 +165,8 @@ function Hunt.new(adapter)
         return {attacks=self.attacks,hpDeclines=self.hits,misses=self.misses,
             result=self.lastResult,distance=self.distance,preySpeed=self.preySpeed,
             active=self.target~=nil,killsObserved=self.kills,blockedSince=self.blockedSince,
-            committedSince=self.started,lastUsefulAt=self.lastUsefulAt,abandonReason=self.abandonReason}
+            committedSince=self.started,lastUsefulAt=self.lastUsefulAt,abandonReason=self.abandonReason,
+            geometry=self.geometry,lastBlockedReason=self.lastBlockedReason,lastBlockedAt=self.lastBlockedAt,inputEvidence=self.inputEvidence}
     end
     return h
 end

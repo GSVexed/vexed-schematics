@@ -1,9 +1,9 @@
 {
-  "version": "0.6.0",
+  "version": "0.6.1",
   "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
   "compiled": 21,
-  "total": 215,
-  "passed": 215,
+  "total": 223,
+  "passed": 223,
   "suites": [
     {
       "suite": "agent_suite.luau",
@@ -17,8 +17,8 @@
     },
     {
       "suite": "care_suite.luau",
-      "total": 46,
-      "passed": 46
+      "total": 47,
+      "passed": 47
     },
     {
       "suite": "driver_suite.luau",
@@ -37,8 +37,8 @@
     },
     {
       "suite": "lifecycle_suite.luau",
-      "total": 28,
-      "passed": 28
+      "total": 35,
+      "passed": 35
     },
     {
       "suite": "nav_suite.luau",
@@ -51,7 +51,7 @@
       "passed": 22
     }
   ],
-  "bundle_sha256": "1e8941cec7db8560d494080c3e958b4049c15e0cdfcb7ab189a35f7aae6feac7",
-  "protected_releases": 9,
+  "bundle_sha256": "297e56f60a0cc93d48a8d7a0a70d29dc11225d0bbba501345960aa21612d690e",
+  "protected_releases": 11,
   "live_gameplay_tested": false
 }

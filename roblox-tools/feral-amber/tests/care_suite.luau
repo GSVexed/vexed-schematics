@@ -280,5 +280,11 @@ test("care budget does not discard an ongoing hunt with repeatedly observed usef
     for at=20,200,10 do a:tick(at);eq(a.goal,goal)end
     eq(a.failures,0)
 end)
+test("observed manual intervention remains attached to the completed care report",function()
+    local b,a=world();b.state.thirst=25;b.state.feedCan="drink";b.state.nativeFeedKnown=true;a:tick(10)
+    b.state.manualInput=true;a:tick(11)
+    b.state.manualInput=false;b.state.thirst=100;a:tick(12)
+    eq(a.feeds,1);eq(a.lastCare.manualInterventionObserved,true)
+end)
 print(string.format("AMBER_CARE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Care transition regressions failed")

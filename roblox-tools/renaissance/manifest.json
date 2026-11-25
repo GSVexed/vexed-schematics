@@ -1,5 +1,5 @@
 {
-  "version": "15.6.0",
+  "version": "15.6.1",
   "game_baseline": 2412,
   "modules": {
     "core": {
@@ -47,11 +47,11 @@
       "bytes": 59807
     },
     "ui": {
-      "sha256": "7fece15f0bc6d4d299d81998743fd93b664c014b33d93adbc9dd9068d43c1c8b",
+      "sha256": "8ec8ab38f02a3743c62158e785096c40fdf0d7a8119494569426eb26a6080f07",
       "bytes": 17439
     },
     "controller": {
-      "sha256": "e94e4b3af701834f83b726205341800f2784e351c7bab2504e4af567c25d6e5c",
+      "sha256": "81adb2e7db3f10a0ceae12ec542860348c94f508026852b00eb35ffcf9b56771",
       "bytes": 43974
     },
     "amber_planner": {
@@ -67,20 +67,20 @@
       "bytes": 28890
     },
     "amber_hunt": {
-      "sha256": "a0d05aa697d099b780055cd2831bdd5bf17b4318c744ce428a83fc2c84a1172b",
-      "bytes": 8884
+      "sha256": "352d0787a5397d01907dcfbfc36d79fbcfa66355957449bc12829daea89b72ba",
+      "bytes": 10095
     },
     "amber_care": {
       "sha256": "0e513ed5c3fd74dc02b316759e22ae55e66855a3b91bf525779b96af09b75cb0",
       "bytes": 4259
     },
     "amber_agent": {
-      "sha256": "e1aa0e14d34c80af2f190d0afce75340002b7256bbed1fd7ff256c69cc408312",
-      "bytes": 29372
+      "sha256": "2ae19a6adbad3746ace19c99322141659c6cf92ed6f23eb0cf9eb1df8eeb4b2f",
+      "bytes": 29550
     },
     "amber_bridge": {
-      "sha256": "3d2a59e9b17fcf5467424ff30064a4c2e00e63485d6b6fde81f1833657931ad3",
-      "bytes": 41820
+      "sha256": "c2978347bcae82aeb603cdd13c39a20e9f2376ee860dd2f05d71aa9a481defd2",
+      "bytes": 44717
     },
     "amber_driver": {
       "sha256": "acad46a645fe3058f6a47f850f8923883d8771a755ccf55b55dddf4b1db8fd1c",
@@ -91,11 +91,11 @@
       "bytes": 3809
     },
     "amber_runtime": {
-      "sha256": "6aa9e1787d3a7dc3befa5d4f214a15f79752bb42c00272bf91d976c05717e2bd",
+      "sha256": "31624be2f6eb0ac1a6fbf021e6dc8c59eb50bed61a58ae3ac7cefa883f79b4f8",
       "bytes": 3906
     }
   },
-  "bundle_sha256": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
-  "bundle_bytes": 343424,
+  "bundle_sha256": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",
+  "bundle_bytes": 347710,
   "stable_clean_v14_overwritten": false
 }
