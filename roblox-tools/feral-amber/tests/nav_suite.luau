@@ -1,6 +1,6 @@
 -- Scripted physical simulations, not recorded live travel or a FERAL server.
 local Gait=assert(loadstring(GAIT_SRC))()
-local Nav=assert(loadstring(NAV_SRC))()
+local Nav
 local total,passed=0,0
 local function eq(a,b,msg) assert(a==b,(msg or "equality")..": "..tostring(a).." != "..tostring(b)) end
 local function test(name,fn)
@@ -24,6 +24,9 @@ Enum={KeyCode={},RaycastFilterType={Exclude=1},Material={Water="Water"},PathStat
 for _,key in ipairs({"W","A","S","D","LeftShift","X","Z"}) do Enum.KeyCode[key]=key end
 RaycastParams={new=function()return {}end}
 typeof=function(a)return type(a)=="table" and a.vector and "Vector3" or type(a)end
+local loader=assert(loadstring(NAV_SRC))
+setfenv(loader,getfenv()) -- Disable built-in import caching for fake Vector3 typeof.
+Nav=loader()
 local scene,keys,events,timers,jobs
 local input={}
 function input:SendKeyEvent(on,key) keys[key]=on;table.insert(events,{key=key,on=on}) end
@@ -159,15 +162,63 @@ test("native-key steering holds a diagonal without world Move writes",function()
     n:tick(v(120,3,-120),c,h,r,10,{},s);n:drive()
     eq(h.writes,0);assert(keys.W and keys.D);eq(n.lastMode,"NATIVE_KEYS")
 end)
-test("nearby player stops steering and all held keys",function()
+test("nearby player does not stop an otherwise valid travel route",function()
     local n,c,h,r,s=world();n:tick(v(350,3,0),c,h,r,10,{},s)
-    eq(n:tick(v(350,3,0),c,h,r,11,{v(4,3,0)},s),"BLOCKED")
-    eq(next(n.held),nil);eq(n.desiredPoint,nil)
+    eq(n:tick(v(350,3,0),c,h,r,11,{v(4,3,0)},s),"MOVING")
+    assert(n.desiredPoint)
 end)
 test("unstreamed ground retries are bounded and do not produce movement",function()
     local n,c,h,r,s=world();scene.missing=true;local result
     for i=0,20,2 do result=n:tick(v(300,3,0),c,h,r,10+i,{},s);if result=="STUCK"then break end end
     eq(result,"STUCK");eq(n.desiredPoint,nil)
+end)
+test("body sweep catches an off-centre tree that centre-line steering could miss",function()
+    local n,c,h,r,s,w=world()
+    CFrame={lookAt=function(from,to)return {Position=from,LookVector=(to-from).Unit}end}
+    function w:Blockcast(cf,size,dir)return {Instance={CanCollide=true},Position=v(12,3,2)}end
+    n.bodyHeight=3;n.bodyLength=6;n.clearance=3.6
+    eq(n:bodyClear(r.Position,v(30,3,0),c),false)
+end)
+test("initial tree overlap selects an outward local detour in about a second",function()
+    local n,c,h,r,s,w=world()
+    OverlapParams={new=function()return {}end}
+    CFrame={lookAt=function(from,to)return {Position=from,LookVector=(to-from).Unit}end}
+    local trunk={CanCollide=true,Position=v(5,3,0)}
+    function w:GetPartsInPart()return {trunk}end
+    function w:Blockcast()return nil end -- native sweeps omit initial overlap
+    n:tick(v(300,3,0),c,h,r,10,{},s)
+    n:tick(v(300,3,0),c,h,r,11.1,{},s)
+    assert((n.obstacleRecoveries or 0)>0,"No detour: "..tostring(n.lastReason).." / "..tostring(n.lastFailure).." / "..tostring(n.overlapParts and #n.overlapParts));assert(math.abs(n.desiredPoint.Z)>3)
+    assert(n.desiredPoint.X<0,"Recovery must move outward, not push into the tree")
+end)
+test("tall canopy is not selected as a ground waypoint",function()
+    local n,c,h,r,s,w=world()
+    Enum.RaycastFilterType.Include=2
+    function w:Raycast(origin,dir,params)
+        if params.FilterType==Enum.RaycastFilterType.Include then return {Position=v(origin.X,0,origin.Z),Normal={Y=1},Material="Grass",Instance=self.Terrain}end
+        return {Position=v(origin.X,42,origin.Z),Normal={Y=1},Material="Wood",Instance={CanCollide=true}}
+    end
+    local p=n:surface(v(50,3,0),c,true);eq(p.Y,2.5)
+end)
+test("standing against an ineffective route does not wait thirty seconds",function()
+    local n,c,h,r,s=world();local result
+    for i=0,50 do result=n:tick(v(300,3,0),c,h,r,10+i*.2,{},s);if result=="STUCK"then break end end
+    eq(result,"STUCK");assert(n.lastAt<20)
+end)
+test("prey following uses ordinary analog movement to match approach speed",function()
+    local n,c,h,r,s=world();s.moveScale=.4
+    n:tick(v(100,3,0),c,h,r,10,{},s);n:drive()
+    assert(math.abs(h.MoveDirection.Magnitude-.4)<.001)
+end)
+test("straight path mesh waypoints share a longer steering horizon",function()
+    local n,c,h,r,s,w=world();scene.wall=true
+    scene.path={}
+    for x=16,112,16 do table.insert(scene.path,{Position=v(x,3,0)})end
+    scene.computeHook=function()scene.wall=false end
+    n:tick(v(350,3,0),c,h,r,10,{},s)
+    assert(n.desiredPoint.X>=80,"Horizon "..tostring(n.desiredPoint.X).." index "..tostring(n.index).." stage "..tostring(n.lastReason))
+    s.hudSprint=true;r.Position=v(8,3,0);n:tick(v(350,3,0),c,h,r,10.3,{},s)
+    eq(n.gait,"BURST")
 end)
 print(string.format("AMBER_NAV_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Navigation regression failure")

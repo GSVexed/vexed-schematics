@@ -1,5 +1,5 @@
 {
-  "version": "15.4.3",
+  "version": "15.5.0",
   "game_baseline": 2412,
   "modules": {
     "core": {
@@ -7,8 +7,8 @@
       "bytes": 10512
     },
     "settings": {
-      "sha256": "067cb0d41a520a4564126d232703af46774beb2baef171d05cb492b0b3124ac8",
-      "bytes": 2610
+      "sha256": "a6eb47f7a54b48a50901943796fb5941756578e8b85a9b32c52901e2a90f82f9",
+      "bytes": 2623
     },
     "policy": {
       "sha256": "a2f9aa8b349073c40987a959294da7338b027b10e07746df0ec3bca7007fa17f",
@@ -47,15 +47,55 @@
       "bytes": 59807
     },
     "ui": {
-      "sha256": "6e3e5dc198f006cbb70af49b959d8d7d6732bb3344a720a051483700fc4a32c3",
-      "bytes": 15970
+      "sha256": "e2573d585b8302a673e7260e5a455038f0455cdf6f035f9ff8b46f499c19654c",
+      "bytes": 17439
     },
     "controller": {
-      "sha256": "e0e37581f164f21f7fc33f608267fc8e1ede5bed1e9665760e5190fabd79b0de",
-      "bytes": 43608
+      "sha256": "ce6a51b9e8c14ee75247dcaa0aeba97a214661fdf3bc7f565ab959e055b6704d",
+      "bytes": 43827
+    },
+    "amber_planner": {
+      "sha256": "92a4a93da50247eb5d127c86bfea0cf356fe5c736efef0076fd1a54f7c309b6c",
+      "bytes": 11654
+    },
+    "amber_gait": {
+      "sha256": "496a44aeeb833da3ad4c61024304e0b2ed4423c07bce7ee86446d134426acd95",
+      "bytes": 7705
+    },
+    "amber_nav": {
+      "sha256": "31172951984b1457e9a2cd5bf9f947a37777e07485736bd7f1ae0dfd699800bd",
+      "bytes": 24882
+    },
+    "amber_hunt": {
+      "sha256": "12a3a386941b9c9eaf099911ee6c254d974a1177bcd4fb06bd25e490d774a6e9",
+      "bytes": 7110
+    },
+    "amber_care": {
+      "sha256": "0e513ed5c3fd74dc02b316759e22ae55e66855a3b91bf525779b96af09b75cb0",
+      "bytes": 4259
+    },
+    "amber_agent": {
+      "sha256": "6b01e3e0b900f107b220e33a99230acec3efee7016ffd490aeb20edfdd6987fa",
+      "bytes": 21929
+    },
+    "amber_bridge": {
+      "sha256": "b97a5f89f2036c0d9f273c68990a4553df7068c935da5c3110aec6e59ad75d98",
+      "bytes": 37308
+    },
+    "amber_driver": {
+      "sha256": "acad46a645fe3058f6a47f850f8923883d8771a755ccf55b55dddf4b1db8fd1c",
+      "bytes": 4231
+    },
+    "amber_ui": {
+      "sha256": "5e5d352927fb8724956b527b065da8ccb269440626969aad24a35fd6617731ea",
+      "bytes": 3768
+    },
+    "amber_runtime": {
+      "sha256": "f972faff3cafd3061c5759171a22ae0f7fd4c2f82e13cce56cd653e1171337e7",
+      "bytes": 3500
     }
   },
-  "bundle_sha256": "e60fd51fabbd192ca6ff77ad0055b089a152a88304efb96aa59e46e6421e514e",
-  "bundle_bytes": 195591,
+  "bundle_sha256": "e58a4e7dadbb1f1ceeb8f4e16f612ea33d72f26ca9519dc48b908c0b03a3f975",
+  "bundle_bytes": 324324,
   "stable_clean_v14_overwritten": false
 }

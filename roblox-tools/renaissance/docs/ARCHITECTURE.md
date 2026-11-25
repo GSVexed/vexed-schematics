@@ -1,6 +1,6 @@
-# Renaissance 15.3.0 architecture
+# Renaissance 15.5.0 architecture
 
-The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. This replaces fourteen embedded legacy modules with thirteen original, independently compiled modules. No raw game bytecode or reconstructed game source is bundled.
+The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its existing clean loader unchanged. The complete bundle embeds thirteen core modules and ten Amber modules, independently compiled from owned source. No raw game bytecode or reconstructed game source is bundled.
 
 | Owner | Responsibility | Lifecycle |
 |---|---|---|
@@ -15,7 +15,7 @@ The v14 rollback is commit 158474ba80c0d613c3427399f24059341369acc8, with its ex
 | rescue.luau | Manual G water-cub attempt through native eligibility and carry protocol | One short request; native attachment observed separately |
 | features.luau | All shared client-config edits and own stamina flag | One reversible lease manager |
 | roblox.luau | Services, snapshots, module identity, native observers, terrain queries | One heartbeat, one render binding, one small PreAnimation guard and the existing render callback after native animation |
-| ui.luau | Four-tab menu, hollow outlines, separate pack/health cues, tags and guide | One GUI and renderer; at most 24 real-player records |
+| ui.luau | Five-tab menu, hollow outlines, separate pack/health cues, tags and guide | One GUI and renderer; at most 24 real-player records |
 | controller.luau | Coordination, preemption, evidence, lifecycle and persistence acknowledgement | Inactive stage, activate, idempotent close |
 
 ## Activation and rollback
@@ -67,3 +67,11 @@ A single high-priority ContextActionService binding passes through when text is 
 The owned pose reset expires after a native animation frame (hub Camera+3; captured WolfAnim Camera+2), including long frame hitches. Visible cooldown guidance can use native Species/Passive calculations and the own bite marker when private callbacks are VM-isolated; that path reports private state as unverified. Validated previous-owner handles are preserved rather than searched for in the global heap.
 
 15.4 adds one owned minigame deadline timer (at most four wakes per strike), with event/Heartbeat/render checks. The scheduler solves the first safe Perfect interval and always sends actual time. Readable native absence differs from a failed read. Manual takeover, end, respawn and close cancel timers; own results cancel only their matching pending strike. Native action attribute listeners can release Rest and idle movement before the next scheduled check. Current selected-body geometry is refreshed between full scans. Known native swim/climb/venom consumption inputs share the stamina lease; native level replacements invalidate the old plan. The existing ledger measures recent stamina by species/locomotion. See V15_4_UPGRADES.md for exact boundaries.
+
+## Integrated Territory ownership (15.5.0)
+
+`amber_runtime` attaches a native page through `ui:registerPage` and runs from the existing main controller tick. It owns one Agent, Bridge, Nav, Gait and Driver. No second Heartbeat, ScreenGui or visibility listener is created. The inactive stage creates no Territory action owner; activation attaches the disabled engine. Close retires Territory before core bridge/render cleanup. Errors inside Territory stop that engine and leave the hub available.
+
+Agent owns the single objective across travel, territory, feeding and hunting. Care distinguishes requested approach, active feeding, interruption and verified resource completion. Planner holds a native region cursor and builds local tours; contested hexes are deferred without blanket proximity pauses. Nav verifies physical displacement and body clearance; Driver restores only callbacks it still owns. STOP invalidates paths and releases owned input immediately. UI tab/hide only retires the page view, leaving engine ownership intact.
+
+The preserved core feature registry remains exactly 21 records. Requested Territory farming is a separate explicit START/STOP operation integrated into the same owner. See ../../feral-amber/docs/V0_5_RELEASE.md for contracts, bounds and acceptance evidence.

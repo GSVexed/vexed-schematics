@@ -1,3 +1,11 @@
+# Renaissance 15.5.0 — integrated Territory farming
+
+Amber 0.5.0 now runs inside the native Territory tab, with one main window and scheduler. Existing 21 feature records and earlier versioned bundles are retained. This release adds region completion sweeps, non-pack occupied-hex deferral, stable claim verification, near-finish protection, interrupted/full drinking, body-sized tree recovery, immediate eligible Burst upgrades and trailing NPC hunts.
+
+Validation: 187/187 retained Renaissance and 170/170 Amber scenarios pass locally with official Luau. All 23 embedded modules have source parity; 28 Renaissance and 21 Amber compilation targets pass. No current live gameplay or yield measurement was performed. See the [complete report](../../feral-amber/docs/V0_5_RELEASE.md), release.json and published PR checks.
+
+---
+
 # Renaissance 15.4.3 — highest native Hippo Crusher Bite cap
 
 Pinned candidate: [immutable source](https://github.com/GSVexed/vexed-schematics/blob/60b8218912f8ff4b9bebec4e0a91bdc104f78b46/roblox-tools/feral-renaissance-v15.4.3.lua).

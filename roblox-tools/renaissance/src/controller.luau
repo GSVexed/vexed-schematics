@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.4.3", tokenIdentity = tokenIdentity,
+    local h = { version = "15.5.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -663,6 +663,7 @@ function Controller.new(M,bridge,options)
     function h:tick(dt)
         if not self.active or self.closed then return end
         local now = bridge.clock()
+        if self.territory then self.territory:tick(now) end
         if Core.finite(dt) and dt>0 then
             self.frameInterval=(self.frameInterval or dt)*.85+math.min(dt,.25)*.15
         end
@@ -772,6 +773,7 @@ function Controller.new(M,bridge,options)
         assert(self.ready and not self.closed,"candidate not staged")
         self.ui:activate()
         self.active = true
+        if M.amber_runtime then self.territory=M.amber_runtime.start(M,self) end
         self.registry:ack("settings",true,"CLIENT","loaded settings; full reconciliation pending")
         return self
     end
@@ -781,6 +783,7 @@ function Controller.new(M,bridge,options)
         self.closed = true
         self.cleanupErrors = {}
         for _,cleanup in ipairs({
+            function() if self.territory then self.territory.close() end end,
             function() self:cancelGrabWake() end,
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,

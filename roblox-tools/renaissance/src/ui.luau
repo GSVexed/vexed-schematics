@@ -13,7 +13,7 @@ function UI.mount(hub, bridge, scope)
     local pg = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui",10)
     assert(pg,"PlayerGui unavailable")
     local u = { visible = true, rows = {}, records = {}, nextText = 0, nextFit = 0,
-        tab = hub.settings.tab, lastPoint = nil }
+        tab = hub.settings.tab, lastPoint = nil,pages={},pageView=nil }
     local palette = {
         bg = Color3.fromRGB(12,17,28), side = Color3.fromRGB(15,22,36),
         panel = Color3.fromRGB(22,31,48), line = Color3.fromRGB(48,65,85),
@@ -67,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.4.3",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  15.5.0",18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -105,10 +105,19 @@ function UI.mount(hub, bridge, scope)
         end)
     end
     local function draw()
+        if u.pageView and u.pageView.close then pcall(u.pageView.close,u.pageView) end
+        u.pageView=nil
         for _, child in ipairs(cards:GetChildren()) do child:Destroy() end
         u.rows,u.combatReadout,u.finderReadout = {},nil,nil
         title.Text = string.upper(u.tab)
-        if u.tab == "Combat" then
+        subtitle.Text="Simple controls. Native gameplay remains in charge."
+        if u.pages[u.tab] then
+            u.pageView=u.pages[u.tab]:mount(cards,{
+                text=text,button=button,palette=palette,make=make,card=card})
+            subtitle.Text="Automatic territory, survival and native movement in one hub."
+        elseif u.tab=="Territory" then
+            info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
+        elseif u.tab == "Combat" then
             info(0,"BITE REACH  ·  ALWAYS ON","Wider client range with rear and vertical assistance. Server acceptance unverified.",78)
             row("biteHelper",94)
             info(161,"RANGE COLOURS","Teal: stock-reference range. Amber: extended only. Grey: blocked, cooling down or readiness unknown.",80)
@@ -144,14 +153,34 @@ function UI.mount(hub, bridge, scope)
         for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end
         u.nextText = 0
     end
-    for i,name in ipairs({"Survival","Combat","Movement","Vision"}) do
-        local btn = button(side,string.upper(name),12,113+(i-1)*49,141,37)
+    for i,name in ipairs({"Survival","Combat","Movement","Vision","Territory"}) do
+        local btn = button(side,string.upper(name),12,113+(i-1)*44,141,35)
         tabs[name] = btn
         btn.Activated:Connect(function()
             if not hub.active then return end
-            u.tab,hub.settings.tab = name,name
-            draw(); hub:save()
+            u:selectTab(name)
         end)
+    end
+    function u:selectTab(name)
+        if not tabs[name] then return false end
+        self.tab,hub.settings.tab=name,name
+        draw();if hub.active then hub:save() end
+        return true
+    end
+    function u:registerPage(name,definition)
+        assert(tabs[name] and type(definition.mount)=="function","Unsupported hub page")
+        self.pages[name]=definition
+        if self.tab==name then draw() end
+        local registration={closed=false}
+        function registration:close()
+            if self.closed then return end
+            self.closed=true
+            if u.pages[name]==definition then
+                u.pages[name]=nil
+                if u.tab==name and not hub.closed then draw() end
+            end
+        end
+        return registration
     end
     function u:toggle()
         self.visible = not self.visible
@@ -265,6 +294,7 @@ function UI.mount(hub, bridge, scope)
         if not self.visible then return end
         if now < self.nextText then return end
         self.nextText = now+.25
+        if self.pageView and self.pageView.tick then self.pageView:tick(now) end
         for id,rowValue in pairs(self.rows) do
             local feature = registry[id]
             assign(rowValue.toggle,"Text",not feature.requested and "OFF"

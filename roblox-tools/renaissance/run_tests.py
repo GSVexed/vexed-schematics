@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 
-from build import ROOT, DEST, MODULES, PROTECTED_HASHES, verify_protected_artifacts, build
+from build import ROOT, DEST, MODULES, PROTECTED_HASHES, verify_protected_artifacts, build, module_path
 
 
 def long_string(text):
@@ -51,7 +51,7 @@ def main():
             raise AssertionError("missing rollback accepted")
     manifest = build()
     compiled = []
-    compile_paths = [*(ROOT/"src"/f"{name}.luau" for name in MODULES),
+    compile_paths = [*(module_path(name) for name in MODULES),
                      ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", ROOT/"tests/performance.luau", DEST]
     launcher = ROOT.parent/"feral-renaissance.lua"
     if launcher.exists():
@@ -85,7 +85,7 @@ def main():
     source = DEST.read_text()
     for name in MODULES:
         body = re.search(r'sources\["' + name + r'"\] = \[============\[\n(.*?)\]============\]', source, re.S).group(1)
-        assert body == (ROOT/"src"/f"{name}.luau").read_text(), f"bundle parity: {name}"
+        assert body == module_path(name).read_text(), f"bundle parity: {name}"
     assert not re.search(r'FireServer\s*\(\s*["\']Bite(?:Hit)?["\']', source)
     assert not re.search(r'\bgetgc\s*\(', source), "runtime heap enumeration forbidden"
     assert not re.search(r'\.Health\s*(?:[+*/-]?=)',source), "local HP writes forbidden"

@@ -1,3 +1,4 @@
+local Care=assert(loadstring(CARE_SRC))()
 local Planner=assert(loadstring(PLANNER_SRC,"=amber_planner"))()
 local Hunt=assert(loadstring(HUNT_SRC))()
 local Agent=assert(loadstring(AGENT_SRC,"=amber_agent"))()
@@ -39,7 +40,7 @@ local function world()
     end
     function w:attackGeometry() return {valid=true,inRange=true} end
     function w:bite() self.bites+=1;return true end
-    return w,Agent.new(Planner,w,Hunt)
+    return w,Agent.new(Planner,w,Hunt,Care)
 end
 test("Spirit Bear is Bear species with coat shown only as metadata",function()
     local w,a=world()
@@ -63,13 +64,13 @@ test("replicated owner verifies claim before reporting success",function()
     local w,a=world();a:setEnabled(true);a:tick(10)
     local key=a.goal.key
     eq(a.claimed,0);w:territory(key).owner=9
-    a:tick(11);eq(a.claimed,1);eq(a.goal,nil)
+    a:tick(11);eq(a.claimed,0);a:tick(11.6);eq(a.claimed,1);eq(a.goal,nil)
 end)
 test("replicated hold verifies rescent before counting it",function()
     local w,a=world();w.hex={w.hex[2]}
     a:setEnabled(true);a:tick(10)
     eq(a.goal.detail.kind,"SCENT");eq(a.scented,0)
-    w.hex[1].hold=.98;a:tick(11)
+    w.hex[1].hold=.998;a:tick(11);a:tick(11.6)
     eq(a.scented,1);eq(a.goal,nil)
 end)
 test("thirst interrupt cancels current claim and moves toward natural water",function()
@@ -89,7 +90,7 @@ test("successful drinking requires actual thirst increase",function()
     eq(a.feeds,0)
     w.state.thirst=24;a:tick(11)
     eq(a.feeds,0)
-    w.state.thirst=72;a:tick(12);eq(a.feeds,1)
+    w.state.thirst=100;a:tick(12);eq(a.feeds,1)
 end)
 test("low health pauses movement without claiming fabricated healing",function()
     local w,a=world();w.state.healthFraction=.19
@@ -101,10 +102,10 @@ test("manual input pauses movement and cancels no owned server attribute",functi
     a:setEnabled(true);a:tick(10)
     eq(a:status().phase,"PAUSED");eq(#w.moves,0)
 end)
-test("nearby real player stops route",function()
+test("nearby player does not globally pause normal travel",function()
     local w,a=world();w.state.players={{x=10,z=0}}
     a:setEnabled(true);a:tick(10)
-    eq(a:status().phase,"PAUSED");eq(#w.moves,0)
+    eq(a:status().phase,"TRAVEL");assert(#w.moves>0)
 end)
 test("NPC hunting is native-click only and never a player attack",function()
     local w,a=world();w.state.hunger=12;w.preyMode=true

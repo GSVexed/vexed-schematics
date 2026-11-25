@@ -29,7 +29,7 @@ function Bridge.new(nav)
     end
     b.config=config
     function b:hub()
-        local h=(type(getgenv)=="function" and getgenv() or _G).FERAL_RENAISSANCE_ACTIVE
+        local h=self.ownerHub or (type(getgenv)=="function" and getgenv() or _G).FERAL_RENAISSANCE_ACTIVE
         return type(h)=="table" and not h.closed and h.bridge and h.bridge.player==player and h or nil
     end
     function b:prepare(now,enabled,goal)
@@ -64,16 +64,37 @@ function Bridge.new(nav)
             or attr(player,"Coat")
         return sp,coat
     end
+    local function packKey(value)
+        if value==nil or value==false or value==0 or value=="0" or value=="" or value=="None" then return nil end
+        return tostring(value)
+    end
+    function b:hexAt(position)
+        if not self.cfg or type(self.cfg.hexAt)~="function" or not position then return nil end
+        local ok,i,j=pcall(self.cfg.hexAt,position.x,position.z)
+        if not ok then return nil end
+        if type(self.cfg.hexKey)=="function" then
+            local good,key=pcall(self.cfg.hexKey,i,j)
+            if good then return key end
+        end
+        return "H"..tostring(i).."_"..tostring(j)
+    end
     function b:otherPlayerPositions()
-        local all={}
+        local all,occupied={},{}
+        local mine=packKey(attr(player,"FeralPack"))
         for _,p in ipairs(Players:GetPlayers()) do
             if p~=player then
                 local c=p.Character
                 local root=c and c:FindFirstChild("HumanoidRootPart")
-                if root then table.insert(all,point(root.Position)) end
+                local theirs=packKey(attr(p,"FeralPack") or attr(c,"FeralPack"))
+                local same=mine~=nil and theirs==mine
+                if root and not same then
+                    local pos=point(root.Position);pos.hex=self:hexAt(pos)
+                    table.insert(all,pos)
+                    if pos.hex then occupied[pos.hex]=(occupied[pos.hex] or 0)+1 end
+                end
             end
         end
-        return all
+        return all,occupied
     end
     function b:refresh(now)
         if not self.cfg or not self.territoryInstance then
@@ -99,6 +120,10 @@ function Bridge.new(nav)
                 if good and p and ((typeof(p)=="Vector2")
                     or (type(p)=="table" and finite(p.X) and finite(p.Y))) then
                     local h={key=t.key,center={x=p.X,z=p.Y}}
+                    if type(self.cfg.regionCell)=="function" then
+                        local valid,region=pcall(self.cfg.regionCell,p.X,p.Y)
+                        if valid and finite(region) then h.region=region end
+                    end
                     table.insert(hexes,h);byKey[t.key]=h
                 end
             end
@@ -132,7 +157,7 @@ function Bridge.new(nav)
             owner=terrAttr(key,"owner"),by=terrAttr(key,"by"),
             prog=terrAttr(key,"prog"),hold=terrAttr(key,"hold"),
             pay=finite(pay) and pay or nil,
-            fade=terrAttr(key,"fade"),center=h.center,spot=h.spot}
+            fade=terrAttr(key,"fade"),center=h.center,spot=h.spot,region=h.region}
     end
     function b:territories(state)
         self:refresh(state.now)
@@ -161,6 +186,10 @@ function Bridge.new(nav)
         return result
     end
     local function groundAt(x,z,c)
+        local root=c and c:FindFirstChild("HumanoidRootPart")
+        if root and type(b.nav.surface)=="function" then
+            return b.nav:surface(Vector3.new(x,root.Position.Y,z),c,false)
+        end
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude
         params.FilterDescendantsInstances={c}
@@ -296,6 +325,9 @@ function Bridge.new(nav)
             local ok,p=pcall(finder.waterAround,state.char,state.root,needs and needs.WATER_PROMPT_PROBES)
             if ok and typeof(p)=="Vector3" then consider(point(p)) end
         end
+        if best and score<25 then
+            self.waterEvidence="NATIVE_OFFER";self.waterCache,self.waterAt=best,state.now;return best
+        end
         -- Find actual nearby terrain water. Also sample progressively larger
         -- landmark rings: a lake's centre is not necessarily its shoreline.
         local origins={{x=state.position.x,z=state.position.z,rings={10,24,48,90,150}}}
@@ -369,7 +401,15 @@ function Bridge.new(nav)
             local ok,mode,started,known=pcall(hub.bridge.nativeFeedState,hub.bridge,now)
             if ok then feed,feedStarted,feedKnown=mode,started,known end
         end
+        local needs=config("NeedsConfig") or {}
+        local attackCooldown
+        local speciesConfig=config("Species")
+        if speciesConfig and type(speciesConfig.biteCooldown)=="function" then
+            local good,value=pcall(speciesConfig.biteCooldown,species,attr(c,"Growth") or 1)
+            if good and finite(value) and value>=.1 and value<=10 then attackCooldown=value end
+        end
         local offer=attr(c,"FeedCanPos")
+        local others,contested=self:otherPlayerPositions()
         local amber=attr(player,"Amber")
         if not finite(amber) then
             local stats=player:FindFirstChild("leaderstats")
@@ -396,8 +436,14 @@ function Bridge.new(nav)
             hudBurstNo=burstNo==true or finite(burstNo) and now>=burstNo and now-burstNo<1.7,
             runIntent=attr(c,"WolfRunIntent"),allowBurst=reserve~=nil and reserve>=.56,
             allowWater=profile.swim==true,swimSprint=profile.swimSprint==true,
-            amber=amber,now=now,serverNow=at,unixNow=os.time(),players=self:otherPlayerPositions(),
-            avoidRadius=110,claimRadius=15,careTarget=72,
+            amber=amber,now=now,serverNow=at,unixNow=os.time(),players=others,contested=contested,currentHex=self:hexAt(point(r.Position)),
+            avoidRadius=35,claimRadius=15,careTarget=72,
+            thirstMax=finite(needs.THIRST_MAX) and needs.THIRST_MAX or 100,
+            drinkTarget=finite(needs.THIRST_MAX) and needs.THIRST_MAX or 100,
+            refillTime=self.cfg and self.cfg.REFILL_TIME,
+            attackCooldown=attackCooldown,gaitSpeeds=profile.native and profile.native.gait,
+            regionGrid=self.cfg and self.cfg.REGIONS and self.cfg.REGIONS.GRID,
+            regionBonus=self.cfg and self.cfg.REGIONS and self.cfg.REGIONS.PAY_MULT,
             gameMenu=attr(player,"FeralMenuOpen")==true,menuOpen=UserInput:GetFocusedTextBox()~=nil,
             manualInput=self:manualInput(),combat=finite(at) and finite(untilCombat) and untilCombat>at or false,
             pinned=attr(c,"FeralPinned")==true or attr(c,"FeralDragged")==true or attr(c,"FeralCarried")==true,
@@ -415,9 +461,7 @@ function Bridge.new(nav)
         local s=table.clone(state)
         for key,value in pairs(options) do s[key]=value end
         local target=Vector3.new(destination.x,state.root.Position.Y,destination.z)
-        local players={}
-        for _,p in ipairs(state.players or {}) do table.insert(players,Vector3.new(p.x,state.root.Position.Y,p.z)) end
-        local result=self.nav:tick(target,state.char,state.hum,state.root,state.now,players,s)
+        local result=self.nav:tick(target,state.char,state.hum,state.root,state.now,{},s)
         self.motionReason=self.nav.lastReason
         return result
     end
@@ -476,7 +520,8 @@ function Bridge.new(nav)
         local finder=config("FeedFinder")
         if finder and type(finder.food)=="function" then
             local ok,item,pos=pcall(finder.food,state.char,state.root)
-            if ok and item and typeof(pos)=="Vector3" and safePosition(point(pos),state) then
+            if ok and item and typeof(pos)=="Vector3" and safePosition(point(pos),state)
+                and (self.foodBlocked[item] or 0)<=state.now then
                 return {position=point(pos),model=item}
             end
         end
@@ -519,21 +564,59 @@ function Bridge.new(nav)
         end
         return best
     end
+    function b:resourceSearch(state,kind)
+        self.searchVisits=self.searchVisits or {}
+        local active=self.searchPoint
+        if active and state.now<(self.searchUntil or 0) and dist(active,state.position)>12 then return active end
+        if active then self.searchVisits[active.key or "last"]=state.now end
+        local best,score=nil,math.huge
+        for _,hex in ipairs(self.hexes) do
+            local p=hex.spot or hex.center
+            local d=dist(p,state.position)
+            local visited=self.searchVisits[hex.key] or -100
+            if d>45 and d<650 and not (state.contested and state.contested[hex.key]) and state.now-visited>25 then
+                local rank=d+(hex.key==state.currentHex and 120 or 0)
+                if rank<score then best,score={x=p.x,z=p.z,key=hex.key},rank end
+            end
+        end
+        self.searchPoint,self.searchUntil=best,state.now+8
+        return best
+    end
+    function b:patrol(state)
+        self.patrolVisits=self.patrolVisits or {}
+        local target=self.patrolTarget
+        if target and dist(target,state.position)>14 and state.now<(self.patrolUntil or 0) then return target end
+        if target then self.patrolVisits[target.key]=state.now end
+        local best,score=nil,math.huge
+        for _,h in ipairs(self.hexes) do
+            local t=self:territory(h.key)
+            local d=dist(state.position,h.spot or h.center)
+            if t and not t.neutral and t.owner==state.pack and d>40 and not (state.contested and state.contested[h.key]) then
+                local recent=self.patrolVisits[h.key]
+                local rank=d+(recent and math.max(0,60-state.now+recent)*12 or 0)
+                if rank<score then best,score={x=(h.spot or h.center).x,z=(h.spot or h.center).z,key=h.key},rank end
+            end
+        end
+        self.patrolTarget,self.patrolUntil=best,state.now+12
+        return best
+    end
     function b:checkPrey(prey,state)
         local profile=state.profile or self:profile(state.char,state.species)
         if not prey or not prey.model or not prey.model.Parent or not profile.hunts then return nil end
         if Players:GetPlayerFromCharacter(prey.model) then return nil end
         local pack=attr(prey.model,"FeralPack")
-        if state.pack~=nil and state.pack==pack then return nil end
+        if packKey(state.pack)~=nil and packKey(state.pack)==packKey(pack) then return nil end
         local root=prey.model:FindFirstChild("HumanoidRootPart")
         local hum=prey.model:FindFirstChildOfClass("Humanoid")
         if not root or not hum or hum.Health<=0 or attr(prey.model,"FeralDead")==true
-            or hum.MaxHealth>state.hum.MaxHealth*.8 or (self.preyBlocked[prey.model] or 0)>state.now then return nil end
+            or hum.MaxHealth>state.hum.MaxHealth*1.25 or (self.preyBlocked[prey.model] or 0)>state.now then return nil end
         local position=point(root.Position)
-        if not safePosition(position,state,120) then return nil end
+        if not safePosition(position,state,32) then return nil end
         local velocity=root.AssemblyLinearVelocity
         prey.position=position;prey.root=root;prey.hum=hum
         prey.velocity=velocity and point(velocity) or {x=0,z=0}
+        local look=root.CFrame and root.CFrame.LookVector
+        prey.forward=look and {x=look.X,z=look.Z} or nil
         prey.health=hum.Health
         prey.attackRange=math.clamp((state.root.Size.Z+root.Size.Z)*.35,4,12)
         return prey
