@@ -2,7 +2,7 @@
 
 The v2412 client hub retains all 21 approved functions in one compact four-tab interface. Right Shift, permanent Bite Reach, hollow-only outlines and schema-15 saved settings are preserved.
 
-This candidate adds first-safe-window minigame timing, one bounded deadline timer, resilient native-state reads, immediate native-action recovery handoffs, extended stamina consumption coverage, current target geometry, guarded talon/dive flight recovery and safer feeding/rescue/idle transitions. It passes 176 scenarios and 18 compile checks locally, including a 72-case timing replay matrix. See docs/V15_4_UPGRADES.md for measurements, the full upgrade decisions and live limits.
+This release adds first-safe-window minigame timing, one bounded deadline timer, resilient native-state reads, immediate native-action recovery handoffs, extended stamina consumption coverage, current target geometry, guarded talon/dive flight recovery and safer feeding/rescue/idle transitions. It passes 176 scenarios and 18 compile checks locally, including a 72-case timing replay matrix. See docs/V15_4_UPGRADES.md for measurements, the full upgrade decisions and live limits.
 
 The retained recovery correction preserves native Rest factors, removes false recurrence pauses, keeps automatic-response provenance, separates camera input from attacks, and resets the owned native animation blend. Actual HP increases and unchanged windows are distinguished; sustained 2x/4x gameplay effects remain unverified. See docs/V15_2_1_RECOVERY.md.
 
@@ -14,7 +14,7 @@ CLEAN v14, its clean loader and complete 15.0.0/15.1.0/15.2.0/15.2.1/15.3.0 bund
 
     loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
 
-The launcher pins immutable source [1905fbe](https://github.com/GSVexed/vexed-schematics/blob/1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b/roblox-tools/feral-renaissance-v15.3.0.lua). All 137 regressions, 18 compile checks, source parity and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45632821703). Final execution was acknowledged without a matching validated result, including one read-only late pickup. Final rendered-pose behavior, Vulture recovery and sustained 2x/4x gameplay rates remain unconfirmed.
+The launcher pins immutable source [ef1544f](https://github.com/GSVexed/vexed-schematics/blob/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua). All 176 regressions, 18 compile checks, source parity and rollback checks pass locally and in [published source CI](https://github.com/GSVexed/vexed-schematics/actions/runs/45643744396). Exact Potassium staging in FERAL v2412 confirmed all 13 modules, rapid timing logic, native minigame/feeding handlers, the 17-field stamina plan, renderer construction and clean shutdown while retaining the active 15.3 hub. Validation made zero gameplay requests and zero attribute writes. Actual minigame win rates, rendered/remote pose, flight repair and sustained recovery/stamina/range results remain unverified.
 
 ## Build and test
 

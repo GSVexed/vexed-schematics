@@ -1,3 +1,42 @@
+# Renaissance 15.4.0 — rapid minigames and coordinated upgrades
+
+Immutable source: [ef1544f](https://github.com/GSVexed/vexed-schematics/blob/ef1544f25d37f071df90dd1da84b9fd5df60bdaf/roblox-tools/feral-renaissance-v15.4.0.lua). [Published source CI 45643744396](https://github.com/GSVexed/vexed-schematics/actions/runs/45643744396) passes all 176 regressions, 18 compile checks, deterministic packaging and rollback checks. The exact source also passed Potassium staging in FERAL v2412, preserving the active hub and issuing zero gameplay requests or attribute writes.
+
+- Minigames target the first safe Perfect interval, with immediate event checks, frame callbacks and one bounded deadline timer. A reproduced late-packet case avoids a 1.020-second extra wait; the ordinary captured zone is scheduled 30.272 ms before its centre. These are deterministic timing measurements, not live win-rate measurements.
+- Temporary native-state read failures retain a genuine pending strike. Native end/bite cleanup still wins. Real own replies alone update grades; bite clicks remain separate. No future/backdated timestamps, artificial strikes or extra press spam are used.
+- Native action changes preempt owned Rest immediately. Recovery displays recent observed rates; the stamina plan covers native swim, climb and venom drain inputs with exact restoration and per-locomotion observations.
+- The selected bite guide follows current body geometry between scans. Small target-distance fluctuations do not flip rear assistance, and a newly selected body's marker starts at that body. Real game-reported damage and HP correlation stay distinct.
+- Guarded post-attack flight recovery covers native-eligible airborne talon/dive episodes. Active locks, capture, water, anchored bodies and deliberate stationary flight remain excluded; physics is not overwritten.
+- Feeding checks the current native food/water offer before a stalled-session restart. Cub rescue yields to abilities and validates the current animal. Idle walks recheck their route; player overlays hide immediately when real-player ownership ends. Idle background scans adapt to slower frames.
+
+The [full upgrade decisions](V15_4_UPGRADES.md) explain the useful improvements, retained implementations and unproven exploit targets. All 21 records, compact tabs, Right Shift, saved settings, player-only hollow health-coloured ESP and permanent Bite Reach remain. No deliberately removed feature returns.
+
+## Confirmed checks and live boundaries
+
+Potassium staging run 45644187432 confirmed all 13 modules, the timing model, native minigame and feeding handler access, a compatible 17-field stamina plan, renderer construction and cleanup. The existing active hub was 15.3.0 and was retained. The private bite handler remained inaccessible; ordinary native bites remain available, while the scripted post-Rest retry may be unavailable. Sanitized exact-source evidence is in live-v154-stage.json.
+
+Actual Perfect frequency/wins, simultaneous accepted bite damage, extra accepted reach, sustained stamina across species, real 2x HP/4x condition recovery, visible/remote moving Rest pose, original Vulture-freeze resolution and water-cub success remain unverified. Native strike cadence, pauses and game eligibility still apply. Staging did not install the replacement into the active session.
+
+## Apply
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+
+Run the complete loader once to apply 15.4.0 using the saved settings. Avoid stacking separate legacy modules.
+
+## Rollback
+
+Complete 15.3.0:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b/roblox-tools/feral-renaissance-v15.3.0.lua"))()
+
+Original CLEAN v14:
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/158474ba80c0d613c3427399f24059341369acc8/roblox-tools/feral-nova-v14.0-clean-reach-core.lua"))()
+
+All complete prior bundles remain byte-for-byte unchanged. Re-running a complete Renaissance loader retires its prior owner, including pending minigame deadlines, before activating the replacement.
+
+---
+
 # Renaissance 15.3.0 — timing and moving Rest corrections
 
 Immutable source: [1905fbe](https://github.com/GSVexed/vexed-schematics/blob/1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b/roblox-tools/feral-renaissance-v15.3.0.lua). Published source [CI 45632821703](https://github.com/GSVexed/vexed-schematics/actions/runs/45632821703) passes all 137 scenarios, 18 compile checks, deterministic packaging and rollback gates.

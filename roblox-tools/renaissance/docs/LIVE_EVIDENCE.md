@@ -1,5 +1,26 @@
 # Live validation record
 
+## Version 15.4.0 release
+
+Exact source ef1544f25d37f071df90dd1da84b9fd5df60bdaf passes all 176 code-level scenarios, 18 compile checks, deterministic packaging and rollback gates in public source CI run 45643744396. The suite includes an independent 72-case native-formula timing matrix and a direct comparison against preserved 15.3.0: the late-packet example changes from a 1020 ms wait to immediate eligibility; ordinary safe entry is 30.272 ms before centre. No actual live speedup, Perfect rate or win rate is inferred from those simulations.
+
+Private Windows runner run 45644187432 executed a pinned, reviewed stage-only validator for this exact source. The unique paired client matched the running Roblox process. Its exact schema-154/source-commit result was parsed from the console and returned MCP_SCRIPT_CONSOLE_CONFIRMED. Sanitized result: live-v154-stage.json.
+
+| Check | Observed result |
+|---|---|
+| Game/capture | Correct FERAL place, actual version 2412, own animal available |
+| Modules/registry | 13 modules, 21 retained records |
+| Rapid timing model | Late-arrival pure simulation passed inside the actual executor; zero fabricated grades |
+| Deadline API | Native task.delay present; no gameplay deadline scheduled by the inactive candidate |
+| Native callback access | Minigame and feeding found; private bite handler not found |
+| Stamina schema | 17 recognised consumption fields planned; no plan applied |
+| Renderer | Hidden construction and render smoke check returned |
+| Isolation | Running 15.3.0 retained; no activation or retirement |
+| Gameplay writes/requests | Zero; validator blocked candidate gameplay requests and attribute writes |
+| Shutdown | Candidate closed with zero cleanup errors |
+
+This establishes exact-source executor compatibility and native interface access. It does not establish actual grade frequency, simultaneous accepted damage, server range, recovery multipliers, stamina sustainability, remote pose visibility or flight/cub/AFK success. No raw capture, credential, player identifier or unrelated console text was exported. The unrelated pre-existing v120 observer workflow failed on the private push; it was not changed and is not a Renaissance gate.
+
 ## Version 15.3.0 release
 
 137 local regressions and 18 compile checks pass, including deterministic operation comparison against preserved 15.2.1. The earlier 128-scenario candidate at 79bb078 passed published source CI run 45514494808. Its exact live staging run 45514618046 found native feeding and minigame handlers but not the private bite handler, so it was not promoted. A bounded metadata check (45515551711) found 58 of 59 primary-input callbacks were foreign-state connections. The revised candidate preserves available validated handles and uses an explicitly limited native-config/own-marker guide when private state is inaccessible. Exact final source 1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b passes all 137 scenarios and 18 compile checks in published CI run 45632821703. Private execution attempt 45633163610 returned MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED. A separate read-console-only pickup 45633541410 returned CONSOLE_MARKER_WITHOUT_VALID_RESULT; it did not execute another script. A matching final source result was not recovered. Final in-game behavior remains unconfirmed, including moving Rest pose correction and Vulture handoff. Further repeated probes stopped. A passive movement check through the existing Potassium runner (run 45512958870) returned the exact marker. The current hub was 15.2.1 in FERAL 2412; the user was moving normally as a Bison, not in the reported Vulture freeze. No attributes or gameplay inputs were changed. This does not establish the cause or resolution of that earlier freeze.

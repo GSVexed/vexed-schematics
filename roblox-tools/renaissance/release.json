@@ -1,68 +1,58 @@
 {
-  "version": "15.3.0",
+  "version": "15.4.0",
   "date": "2026-11-25",
-  "source_commit": "1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b",
-  "bundle_sha256": "af3439173cf2e848c4441b967b0a6144397467fcc6750f9611b43bb60432f6e8",
+  "source_commit": "ef1544f25d37f071df90dd1da84b9fd5df60bdaf",
+  "bundle_sha256": "cb0c9c840eff287bb82bcda212aa9a986f06bf44dedf920777d753c40606ed6f",
   "game_baseline": 2412,
   "retained_features": 21,
   "removed_features_reintroduced": 0,
   "module_count": 13,
   "compiled_files": 18,
   "regressions": {
-    "total": 137,
-    "passed": 137,
+    "total": 176,
+    "passed": 176,
     "failed": 0
   },
-  "source_ci_run": 45632821703,
+  "minigame_replay_subcases": 72,
+  "source_ci_run": 45643744396,
   "source_ci_status": "success",
-  "potassium_staging_run": null,
-  "potassium_staging_attempt": 45633163610,
-  "late_result_pickup": 45633541410,
-  "potassium_validation": "FINAL_SOURCE_RESULT_UNCONFIRMED",
-  "initial_request_status": "MCP_SCRIPT_ACCEPTED_CONSOLE_NOT_CONFIRMED",
-  "late_pickup_status": "CONSOLE_MARKER_WITHOUT_VALID_RESULT",
-  "earlier_unpromoted_candidate": "79bb078885dbf4e6457234a2b3f3e9135bcdf7dd",
-  "earlier_candidate_run": 45514618046,
-  "native_input_shape_run": 45515551711,
-  "vulture_passive_observer_run": 45512958870,
+  "potassium_staging_run": 45644187432,
+  "potassium_validation": "EXACT_SOURCE_STAGE_CONFIRMED",
   "gameplay_acceptance": "unverified",
+  "live_modules": 13,
+  "live_game_version": 2412,
+  "native_grab_found": true,
+  "native_feed_found": true,
+  "native_bite_found": false,
+  "stamina_plan_compatible": true,
+  "live_stamina_plan_fields": 17,
+  "validation_gameplay_requests": 0,
+  "validation_attribute_writes": 0,
+  "previous_running_hub_retained": true,
+  "previous_running_hub_version": "15.3.0",
   "rollback_commit": "158474ba80c0d613c3427399f24059341369acc8",
-  "previous_renaissance_commit": "bdfd2fc913fcf70f2a71dee5a94d5cfbfdda8b17",
+  "previous_renaissance_commit": "1905fbe0eda6e3dd48b2ef32a16de8d02b5f6a3b",
   "previous_renaissance_hashes_unchanged": true,
   "clean_v14_hash_unchanged": true,
   "source_parity": true,
-  "performance_comparison": {
-    "baseline": "15.2.1",
-    "frames": 120,
-    "players": 24,
-    "highlight_writes": [
-      11520,
+  "minigame_timing_comparison": {
+    "baseline": "15.3.0",
+    "reproduced_late_packet_wait_ms": [
+      1020,
       0
     ],
-    "label_position_writes": [
-      2880,
-      0
-    ],
-    "idle_upvalue_reads": [
-      240,
-      96
-    ],
-    "pending_strike_target_scans": [
-      15,
-      0
-    ],
-    "pending_strike_binding_queries": [
-      120,
-      20
-    ],
-    "actual_fps_measured": false
+    "ordinary_scheduled_opening_gain_ms": 30.272,
+    "native_grade_formula_replays": 72,
+    "outstanding_timer_limit": 1,
+    "deadline_wakes_per_strike_limit": 4,
+    "actual_live_win_rate_measured": false
   },
   "limitations": [
-    "Final-source live execution did not return a validated result.",
-    "The latest moving Rest paths pass contract tests; final visual behavior remains live-unconfirmed.",
-    "The Vulture freeze was not reproduced live; native release/relaunch effectiveness is unconfirmed.",
-    "Private bite timing may be inaccessible across executor VMs. Visible cooldown uses the native config and own bite marker while private state remains explicitly unverified.",
-    "A scripted post-Rest retry needs an available validated native handle; ordinary native inputs remain unchanged.",
-    "Sustained real 2x HP and 4x injury/bleed/venom rates, extra accepted reach and previous server-dependent outcomes remain unverified."
+    "Live validation staged the exact candidate without activation, gameplay requests or attribute writes. Real Perfect rates and simultaneous accepted damage remain unverified.",
+    "Native strike issuance, NEXT_GAP, bite pauses, latency and round rules limit minigame cadence. No future/backdated press timestamps are used.",
+    "The private native bite callback was unavailable. Visible timing uses validated native config/own-marker evidence; scripted post-Rest retry may be unavailable.",
+    "Actual sustained stamina across species, 2x HP, 4x condition clearance, accepted extended range and damage attribution remain unverified.",
+    "Rendered and remote moving Rest pose, original Vulture freeze resolution, water pickup, survival credit and other server-dependent outcomes remain unverified.",
+    "Native raw Right Shift polling can still overlap sprint. Streamed-out players cannot be displayed."
   ]
 }
