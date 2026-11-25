@@ -15,7 +15,7 @@ def main():
     nav=ROOT/"src/nav.luau"
     bridge=ROOT/"src/bridge.luau"
     suites=[ROOT/"tests/suite.luau",ROOT/"tests/agent_suite.luau",ROOT/"tests/bridge_suite.luau"]
-    bundle=ROOT.parent/"feral-amber-autopilot-v0.1.lua"
+    bundle=ROOT.parent/"feral-amber-autopilot-v0.2.lua"
     launcher=ROOT.parent/"feral-amber.lua"
     subprocess.run(["python3",str(ROOT/"build.py"),"--check"],check=True)
     for file in (bundle,launcher):
