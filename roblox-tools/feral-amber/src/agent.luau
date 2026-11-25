@@ -153,7 +153,18 @@ function Agent.new(planner,adapter)
             end
             if finite(native.hold) and native.hold>(goal.lastHold or 0)+.002 then goal.progressAt=now end
             goal.lastProg,goal.lastHold=native.prog,native.hold
-            if now-goal.progressAt>32 or now-goal.start>165 then
+            if now-goal.progressAt>20 and (goal.alternates or 0)<3 then
+                -- Do not abandon valid hexes just because the first ground
+                -- position missed a native claim circle. Try nearby walkable
+                -- surface points in the SAME hex after a real timeout.
+                goal.alternates=(goal.alternates or 0)+1
+                goal.progressAt=now
+                self.adapter:advanceSpot(goal.key)
+                self.adapter:stop("alternate claim position")
+                self.phase="REPOSITION"
+                self.reason="Trying alternate walkable claim spot in "..goal.key
+                self:log(now,"alternate","Native claim zone recheck "..goal.key)
+            elseif now-goal.progressAt>32 or now-goal.start>165 then
                 self:fail(state,"No confirmed territory progress: "..goal.key)
             end
             return
