@@ -158,6 +158,7 @@ function Nav.new(pathService,workspace,Gait)
             points={surface}
         end
         self.points,self.index=points,1
+        self.routeOrigin=from
         self.routeAt=now
         self.progressAt=now
         self.progressDistance=distance
@@ -251,6 +252,21 @@ function Nav.new(pathService,workspace,Gait)
         local check={}
         for _,p in ipairs(self.points) do table.insert(check,xyz(p)) end
         local newIndex=self.math.waypointIndex(check,self.index,currentPosition,waypointRange)
+        -- High-speed animals can overshoot a short path waypoint between
+        -- samples. Never turn them around to chase a point behind them:
+        -- advance when the animal has passed the waypoint along the segment.
+        while newIndex<=#self.points do
+            local p=self.points[newIndex]
+            local prev=self.points[newIndex-1] or self.routeOrigin
+            if not prev then break end
+            local sx,sz=p.X-prev.X,p.Z-prev.Z
+            local length=math.sqrt(sx*sx+sz*sz)
+            if length<=2 then newIndex+=1 else
+                local beyond=((root.Position.X-p.X)*sx
+                    +(root.Position.Z-p.Z)*sz)/length
+                if beyond>waypointRange*.5 then newIndex+=1 else break end
+            end
+        end
         self.index=newIndex
         if self.index>#self.points then
             self.points={}
@@ -283,6 +299,9 @@ function Nav.new(pathService,workspace,Gait)
             self.lastHeading=currentPosition
         end
         local reserve=state and state.staminaFraction or nil
+        -- Burst only on a nearly straight, sufficiently long LOCAL segment,
+        -- not simply because the distant territory is far away.
+        if flat(root.Position,waypoint)<34 then turn=math.max(turn,42) end
         local wanted=self.math.select(total,turn,reserve,{
             allowBurst=state and state.allowBurst~=false,
             burstReady=not (state and state.hudBurstNo),
