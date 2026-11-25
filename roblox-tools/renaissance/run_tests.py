@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 
-from build import ROOT, DEST, MODULES, build
+from build import ROOT, DEST, MODULES, PROTECTED_HASHES, verify_protected_artifacts, build
 
 
 def long_string(text):
@@ -25,6 +25,30 @@ def main():
     ap.add_argument("--compiler", default=os.environ.get("LUAU_COMPILE", "luau-compile"))
     ap.add_argument("--output", type=pathlib.Path, default=ROOT / "test-results.json")
     args = ap.parse_args()
+    # Fault-injection: a damaged or missing known-good rollback must be rejected
+    # before package writes. Never corrupt the actual repository artifacts.
+    with tempfile.TemporaryDirectory(prefix="renaissance-rollback-guard-") as directory:
+        staged = pathlib.Path(directory)
+        for name in PROTECTED_HASHES:
+            shutil.copyfile(ROOT.parent / name, staged / name)
+        verify_protected_artifacts(staged)
+        sentinel = staged / "feral-renaissance-v15.4.0.lua"
+        original = sentinel.read_bytes()
+        sentinel.write_bytes(original + b"fault-injection")
+        try:
+            verify_protected_artifacts(staged)
+        except RuntimeError as exc:
+            assert "feral-renaissance-v15.4.0.lua" in str(exc)
+        else:
+            raise AssertionError("tampered rollback accepted")
+        sentinel.write_bytes(original)
+        sentinel.unlink()
+        try:
+            verify_protected_artifacts(staged)
+        except RuntimeError as exc:
+            assert "feral-renaissance-v15.4.0.lua" in str(exc)
+        else:
+            raise AssertionError("missing rollback accepted")
     manifest = build()
     compiled = []
     compile_paths = [*(ROOT/"src"/f"{name}.luau" for name in MODULES),
