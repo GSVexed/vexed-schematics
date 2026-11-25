@@ -141,11 +141,23 @@
       "capture_script_id": 15373,
       "capture_path": "game/StarterPlayer/PlayerModule/ControlModule",
       "finding": "Captured platform script metadata shows the newer PlayerModule location. Its source was not supplied as a game program."
+    },
+    {
+      "program": "TerritoryConfig",
+      "prototype": 14,
+      "finding": "Captured REGIONS config: GRID=3, MIN=6, MAX=10, PAY_MULT=2; REFILL_TIME=60. Static client values do not prove server reward. Runtime reads the native config."
+    },
+    {
+      "program": "TerritoryConfig",
+      "prototype": 12,
+      "finding": "regionCell(x,z) returns one one-based row-major region ID (row*grid+column+1), not a row/column pair."
     }
   ],
   "official_platform_references": [
     "https://devforum.roblox.com/t/full-release-input-action-system-ias-newly-converted-player-scripts/4678416",
-    "https://github.com/Roblox/avatar/blob/main/ReferenceBodyCreator/StarterPlayerScripts/PlayerModule/ControlModule/init.lua"
+    "https://github.com/Roblox/avatar/blob/main/ReferenceBodyCreator/StarterPlayerScripts/PlayerModule/ControlModule/init.lua",
+    "https://create.roblox.com/docs/reference/engine/classes/WorldRoot",
+    "https://create.roblox.com/docs/reference/engine/datatypes/RaycastParams"
   ],
   "interpretation": "These are static client contracts and metadata. They do not establish server authority, live path success, actual accepted attacks or farm yield."
 }

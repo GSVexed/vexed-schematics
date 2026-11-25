@@ -32,15 +32,21 @@ function Gait.select(distance,turn,stamina,options)
         if options.swimSprint and distance>45 and (not finite(stamina) or stamina>.25) then return "SPRINT" end
         return "TROT"
     end
-    if options.hunting and (options.preySpeed or 0)>6 and distance>6
-        and (not finite(stamina) or stamina>=.22) and (turn or 0)<65 then return "SPRINT" end
-    if distance<10 then return "WALK" end
-    if distance<24 then return "TROT" end
+    if options.following and type(options.gaitSpeeds)=="table" then
+        for _,mode in ipairs({"WALK","TROT","SPRINT"}) do
+            local speed=options.gaitSpeeds[mode]
+            if finite(speed) and speed>=(options.preySpeed or 0)*1.08 then return mode end
+        end
+    end
     local reserve=finite(stamina) and stamina or nil
     local angle=finite(turn) and turn or 0
     if options.allowBurst~=false and reserve and reserve>=.56
-        and distance>=170 and angle<=22 and not options.crowded
+        and distance>=80 and angle<=22 and not options.crowded
         and options.burstReady~=false then return "BURST" end
+    if options.hunting and (options.preySpeed or 0)>6 and distance>6
+        and (not reserve or reserve>=.22) and angle<65 then return "SPRINT" end
+    if distance<10 then return "WALK" end
+    if distance<24 then return "TROT" end
     if distance>=48 and angle<=72 and not options.crowded
         and (not reserve or reserve>=.22) then return "SPRINT" end
     return "TROT"
@@ -69,9 +75,9 @@ function Gait.controller(io)
                 self.lastSuccess=now;self.confirmations+=1
                 self.attempts[p.mode]=0;self.pending=nil
                 self.reason="Native gait observed"
-            elseif now-p.at>=2.4 then
+            elseif now-p.at>=1.25 then
                 local count=self.attempts[p.mode] or 1
-                if count>=2 then self.blocked[p.mode]=now+18 end
+                if count>=2 then self.blocked[p.mode]=now+8 end
                 self.pending=nil;self.reason="Gait request unconfirmed"
                 if p.mode=="SPRINT" then io:hold("SHIFT",false) end
                 if count==1 and type(io.retryInput)=="function" then
@@ -79,8 +85,9 @@ function Gait.controller(io)
                 end
             end
         end
-        local emergency=wanted=="STOP" or wanted=="WALK" or s.ability or s.swimming
-        if wanted~=self.requested and not emergency and now-self.changedAt<2.25 then
+        local emergency=wanted=="STOP" or wanted=="WALK" or s.ability or s.swimming or s.brake
+        local boost=wanted=="BURST" and self.requested=="SPRINT" and observed=="SPRINT"
+        if wanted~=self.requested and not emergency and not boost and now-self.changedAt<1.1 then
             wanted=self.requested
         end
         if wanted=="BURST" and (type(s.hudBurst)~="boolean" or s.hudBurstNo or (self.blocked.BURST or 0)>now) then wanted="SPRINT" end
@@ -89,6 +96,7 @@ function Gait.controller(io)
         local fast=wanted=="SPRINT" or wanted=="BURST"
         io:hold("SHIFT",fast)
         local function request(mode,key)
+            if self.pending and self.pending.mode~=mode and mode=="BURST_OFF" then self.pending=nil end
             if self.pending or (self.blocked[mode] or 0)>now then return end
             local sent=key=="SHIFT" and io:hold(key,true) or io:tap(key)
             if sent then
@@ -97,7 +105,7 @@ function Gait.controller(io)
                 self.reason="Input requested; awaiting native gait"
                 if mode=="BURST" then self.burstOwned=true end
                 if mode=="TROT" then self.trotOwned=true end
-            else self.blocked[mode]=now+18;self.reason="Gait input unavailable" end
+            else self.blocked[mode]=now+8;self.reason="Gait input unavailable" end
         end
         if wanted~="BURST" and s.hudBurst==true and self.burstOwned then
             request("BURST_OFF","X")

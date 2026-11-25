@@ -4,11 +4,13 @@ on:
     branches: [main, 'renaissance/**']
     paths:
       - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-amber/src/**'
       - 'roblox-tools/feral-renaissance*'
       - '.github/workflows/feral-renaissance-v15-validate.yml'
   pull_request:
     paths:
       - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-amber/src/**'
       - 'roblox-tools/feral-renaissance*'
 permissions:
   contents: read

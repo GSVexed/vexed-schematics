@@ -62,5 +62,20 @@ test("native geometry being unavailable never creates a guessed attack",function
     local a,h,p,s=world();a.attackGeometry=function()return nil end
     p.position={x=3,z=0};h:tick(s);eq(a.bites,0);assert(#a.moves>0)
 end)
+test("close moving-prey pursuit targets a trailing position",function()
+    local a,h,p,s=world();p.position={x=8,z=0};p.velocity={x=12,z=0};p.attackRange=8
+    a.inRange=true;h:tick(s)
+    assert(a.moves[1].to.x<p.position.x);assert(a.moves[1].options.following)
+end)
+test("stationary prey in valid bite position is attacked without movement",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0}
+    h:tick(s);eq(a.bites,1);eq(#a.moves,0);assert(a.stops>0)
+end)
+test("nearby ineffective attacks abandon prey within seconds",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0}
+    h:tick(s);local phase
+    for i=1,40 do s.now=10+i*.2;phase=h:tick(s);if phase=="HUNT_REPLAN"then break end end
+    eq(phase,"HUNT_REPLAN");assert(s.now<19);assert(h.misses>=2)
+end)
 print(string.format("AMBER_HUNT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Hunting regressions failed")

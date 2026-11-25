@@ -33,6 +33,7 @@ function Planner.objective(hex,state,from,options)
         or not hex.center or not finite(hex.center.x) or not finite(hex.center.z) then return nil end
     if (options.exclude and options.exclude[hex.key])
         or (options.blockedUntil and (options.blockedUntil[hex.key] or 0)>(state.now or 0)) then return nil end
+    if state.contested and state.contested[hex.key] then return nil end
     local owned=hex.owner==state.pack
     local hold=finite(hex.hold) and clamp(hex.hold,0,1) or nil
     local payKnown=finite(hex.pay)
@@ -58,7 +59,7 @@ function Planner.objective(hex,state,from,options)
     local d=dist(from,hex.center)
     if d==math.huge then return nil end
     local deny,nearest=pathRisk(from,hex.center,state.players,options.avoidRadius or 120)
-    if deny and options.avoidPlayers~=false then return nil end
+    if deny and options.avoidPlayers==true then return nil end
     local recent=options.recent and options.recent[hex.key]
     local waiting=options.waitingSince and options.waitingSince[hex.key]
     if finite(waiting) then priority+=math.min(180,math.max(0,(state.now or 0)-waiting)/5) end
@@ -130,6 +131,109 @@ function Planner.plan(hexes,state,options)
         end
     end
     return route
+end
+
+-- Native regionCell is a one-based row-major ID. Sweep alternating rows to
+-- finish complete areas without crossing repeatedly between opposite corners.
+function Planner.regionOrder(grid)
+    local order={}
+    for row=0,grid-1 do
+        for step=0,grid-1 do
+            local col=row%2==0 and step or grid-1-step
+            table.insert(order,row*grid+col+1)
+        end
+    end
+    return order
+end
+local function localTour(hexes,state,options)
+    local remaining={}
+    for _,hex in ipairs(hexes) do
+        local item=Planner.objective(hex,state,state.position,options)
+        if item then item.region=hex.region;table.insert(remaining,item) end
+    end
+    local route,from={},state.position
+    while #remaining>0 and #route<16 do
+        local nearest=math.huge
+        for _,item in ipairs(remaining) do nearest=math.min(nearest,dist(from,item.center)) end
+        local best,index,cost=nil,nil,math.huge
+        for i,item in ipairs(remaining) do
+            local d=dist(from,item.center)
+            if d<=nearest*1.3+20 then
+                local nextDistance=0
+                if #remaining>1 then
+                    nextDistance=math.huge
+                    for j,other in ipairs(remaining) do if i~=j then nextDistance=math.min(nextDistance,dist(item.center,other.center)) end end
+                end
+                local value=d+nextDistance*.22
+                if value<cost or value==cost and item.key<(best and best.key or "~") then best,index,cost=item,i,value end
+            end
+        end
+        table.insert(route,best);table.remove(remaining,index);from=best.center
+    end
+    -- Shorten crossings while keeping the entry fixed. At most 16 stops.
+    for _=1,3 do
+        local changed=false
+        for i=2,#route-1 do
+            for j=i+1,#route-1 do
+                local before=dist(route[i-1].center,route[i].center)+dist(route[j].center,route[j+1].center)
+                local after=dist(route[i-1].center,route[j].center)+dist(route[i].center,route[j+1].center)
+                if after+3<before then
+                    local l,r=i,j
+                    while l<r do route[l],route[r]=route[r],route[l];l+=1;r-=1 end
+                    changed=true
+                end
+            end
+        end
+        if not changed then break end
+    end
+    return route
+end
+function Planner.strategy(hexes,state,options)
+    options=options or {}
+    local grid=state.regionGrid
+    if not finite(grid) or grid<1 or grid>8 or grid%1~=0 then
+        return Planner.plan(hexes,state,options),{phase="GENERAL",cursor=options.regionCursor or 1}
+    end
+    local groups={};local urgent={};local anyRegion=false
+    for _,hex in ipairs(hexes) do
+        if hex.region and not hex.neutral then
+            anyRegion=true
+            groups[hex.region]=groups[hex.region] or {total=0,owned=0,hexes={}}
+            local group=groups[hex.region];group.total+=1
+            if hex.owner==state.pack then group.owned+=1 end
+            table.insert(group.hexes,hex)
+        end
+        local item=Planner.objective(hex,state,state.position,options)
+        if item and item.kind=="SCENT" and item.hold and item.hold<.28 then table.insert(urgent,hex) end
+    end
+    if not anyRegion then return Planner.plan(hexes,state,options),{phase="GENERAL",cursor=1} end
+    local order=Planner.regionOrder(grid)
+    if #urgent>0 then return localTour(urgent,state,options),{phase="URGENT_SCENT",cursor=options.regionCursor or 1} end
+    local cursor=math.clamp(options.regionCursor or 1,1,#order)
+    -- Claims first, then maintenance; blocked areas stay eligible for the next
+    -- pass instead of being incorrectly counted as completed.
+    for _,claimsOnly in ipairs({true,false}) do
+        for step=0,#order-1 do
+            local index=(cursor+step-1)%#order+1
+            local region=order[index];local group=groups[region]
+            if group and (not claimsOnly or group.owned<group.total) then
+                local pool={}
+                for _,hex in ipairs(group.hexes) do
+                    if not claimsOnly or hex.owner~=state.pack then table.insert(pool,hex) end
+                end
+                local route=localTour(pool,state,options)
+                if #route>0 then
+                    local row,col=math.floor((region-1)/grid),(region-1)%grid
+                    local vertical=grid==3 and ({"Top","Middle","Bottom"})[row+1] or ("Row "..(row+1))
+                    local horizontal=grid==3 and ({"left","centre","right"})[col+1] or ("column "..(col+1))
+                    return route,{phase=claimsOnly and "AREA_SWEEP" or "AREA_MAINTENANCE",cursor=index,
+                        region=region,area=vertical.." "..horizontal,owned=group.owned,total=group.total,
+                        bonus=state.regionBonus,order=order}
+                end
+            end
+        end
+    end
+    return {},{phase="MAINTAINED",cursor=cursor,order=order}
 end
 
 function Planner.need(state,options)

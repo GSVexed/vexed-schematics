@@ -1,17 +1,21 @@
 name: FERAL All-animal Amber Autopilot planner compile and regression gate
 on:
   push:
-    branches: ['renaissance/**']
+    branches: [main, 'renaissance/**']
     paths:
       - 'roblox-tools/feral-amber/**'
       - 'roblox-tools/feral-amber.lua'
-      - 'roblox-tools/feral-amber-autopilot-v0.4.lua'
+      - 'roblox-tools/feral-amber-autopilot-v0.5.lua'
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-renaissance*'
       - '.github/workflows/feral-amber-validate.yml'
   pull_request:
     paths:
       - 'roblox-tools/feral-amber/**'
       - 'roblox-tools/feral-amber.lua'
-      - 'roblox-tools/feral-amber-autopilot-v0.4.lua'
+      - 'roblox-tools/feral-amber-autopilot-v0.5.lua'
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-renaissance*'
       - '.github/workflows/feral-amber-validate.yml'
 permissions:
   contents: read
@@ -26,12 +30,12 @@ jobs:
           git clone https://github.com/luau-lang/luau.git /tmp/amber-luau
           git -C /tmp/amber-luau checkout 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
           make -s -C /tmp/amber-luau config=release -j2 luau luau-compile
-      - name: Validate pure planner and replay cases
+      - name: Validate integrated territory and replay cases
         run: |
           python3 roblox-tools/feral-amber/run_tests.py \
             --luau /tmp/amber-luau/luau \
             --compiler /tmp/amber-luau/luau-compile
-      - name: Verify existing Renaissance regressions and unchanged source
+      - name: Verify retained Renaissance regressions and deterministic source
         run: |
           python3 roblox-tools/renaissance/run_tests.py \
             --luau /tmp/amber-luau/luau \

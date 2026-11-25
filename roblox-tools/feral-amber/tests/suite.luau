@@ -53,7 +53,7 @@ test("critical owned scent takes priority over nearby fresh claim",function()
 end)
 test("player hazard on travel corridor filters target",function()
     local state=s();state.players={{x=80,z=0}}
-    local r=Planner.plan({h("BAD",170,0,5,nil,nil),h("SAFE",0,200,5,nil,nil)},state,{avoidRadius=55})
+    local r=Planner.plan({h("BAD",170,0,5,nil,nil),h("SAFE",0,200,5,nil,nil)},state,{avoidRadius=55,avoidPlayers=true})
     eq(r[1].key,"SAFE")
 end)
 test("temporary cooldown prevents repeatedly revisiting failed territory",function()
@@ -119,5 +119,37 @@ test("territory exclusion never leaks over to the next plan's distinct eligible 
     eq(Planner.plan(hexes,state,{maxStops=1,exclude={B=true}})[1].key,"A")
 end)
 
+test("native 3 by 3 areas follow the requested serpentine sweep",function()
+    local order=Planner.regionOrder(3)
+    for i,v in ipairs({1,2,3,6,5,4,7,8,9})do eq(order[i],v)end
+end)
+test("area completion is preferred over closer hexes in the next area",function()
+    local state=s();state.regionGrid=3;state.regionBonus=2
+    local hexes={h("A",240,0,5,nil,nil,{region=1}),h("B",5,0,5,nil,nil,{region=2})}
+    local route,meta=Planner.strategy(hexes,state,{regionCursor=1})
+    eq(route[1].key,"A");eq(meta.region,1);eq(meta.bonus,2)
+end)
+test("completed top left area advances to top centre",function()
+    local state=s();state.regionGrid=3
+    local route,meta=Planner.strategy({h("A",20,0,5,5,1,{region=1}),h("B",60,0,5,nil,nil,{region=2})},state,{regionCursor=1})
+    eq(route[1].key,"B");eq(meta.region,2)
+end)
+test("occupied hex is skipped even if it has the highest reward",function()
+    local state=s();state.contested={A=1}
+    local route=Planner.plan({h("A",2,0,20,nil,nil),h("B",40,0,2,nil,nil)},state,{})
+    eq(route[1].key,"B")
+end)
+test("urgent scent loss can interrupt the area sweep",function()
+    local state=s();state.regionGrid=3
+    local route,meta=Planner.strategy({h("A",20,0,5,nil,nil,{region=1}),h("S",60,0,5,5,.1,{region=9})},state,{regionCursor=1})
+    eq(route[1].key,"S");eq(meta.phase,"URGENT_SCENT");eq(meta.cursor,1)
+end)
+test("within an area the route avoids repeated opposite-corner jumps",function()
+    local state=s();state.regionGrid=3;state.position={x=0,z=0}
+    local hexes={h("A",10,0,2,nil,nil,{region=1}),h("B",20,0,2,nil,nil,{region=1}),
+        h("FAR",300,300,20,nil,nil,{region=1}),h("C",30,0,2,nil,nil,{region=1})}
+    local route=Planner.strategy(hexes,state,{regionCursor=1})
+    eq(route[1].key,"A");eq(route[2].key,"B");eq(route[3].key,"C");eq(route[4].key,"FAR")
+end)
 print(string.format("AMBER_PLANNER_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Amber planner tests failed")

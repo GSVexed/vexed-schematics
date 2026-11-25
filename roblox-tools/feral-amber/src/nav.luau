@@ -8,7 +8,7 @@ local function p2(v) return {x=v.X,z=v.Z} end
 local function rayParams(char)
     local p=RaycastParams.new()
     p.FilterType=Enum.RaycastFilterType.Exclude
-    p.FilterDescendantsInstances={char};p.IgnoreWater=false
+    p.FilterDescendantsInstances={char};p.IgnoreWater=false;p.RespectCanCollide=true
     return p
 end
 function Nav.new(pathService,workspace,Gait)
@@ -83,20 +83,67 @@ function Nav.new(pathService,workspace,Gait)
         self.windowAt=now;self.windowOrigin=nil;self.windowTravel=0
         self.stallsInRow,self.routeFailures,self.corrections=0,0,0
         self.inputVerified=false;self.steeringStrategy=self.preferredStrategy
-        self.recoveryProgress=0
+        self.recoveryProgress=0;self.overlapAt=nil;self.overlapParts=nil
         self.lastReason="NEW_ROUTE";self.goalStarted=now
     end
     function n:surface(pos,char,allowWater)
-        local hit=self.workspace:Raycast(pos+Vector3.new(0,100,0),Vector3.new(0,-420,0),rayParams(char))
+        local params=rayParams(char)
+        local root=char and type(char.FindFirstChild)=="function" and char:FindFirstChild("HumanoidRootPart")
+        local originY=root and root.Position.Y or pos.Y
+        -- Prefer the real terrain under tall foliage. A low supporting solid
+        -- surface may override it for rocks, bridges and constructed ground.
+        local terrainParams=rayParams(char)
+        terrainParams.FilterType=Enum.RaycastFilterType.Include
+        terrainParams.FilterDescendantsInstances={self.workspace.Terrain}
+        local terrain=self.workspace:Raycast(Vector3.new(pos.X,math.max(pos.Y,originY)+100,pos.Z),Vector3.new(0,-420,0),terrainParams)
+        local solid=self.workspace:Raycast(Vector3.new(pos.X,originY+12,pos.Z),Vector3.new(0,-420,0),params)
+        local hit=terrain or solid
+        if solid and solid.Normal.Y>=.46 and solid.Position.Y<=originY+5
+            and (not terrain or solid.Position.Y>terrain.Position.Y+.4) then hit=solid end
         if not hit then return nil end
         local wet=hit.Material==Enum.Material.Water
         if wet and not allowWater or not wet and hit.Normal.Y<.46 then return nil end
         return hit.Position+Vector3.new(0,2.5,0),wet
     end
+    function n:bodyClear(from,to,char)
+        local direction=Vector3.new(to.X-from.X,0,to.Z-from.Z)
+        if direction.Magnitude<.1 then return true end
+        -- Sweeps omit shapes already touching their start volume. Check the
+        -- actual animal root separately and allow movement out of an overlap.
+        if self.bodyRoot and type(self.workspace.GetPartsInPart)=="function" and OverlapParams then
+            local at=self.lastAt or 0
+            if not self.overlapAt or at-self.overlapAt>.4 then
+                self.overlapAt=at
+                local params=OverlapParams.new()
+                params.FilterType=Enum.RaycastFilterType.Exclude
+                params.FilterDescendantsInstances={char};params.RespectCanCollide=true;params.MaxParts=12
+                local ok,parts=pcall(self.workspace.GetPartsInPart,self.workspace,self.bodyRoot,params)
+                self.overlapParts=ok and parts or {}
+            end
+            for _,part in ipairs(self.overlapParts or {}) do
+                if part.CanCollide~=false and part.Position then
+                    local away=Vector3.new(from.X-part.Position.X,0,from.Z-part.Position.Z)
+                    if away.Magnitude>.05 and direction:Dot(away)<0 then
+                        self.lastObstacle={Instance=part};return false
+                    end
+                end
+            end
+        end
+        if type(self.workspace.Blockcast)=="function" and CFrame and type(CFrame.lookAt)=="function" then
+            local params=rayParams(char);params.IgnoreWater=true
+            local size=Vector3.new((self.clearance or 2)*1.9,self.bodyHeight or 2,self.bodyLength or 4)
+            local ok,hit=pcall(self.workspace.Blockcast,self.workspace,CFrame.lookAt(from,from+direction),size,direction,params)
+            if ok and hit and (not hit.Instance or hit.Instance.CanCollide~=false) then
+                self.lastObstacle=hit;return false
+            end
+        end
+        return true
+    end
     function n:clearSegment(from,to,char,allowWater)
         local distance=flat(from,to)
         if distance<.1 then return true,false end
         local params=rayParams(char);params.IgnoreWater=true
+        if not self:bodyClear(from,to,char) then return false,false end
         -- Terrain walls are obstacles too; never exempt Terrain from this ray.
         local hit=self.workspace:Raycast(from+Vector3.new(0,1.5,0),to-from,params)
         if hit and (not hit.Instance or hit.Instance.CanCollide~=false) then return false,false end
@@ -116,6 +163,28 @@ function Nav.new(pathService,workspace,Gait)
             previous=ground;wet=wet or water
         end
         return true,wet
+    end
+    function n:detour(root,char,state,now)
+        local delta=self.destination-root.Position
+        local d=flat(self.destination,root.Position)
+        if d<.1 then return false end
+        local base=Vector3.new(delta.X/d,0,delta.Z/d)
+        local span=math.clamp((self.clearance or 2)*2.5,8,18)
+        local sides=self.detourSide or 1
+        for _,angle in ipairs({sides*1.1,-sides*1.1,sides*1.8,-sides*1.8,math.pi}) do
+            local x=base.X*math.cos(angle)-base.Z*math.sin(angle)
+            local z=base.X*math.sin(angle)+base.Z*math.cos(angle)
+            local point=self:surface(root.Position+Vector3.new(x*span,0,z*span),char,state.allowWater==true)
+            if point and self:clearSegment(root.Position,point,char,state.allowWater==true) then
+                self.epoch+=1;self.pending=nil
+                self.points,self.index={point},1;self.routeOrigin=root.Position
+                self.detourUntil=now+2;self.detourSide=-sides
+                self.obstacleRecoveries=(self.obstacleRecoveries or 0)+1
+                self.lastFailure="LOCAL_OBSTACLE_DETOUR"
+                return true
+            end
+        end
+        return false
     end
     function n:compute(from,root,hum,char,state,goal,attempt)
         local distance=flat(from,goal)
@@ -155,13 +224,14 @@ function Nav.new(pathService,workspace,Gait)
         return nil,"NO_STREAMED_SAFE_ROUTE"
     end
     function n:route(root,hum,char,now,state)
-        if self.pending or now<self.nextRouteAt then return end
+        if self.pending or (self.activeJobs or 0)>=2 or now<self.nextRouteAt then return end
         local epoch=self.epoch
         local request={at=now,epoch=epoch,origin=root.Position,goal=self.destination}
-        self.pending=request
+        self.pending=request;self.activeJobs=(self.activeJobs or 0)+1
         task.spawn(function()
             local ok,points,reason=pcall(self.compute,self,request.origin,root,hum,char,
                 table.clone(state or {}),request.goal,self.replans)
+            self.activeJobs-=1
             if self.closed or self.epoch~=epoch or self.pending~=request then return end
             self.pending=nil
             if not ok or not points then
@@ -185,7 +255,7 @@ function Nav.new(pathService,workspace,Gait)
         local delta=Vector3.new(p.X-root.Position.X,0,p.Z-root.Position.Z)
         if delta.Magnitude<=self.arrivalRadius and flat(root.Position,self.destination or p)<=self.arrivalRadius then return Vector3.zero end
         if delta.Magnitude<.1 then return Vector3.zero end
-        return delta.Unit
+        return delta.Unit*(self.inputScale or 1)
     end
     function n:drive()
         self.driveCalls+=1
@@ -234,18 +304,18 @@ function Nav.new(pathService,workspace,Gait)
             self:stop(hum,root,"NO_LIVING_ANIMAL");return "WAIT"
         end
         local identity=state.navKey or "STATIC"
+        self.bodyRoot=root
         self.clearance=math.clamp(root.Size.X*.5+.65,2,12)
+        self.bodyHeight=math.clamp(root.Size.Y*.8,1,10)
+        self.bodyLength=math.clamp(root.Size.Z*.65,2,18)
         if not self.destination or self.body~=char or self.identity~=identity then self:reset(destination,char,now,identity) end
         local targetShift=flat(destination,self.destination)
         self.destination=destination
         self.arrivalRadius=state.moveRadius or 8
+        self.inputScale=state.moveScale and math.clamp(state.moveScale,.15,1) or 1
         local total=flat(root.Position,destination);self.distance=total
         if total<=self.arrivalRadius then self:stop(hum,root,"ARRIVED");return "REACHED" end
-        for _,p in ipairs(otherPlayers or {}) do
-            if flat(root.Position,p)<(state.avoidRadius or 110) then
-                self:stop(hum,root,"PLAYER_NEARBY");return "BLOCKED"
-            end
-        end
+
         local dt=now-(self.lastSampleAt or now)
         if self.lastPosition and dt>0 then
             local moved=flat(root.Position,self.lastPosition)
@@ -276,21 +346,34 @@ function Nav.new(pathService,workspace,Gait)
         end
         local advanced=self:advance(root,math.clamp(root.Size.X*.5+4,6,12))
         if advanced then self.lastProgressAt=now;self.inputVerified=true end
-        if self.pending and now-self.pending.at>12 then
+        if self.pending and now-self.pending.at>4 then
             self.epoch+=1;self.pending=nil;self.routeFailures+=1
             self.lastFailure="PATH_TIMEOUT"
         end
         if self.routeFailures>=4 then self:stop(hum,root,self.lastFailure);return "STUCK" end
-        if now-self.lastProgressAt>5 then
+        if now-self.lastProgressAt>.9 and now-(self.lastObstacleProbe or 0)>1 then
+            self.lastObstacleProbe=now
+            local probePoint=self.desiredPoint or destination
+            local towards=probePoint-root.Position
+            local dist=flat(probePoint,root.Position)
+            if dist>1 then
+                local probe=root.Position+Vector3.new(towards.X/dist,0,towards.Z/dist)*math.min(12,dist)
+                if not self:bodyClear(root.Position,probe,char) then
+                    self.lastCollisionAt=now
+                    self:detour(root,char,state,now)
+                end
+            end
+        end
+        if now-self.lastProgressAt>(self.inputVerified and 2.5 or 1.6) then
             self.stallsInRow+=1;self.replans+=1;self.lastProgressAt=now
             self.recoveryProgress=0
             self.points={};self.epoch+=1;self.pending=nil;self.desiredPoint=nil
             self:releaseSteering();self:hold("SHIFT",false)
             self.lastFailure=self.lastFailure=="OSCILLATION" and self.lastFailure or "NO_PHYSICAL_PROGRESS"
-            if self.stallsInRow==1 and self.steeringStrategy=="WORLD" then
+            if self.stallsInRow==1 and self.steeringStrategy=="WORLD" and now-(self.lastCollisionAt or -100)>3 then
                 self.steeringStrategy="KEY";self.strategyChanges+=1
             elseif self.stallsInRow==2 and type(keypress)=="function" then self.keyBackend="EXECUTOR" end
-            if self.stallsInRow>=4 then self:stop(hum,root,"BOUNDED_STUCK");return "STUCK" end
+            if self.stallsInRow>=3 then self:stop(hum,root,"BOUNDED_STUCK");return "STUCK" end
         end
         local exhausted=self.index>#self.points
         if exhausted then
@@ -301,7 +384,7 @@ function Nav.new(pathService,workspace,Gait)
         local tail=self.points[#self.points]
         local prefetch=tail and flat(root.Position,tail)<math.max(24,self.speed*.85)
             and flat(tail,destination)>15
-        if exhausted or prefetch or targetShift>14 and now-(self.routeAt or 0)>1.1 then
+        if (not self.detourUntil or now>=self.detourUntil or exhausted) and (exhausted or prefetch or targetShift>14 and now-(self.routeAt or 0)>1.1) then
             self:route(root,hum,char,now,state)
         end
         self:advance(root,math.clamp(root.Size.X*.5+4,6,12))
@@ -310,6 +393,15 @@ function Nav.new(pathService,workspace,Gait)
             self.desiredPoint=nil;self:releaseSteering();self:hold("SHIFT",false)
             self.lastReason=self.pending and "PLANNING" or self.lastFailure or "WAIT_ROUTE"
             return "WAIT"
+        end
+        -- Collapse straight, visible path sections into a body-checked horizon.
+        -- Gaits can remain fast across tiny mesh waypoints without cutting bends.
+        for j=math.min(#self.points,self.index+7),self.index+1,-1 do
+            local candidate=self.points[j]
+            if flat(root.Position,candidate)<=120 and self.math.turn(p2(root.Position),p2(waypoint),p2(candidate))<22
+                and self:clearSegment(root.Position,candidate,char,state.allowWater==true) then
+                self.index=j;waypoint=candidate;break
+            end
         end
         -- Directly track a nearby moving target only over checked terrain.
         if state.movingTarget and total<28 then
@@ -322,11 +414,13 @@ function Nav.new(pathService,workspace,Gait)
         local localRange=flat(root.Position,waypoint)
         local nextPoint=self.points[self.index+1]
         if nextPoint and self.math.turn(p2(root.Position),p2(waypoint),p2(nextPoint))>55 and localRange<35 then turn=math.max(turn,85) end
+        local braking=turn>72 or total<18 or (nextPoint and localRange<math.max(20,self.speed*.55))
+        state.brake=braking or self.detourUntil and now<self.detourUntil
         local wanted=self.math.select(state.hunting and total*2 or total,turn,state.staminaFraction,{
             allowBurst=state.allowBurst~=false and self.inputVerified and localRange>=38,
             burstReady=not state.hudBurstNo,swimming=state.swimming,
             swimSprint=state.swimSprint,combat=state.combat,hunting=state.hunting,
-            preySpeed=state.preySpeed,ability=state.ability})
+            preySpeed=state.preySpeed,following=state.following,gaitSpeeds=state.gaitSpeeds,ability=state.ability})
         self.gait=self.gaits:step(wanted,state,now)
         self.desiredPoint,self.desiredRoot,self.desiredHum=waypoint,root,hum
         self.lastReason=(state.swimming and "SWIM_" or "FOLLOWING_")..self.gait
@@ -341,7 +435,7 @@ function Nav.new(pathService,workspace,Gait)
             inputVerified=self.inputVerified,distance=self.distance,
             travelled=math.floor(self.travelled*10)/10,speed=math.floor(self.speed*10)/10,
             replans=self.replans,failures=self.failures,waterRoutes=self.waterRoutes,
-            corrections=self.corrections,segments=self.segmentCount}
+            corrections=self.corrections,segments=self.segmentCount,obstacleRecoveries=self.obstacleRecoveries or 0}
     end
     return n
 end

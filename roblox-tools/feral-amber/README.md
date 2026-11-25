@@ -1,67 +1,64 @@
-# FERAL Amber Autopilot 0.4.0
+# FERAL Amber Autopilot 0.5.0
 
-This continues the published Amber system and the unfinished `renaissance/amber-v0.4-reliability` branch. It uses continuous animal input, one objective coordinator and measured game-state changes.
+Territory farming is now a permanent **Territory** page in Renaissance 15.5.0. The hub owns its window, scheduler, controls and shutdown.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber.lua"))()
 ```
 
-Select **START** after spawning and joining a pack. The combined launcher loads Renaissance if needed. Amber starts disabled. **STOP** releases movement and owned pending inputs. **Right Shift** follows Renaissance's menu visibility. The header drags the panel; **MIN** and hiding the panel leave farming active. **COPY STATUS** copies a short report locally; no automatic upload occurs.
+Spawn, join a pack and select **START FARMING**. The engine starts disabled. **STOP FARMING** releases owned movement and feeding input. **Right Shift** opens or hides the main hub; hiding it or changing tabs keeps farming active. **SKIP TARGET** defers the current hex. **COPY STATUS** copies a local report and performs no upload.
 
-The current reference is Bear with the Spirit Bear coat. Coat is display metadata. Native Species/Forage configuration supplies diet and swimming information for other animals. The strategic territory framework is shared; aerial travel and underwater route control are not implemented.
+## Farming behavior
 
-## What changed
+- Complete the live configuration's regions in a snake: top-left → top-middle → top-right → middle-right → centre → middle-left → bottom-left → bottom-middle → bottom-right. Finish eligible claims within the selected region, follow a local neighboring route, and revisit deferred areas. Critically fading scent can interrupt the sweep.
+- Skip a hex occupied by a non-pack player and select another in the same coordinator tick. Nearby people do not cause a blanket pause. Packmates do not enter the contest map.
+- Retain progressing, nearly completed territory work before routine care, then observe stable replicated completion before departure. Critical needs and genuine native interruptions still take priority.
+- Hold sprint on travel, request eligible Burst on clear straights, and brake for corners and interactions. Confirmed sprint can upgrade to Burst immediately. Requests and observed native gaits are displayed separately.
+- Check animal-sized collision clearance, avoid canopy waypoints, and try a local outward detour when touching a tree. Ineffective travel is retried within seconds; path jobs are cancellable and bounded.
+- Follow moving NPC prey from behind, match approach speed with ordinary input, and stop to bite stationary prey when native attack geometry permits. Verify HP decline and abandon ineffective targets promptly. Only eligible NPCs are hunted.
+- Drink to the native thirst maximum, including convenient native drink offers during travel. A manually interrupted or prematurely ended drink can restart. Food, water and hunts share one objective owner; territory resumes after care. Missing resources cause a search route when one is available.
 
-- Steering passes through the detected PlayerModule `moveFunction` before FERAL's `WolfMove` reads movement input. Both PlayerScripts and the captured StarterPlayer layouts are supported. Unsupported or inaccessible layouts use native keys, with observed movement and bounded retries.
-- Streamed route segments are prefetched. Pending computations cannot resume after STOP, unload or character change. Progress survives moving-target updates and ordinary route replanning. Terrain walls, body width, sharp turns, overshot waypoints, circling and repeated position corrections are handled explicitly.
-- Ground/water transitions use sampled terrain and continuous horizontal input. Swimming no longer causes the main coordinator to pause. Difficult banks trigger alternative local probes and bounded route failure.
-- Gaits have separate requested and observed states. Sprint uses held Left Shift; Burst and trot use their native Begin toggles. Missing acknowledgements cause a bounded retry, an alternative input provider when available, and a slower fallback. A numeric `HudBurstNo` pulse expires correctly.
-- Hunts pursue eligible NPCs, lead moving targets, retain close pursuit speed, check native geometry/visibility and verify prey HP. Inputs alone never count as damage, death or a meal. Ineffective prey are abandoned and cooled down.
-- Food and water have approach, interaction and actual-resource verification. Pending native feeding owns its approach; repeated E cannot cancel it. Care remains latched through its target, and the suspended territory objective is resumed.
-- All current eligible hexes are considered, with ownership, scent, partial progress, known reward values, travel distance, player hazards, failed targets and waiting time affecting selection. No map-size constant is used.
-- Unloading/replacing Renaissance or re-executing Amber closes the previous companion, releases inputs, invalidates path jobs and restores its owned movement callback.
+Native Species/Forage configuration supplies diet and capabilities. Bear/Spirit Bear is covered by the fixtures; coat is display metadata. The framework supports ground and surface-swimming travel. Aerial routes and underwater navigation remain manual.
 
-## Verification and limits
+## Verification
 
-See [release report](docs/V0_4_RELEASE.md), [test results](test-results.json), and [static native contracts](docs/native-contracts.json).
+The pinned official Luau toolchain passes **170/170 Amber regressions** and **187/187 retained Renaissance regressions**. Both bundles have exact source parity; previous versioned bundles remain hash protected. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
 
-The official pinned Luau compiler/interpreter runs the component, simulated travel and complete-package lifecycle suites. Renaissance's separate regression suite is also run. These establish build and client-contract behavior; **live FERAL travel, gait acceptance, prey damage, feeding rates and Amber/hour have not been tested for 0.4.0**.
+These are deterministic simulations and service mocks. **Current live FERAL travel, gait acceptance, NPC damage, feeding rates and Amber/hour are unverified for this release.** Configuration and local observations cannot independently prove server persistence or reward attribution.
 
-Native HUD flags are client observations. HP/resource/territory changes are observations of the available game state; the addon cannot independently prove server persistence or causally attribute every change. The report preserves that distinction.
+See the [0.5 release report](docs/V0_5_RELEASE.md), [test results](test-results.json) and [static native contracts](docs/native-contracts.json). Previous [0.4 engineering evidence](docs/V0_4_RELEASE.md) remains historical.
 
-### Remaining targeted gameplay check
+## Modules
 
-1. As Bear/Spirit Bear, join a pack and select START. Allow roughly a minute of territory travel, including a water crossing if the selected route has one. Check that the reported travelled distance grows.
-2. When a normal low need triggers care, check that the need actually rises and territory work resumes. NPC damage should appear as observed HP declines, not just attack requests.
-3. Select STOP, then unload Renaissance. Movement should return to normal and Amber's panel should disappear. If something stalls, click COPY STATUS before unloading and provide that single report.
-
-### Rollback
-
-The immutable `feral-amber-autopilot-v0.3.lua` bundle is retained. With Renaissance loaded:
-
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.3.lua"))()
-```
-
-The old v0.1/v0.2 bundles and Renaissance 15.4.3 are also protected by hashes. To revert the default, restore only `roblox-tools/feral-amber.lua` to its preceding v0.3 version.
-
-## Modules and local validation
-
-| File | Responsibility |
+| Module | Responsibility |
 |---|---|
-| `src/agent.luau` | Objective ownership, care latch, interruption and territory evidence |
-| `src/planner.luau` | Pure strategic territory scoring |
-| `src/nav.luau` | Cancellable streamed routing and measured physical progress |
-| `src/driver.luau` | Runtime movement callback discovery and ownership restoration |
-| `src/gait.luau` | Gait decisions, acknowledgements, retry limits and toggles |
-| `src/hunt.luau` | Pursuit, interception, attack evidence and abandonment |
-| `src/bridge.luau` | Native config/state, food/water/NPC eligibility and inputs |
-| `src/ui.luau` | Compact controls and local status copying |
+| `planner` | Region completion, local tours and critical scent priorities |
+| `agent` | One objective, territory evidence, care suspension and resume |
+| `care` | Feeding request, interruption, retry, resource gain and full thirst |
+| `hunt` | Trailing pursuit, speed matching, native attack evidence and abandonment |
+| `nav` | Streamed routes, body clearance, detours and physical progress |
+| `gait` | Gait selection, observed acknowledgements and owned toggles |
+| `bridge` | Native configuration, state, food, water, NPC eligibility and inputs |
+| `driver` | Movement callback discovery and exact ownership restoration |
+| `ui` | Built-in page and local status controls |
+| `runtime` | Renaissance scheduling, engine reuse and cleanup |
 
 ```bash
 python3 roblox-tools/feral-amber/build.py
+python3 roblox-tools/renaissance/build.py
 python3 roblox-tools/feral-amber/run_tests.py \
+  --luau /path/to/luau --compiler /path/to/luau-compile
+python3 roblox-tools/renaissance/run_tests.py \
   --luau /path/to/luau --compiler /path/to/luau-compile
 ```
 
-CI uses official Luau commit `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`. `build.py --check` requires byte-for-byte bundle parity. The gate also verifies rollback hashes and rejects direct resource, position, velocity, CFrame and gameplay-remote writers in Amber source.
+Official toolchain commit: `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`. Amber introduces no root transform, velocity, resource, ownership or direct gameplay-remote writer.
+
+## Rollback
+
+The prior complete Renaissance 15.4.3 and companion Amber 0.4 bundles remain unchanged. To use the old pair, load Renaissance 15.4.3 followed by Amber 0.4:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/4dbf0780ca10aad757dd64631293b823cd4e7eed/roblox-tools/feral-renaissance-v15.4.3.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/4dbf0780ca10aad757dd64631293b823cd4e7eed/roblox-tools/feral-amber-autopilot-v0.4.lua"))()
+```

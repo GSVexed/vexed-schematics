@@ -224,8 +224,19 @@ function Mock.new()
     local http={}
     function http:JSONDecode(key) assert(files[key],"invalid JSON");return files[key] end
     function http:JSONEncode(value) local key="json:"..tostring(#w.calls)..":"..tostring(w.time)..":"..tostring(value);files[key]=value;return key end
+    local paths={}
+    function paths:CreatePath()
+        local p={Status=enum.PathStatus.Success}
+        function p:ComputeAsync(from,target)self.from,self.target=from,target end
+        function p:GetWaypoints()return {{Position=self.from},{Position=self.target}}end
+        return p
+    end
+    function uis:IsKeyDown(key)return w.keys and w.keys[key]==true or false end
+    uis.InputEnded=signal()
+    function methods:Move(dir)self.MoveDirection=dir end
+    V3.zero=V3.new()
     local services={Players=players,ReplicatedStorage=rs,RunService=run,UserInputService=uis,
-        ContextActionService=cas,HttpService=http,Workspace=workspace,VirtualUser=virtual}
+        ContextActionService=cas,HttpService=http,Workspace=workspace,VirtualUser=virtual,PathfindingService=paths}
     local gameObject={PlaceId=108901361810209,PlaceVersion=2412}
     function gameObject:GetService(name) return assert(services[name],"unknown service "..name) end
     local stored={}
@@ -237,7 +248,7 @@ function Mock.new()
         UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end},
         Instance={new=new},RaycastParams={new=function()return {}end},OverlapParams={new=function()return {}end},
         typeof=kind,os=mockOS,
-        task={delay=function(seconds,fn)
+        task={spawn=function(fn)fn()end,defer=function(fn)fn()end,delay=function(seconds,fn)
             w.timerSerial+=1
             local timer={id=w.timerSerial,at=w.time+seconds,fn=fn}
             w.timers[timer.id]=timer;return timer

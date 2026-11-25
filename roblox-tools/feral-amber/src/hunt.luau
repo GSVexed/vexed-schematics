@@ -11,7 +11,7 @@ function Hunt.new(adapter)
             if self.adapter.preyBlocked then self.adapter.preyBlocked[self.target.model]=now+80 end
         end
         self.target,self.pending=nil,nil
-        self.lastResult=why;self.nextSelect=now+2
+        self.lastResult=why;self.nextSelect=now+.25
         self.adapter:stop(why)
     end
     function h:tick(s)
@@ -41,16 +41,16 @@ function Hunt.new(adapter)
                 self.hits+=1;self.noDamageAt=now;self.missesOnTarget=0
                 self.lastResult="Observed prey HP decline after input; attribution unverified"
                 self.pending=nil
-            elseif now-p.at>1.6 then
+            elseif now-p.at>1.1 then
                 self.misses+=1;self.missesOnTarget+=1
                 self.lastResult="No prey HP decline observed"
-                self.pending=nil;self.repositionUntil=now+1.1
+                self.pending=nil;self.repositionUntil=now+.55
             end
         end
         local d=distance(s.position,prey.position)
         if d<self.bestDistance-3 then self.bestDistance=d;self.closingAt=now end
-        if d>390 or now-self.started>65 or self.missesOnTarget>=6
-            or now-self.closingAt>12 and d>28 or now-self.noDamageAt>25 and d<28 then
+        if d>390 or now-self.started>30 or self.missesOnTarget>=3
+            or now-self.closingAt>5 and d>28 or now-self.noDamageAt>7 and d<28 then
             self:abandon(now,"Prey escaping, unreachable or attacks ineffective")
             return "HUNT_REPLAN",self.lastResult
         end
@@ -63,15 +63,32 @@ function Hunt.new(adapter)
         if speed>100 then velocity={x=0,z=0};speed=0 end
         self.sample={position={x=prey.position.x,z=prey.position.z},at=now}
         local lead=math.clamp(d/math.max(20,(s.travelSpeed or 35)+speed),.08,.85)
-        local target={x=prey.position.x+velocity.x*lead,z=prey.position.z+velocity.z*lead}
         local geometry=type(self.adapter.attackGeometry)=="function" and self.adapter:attackGeometry(s,prey) or nil
         local valid=geometry and geometry.valid
+        local heading=speed>1 and {x=velocity.x/speed,z=velocity.z/speed} or prey.forward
+        local standoff=math.clamp((prey.attackRange or 7)*.65,2.4,8)
+        local target={x=prey.position.x+velocity.x*lead,z=prey.position.z+velocity.z*lead}
+        if heading then
+            target.x-=heading.x*standoff;target.z-=heading.z*standoff
+        end
+        local following=speed>1 and d<standoff+10 and geometry and geometry.inRange
+        local scale=1
+        if following then
+            local nav=self.adapter.nav
+            local observed=nav and nav.speed
+            local previous=self.previousThrottle or 1
+            if observed and observed>2 then self.fullSpeed=(self.fullSpeed or observed)*.7+(observed/math.max(previous,.2))*.3 end
+            if self.fullSpeed and self.fullSpeed>2 then
+                scale=math.clamp((speed+(d-standoff)*1.8)/self.fullSpeed,.15,1)
+            end
+        end
+        self.previousThrottle=scale
         -- Keep pursuing while verifying a previous bite; a coarse range check
         -- must never freeze a hunter while its prey runs out of range.
         if valid and now>=self.nextAttack and not self.pending and now>=(self.repositionUntil or 0) then
             local sent,why=self.adapter:bite(s,prey)
             self.lastResult=why or (sent and "Attack requested; awaiting prey HP" or "Native attack not ready")
-            self.nextAttack=now+(s.attackCooldown or 1.35)
+            self.nextAttack=now+(s.attackCooldown or .9)
             if sent and finite(health) then
                 self.attacks+=1;self.pending={at=now,health=health}
             end
@@ -83,11 +100,16 @@ function Hunt.new(adapter)
                 local dx,dz=prey.position.x-s.position.x,prey.position.z-s.position.z
                 local len=math.max(1,math.sqrt(dx*dx+dz*dz))
                 local side=(self.missesOnTarget%2==0) and 1 or -1
-                target={x=prey.position.x+dx/len*2-dz/len*side*2,
-                    z=prey.position.z+dz/len*2+dx/len*side*2}
+                if heading then
+                    target={x=prey.position.x-heading.x*standoff-heading.z*side*2,
+                        z=prey.position.z-heading.z*standoff+heading.x*side*2}
+                else
+                    target={x=prey.position.x+dx/len*2-dz/len*side*2,
+                        z=prey.position.z+dz/len*2+dx/len*side*2}
+                end
             end
             local result=self.adapter:move(target,s,{navKey=prey.model or "NPC_HUNT",
-                movingTarget=true,hunting=true,preySpeed=speed,moveRadius=.9})
+                movingTarget=true,hunting=true,following=following,moveScale=scale,preySpeed=speed,moveRadius=.9})
             if result=="STUCK" or result=="BLOCKED" then
                 self:abandon(now,"NPC pursuit route failed")
                 return "HUNT_REPLAN",self.lastResult

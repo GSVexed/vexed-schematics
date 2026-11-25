@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Deterministically package the thirteen owned modules; no downloaded code at boot."""
+"""Deterministically package thirteen core and ten integrated Territory modules."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "ui", "controller")
-VERSION = "15.4.3"
+CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "ui", "controller")
+AMBER_MODULES=("planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
+MODULES=(*CORE_MODULES,*("amber_"+name for name in AMBER_MODULES))
+def module_path(name):
+    if name.startswith("amber_"):
+        return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
+    return ROOT/"src"/(name+".luau")
+
+VERSION = "15.5.0"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
@@ -22,6 +29,7 @@ PROTECTED_HASHES = {
     "feral-renaissance-v15.4.0.lua": "cb0c9c840eff287bb82bcda212aa9a986f06bf44dedf920777d753c40606ed6f",
     "feral-renaissance-v15.4.1.lua": "22903a4f0ea88fbfdc5965104d511c3c73251ae706b3aa0c3db7e2f1e00ea6c5",
     "feral-renaissance-v15.4.2.lua": "022d9f06c5544eced1da971152243438b98f3b304743a95f3870d1ccc74e053a",
+    "feral-renaissance-v15.4.3.lua": "e60fd51fabbd192ca6ff77ad0055b089a152a88304efb96aa59e46e6421e514e",
 }
 
 
@@ -93,7 +101,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.4.3] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.5.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 
@@ -107,7 +115,7 @@ def build():
               "local sources = {}"]
     manifest = {}
     for name in MODULES:
-        content = (ROOT / "src" / f"{name}.luau").read_text()
+        content = module_path(name).read_text()
         if "]============]" in content:
             raise ValueError("module delimiter collision")
         chunks.append(f'sources["{name}"] = [============[\n{content}]============]')
