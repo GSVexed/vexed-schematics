@@ -1,4 +1,18 @@
-# FERAL Amber Autopilot 0.1 — all-animal strategic farming candidate
+# FERAL Amber Autopilot 0.2 — all-animal strategic farming experiment
+
+## Version 0.2 — movement and panel fixes
+
+Version 0.1 could stay completely stationary: `territory` was both the live `ReplicatedStorage.FeralTerritory` instance and the per-hex read method. The method overwrote the data object, preventing the map's replicated `Hexes` from being read. The real object is now stored as `territoryInstance`, with a dedicated mocked-service regression.
+
+Two additional movement blockers are addressed: an open Renaissance menu previously paused the planner, and distant hexes were rejected when their terrain had not streamed in. Version 0.2 continues when menus are visible and travels toward the replicated hex coordinates first, evaluating safe ground when nearby.
+
+FERAL's custom animal controller may override `Humanoid:MoveTo`. Version 0.2 additionally uses native directional control (virtual/executor WASD where available), plus `Humanoid:Move`, releasing keys promptly on pause, death, manual input or shutdown. It remains **surface-only**, with no teleports, forced velocity, CFrame repositioning or direct gameplay remote calls. Game acceptance of movement remains unverified.
+
+**Right Shift** follows Renaissance's panel visibility; when used standalone, it toggles Amber's own panel. **Drag the title bar** to move the panel, and use MIN for a small collapsed view. Position is retained in the current executor session. Hiding the UI does not stop the farming task. The COPY STATUS report now includes navigation input and faults.
+
+The prior v0.1 bundle is preserved for rollback. All-species live farming, native sprint/burst and real Amber payments remain to be validated.
+
+---
 
 This is an **opt-in add-on** for Renaissance 15.4.3. It has its own small START/STOP panel and does **not** replace the existing hub, its controls or its saved settings. It stops any older Territory Rush v4 auto controller to prevent competing teleports, but does not call its movement functions.
 
@@ -36,7 +50,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schemat
 
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.1.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-amber-autopilot-v0.2.lua"))()
 ```
 
 This remains an experimental client-side game addon, not a proven Amber-income bot. Official Luau tests exercise simulated client contracts rather than live FERAL gameplay.
