@@ -3,8 +3,17 @@
 local Driver={}
 function Driver.new(player,nav,manual)
     local d={nav=nav,closed=false,method="NATIVE_KEYS",controls=nil,original=nil,nextProbe=0}
+    local function currentAnimal()
+        if not nav.body then return true end
+        local char=player.Character
+        local root=char and type(char.FindFirstChild)=="function" and char:FindFirstChild("HumanoidRootPart") or nil
+        if char==nav.body and (not nav.bodyRoot or root==nav.bodyRoot) then return true end
+        if nav.gaits then nav.gaits.burstOwned=false;nav.gaits.trotOwned=false end
+        nav:stop(nil,nil,"CHARACTER_CHANGED")
+        return false
+    end
     function d:attach()
-        if self.closed or self.controls then return end
+        if self.closed or self.controls and self.controls.moveFunction==self.wrapper then return end
         local modules={}
         local scripts=player:FindFirstChild("PlayerScripts")
         local legacy=scripts and scripts:FindFirstChild("PlayerModule")
@@ -34,26 +43,29 @@ function Driver.new(player,nav,manual)
             if controls and type(controls.moveFunction)=="function" then path=candidate.path;break end
             controls=nil
         end
+        if controls and controls==self.displacedControls then
+            self.reason="External owner retained; waiting for a new control module";return
+        end
         if not controls then self.reason="No supported native moveFunction; using keys";return end
         local previous=controls.moveFunction
-        self.original=previous
+        local binding={original=previous}
         local wrapper=function(p,direction,relative)
-            if p==player and not self.closed and nav.desiredPoint and nav.steeringStrategy=="WORLD" then
-                if manual and manual() then
+            if p==player and not self.closed and nav.desiredPoint and nav.steeringStrategy=="WORLD" and binding.active~=false and currentAnimal() then
+                if manual and manual(direction) then
                     nav:stop(nav.desiredHum,nav.desiredRoot,"MANUAL_INPUT")
                 else
                     local wanted=nav:direction()
                     if wanted then
                         nav.driveCalls+=1;nav.lastMode="PLAYER_MODULE"
-                        return self.original(p,wanted,false)
+                        return binding.original(p,wanted,false)
                     end
                 end
             end
-            return self.original(p,direction,relative)
+            return binding.original(p,direction,relative)
         end
         local attached,why=pcall(function()controls.moveFunction=wrapper end)
         if not attached then self.reason=tostring(why);return end
-        self.controls,self.original,self.wrapper=controls,previous,wrapper
+        self.controls,self.original,self.wrapper=controls,previous,wrapper;self.binding=binding
         self.method,self.path,self.reason="PLAYER_MODULE",path,"Native callback attached; motion unverified"
         nav.preferredStrategy="WORLD";nav.steeringStrategy="WORLD"
         nav.driverPath=path
@@ -62,9 +74,12 @@ function Driver.new(player,nav,manual)
     if not d.controls then nav.preferredStrategy="KEY";nav.steeringStrategy="KEY" end
     function d:tick()
         if self.closed then return end
+        currentAnimal()
         if self.controls and self.controls.moveFunction~=self.wrapper then
             self.method="NATIVE_KEYS";nav.preferredStrategy="KEY";nav.steeringStrategy="KEY"
-            self.reason="Native callback ownership changed"
+            self.reason="Native callback ownership changed";self.displacedControls=self.controls
+            if self.binding then self.binding.active=false end
+            if os.clock()>=self.nextProbe then self.nextProbe=os.clock()+5;self:attach() end
         elseif not self.controls and os.clock()>=self.nextProbe then
             self.nextProbe=os.clock()+5;self:attach()
         end

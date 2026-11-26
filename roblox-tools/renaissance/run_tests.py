@@ -87,7 +87,23 @@ def main():
         body = re.search(r'sources\["' + name + r'"\] = \[============\[\n(.*?)\]============\]', source, re.S).group(1)
         assert body == module_path(name).read_text(), f"bundle parity: {name}"
     assert not re.search(r'FireServer\s*\(\s*["\']Bite(?:Hit)?["\']', source)
-    assert not re.search(r'\bgetgc\s*\(', source), "runtime heap enumeration forbidden"
+    # The old build forbade *all* heap access, even an explicitly requested,
+    # bounded own-script lookup. Permit only the new held-bite recovery helper;
+    # never allow background scans, generic GC loops, or heap access in other
+    # modules. CI additionally tests that ordinary startup stays at zero GC.
+    for module in MODULES:
+        raw=module_path(module).read_text()
+        executable="\n".join(line for line in raw.splitlines()
+                            if not line.lstrip().startswith("--"))
+        if module!="roblox":
+            assert not re.search(r"\bgetgc\b",executable), f"heap access outside owner: {module}"
+        else:
+            assert "function b:recoverWolfBiteFromHeap(now)" in raw
+            assert "not self.wantHeldNativeDiscovery" in raw
+            assert "scan.index<=scan.limit and checked<192" in raw
+            assert "limit=math.min(#items,32768)" in raw
+            assert len(re.findall(r"pcall\(getgc",executable))==2
+            assert not re.search(r"\bgetgc\s*\(",executable), "direct heap sweeps forbidden"
     assert not re.search(r'\.Health\s*(?:[+*/-]?=)',source), "local HP writes forbidden"
     assert not re.search(r'(?:setAttribute|SetAttribute)\([^\n]*["\'](?:Hunger|Thirst|Stamina|StaminaMax|FeralInjury|FeralBleed|FeralVenomAmt)["\']\s*,',source), "local resource/status writes forbidden"
     script = "local BUNDLE = " + long_string(source) + "\nlocal MOCK_SOURCE = " + long_string(

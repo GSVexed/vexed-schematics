@@ -1,0 +1,72 @@
+name: FERAL Renaissance 15.8.6 held bite + grab minigame compatibility build
+on:
+  push:
+    branches: ['renaissance/hold-bite-minigame-v15.8.6-*']
+    paths:
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-renaissance-v15.8.0.lua'
+      - '.github/workflows/feral-renaissance-v15.8.6-publish.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build-verify-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Build pinned official Luau compiler and interpreter
+        run: |
+          git clone --quiet https://github.com/luau-lang/luau.git /tmp/renaissance-luau
+          git -C /tmp/renaissance-luau checkout --quiet 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/renaissance-luau config=release -j2 luau luau-compile
+      - name: Compile, check protected bundles and run every Renaissance regression
+        run: |
+          python3 roblox-tools/renaissance/run_tests.py \
+            --luau /tmp/renaissance-luau/luau \
+            --compiler /tmp/renaissance-luau/luau-compile
+      - name: Run integrated Territory and survival regressions
+        run: |
+          python3 roblox-tools/feral-amber/run_tests.py \
+            --luau /tmp/renaissance-luau/luau \
+            --compiler /tmp/renaissance-luau/luau-compile
+      - name: Confirm source/bundle manifest, safe staging and deterministic rebuild
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,subprocess
+          from pathlib import Path
+          base=Path("roblox-tools")
+          manifest=json.loads((base/"renaissance/manifest.json").read_text())
+          bundle=base/"feral-renaissance-v15.8.6.lua"
+          original=bundle.read_bytes()
+          assert manifest["version"]=="15.8.6"
+          assert hashlib.sha256(original).hexdigest()==manifest["bundle_sha256"]
+          subprocess.run(["python3",str(base/"renaissance/build.py")],check=True,stdout=subprocess.DEVNULL)
+          assert bundle.read_bytes()==original,"Rebuild was not byte-identical"
+          assert len(manifest["modules"])==29,"Expected integrated Voice, Hippo, tests and Territory"
+          result=json.loads((base/"renaissance/test-results.json").read_text())
+          assert result["regressions"]["failed"]==0
+          print("RENAISSANCE_INTEGRATED_PACKAGE_VERIFIED",result["regressions"]["passed"])
+          PY
+      - name: Publish only validated immutable candidate and generated reports
+        if: github.event_name == 'push'
+        run: |
+          git add roblox-tools/feral-renaissance-v15.8.6.lua \
+            roblox-tools/renaissance/manifest.json \
+            roblox-tools/renaissance/test-results.json
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Build and validate Renaissance 15.8.6 integrated candidate [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+      - name: Upload machine verification records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feral-renaissance-15.8.6-ci
+          path: |
+            roblox-tools/renaissance/test-results.json
+            roblox-tools/renaissance/manifest.json

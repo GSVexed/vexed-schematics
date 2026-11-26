@@ -45,15 +45,18 @@ function UI.new(engine,hub)
             local value=target.action=="SCENT" and target.hold or target.progress
             progress.Text=type(value)=="number" and ("Native territory progress "..amount(value*100).."%")
                 or s.suspended and ("Will resume "..s.suspended) or "Watching native progress and resource changes"
-            if s.capacity and s.capacity.state=="DEADLINE_PRESSURE" then
-                progress.Text=progress.Text.." · Maintenance pressure"
-            end
             gait.Text=tostring(n.requested or "STOP").." requested · "..tostring(n.observed or "UNKNOWN").." observed"
             travel.Text="Travelled "..amount(n.travelled).." studs · Target "..amount(n.distance).." studs"
                 ..(n.failure and (n.stalledFor or 0)>1 and " · "..n.failure or "")
             if s.strategy and s.strategy.area then
                 progress.Text=s.strategy.area.." · "..tostring(s.strategy.owned or 0).."/"..tostring(s.strategy.total or 0).." owned"
                     ..(type(value)=="number" and (" · Native progress "..amount(value*100).."%") or "")
+            end
+            local capacity=s.capacity and s.capacity.maintenance
+            if capacity and capacity.state=="OVERLOADED" then
+                progress.Text=progress.Text.." · Maintenance "..tostring(capacity.retained).."/"..tostring(capacity.owned).." retained (estimate)"
+            elseif s.capacity and s.capacity.state=="DEADLINE_PRESSURE" then
+                progress.Text=progress.Text.." · Deadline pressure"
             end
             last.Text=s.lastNotice or s.lastSuccess or s.lastSkip or "Select START FARMING. Hiding the hub keeps farming active."
         end

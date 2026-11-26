@@ -1,5 +1,8 @@
 -- A single native Rest owner. Manual Rest is never cancelled or masked.
 local Recovery = {}
+local function positive(value)
+    return type(value)=="number" and value==value and value>0 and value<1e12
+end
 function Recovery.new(bridge, policy, ledger)
     local r = { state = "OFF", owned = nil, enabled = false, echoes = 0,
         backoffUntil = 0, releaseAt = -math.huge, signalAt = -math.huge,
@@ -171,9 +174,7 @@ function Recovery.new(bridge, policy, ledger)
         if self.owned and (not s or self.owned ~= s.char) then self:release("animal changed", now) end
         if not self.enabled then self:release("OFF", now); return end
         local effects = s and (
-            (type(s.injury) == "number" and s.injury > .1)
-            or (type(s.bleed) == "number" and s.bleed > .1)
-            or (type(s.venom) == "number" and s.venom > .1))
+            positive(s.injury) or positive(s.bleed) or positive(s.venom))
         self.purpose = effects and "effects" or "health"
         local allowed, reason = policy:allowed("recovery", s, now,self.purpose)
         if not allowed then self:release(reason, now); return end

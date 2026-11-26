@@ -35,6 +35,8 @@ function Planner.objective(hex,state,from,options)
         or (options.blockedUntil and (options.blockedUntil[hex.key] or 0)>(state.now or 0)) then return nil end
     if state.contested and state.contested[hex.key] then return nil end
     local owned=hex.owner==state.pack
+    if options.maintenanceOnly and not owned then return nil end
+    if owned and options.retainOwned and not options.retainOwned[hex.key] then return nil end
     local hold=finite(hex.hold) and clamp(hex.hold,0,1) or nil
     local payKnown=finite(hex.pay)
     local pay=payKnown and clamp(hex.pay,1,20) or 1
@@ -282,14 +284,27 @@ end
 
 function Planner.decide(state,options)
     options=options or {}
-    if not state or not finite(state.healthFraction) or state.needsKnown==false then
+    if not state or not finite(state.healthFraction) or state.healthFraction<0 or state.healthFraction>1.05 or state.needsKnown==false then
         return {kind="WAIT",reason="Waiting for valid native health and needs"}
+    end
+    if state.hungerMax~=nil and (not finite(state.hungerMax) or state.hungerMax<=0)
+        or state.thirstMax~=nil and (not finite(state.thirstMax) or state.thirstMax<=0) then
+        return {kind="WAIT",reason="Native resource maxima unavailable"}
     end
     local hm=finite(state.hungerMax) and state.hungerMax>0 and state.hungerMax or 100
     local tm=finite(state.thirstMax) and state.thirstMax>0 and state.thirstMax or 100
     local h=finite(state.hunger) and state.hunger/hm or nil
     local t=finite(state.thirst) and state.thirst/tm or nil
-    local critical=t and t<.19 and "DRINK" or h and h<.19 and "EAT"
+    if not h or not t or h<0 or t<0 then return {kind="WAIT",reason="Waiting for both native needs"} end
+    -- A merely thirsty animal must not repeatedly defer a starving one. Use
+    -- observed depletion margins when both exist, otherwise normalized needs.
+    local critical
+    if h<.19 and t<.19 then
+        local hr=finite(state.hungerReserve) and state.hungerReserve or h
+        local tr=finite(state.thirstReserve) and state.thirstReserve or t
+        if not (finite(state.hungerReserve) and finite(state.thirstReserve)) then hr,tr=h,t end
+        critical=hr<tr and "EAT" or "DRINK"
+    elseif t<.19 then critical="DRINK" elseif h<.19 then critical="EAT" end
     if state.healthFraction<.25 then
         if critical and (state.feedCan==(critical=="DRINK" and "drink" or "eat") or state.recoveryStalled
             or critical=="DRINK" and t<.08 or critical=="EAT" and h<.08) then
@@ -312,25 +327,103 @@ function Planner.decide(state,options)
     return {kind="TERRITORY",reason="Survival reserve available"}
 end
 function Planner.need(state,options)return Planner.decide(state,options).kind end
+-- Due-job deadlines and sustained maintenance are separate estimates. Include
+-- healthy owned hexes in the latter: a full scent bar still creates future work.
+-- Unknown decay is never silently replaced by an invented native lifetime.
 function Planner.capacity(hexes,state,options)
-    local jobs={};local unknown=0
+    options=options or {}
+    local jobs,recurring={},{}
+    local unknown,owned=0,0
+    local refill=finite(state.refillTime) and state.refillTime>0 and state.refillTime or 60
+    local horizon=finite(options.horizon) and clamp(options.horizon,120,7200) or 900
+    local floor=.35
+    local function travel(from,to,purpose)
+        local fallback=dist(from,to)/math.max(6,finite(state.travelSpeed) and state.travelSpeed or 24)
+        if type(state.travelCost)=="function" then
+            local ok,value=pcall(state.travelCost,from,to,purpose)
+            if ok and finite(value) and value>=0 then return value end
+        end
+        return fallback
+    end
     for _,hex in ipairs(hexes) do
-        if hex.owner==state.pack and not hex.neutral then
+        if state.pack~=nil and hex.owner==state.pack and not hex.neutral then
+            owned+=1
             local item=Planner.objective(hex,state,state.position,options)
-            if item and item.deadlineSeconds then table.insert(jobs,item) else unknown+=1 end
+            if item and item.deadlineSeconds then table.insert(jobs,item) end
+            local rate=hex.decayPerSecond
+            if type(hex.key)=="string" and finite(rate) and rate>0 and rate<.1 and finite(hex.hold)
+                and hex.center and finite(hex.center.x) and finite(hex.center.z) and #recurring<128 then
+                local period=(1-floor)/rate
+                local service=refill*(1-floor)
+                table.insert(recurring,{key=hex.key,center=hex.center,pay=finite(hex.pay) and clamp(hex.pay,1,20) or 1,
+                    period=period,service=service,load=service/period,
+                    nextDue=math.max(0,(hex.hold-floor)/rate),
+                    travel=travel(state.position,hex.center,"HEX:"..hex.key)})
+            else unknown+=1 end
         end
     end
-    table.sort(jobs,function(a,b)return a.deadlineSeconds<b.deadlineSeconds end)
+    table.sort(jobs,function(a,b)
+        return a.deadlineSeconds==b.deadlineSeconds and a.key<b.key or a.deadlineSeconds<b.deadlineSeconds
+    end)
     local elapsed,misses=0,0;local from=state.position
     for _,item in ipairs(jobs) do
-        local travel=item.travelSeconds
-        if type(state.travelCost)=="function" then travel=state.travelCost(from,item.center,"HEX:"..item.key) end
-        elapsed+=travel+item.serviceSeconds
+        elapsed+=travel(from,item.center,"HEX:"..item.key)+item.serviceSeconds
         if elapsed>item.deadlineSeconds then misses+=1 end
         from=item.center
     end
+    -- A bounded nearest-neighbour tour gives a travel allowance. It is an
+    -- estimate, not a proof that every live terrain segment is traversable.
+    local remaining=table.clone(recurring);from=state.position
+    local tour,period,serviceLoad,events=0,math.huge,0,0
+    for _,job in ipairs(recurring) do
+        period=math.min(period,job.period);serviceLoad+=job.load
+        events+=math.max(0,math.floor((horizon-job.nextDue)/job.period)+1)
+    end
+    while #remaining>0 do
+        local index,best=1,math.huge
+        for i,job in ipairs(remaining) do
+            local cost=(from.x-job.center.x)^2+(from.z-job.center.z)^2
+            if cost<best or cost==best and job.key<remaining[index].key then index,best=i,cost end
+        end
+        local job=table.remove(remaining,index);tour+=travel(from,job.center,"HEX:"..job.key);from=job.center
+    end
+    if #recurring>1 then tour+=travel(from,state.position,"MAINTENANCE_RETURN") end
+    local care=finite(options.careFraction) and clamp(options.careFraction,0,.75) or 0
+    local available=1-care
+    local load=serviceLoad+(period<math.huge and tour/period or 0)
+    local maintenanceState=#recurring==0 and "UNKNOWN" or unknown>0 and "PARTIAL"
+        or load>available and "OVERLOADED" or "ESTIMATED_SUSTAINABLE"
+    local retain,retained,retainedLoad={},0,0
+    -- Act only on proven service overload (even zero travel cannot fit). The
+    -- travel estimate alone may defer new acquisitions but does not abandon
+    -- existing owned work. Higher-value cheap maintenance remains productive.
+    local hardOverload=unknown==0 and serviceLoad>available
+    if hardOverload then
+        table.sort(recurring,function(a,b)
+            local ar=a.pay/math.max(.0001,a.load+a.travel/a.period)
+            local br=b.pay/math.max(.0001,b.load+b.travel/b.period)
+            return ar==br and a.key<b.key or ar>br
+        end)
+        for _,job in ipairs(recurring) do
+            local marginal=job.load+job.travel/job.period
+            if retainedLoad+marginal<=available*.95 or retained==0 then
+                retain[job.key]=true;retained+=1;retainedLoad+=marginal
+            end
+        end
+    end
     return {knownDeadlines=#jobs,unknown=unknown,estimatedSeconds=elapsed,predictedLate=misses,
         state=#jobs==0 and "UNKNOWN" or misses>0 and "DEADLINE_PRESSURE" or "DUE_WORK_FEASIBLE",
-        scope="estimated currently due maintenance; excludes unknown/future workload"}
+        scope="due deadlines plus bounded recurring owned-map workload; estimates require live calibration",
+        maintenance={state=maintenanceState,owned=owned,known=#recurring,unknown=unknown,horizonSeconds=horizon,
+            visits=events,serviceUtilization=serviceLoad,travelUtilization=period<math.huge and tour/period or 0,
+            estimatedUtilization=load,availableFraction=available,tourSeconds=tour,
+            intervalSeconds=period<math.huge and period or nil,retained=hardOverload and retained or owned,
+            retainedFeasible=hardOverload and retainedLoad<=available or not hardOverload},
+        maintenanceOnly=unknown==0 and #recurring>0 and load>available,
+        retainOwned=hardOverload and retain or nil,
+        policy=hardOverload and (retainedLoad<=available and "Retain highest-value estimated maintenance subset; no new claims"
+            or "Even best maintenance exceeds capacity; prioritize it without new claims")
+            or maintenanceState=="OVERLOADED" and "Preserve owned maintenance before new claims"
+            or unknown>0 and "Unknown lifetime remains eligible; no sustainability claim" or "Full observed workload estimated"}
 end
 return Planner

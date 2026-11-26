@@ -1,4 +1,10 @@
-# FERAL Amber Autopilot 0.7.0
+# FERAL Territory 0.8.0 candidate
+
+The current source is integrated into **Renaissance 16.0.0**. See the [consolidated candidate loader and instructions](../renaissance/README.md), [release report](../renaissance/docs/OVERHAUL_16_RELEASE.md), [all-scenario acceptance ledger](../renaissance/docs/OVERHAUL_16_ACCEPTANCE.md) and [current test results](test-results.json). The candidate adds recurring scent capacity and overload scheduling, stale-route/config/character isolation, manual gamepad/touch priority, critical minigame yields, safe feeding cleanup and outcome continuity. Territory still starts OFF.
+
+**305/305 automated Territory checks and 304/304 integrated core checks pass locally**, including all previous scenarios. The new source is tested inside the current 16.0.0 bundle as well as against the protected stable hub. Native autonomous climb, flight and underwater-depth routing remain unsupported; current-server acceptance, full-map retention and device performance remain unverified. The old T01–T44 and S01–S62 ledgers below remain historical requirements, not erased gaps.
+
+## Stable 0.7.0 instructions and retained behavior
 
 Territory farming is now a permanent **Territory** page in Renaissance 15.7.0. The hub owns its window, scheduler, controls and shutdown.
 
@@ -24,7 +30,7 @@ Native Species/Forage configuration supplies diet and capabilities. Bear/Spirit 
 
 ## Verification
 
-The pinned official Luau toolchain passes **263/263 Amber regressions** and **202/202 retained Renaissance regressions**. Both bundles have exact source parity; previous versioned bundles remain hash protected. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
+The stable 0.7.0 release passed **263/263 Amber regressions** and **202/202 retained Renaissance regressions**. The candidate's expanded current totals are recorded above and in the linked test results. Both generations retain exact source parity and hash-protected earlier bundles. Scenarios include native hub lifecycle, interrupted/full drinking, contested hexes, region ordering, stable completion, Burst acknowledgements, prey following, tree overlap and bounded stalls.
 
 These are deterministic simulations and service mocks. **Current live FERAL travel, gait acceptance, NPC damage, feeding rates and Amber/hour are unverified for this release.** Configuration and local observations cannot independently prove server persistence or reward attribution.
 

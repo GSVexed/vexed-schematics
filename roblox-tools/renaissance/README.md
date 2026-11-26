@@ -1,4 +1,58 @@
-# FERAL Project Renaissance 15.7.0
+# FERAL Project Renaissance — 16.1.0 unified candidate
+
+This branch reconciles two earlier candidate lines that diverged on 26 November 2026. The **16.0.2 overhaul** contained the 0.8.0 Territory navigation/planning engine, but its combat input module only buffered one Rest-exit bite and lacked later Hippo, hearing and hold-repeat work. Separately, 15.8.7 developed additional combat, minigame, Hippo, hearing and ghost-hit features while retaining Territory 0.7.0. This 16.1.0 candidate starts with the complete 15.8.7 hub, restores the **Territory 0.8.0 engine and original test suite from 16.0.2**, and improves the held-input dispatch path. The historical 16.0.2 and 15.8.7 source bundles remain available unchanged for rollback.
+
+### Held left-click repair
+
+The historical 15.7.1 protected source required by Territory 0.8's migration tests is restored byte-for-byte from the original 16.0.2 branch, rather than relaxing any release integrity check. The Combat tab indicates whether Hold to Repeat Bites is using a validated original callback (including heap recovery) or an unverified mouse-replay fallback.
+
+
+When input-event connections are inaccessible, the hub now checks whether the executor exposes the original `WolfController.tryBite` in its own Lua heap. It scans only on a held attack, incrementally, and requires an exact local-script source, own Player, native doBite/cooldown identities and WolfActions remote before invoking anything. The earlier mouse-replay fallback remains only if no validated native function is available. Real M1 InputObjects are tracked separately from the synthetic press/release lifecycle, preventing a simulated InputEnded from cancelling the human hold. Minigame auto-perfect input retains priority; no BiteHit or fake hit reply is sent by the hub.
+
+Both original 16.0.2 and current 15.8.7 are **candidates**, not proven live releases. Native heap accessibility and actual server-accepted repeated damage cannot be established by automated test doubles. The updated hub is intentionally not promoted to the stable launcher, and no manual diagnostic uploads are required.
+
+## Prior 15.8.7 branch
+
+
+This revision preserves the held-M1, minigame and adaptive combat changes from 15.8.6. The reach guide now favours unobstructed stock-range targets before uncertain extended-only alternatives; it also aligns aim with the stock target when one exists and limits speculative relative-velocity lead to 2.25 studs over at most 0.20 seconds (formerly 4 studs/0.35 s).
+
+FeralHit server replies now match an alternate nearby victim when the original client target was wrong, provided that the timing match is unique. Delayed and ambiguous real replies are never treated as fake. Missing replies are given additional time before the hub reports an unverified contact. **Two clear extended-only contacts without a matching server reply briefly pause extended-only Auto Bite attempts against that victim; stock-range Auto Bite and all manual attacks remain available.** This reduces repetitive speculative auto-bites but does not establish the server's reach or guarantee accepted damage. Bite Reach's expanded client geometry and the original faster-bite, recovery, Hippo, Territory and hearing features are preserved.
+
+## Previous 15.8.6 candidate
+
+
+**15.8.6** fixes two known scheduler barriers: input backends cannot generate another InputBegan by pressing an already-held M1, and previous versions entirely disabled bites during all grab minigames. Repeated M1 now requests a single owned Up → Down → Up edge when no validated native bite callback is available; each edge is asynchronous and can be safely cancelled on respawn, unload, or a new minigame. When the executor exposes multiple input methods, two missing native bite markers automatically rotate to another method (VirtualInputManager, paired mouse press/release, or click) rather than continually treating a successful local call as a real hit.
+
+During a **hunter** grab minigame, a validated native WolfController bite callback can run in parallel with the native grab timing automation **only when** the original M1 minigame binding is confirmed separated and a physical M1 hold is observed. The minigame's automatic timed presses are unchanged. Prey and captured players, native FeralClamp/carry restrictions, R2 minigame controls, unsafe or unavailable native bindings, and synthetic mouse fallback during grabs remain blocked. FERAL server-side permission and acceptance are not bypassed; no extra Bite or BiteHit requests are fabricated.
+
+The held-input fallback is now gated by the actual FERAL WolfController + WolfActions + Species.biteCooldown schema instead of the game.PlaceVersion == 2412 constant, so a compatible game update does not silently disable input. Faster-bite tuning still refuses unknown game versions. The build uses the existing 15.8.5 adaptive speed governor and retains all voice, Hippo, Territory, recovery and settings features. Gameplay acceptance requires independent live validation, not user diagnostics.
+
+## Previous 15.8.5 candidate
+
+
+**15.8.5** addresses held bite input lost to private callback discovery, synthetic minigame interference, early fake-hit attribution and aggressive client-only cooldown requests. Hold to Repeat Bites now combines M1/R2 edges with held-state polling, uses an optional bounded real-input replay when the native callback is isolated (no direct hit remotes), and pauses through native minigame windows. Faster Bites begins at 62% of stock local timing, cautiously approaches 55% after repeated uniquely matched positive server replies, and retreats toward stock timing on recurring clean stock-range no-damage windows. Client timing and server acceptance are still different. The old 15.8.4 immutable release and stable launcher are unchanged.
+
+## Previous 15.8.4 candidate
+
+
+
+**15.8.4** integrates an optional **Extended Proximity Hearing** toggle in the existing Vision tab, enabled by default and saved with other preferences. It listens for compatible default Roblox voice AudioEmitters, increases only local attenuation distance points by 25%, and restores prior values at OFF/unload or peer replacement. It has no manual diagnostic step and does not touch voice microphones, mute/permissions, game remotes, combat, minigames, or Territory.
+
+The auditory effect is conditional on Roblox actually exposing voice AudioEmitters and transmitting the audio. Older/private voice systems and server voice distance restrictions cannot be bypassed by a local attenuation change; audible range is not live verified. **Use the new 15.8.4 candidate from its own branch, not the stable launcher.** The 15.8.3 release and stable rollbacks remain intact. The 15.8.0 historical file absent from this Hippo branch is restored from the independently archived PR #15 version (SHA256 ba69a1ef...), not presented as the missing Hippo 15.8.0 build (SHA256 e9c51181...).
+
+## Prior 15.8.3 candidate
+
+The candidate adds held left-click and R2 native bite repetition, a faster client bite cooldown, optional Auto Bite, moving-target lead, safer hit-reply matching, a Burst stamina fix and residual-condition recovery. Hippo assistance includes charge information, movement while charging, matching native gait HUD highlights and optional native smart release.
+
+**251/251 core scenarios and 263/263 Territory scenarios pass.** The complete candidate contains 28 modules. Live damage, server-accepted attack rate, recovery and movement remain unverified. Damage uncapping, ability cooldown bypasses and the proposed Turtle shell protection for Hippo are not established.
+
+See the [held-bite release notes](docs/V15_8_3_HELD_BITES.md), [implementation ledger](docs/V15_8_HIPPO_COMBAT.md), [15.8.1 HUD/Turtle investigation](docs/V15_8_1_HUD_TURTLE.md) and [15.8.2 Test Features](docs/V15_8_2_TEST_FEATURES.md). The versioned candidate bundle is `roblox-tools/feral-renaissance-v15.8.3.lua`. The stable launcher below still resolves to 15.7.0.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/37024d31941f0b20f62280d4c44e1102c847b79a/roblox-tools/feral-renaissance-v15.8.3.lua"))()
+```
+
+## Stable release: 15.7.0
 
 Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records plus Zoom Unlock and Amber 0.7.0.
 
@@ -44,7 +98,7 @@ The 15.6.2 rollback includes its Territory page and Zoom Unlock. Earlier compani
 - [Architecture](docs/ARCHITECTURE.md), [21-feature audit](docs/FEATURE_AUDIT.md), [historical release notes](docs/RELEASE_NOTES.md).
 - [Native territory/input contracts](../feral-amber/docs/native-contracts.json), [previous live evidence](docs/LIVE_EVIDENCE.md).
 
-There is no diagnostics tab or automatic report upload. Territory has an optional local COPY STATUS button.
+Candidate 15.8.3 adds a **Test Features** page with a local report and a private PC runner sync. Territory retains its optional local COPY STATUS button.
 
 ### Zoom Unlock (15.6.2)
 

@@ -87,7 +87,11 @@ test("need arbitration prioritises health and thirst emergencies",function()
 end)
 test("missing need values do not trigger unsupportable food requests",function()
     local state=s();state.hunger=nil;state.thirst=nil
-    eq(Planner.need(state),"TERRITORY")
+    -- Unknown needs must also stop optional territory acquisition. The old
+    -- fallback avoided feeding but incorrectly treated unavailable data as safe.
+    eq(Planner.need(state),"WAIT")
+    state.hunger=80;eq(Planner.need(state),"WAIT")
+    state.hunger=nil;state.thirst=80;eq(Planner.need(state),"WAIT")
 end)
 test("complete 71-hex map discovers every one of 69 eligible territories across route batches",function()
     local state=s()

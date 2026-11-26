@@ -182,5 +182,36 @@ test("same animal profile and discovery generation replacements retire incompati
     local second=a.goal;w.state.generation=2;a:tick(12);assert(a.goal~=second)
     eq(a.lastGeneration,2)
 end)
+test("failed owned feeding releases its native session and pending pulse",function()
+    local w,a=world();local cancelled,released=0,0
+    function w:cancelFeed()cancelled+=1;return true end
+    function w:releaseInputs()released+=1 end
+    a:setEnabled(true,10);a.goal={kind="EAT",meal={owned=true},feedPending=false}
+    a:fail({now=11},"No native food progress")
+    eq(cancelled,1);eq(released,1);eq(a.goal,nil)
+end)
+test("unknown native combat time pauses requests while preserving the current goal",function()
+    local w,a=world();a:setEnabled(true);a:tick(10);local goal=a.goal
+    w.state.combatKnown=false;a:tick(11)
+    eq(a.phase,"PAUSED");eq(a.goal,goal)
+    w.state.combatKnown=true;a:tick(12);eq(a.goal,goal);eq(a.phase,"TRAVEL")
+end)
+test("STOP cancels owned active feeding after its initial pending flag clears",function()
+    local w,a=world();local cancelled=0;function w:cancelFeed()cancelled+=1;return true end
+    a:setEnabled(true,10);a.lastState={now=10};a.goal={kind="DRINK",meal={owned=true},feedPending=false}
+    a:setEnabled(false,11);eq(cancelled,1);eq(a.goal,nil);eq(a.enabled,false)
+end)
+
+test("overload retention remains consistent through route selection and suspended resumption",function()
+    local w,a=world();w.state.refillTime=60
+    w.hex={{key="cheap",center={x=20,z=0},owner=9,hold=.01,decayPerSecond=.01,pay=1},
+        {key="valuable",center={x=40,z=0},owner=9,hold=.5,decayPerSecond=.01,pay=20},
+        {key="new",center={x=10,z=0},pay=20}}
+    a:setEnabled(true,10);a:tick(10)
+    eq(a.goal.key,"valuable");eq(a.capacity.retainOwned.cheap,nil)
+    a.suspended={kind="TERRITORY",key="cheap",detail={kind="SCENT"}};a:resume(w:snapshot(11))
+    eq(a.goal,nil);a:tick(12);eq(a.goal.key,"valuable")
+end)
+
 print(string.format("AMBER_AGENT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Amber agent tests failed")
