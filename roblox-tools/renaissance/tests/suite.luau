@@ -27,10 +27,11 @@ local function boot(settings)
 end
 local E=Mock.Enum
 
-test("22 features retained; experimental reach is optional and native geometry is the default",function()
+test("22 features retained; existing reach defaults ON and explicit OFF remains available",function()
     local M=modules();local r=M.core.registry()
     eq(#r.order,22);r:request("reach",false);eq(r.byId.reach.requested,false)
-    eq(M.settings.sanitize(nil,M.core.specs).states.reach,false)
+    eq(M.settings.sanitize(nil,M.core.specs).states.reach,true)
+    eq(M.settings.sanitize({states={reach=false}},M.core.specs).states.reach,false)
     r:request("reach",true);eq(r.byId.reach.requested,true)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
@@ -1717,9 +1718,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 16.0.1 presents its actual version in the active controller",function()
+test("Renaissance 16.0.2 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"16.0.1")
+    eq(h.version,"16.0.2")
     h:close()
 end)
 
@@ -1901,11 +1902,11 @@ test("condition-only recovery remains eligible with unknown combat time",functio
     s.combat=true;eq(policy:allowed("recovery",s,10,"effects"),true)
     s.captured=true;eq(policy:allowed("recovery",s,10,"effects"),false)
 end)
-test("default native combat preserves every attack profile field while retaining the guide",function()
+test("explicit native combat mode preserves every attack profile field while retaining the guide",function()
     local w=Mock.new();local c=w.configs.CombatConfig
     c.HIT2={PREDICT=true}
     local before=table.clone(c)
-    local h=load(w,{settings={states={recovery=false,biteHelper=true}}})
+    local h=load(w,{settings={states={reach=false,recovery=false,biteHelper=true}}})
     local _,char=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
     eq(h.registry.byId.reach.requested,false)
     eq(h.features.leases.owners.reach,nil)
@@ -1948,6 +1949,87 @@ test("failed native recovery renewal relinquishes owned pose and cannot appear a
     eq(h.recovery.owned,nil);eq(h.recovery.pose,nil)
     eq(w.player.Character:GetAttribute("WolfDbgRestP"),nil)
     assert(h.recovery:summary():find("renewal unavailable",1,true))
+    h:close()
+end)
+test("failed Rest exit leaves native state visible and never schedules a deferred attack",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+    local h=load(w,{settings={states={recovery=true,reach=true}}});w:advance(.15)
+    local char=w.player.Character
+    assert(h.recovery.owned==char)
+    local old=h.bridge.rest
+    h.bridge.rest=function(self,who,on)
+        if not on then return false end
+        return old(self,who,on)
+    end
+    w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.recovery.owned,nil);eq(h.recovery.pose,nil)
+    eq(h.recovery.releaseFailedChar,char)
+    eq(h.combatInput.pending,nil);eq(h.lastIntent.restExitFailed,true)
+    eq(h.ledger.counts.native_rest_exit_failed,1)
+    eq(h.ledger.counts.owned_rest_released,nil)
+    char:SetAttribute("WolfRest",true)
+    w:advance(3)
+    eq(char:GetAttribute("WolfRest"),true)
+    eq(char:GetAttribute("WolfDbgRestP"),nil)
+    eq(h.recovery.owned,nil)
+    eq(h.ledger.counts.native_bite_buffer_released,nil)
+    assert(h.recovery:summary():find("exit failed",1,true))
+    h.recovery:manual(w.time)
+    eq(h.recovery.releaseFailedChar,nil)
+    eq(h.policy.manualRest,true)
+    h:close()
+end)
+test("character change retires all stale combat targets before the next scan",function()
+    local w,h=boot({biteHelper=true,reach=true,recovery=false})
+    w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    assert(h.guide and h.bridge.reachTarget)
+    h.bridge.treeTarget=h.guide.target
+    h.recovery.releaseFailedChar=w.player.Character
+    w:spawn("Wolf")
+    eq(h.guide,nil);eq(h.snapshot,nil)
+    eq(h.bridge.reachTarget,nil);eq(h.bridge.treeTarget,nil)
+    eq(#h.bridge.allCandidates,0);eq(#h.bridge.tracked,0)
+    eq(h.recovery.releaseFailedChar,nil)
+    eq(#h.transactions,0)
+    w:advance(.3);eq(h.active,true)
+    assert(h.features.leases:valid("reach"))
+    h:close()
+end)
+test("replaced opponent body retires the old guide without a respawn of our animal",function()
+    local w,h=boot({biteHelper=true,reach=true,recovery=false})
+    local p,old=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    local cached=h.guide.target
+    eq(cached.char,old);eq(h.bridge.reachTarget,cached)
+    h.bridge.treeTarget=cached
+    local new=w:animal("Wolf",Mock.V3.new(0,3,-7))
+    p.Character=new
+    h.nextScan=w.time+10
+    h:render(.016)
+    eq(h.guide.invalid,true)
+    eq(h.bridge.reachTarget,nil);eq(h.bridge.treeTarget,nil)
+    eq(h.bridge:currentTargetBody(cached),false)
+    h.nextScan=0;w:advance(.3)
+    assert(h.guide and h.guide.target.char==new)
+    h:close()
+end)
+test("disconnected or replaced feedback listeners rebind without stale events",function()
+    local w,h=boot({recovery=false})
+    local remote=w:remote("FeralHit")
+    local first=h.bridge.remoteConnections.FeralHit.connection
+    first:Disconnect()
+    h.bridge:bindNative(h)
+    local nextConn=h.bridge.remoteConnections.FeralHit.connection
+    assert(first~=nextConn and nextConn.Connected)
+    remote.OnClientEvent:Fire("hit",{})
+    eq(h.ledger.counts.native_hit_feedback,1)
+    remote.Parent=nil
+    local replacement=w.new("RemoteEvent");replacement.Name="FeralHit";replacement.Parent=w.rs
+    remote.OnClientEvent:Fire("hit",{})
+    eq(h.ledger.counts.native_hit_feedback,1)
+    h.bridge:bindNative(h)
+    eq(nextConn.Connected,false)
+    replacement.OnClientEvent:Fire("hit",{})
+    eq(h.ledger.counts.native_hit_feedback,2)
     h:close()
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
