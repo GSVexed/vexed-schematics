@@ -35,13 +35,15 @@
     "overhaul_native.luau",
     "overhaul_ui.luau",
     "feral-renaissance-v16.0.0.lua",
-    "feral-renaissance.lua"
+    "feral-renaissance.lua",
+    "feral-renaissance-candidate.lua"
   ],
   "module_parity": true,
   "rollback_hashes_unchanged": true,
   "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
   "protected_artifacts": 22,
-  "candidate_pin_validated": false,
+  "candidate_pin_validated": true,
+  "candidate_source_commit": "6c2e10c268d681d45d312ec5cb8a0de5100243fa",
   "regressions": {
     "total": 304,
     "passed": 304,

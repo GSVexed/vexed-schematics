@@ -51,7 +51,7 @@ Feeding retries use a guarded native stop operation, not a toggle that might acc
 
 ### Territory 0.8.0
 
-The capacity estimator includes recurring work for all owned scent, including currently full bars. It uses observed decay/service costs, an estimated tour and observed care share. Missing lifetime evidence stays unknown. Expansion pauses under estimated overload; when service time alone exceeds available time, maintenance selects a feasible valuable subset instead of claiming that the whole map is sustainable. Expensive travel-helper calls are bounded to at most `3N + 1` for N considered hexes.
+The capacity estimator includes recurring work for all owned scent, including currently full bars. It uses observed decay, configured refill cost, an estimated tour and observed care share. Missing lifetime evidence stays unknown. Expansion pauses under estimated overload; when service time alone exceeds available time, maintenance prioritizes an estimated valuable subset and reports when even the best remaining job exceeds capacity. Expensive travel-helper calls are bounded to at most `4N + 1` for N considered hexes.
 
 Asynchronous navigation uses isolated worker state until adoption. Old computations cannot mutate a replacement route; character/root/config generations invalidate obsolete work. Physical gamepad, touch and keyboard control win promptly, with native gait ownership preserved. Core minigame deadlines suspend background Territory work and release owned input. STOP, failure and unload release owned feeding exactly once.
 

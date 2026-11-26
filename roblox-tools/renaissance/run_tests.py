@@ -127,6 +127,7 @@ def main():
                "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
                "protected_artifacts": len(PROTECTED_HASHES),
                "candidate_pin_validated": candidate_path.exists(),
+               "candidate_source_commit": candidate["source_commit"] if candidate_path.exists() else None,
                "regressions": dict(zip(("total","passed","failed"), map(int,match.groups()))) if match else None,
                "runtime_exit_code": result.returncode, "gameplay_success_claimed": False,
                "results": result.stdout.splitlines()}
