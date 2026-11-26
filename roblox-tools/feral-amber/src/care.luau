@@ -1,6 +1,7 @@
 -- Feeding handshake and recovery. Native approach, active feeding and an input
 -- request have distinct lifetimes; manual cancellation never leaves a stale latch.
 local Care={}
+local function finite(n)return type(n)=="number" and n==n and math.abs(n)<1e10 end
 local function active(s,kind)
     return s.nativeFeedMode==kind or s.feedMode==kind or s.feedMode==true
 end
@@ -27,7 +28,7 @@ function Care.step(g,s,adapter)
     local now=s.now;local m=meal(g,now)
     local kind=g.kind=="DRINK" and "drink" or "eat"
     local value=kind=="drink" and s.thirst or s.hunger
-    if type(value)~="number" or type(g.baseline)~="number" then return "FAILED","Native needs unavailable" end
+    if not finite(value) or not finite(g.baseline) then return "FAILED","Native needs unavailable" end
     g.gain=value-g.baseline
     if m.value and value>m.value+.02 then m.progressAt=now;m.requests=0 end
     m.value=value
@@ -50,8 +51,11 @@ function Care.step(g,s,adapter)
         m.pending=false;g.feedPending=nil;g.nextAction=now+.2
         if m.requests>=3 then return "RELOCATE","Native feed request was not acknowledged" end
     end
-    local target=kind=="drink" and (s.drinkTarget or s.thirstMax or 100)-.2 or (s.careTarget or 72)
-    if value>=target and g.gain>.25 then
+    local maximum=kind=="drink" and (s.thirstMax or 100) or (s.hungerMax or 100)
+    if not finite(maximum) or maximum<=0 then return "FAILED","Native need maximum unavailable" end
+    local target=kind=="drink" and math.min(s.drinkTarget or maximum,maximum)-maximum*.002 or math.min(s.careTarget or maximum*.72,maximum)
+    if not finite(target) or target<=0 then return "FAILED","Native care target unavailable" end
+    if value>=target and g.gain>math.min(.25,maximum*.002) then
         if running then
             m.fullAt=m.fullAt or now
             if m.owned and not m.cancelAt and adapter.cancelFeed then

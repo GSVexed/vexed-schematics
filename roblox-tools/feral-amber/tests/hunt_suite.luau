@@ -104,8 +104,8 @@ test("another nearer candidate does not replace a valid committed prey",function
 end)
 test("a late HP decline clears ineffective-attempt accumulation between attacks",function()
     local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.velocity={x=0,z=0};s.attackCooldown=3
-    h:tick(s);s.now=11.5;h:tick(s);eq(h.missesOnTarget,1)
-    p.health=70;p.hum.Health=70;s.now=12;h:tick(s);eq(h.missesOnTarget,0);eq(h.target,p)
+    h:tick(s);s.now=14;h:tick(s);eq(h.missesOnTarget,1)
+    p.health=70;p.hum.Health=70;s.now=14.5;h:tick(s);eq(h.missesOnTarget,0);eq(h.target,p)
 end)
 print(string.format("AMBER_HUNT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Hunting regressions failed")

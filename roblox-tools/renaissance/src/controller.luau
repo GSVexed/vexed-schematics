@@ -2,7 +2,7 @@ local Controller = {}
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.6.2", tokenIdentity = tokenIdentity,
+    local h = { version = "15.7.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -260,6 +260,7 @@ function Controller.new(M,bridge,options)
         if click and self.ui:contains(point) then return end
         local s = bridge:snapshot(now,false)
         if s.gameMenu then return end
+        self.features:hippoInput(s,key)
         if key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonY
             or ((primary or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
             self.policy:input("rest",now)
@@ -321,6 +322,7 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         local now = bridge.clock()
         local s = bridge:snapshot(now,false)
+        if key=="FeralCrushAt" then self.features:hippoAttribute(s) end
         if key == "WolfRest" then self.recovery:echo(s,now)
         elseif key == "WolfBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
             bridge.biteTiming=nil
@@ -705,7 +707,7 @@ function Controller.new(M,bridge,options)
         self.activity=self.policy:activity(s,now)
         self.combatInput:tick(s,now)
         if not critical then self.features:reconcile(s,now) end
-        self.recovery.enabled = self.registry.byId.recovery.requested
+        self.recovery.enabled = self.registry.byId.recovery.requested or self.territoryRecoveryOwner~=nil
         self.recovery:tick(s,now)
         self:stepClimb(s,now)
         self:stepEscape(s,now)

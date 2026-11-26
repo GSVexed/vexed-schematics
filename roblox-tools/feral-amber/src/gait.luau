@@ -34,7 +34,7 @@ function Gait.select(distance,turn,stamina,options)
     end
     if options.following and type(options.gaitSpeeds)=="table" then
         for _,mode in ipairs({"WALK","TROT","SPRINT"}) do
-            local speed=options.gaitSpeeds[mode]
+            local speed=options.gaitSpeeds[mode] or options.gaitSpeeds[string.lower(mode)]
             if finite(speed) and speed>=(options.preySpeed or 0)*1.08 then return mode end
         end
     end

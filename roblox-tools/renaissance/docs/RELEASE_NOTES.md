@@ -1,3 +1,15 @@
+# Renaissance 15.7.0 — Territory prep implementation and Hippo gait repair
+
+Territory 0.7.0 adds priority/time itineraries, actual-position region entry, observed directed travel costs, scent slack, due-work pressure, checked longer navigation, shoulder/drop checks and spatial recovery memory. Survival uses one decision table, validated maxima, temporary recovery ownership and measured care budgets. Feeding fallback, prey contact/shared-target handoff, cache generations and run accounting are hardened.
+
+Hippo ability speed now corrects the captured controller's consumed Species scalar for native sprint/Burst input; the old cap label alone did not change the forced-trot branch. Land/water math, denial, external edits and restoration have regression coverage. Zoom Unlock and all prior feature records remain.
+
+Official Luau passes **263/263 Territory and 202/202 core** cases, compilation, source parity and protected-artifact checks. The integrated simulation runs **7,200 simulated seconds**, completing five prey-down sequences, twelve meals, thirteen drinks, one claim and thirty-seven scents without manual intervention or starvation. Fixed paired region/deadline comparisons improve; they are not live efficiency measurements.
+
+See the [complete report](../../feral-amber/docs/V0_7_RELEASE.md), [44-item ledger](../../feral-amber/docs/PREPARATION_EXECUTION_LEDGER.md) and [scenario matrix](../../feral-amber/docs/V0_7_SCENARIOS.md). Native flight/climb/depth adapters, live capacity/performance calibration and repeated gameplay acceptance remain incomplete. No universal unattended or perfect completion claim is made.
+
+---
+
 # Renaissance 15.6.2 — normal camera zoom unlock
 
 Adds one saved **Movement → Zoom Unlock** control, enabled by default while respecting saved OFF. Expands Player camera limits to 0.5–100,000 studs and Classic mode. Native default changes are observed; OFF/unload restores the latest values still owned by this feature. Does not replace CameraType, CFrame, subject, FOV or the camera controller. Cinematics/custom camera code may still impose their own behavior; the limit range is not a live-tested universal camera guarantee.

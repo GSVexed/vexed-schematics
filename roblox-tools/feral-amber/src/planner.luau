@@ -64,12 +64,28 @@ function Planner.objective(hex,state,from,options)
     local waiting=options.waitingSince and options.waitingSince[hex.key]
     if finite(waiting) then priority+=math.min(180,math.max(0,(state.now or 0)-waiting)/5) end
     if finite(recent) and (state.now or 0)-recent<120 then priority*=.65 end
+    local travel,confidence=d/24,"distance estimate"
+    local estimate=options.travelCost or state.travelCost
+    if type(estimate)=="function" then
+        local ok,t,c=pcall(estimate,from,hex.center,"HEX:"..hex.key)
+        if ok and finite(t) and t>=0 then travel,confidence=t,c or "estimate" end
+    end
+    local service=kind=="SCENT" and (state.refillTime or 60)*(1-hold)
+        or (state.claimTime or 20)*(1-(hex.by==state.pack and finite(hex.prog) and clamp(hex.prog,0,1) or 0))
+    local deadline=finite(hex.deadlineSeconds) and math.max(0,hex.deadlineSeconds) or nil
+    -- Fade is used only when its units plausibly match the supplied Unix clock.
+    if not deadline and finite(hex.fade) and finite(state.unixNow) and math.abs(hex.fade-state.unixNow)<86400 then
+        deadline=math.max(0,hex.fade-state.unixNow)
+    end
+    local slack=deadline and deadline-travel-service or nil
+    if kind=="SCENT" and slack and slack<60 then priority+=math.max(0,60-slack)*6 end
     local routeCost=1+d/320
-    local score=priority/(routeCost^.74)
+    local score=type(estimate)=="function" and priority/math.max(2,travel+service+2) or priority/(routeCost^.74)
     if not finite(score) then return nil end
     return {key=hex.key,kind=kind,score=score,base=priority,distance=d,
         pay=payKnown and pay or nil,hold=hold,center=hex.center,nearestPlayer=nearest,
-        urgency=owned and (1-(hold or 0)) or 0}
+        urgency=owned and (1-(hold or 0)) or 0,travelSeconds=travel,serviceSeconds=service,
+        deadlineSeconds=deadline,slack=slack,confidence=confidence}
 end
 
 function Planner.plan(hexes,state,options)
@@ -149,42 +165,26 @@ local function localTour(hexes,state,options)
     local remaining={}
     for _,hex in ipairs(hexes) do
         local item=Planner.objective(hex,state,state.position,options)
-        if item then item.region=hex.region;table.insert(remaining,item) end
+        if item then item.region=hex.region;item.hex=hex;table.insert(remaining,item) end
     end
     local route,from={},state.position
-    while #remaining>0 and #route<16 do
-        local nearest=math.huge
-        for _,item in ipairs(remaining) do nearest=math.min(nearest,dist(from,item.center)) end
-        local best,index,cost=nil,nil,math.huge
+    local elapsed=0
+    while #remaining>0 and #route<math.min(options.maxStops or 6,16) do
+        local best,index,value=nil,nil,-math.huge
         for i,item in ipairs(remaining) do
-            local d=dist(from,item.center)
-            if d<=nearest*1.3+20 then
-                local nextDistance=0
-                if #remaining>1 then
-                    nextDistance=math.huge
-                    for j,other in ipairs(remaining) do if i~=j then nextDistance=math.min(nextDistance,dist(item.center,other.center)) end end
-                end
-                local value=d+nextDistance*.22
-                if value<cost or value==cost and item.key<(best and best.key or "~") then best,index,cost=item,i,value end
+            local refreshed=Planner.objective(item.hex,state,from,options)
+            local t=refreshed.travelSeconds+refreshed.serviceSeconds+2
+            local rank=refreshed.base/math.max(2,t)/(1+(refreshed.travelSeconds/5)^2)
+            if refreshed.slack and refreshed.slack-elapsed<45 then
+                rank+=1000/math.max(1,refreshed.slack-elapsed+20)
+            end
+            if rank>value or rank==value and item.key<(best and best.key or "~") then
+                best,index,value=refreshed,i,rank
+                best.region=item.region
             end
         end
+        elapsed+=best.travelSeconds+best.serviceSeconds
         table.insert(route,best);table.remove(remaining,index);from=best.center
-    end
-    -- Shorten crossings while keeping the entry fixed. At most 16 stops.
-    for _=1,3 do
-        local changed=false
-        for i=2,#route-1 do
-            for j=i+1,#route-1 do
-                local before=dist(route[i-1].center,route[i].center)+dist(route[j].center,route[j+1].center)
-                local after=dist(route[i-1].center,route[j].center)+dist(route[i].center,route[j+1].center)
-                if after+3<before then
-                    local l,r=i,j
-                    while l<r do route[l],route[r]=route[r],route[l];l+=1;r-=1 end
-                    changed=true
-                end
-            end
-        end
-        if not changed then break end
     end
     return route
 end
@@ -204,17 +204,61 @@ function Planner.strategy(hexes,state,options)
             table.insert(group.hexes,hex)
         end
         local item=Planner.objective(hex,state,state.position,options)
-        if item and item.kind=="SCENT" and item.hold and item.hold<.28 then table.insert(urgent,hex) end
+        if item and item.kind=="SCENT" and item.hold and (item.hold<.28 or item.slack and item.slack<45) then table.insert(urgent,hex) end
     end
     if not anyRegion then return Planner.plan(hexes,state,options),{phase="GENERAL",cursor=1} end
     local order=Planner.regionOrder(grid)
     if #urgent>0 then return localTour(urgent,state,options),{phase="URGENT_SCENT",cursor=options.regionCursor or 1} end
+    local oldest,agedRegion=300,nil
+    for region,group in pairs(groups) do
+        for _,hex in ipairs(group.hexes) do
+            local since=options.waitingSince and options.waitingSince[hex.key]
+            if finite(since) and (state.now or 0)-since>oldest and Planner.objective(hex,state,state.position,options) then
+                oldest,agedRegion=(state.now or 0)-since,region
+            end
+        end
+    end
+    if agedRegion then
+        local index=table.find(order,agedRegion) or 1
+        return localTour(groups[agedRegion].hexes,state,options),{phase="FAIRNESS_SWEEP",cursor=index,region=agedRegion,
+            area="Revisiting waiting area",order=order}
+    end
     local cursor=math.clamp(options.regionCursor or 1,1,#order)
+    if not options.regionCursor then
+        local closest=math.huge
+        for index,region in ipairs(order) do
+            local group=groups[region]
+            if group then
+                for _,hex in ipairs(group.hexes) do
+                    local item=Planner.objective(hex,state,state.position,options)
+                    if item and item.travelSeconds<closest then cursor,closest=index,item.travelSeconds end
+                end
+            end
+        end
+    end
+    local direction=options.regionDirection or 1
+    if not options.regionCursor then
+        local best=math.huge
+        for _,candidateDirection in ipairs({1,-1}) do
+            for step=1,#order-1 do
+                local index=(cursor+step*candidateDirection-1)%#order+1
+                local group=groups[order[index]];local cost=math.huge
+                for _,hex in ipairs(group and group.hexes or {}) do
+                    local item=Planner.objective(hex,state,state.position,options)
+                    if item then cost=math.min(cost,item.travelSeconds) end
+                end
+                if cost<math.huge then
+                    if cost<best then direction,best=candidateDirection,cost end
+                    break
+                end
+            end
+        end
+    end
     -- Claims first, then maintenance; blocked areas stay eligible for the next
     -- pass instead of being incorrectly counted as completed.
     for _,claimsOnly in ipairs({true,false}) do
         for step=0,#order-1 do
-            local index=(cursor+step-1)%#order+1
+            local index=(cursor+step*direction-1)%#order+1
             local region=order[index];local group=groups[region]
             if group and (not claimsOnly or group.owned<group.total) then
                 local pool={}
@@ -227,28 +271,66 @@ function Planner.strategy(hexes,state,options)
                     local vertical=grid==3 and ({"Top","Middle","Bottom"})[row+1] or ("Row "..(row+1))
                     local horizontal=grid==3 and ({"left","centre","right"})[col+1] or ("column "..(col+1))
                     return route,{phase=claimsOnly and "AREA_SWEEP" or "AREA_MAINTENANCE",cursor=index,
-                        region=region,area=vertical.." "..horizontal,owned=group.owned,total=group.total,
+                        region=region,direction=direction,area=vertical.." "..horizontal,owned=group.owned,total=group.total,
                         bonus=state.regionBonus,order=order}
                 end
             end
         end
     end
-    return {},{phase="MAINTAINED",cursor=cursor,order=order}
+    return {},{phase="MAINTAINED",cursor=cursor,direction=direction,order=order}
 end
 
-function Planner.need(state,options)
+function Planner.decide(state,options)
     options=options or {}
-    if not state or not finite(state.healthFraction) then return "WAIT" end
-    if state.healthFraction<(options.minimumHP or .46) then return "RECOVER" end
-    local h,t=state.hunger,state.thirst
-    if finite(t) and t<(options.emergencyThirst or 19) then return "DRINK" end
-    if finite(h) and h<(options.emergencyHunger or 19) then return "EAT" end
-    -- Measured depletion can bring care forward before a long search/hunt.
-    -- Absent telemetry does not invent a rate or a full resource value.
-    if finite(t) and t<80 and finite(state.thirstReserve) and state.thirstReserve<180 then return "DRINK" end
-    if finite(h) and h<80 and finite(state.hungerReserve) and state.hungerReserve<240 then return "EAT" end
-    if finite(t) and t<(options.thirstTrigger or 44) then return "DRINK" end
-    if finite(h) and h<(options.hungerTrigger or 42) then return "EAT" end
-    return "TERRITORY"
+    if not state or not finite(state.healthFraction) or state.needsKnown==false then
+        return {kind="WAIT",reason="Waiting for valid native health and needs"}
+    end
+    local hm=finite(state.hungerMax) and state.hungerMax>0 and state.hungerMax or 100
+    local tm=finite(state.thirstMax) and state.thirstMax>0 and state.thirstMax or 100
+    local h=finite(state.hunger) and state.hunger/hm or nil
+    local t=finite(state.thirst) and state.thirst/tm or nil
+    local critical=t and t<.19 and "DRINK" or h and h<.19 and "EAT"
+    if state.healthFraction<.25 then
+        if critical and (state.feedCan==(critical=="DRINK" and "drink" or "eat") or state.recoveryStalled
+            or critical=="DRINK" and t<.08 or critical=="EAT" and h<.08) then
+            return {kind=critical,critical=true,reason="Immediate native care before critical recovery"}
+        end
+        return {kind="RECOVER",critical=true,reason="Critical health"}
+    end
+    if critical then return {kind=critical,critical=true,reason="Critical survival need"} end
+    if state.healthFraction<(options.minimumHP or .46) then return {kind="RECOVER",reason="Low health"} end
+    local drinkBudget=math.max(180,(state.drinkETA or 0)+45)
+    local foodBudget=math.max(240,(state.foodETA or 0)+60)
+    if t and t<.8 and finite(state.thirstReserve) and state.thirstReserve<drinkBudget then
+        return {kind="DRINK",reason="Water reserve shorter than care margin"}
+    end
+    if h and h<.8 and finite(state.hungerReserve) and state.hungerReserve<foodBudget then
+        return {kind="EAT",reason="Food reserve shorter than acquisition margin"}
+    end
+    if t and t<(options.thirstTrigger or 44)/100 then return {kind="DRINK",reason="Thirst care"} end
+    if h and h<(options.hungerTrigger or 42)/100 then return {kind="EAT",reason="Hunger care"} end
+    return {kind="TERRITORY",reason="Survival reserve available"}
+end
+function Planner.need(state,options)return Planner.decide(state,options).kind end
+function Planner.capacity(hexes,state,options)
+    local jobs={};local unknown=0
+    for _,hex in ipairs(hexes) do
+        if hex.owner==state.pack and not hex.neutral then
+            local item=Planner.objective(hex,state,state.position,options)
+            if item and item.deadlineSeconds then table.insert(jobs,item) else unknown+=1 end
+        end
+    end
+    table.sort(jobs,function(a,b)return a.deadlineSeconds<b.deadlineSeconds end)
+    local elapsed,misses=0,0;local from=state.position
+    for _,item in ipairs(jobs) do
+        local travel=item.travelSeconds
+        if type(state.travelCost)=="function" then travel=state.travelCost(from,item.center,"HEX:"..item.key) end
+        elapsed+=travel+item.serviceSeconds
+        if elapsed>item.deadlineSeconds then misses+=1 end
+        from=item.center
+    end
+    return {knownDeadlines=#jobs,unknown=unknown,estimatedSeconds=elapsed,predictedLate=misses,
+        state=#jobs==0 and "UNKNOWN" or misses>0 and "DEADLINE_PRESSURE" or "DUE_WORK_FEASIBLE",
+        scope="estimated currently due maintenance; excludes unknown/future workload"}
 end
 return Planner

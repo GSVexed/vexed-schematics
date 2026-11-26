@@ -576,7 +576,8 @@ function Roblox.new(Core, environment)
             or self:attribute(char,"FeralCarcassCarry") == true
         s.talonLock=self:attribute(char,"FeralTalonLock")
         s.diveLock=self:attribute(char,"FeralDiveLocal")
-        s.ability = self:attribute(char,"FeralDeathRollLocal") == true
+        s.ability = self:attribute(char,"FeralCrushAt")~=nil and self:attribute(char,"FeralCrushAt")~=false
+            or self:attribute(char,"FeralDeathRollLocal") == true
             or self:attribute(char,"FeralDowned") == true
             or self:attribute(char,"FeralRolling") == true
             or s.talonLock~=nil or s.diveLock~=nil
@@ -963,7 +964,7 @@ function Roblox.new(Core, environment)
             if not char then return end
             for _, key in ipairs({"WolfRest","WolfBiteAt","WolfFeed","FeralPinned","FeralCarried",
                 "FeralDragged","FeralTalonLock","FeralDiveLocal","FeralDeathRollLocal","FeralRolling",
-                "FeralDowned","FeralVenomDown","FeralTumbleAt","FeralClimbLocal","FeralFlyLocal","FeralUnderwater"}) do
+                "FeralDowned","FeralVenomDown","FeralTumbleAt","FeralCrushAt","FeralCrushBiteAt","FeralClimbLocal","FeralFlyLocal","FeralUnderwater"}) do
                 local c = char:GetAttributeChangedSignal(key):Connect(function()
                     if hub.active and not hub.closed and char == self.player.Character then hub:nativeAttribute(key) end
                 end)
