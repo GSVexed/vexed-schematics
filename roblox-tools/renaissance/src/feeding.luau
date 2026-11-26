@@ -5,6 +5,7 @@ function Feeding.new(bridge,policy,ledger)
     function f:cancel(reason,now)
         local active=self.intent or self.session or self.restart or self.busy
         self.intent,self.session,self.restart,self.carryRetry,self.busy = nil,nil,nil,nil,false
+        self.mode,self.started,self.known,self.nextProbe=nil,nil,false,0
         self.status = reason or ""
         if active then policy.actionUntil = math.max(policy.actionUntil,now+.45) end
     end
@@ -13,7 +14,7 @@ function Feeding.new(bridge,policy,ledger)
         if s.feeding or self.intent or self.restart then self:cancel("manual feeding toggle",now);return end
         local kind = bridge:attribute(s.char,"FeedCan")
         if kind == "eat" or kind == "drink" then
-            self.intent = {char=s.char,kind=kind,untilAt=now+6}
+            self.intent = {char=s.char,generation=s.generation,kind=kind,untilAt=now+6}
             self.busy,self.status = true,"Approaching " .. (kind == "eat" and "food" or "water")
         end
     end
@@ -42,22 +43,25 @@ function Feeding.new(bridge,policy,ledger)
             self.nextProbe=now+.25
         end
         local mode,started,known = self.mode,self.started,self.known
-        if self.intent and (self.intent.char ~= s.char or now > self.intent.untilAt
+        if self.intent and (self.intent.char ~= s.char or self.intent.generation~=s.generation or now > self.intent.untilAt
             or known and mode == nil and not self.restart and now > self.intent.untilAt-5.65) then self.intent=nil end
-        if self.session and (self.session.char ~= s.char or s.feedMode ~= self.session.kind) and not self.restart then self.session=nil end
+        if self.session and (self.session.char ~= s.char or self.session.generation~=s.generation
+            or s.feedMode ~= self.session.kind and (not known or mode~=self.session.kind)) and not self.restart then self.session=nil end
+        if self.carryRetry and (self.carryRetry.char~=s.char or self.carryRetry.generation~=s.generation
+            or now>self.carryRetry.untilAt) then self.carryRetry=nil end
         local active = s.feedMode
         local pending = known and mode ~= nil or self.intent ~= nil or self.restart ~= nil
         self.busy = s.feeding or pending
         s.feeding = self.busy
         if self.restart then
             local r = self.restart
-            if r.char ~= s.char or s.moving or now > r.untilAt then self:cancel("feeding restart cancelled",now);return end
+            if r.char ~= s.char or r.generation~=s.generation or s.moving or now > r.untilAt then self:cancel("feeding restart cancelled",now);return end
             if now >= r.at and known and mode == nil and bridge:attribute(s.char,"FeedCan") == r.kind then
                 self.restart=nil
                 -- Original toggleFeed owns approach, selection, eligibility and Feed.
                 local sent = bridge:toggleNativeFeed(now)
-                self.intent = sent and {char=s.char,kind=r.kind,untilAt=now+6} or nil
-                self.carryRetry = sent and {char=s.char,kind=r.kind} or nil
+                self.intent = sent and {char=s.char,generation=s.generation,kind=r.kind,untilAt=now+6} or nil
+                self.carryRetry = sent and {char=s.char,generation=s.generation,kind=r.kind,untilAt=now+6} or nil
                 self.status = sent and "Feeding restarted once; watching resource" or "Native feeding restart unavailable"
                 ledger:event("native_feed_restart",now,{called=sent==true})
             end
@@ -69,10 +73,10 @@ function Feeding.new(bridge,policy,ledger)
         end
         self.intent=nil
         local value = active == "eat" and s.hunger or s.thirst
-        if type(value) ~= "number" or value ~= value then self.status="Feeding; resource unavailable";return end
+        if type(value) ~= "number" or value ~= value or math.abs(value)>=1e12 then self.status="Feeding; resource unavailable";return end
         local session = self.session
         if not session or session.kind ~= active or session.char ~= s.char then
-            session = {char=s.char,kind=active,last=value,progressAt=now,
+            session = {char=s.char,generation=s.generation,kind=active,last=value,progressAt=now,
                 retried=self.carryRetry and self.carryRetry.char==s.char and self.carryRetry.kind==active or false}
             self.session,self.carryRetry = session,nil
         end
@@ -84,7 +88,7 @@ function Feeding.new(bridge,policy,ledger)
         self.status = active == "eat" and "Eating; watching hunger" or "Drinking; watching thirst"
         local cfg=bridge:config("NeedsConfig")
         local maximum=cfg and cfg[active=="eat" and "HUNGER_MAX" or "THIRST_MAX"] or 100
-        if type(maximum) ~= "number" then maximum=100 end
+        if type(maximum) ~= "number" or maximum~=maximum or maximum<=0 or maximum>=1e12 then maximum=100 end
         -- Territory Care owns repair/cancellation for its own feeding session.
         -- Keep native approach protection and observations, without a second
         -- stop/start repair racing the farming controller.
@@ -96,8 +100,10 @@ function Feeding.new(bridge,policy,ledger)
         end
         if session.retried or s.moving or not known or mode ~= active or not started then return end
         session.retried=true
-        self.restart={char=s.char,kind=active,at=now+.18,untilAt=now+1.3}
-        local stopped = bridge:toggleNativeFeed(now)
+        self.restart={char=s.char,generation=s.generation,kind=active,at=now+.18,untilAt=now+1.3}
+        -- Re-read the current native mode at cancellation. A stale toggle
+        -- would otherwise start feeding after the native session already ended.
+        local stopped = bridge:stopNativeFeed(now)
         ledger:event("native_feed_stall_repair",now,{called=stopped==true})
         if not stopped then self.restart=nil;self.status="Feeding stalled; native restart unavailable" end
     end
