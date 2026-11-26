@@ -7,9 +7,15 @@ function Controller.matchFeedback(Core,transactions,data,now)
     for _,tx in ipairs(transactions) do
         local corrected=tx.feedback and not tx.feedback.safe and tx.feedback.v==data.v
             and Core.finite(tx.feedback.dmg) and tx.feedback.dmg==0 and Core.finite(data.dmg) and data.dmg>0
-        if tx.nativeAt and not tx.classified and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<1.8 then
+        if tx.nativeAt and not tx.classified and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
             local target=tx.nativeTarget or tx.focusTarget and tx.focusTarget.char or tx.target and tx.target.char
-            local rank=target==data.v and 0 or target==nil and tx.hpBefore and tx.hpBefore[data.v] and 1 or nil
+            local seenVictim=tx.hpBefore and tx.hpBefore[data.v]~=nil
+            -- Real FeralHit replies may involve a different nearby victim
+            -- than the client's projected target. Prefer exact matches but
+            -- allow a unique weaker nearby-victim match.
+            local rank=target==data.v and 0
+                or (target==nil and seenVictim) and 1
+                or (target~=nil and seenVictim) and 2 or nil
             if rank then
                 local delta=math.abs(now-(tx.claimDue or tx.nativeAt))
                 if rank<bestRank then
@@ -21,13 +27,13 @@ function Controller.matchFeedback(Core,transactions,data,now)
             end
         end
     end
-    local ambiguous=best~=nil and secondTime-bestTime<=.040001
+    local ambiguous=best~=nil and secondTime-bestTime<=.085001
     return not ambiguous and best or nil,ambiguous
 end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.8.6", tokenIdentity = tokenIdentity,
+    local h = { version = "15.8.7", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -48,6 +54,10 @@ function Controller.new(M,bridge,options)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
     bridge.combatGovernor = h.combatInput
+    -- Weak keyed: a disappeared animal is never retained by combat trust.
+    -- Only Auto Bite pauses unconfirmed extended contacts; manual reach stays.
+    h.extendedConfidence=setmetatable({},{__mode="k"})
+    bridge.extendedConfidence=h.extendedConfidence
     -- A pending synthetic reset can outlive the current Heartbeat. Never
     -- press during an asynchronously arriving native grab begin.
     bridge.combatPulseBlocked = function()
@@ -214,6 +224,8 @@ function Controller.new(M,bridge,options)
         self.feeding:close(now)
         self.combatInput:cancel()
         self.combatInput:resetRate()
+        self.extendedConfidence=setmetatable({},{__mode="k"})
+        bridge.extendedConfidence=self.extendedConfidence
         self.hippo:reset()
         self.rescue:cancel("animal changed")
         self:stopWalk("animal changed")
@@ -467,6 +479,14 @@ function Controller.new(M,bridge,options)
                 local tx,ambiguous=Controller.matchFeedback(Core,self.transactions,data,now)
                 if tx then
                     tx.feedback=data;tx.nativeTarget=data.v
+                    if Core.finite(data.dmg) and data.dmg>0 and data.safe~=true then
+                        tx.positiveReply=true
+                        local confidence=self.extendedConfidence[data.v]
+                        if confidence then
+                            confidence.misses=0
+                            confidence.waitUntil=0
+                        end
+                    end
                     if tx.rateEligible and tx.rateTarget and tx.rateTarget.char==data.v
                         and data.safe~=true and Core.finite(data.dmg) and data.dmg>0
                         and not tx.fastConfirmed then
@@ -476,6 +496,12 @@ function Controller.new(M,bridge,options)
                 end
                 self.ledger:event("native_outgoing_hit_reply",now,{safe=data.safe==true,damage=data.dmg,
                     matched=tx~=nil,ambiguous=ambiguous==true})
+                if not tx and Core.finite(data.dmg) and data.dmg>0 and data.safe~=true then
+                    -- A genuine reply must not be displayed as a ghost
+                    -- merely because its client bite ID was ambiguous.
+                    self.lastUnmatchedGameHit=now
+                    self.combatStatus="Game reports a hit · local bite association uncertain"
+                end
             end
             return
         end
@@ -714,12 +740,23 @@ function Controller.new(M,bridge,options)
                     if target and target.root and target.root.Parent then
                         local before=tx.hpBefore and tx.hpBefore[target.char]
                         tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
-                        tx.extendedOnly=tx.focusTarget and tx.focusExtendedOnly or
-                            self.guide and self.guide.extended and self.guide.extended.valid
-                            and not (self.guide.baseline and self.guide.baseline.valid) or false
+                        if tx.focusTarget then
+                            tx.extendedOnly=tx.focusExtendedOnly==true
+                        else
+                            tx.extendedOnly=self.guide and self.guide.extended and self.guide.extended.valid
+                                and not (self.guide.baseline and self.guide.baseline.valid) or false
+                        end
+                        if tx.extendedOnly and tx.focusTarget and tx.focusTarget.char==target.char then
+                            -- At contact time, an unobstructed extended
+                            -- candidate is a credible auto-reach probe.
+                            local ok,geo=pcall(bridge.geometry,bridge,self.features.combat,s,target)
+                            local clear,blocked=pcall(bridge.occluded,bridge,s,target)
+                            tx.extendedClaimValid=ok and geo and geo.valid and clear and not blocked
+                        end
                     end
                     self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
-                elseif tx.nativeAt and tx.sampled and now >= tx.claimDue+.8 then
+                elseif tx.nativeAt and tx.sampled
+                    and now >= tx.claimDue+(tx.feedback and .8 or 2.0) then
                     tx.classified = true
                     local target = tx.target
                     local char=tx.nativeTarget or target and target.char
@@ -727,6 +764,25 @@ function Controller.new(M,bridge,options)
                     local before=char and tx.hpBefore and tx.hpBefore[char]
                     local drop=ok and hum and hum.Parent and before and hum.MaxHealth==before.maxHP and hum.Health<before.hp-.05
                     local damage=tx.feedback and tx.feedback.dmg
+                    -- Two silent, clear extended-only contacts will
+                    -- temporarily pause *automatic* speculative attempts.
+                    -- This is a confidence guard, not proof of server rejection.
+                    if tx.extendedOnly and tx.extendedClaimValid and target and target.char
+                        and not tx.positiveReply and not tx.feedback
+                        and not (self.lastUnmatchedGameHit and now-self.lastUnmatchedGameHit<1.2) then
+                        local entry=self.extendedConfidence[target.char]
+                        if not entry then
+                            entry={misses=0,waitUntil=0}
+                            self.extendedConfidence[target.char]=entry
+                        end
+                        entry.misses+=1
+                        if entry.misses>=2 then
+                            entry.waitUntil=now+math.min(4,1.5+entry.misses*.5)
+                        end
+                        self.ledger:event("extended_contact_unconfirmed",now,{
+                            count=entry.misses,autoWait=entry.waitUntil>now,
+                        })
+                    end
                     if tx.rateEligible and tx.rateAtClaim and not tx.fastConfirmed
                         and not drop and not (tx.feedback and tx.feedback.safe==true)
                         and (not tx.feedback or tx.rateTarget and tx.feedback.v==tx.rateTarget.char) then
@@ -737,7 +793,7 @@ function Controller.new(M,bridge,options)
                             ..(drop and " · HP decline correlated" or " · HP change unconfirmed"))
                         or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
                         or drop and "Target HP fell after native marker · attribution unverified"
-                        or "Native marker observed · no matching HP decline observed"
+                        or "Native marker observed · no matching server hit reply"
                     self.ledger:event(drop and "target_hp_decline_correlated" or "no_correlated_hp_decline",now,
                         {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,damageAcceptance = "unverified"})
                     tx.hpBefore=nil
