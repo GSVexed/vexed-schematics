@@ -502,6 +502,20 @@ function Roblox.new(Core, environment)
             and not Core.finite(marker) then return false end
         return true
     end
+    -- A pcall succeeding on VirtualInputManager does not mean FERAL received
+    -- a native bite. After two unmarked pulses try a different available
+    -- real-input backend automatically, without user diagnostics.
+    function b:noteHeldInputTimeout()
+        self.heldInputMisses=(self.heldInputMisses or 0)+1
+        local count=self.heldInputModes or 1
+        if self.heldInputMisses>=2 and count>1 then
+            self.heldInputIndex=((self.heldInputIndex or 1)%count)+1
+            self.heldInputMisses=0
+        end
+    end
+    function b:noteHeldInputMarker()
+        self.heldInputMisses=0
+    end
     function b:releaseSyntheticBite()
         local pulse=self.syntheticM1
         if not pulse then return end
@@ -533,24 +547,34 @@ function Roblox.new(Core, environment)
                 end
             end
         end
-        local down,up,backend
+        local modes={}
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
-        if ok and virtual then
-            backend="VIRTUAL_MOUSE"
-            down=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)end
-            up=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)end
-        elseif type(mouse1press)=="function" and type(mouse1release)=="function" then
-            backend="EXECUTOR_PAIRED"
-            down=mouse1press;up=mouse1release
-        elseif type(mouse1click)=="function" then
-            -- An executor's click primitive may internally create both edges.
+        if ok and virtual then table.insert(modes,{
+            name="VIRTUAL_MOUSE",
+            down=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)end,
+            up=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)end,
+        }) end
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then
+            table.insert(modes,{name="EXECUTOR_PAIRED",down=mouse1press,up=mouse1release})
+        end
+        if type(mouse1click)=="function" then
+            table.insert(modes,{name="EXECUTOR_CLICK",click=mouse1click})
+        end
+        if #modes==0 then return false end
+        self.heldInputModes=#modes
+        local index=self.heldInputIndex or 1
+        if index>#modes then index=1 end
+        self.heldInputIndex=index
+        local mode=modes[index]
+        local down,up,backend=mode.down,mode.up,mode.name
+        self.heldInputBackend=backend
+        if mode.click then
             self.syntheticM1Until=now+.18
             self.syntheticPressing=true
-            local clicked=pcall(mouse1click)
+            local clicked=pcall(mode.click)
             self.syntheticPressing=false
+            if not clicked then self:noteHeldInputTimeout() end
             return clicked
-        else
-            return false
         end
         self.syntheticM1Until=now+.3
         local pulse={release=up,method=backend,didPress=false}
@@ -566,7 +590,12 @@ function Roblox.new(Core, environment)
         end
         -- Reset the logical button state while preserving the real human-held
         -- intent in CombatInput (synthetic InputEnded events are ignored).
-        if not safeUp() then self.syntheticM1=nil;return false end
+        if not safeUp() then
+            self.syntheticM1=nil
+            self.heldInputIndex=(index%#modes)+1
+            self.heldInputMisses=0
+            return false
+        end
         local function beginPress()
             if self.syntheticM1~=pulse then return end -- a grab began meanwhile
             if self.combatPulseBlocked and self.combatPulseBlocked() then

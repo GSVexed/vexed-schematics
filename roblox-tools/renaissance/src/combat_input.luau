@@ -57,6 +57,10 @@ function CombatInput.new(bridge,policy,ledger)
         end
     end
     function c:marker(s,now)
+        if self.awaiting and self.awaiting.backend=="INPUT"
+            and type(bridge.noteHeldInputMarker)=="function" then
+            bridge:noteHeldInputMarker()
+        end
         self.pending,self.awaiting=nil,nil
         self.lastMarker=now
         self.markerCount+=1
@@ -128,6 +132,9 @@ function CombatInput.new(bridge,policy,ledger)
             if now-waiting.at<math.max(.18,bridge:biteDelay(s.char)+.10) then return end
             self.awaiting=nil
             self.nextAttempt=math.max(self.nextAttempt,now+.18)
+            if waiting.backend=="INPUT" and type(bridge.noteHeldInputTimeout)=="function" then
+                bridge:noteHeldInputTimeout()
+            end
             self.fallbackMisses+=waiting.backend=="INPUT" and 1 or 0
             if self.fallbackMisses>=3 then
                 self.unavailableUntil=now+2.5

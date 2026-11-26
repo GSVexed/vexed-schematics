@@ -265,6 +265,7 @@ function Mock.new()
         w.virtualBiteCalls=(w.virtualBiteCalls or 0)+1
         if down then
             w.virtualBiteDowns=(w.virtualBiteDowns or 0)+1
+            if w.virtualDropInput then return end
             -- A Down event while physically/logically Down is not a new
             -- InputBegan; previous tests incorrectly counted this as a bite.
             if w.logicalM1Down then return end
