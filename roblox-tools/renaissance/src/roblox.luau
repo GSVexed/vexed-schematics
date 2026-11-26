@@ -501,7 +501,17 @@ function Roblox.new(Core, environment)
             and not Core.finite(marker) then return false end
         return true
     end
+    function b:releaseSyntheticBite()
+        local pulse=self.syntheticM1
+        if not pulse then return end
+        self.syntheticM1=nil
+        if pulse.timer and type(task)=="table" and type(task.cancel)=="function" then
+            pcall(task.cancel,pulse.timer)
+        end
+        pcall(pulse.release)
+    end
     function b:tryHeldInputBite(s,now)
+        if self.syntheticM1 then return false end -- no overlapping press edges
         if not s or not s.alive or s.char~=self.player.Character or game.PlaceVersion~=2412
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding then return false end
@@ -516,18 +526,31 @@ function Roblox.new(Core, environment)
                 end
             end
         end
-        -- Guard both CAS and InputBegan from treating a replayed click as a
-        -- second human press; it may still reach the game's own WolfController.
+        -- Guard CAS and InputBegan against identifying a synthetic input as
+        -- another physical hold. The game's native handler still receives it.
         self.syntheticM1Until=now+.18
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then
             local pressed=pcall(function()
                 virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)
             end)
-            local released=pcall(function()
-                virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)
-            end)
-            if pressed and released then return true end
+            if pressed then
+                -- Keep the press for a small real frame interval so the native
+                -- WolfController sees an InputBegan edge. Release is owned by
+                -- the hub and is also performed on unload.
+                local pulse={release=function()
+                    virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)
+                end}
+                self.syntheticM1=pulse
+                if type(task)=="table" and type(task.delay)=="function" then
+                    local scheduled,timer=pcall(task.delay,.07,function()
+                        if self.syntheticM1==pulse then self:releaseSyntheticBite() end
+                    end)
+                    if scheduled then pulse.timer=timer
+                    else self:releaseSyntheticBite() end
+                else self:releaseSyntheticBite() end
+                return true
+            end
         end
         if type(mouse1click)=="function" then
             local clicked=pcall(mouse1click)
@@ -1178,6 +1201,7 @@ function Roblox.new(Core, environment)
         return ok
     end
     function b:attach(hub,scope)
+        scope:add(function() self:releaseSyntheticBite() end)
         local function connect(signal,fn)
             local c = signal:Connect(function(...)
                 if hub.active and not hub.closed then fn(...) end
