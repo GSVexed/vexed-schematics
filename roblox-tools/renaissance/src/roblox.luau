@@ -829,8 +829,11 @@ function Roblox.new(Core, environment)
                 local geometry = self:geometry(selectionModel,s,target)
                 if geometry and geometry.withinBodyRange then
                     local stock = self:geometry(baseline,s,target)
+                    -- Stock-native geometry outranks extended-only predictions.
+                    -- Preferring a nearer speculative target over a real
+                    -- stock-eligible one produced poor attack choices.
                     local rank = target.distance+(target.affiliation == "unknown" and .5 or 0)
-                        -(stock and stock.valid and .75 or 0)
+                        +(stock and stock.valid and 0 or 100)
                     if previousAssist and previousAssist.char==target.char then rank-=.65 end
                     if rank < assistScore and (target.sameTree or not self:occluded(s,target)) then
                         assisted,assistScore = target,rank
@@ -842,7 +845,8 @@ function Roblox.new(Core, environment)
                 local base = self:geometry(baseline,s,target)
                 local extended = self:geometry(changed,s,target)
                 if base or extended then
-                    local rank = (extended and extended.score or math.huge) + (extended and extended.valid and 0 or 1000)
+                    local rank = (extended and extended.score or math.huge)
+                        +(extended and extended.valid and (base and base.valid and 0 or 100) or 1000)
                     if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
                 end
         end
