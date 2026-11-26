@@ -2229,12 +2229,13 @@ test("held M1 replays safe real input when WolfController closures are private",
     w.virtualBiteAvailable=true
     local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
     w:advance(.15);eq(h.bridge.wolfActions,nil)
-    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w.held=E.UserInputType.MouseButton1
+    local physicalInput=w:input(nil,E.UserInputType.MouseButton1)
     w:advance(1.7)
     assert((w.virtualBiteCalls or 0)>=2,"fallback did not dispatch")
     assert((w.nativeBites or 0)>=3,"synthetic native input did not receive markers")
     local before=w.nativeBites
-    w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w.held=nil;w.uis.InputEnded:Fire(physicalInput)
     w:advance(.9);eq(w.nativeBites,before)
     eq(h.ledger.counts.attack_intent,1)
     h:close() -- Only owned listeners unload; the game's own handler stays
