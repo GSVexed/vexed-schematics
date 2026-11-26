@@ -2614,5 +2614,26 @@ test("a positive game reply with ambiguous local identity never becomes a ghost 
     eq(h.ledger.counts.native_outgoing_hit_reply,1)
     h:close()
 end)
+test("extended contact with observed HP decline is not counted as a ghost miss",function()
+    local w,h=boot({autoBite=true,biteHelper=true})
+    local _,char,hum=w:enemy(2,Mock.V3.new(0,3,-8))
+    w:advance(.3)
+    local target=h.guide and h.guide.target
+    assert(target and target.char==char)
+    local s=h.bridge:snapshot(w.time,false)
+    local prior=hum.Health
+    hum.Health=prior-6
+    local tx={nativeAt=w.time-1.2,claimDue=w.time-1.0,
+        generation=s.generation,sampled=true,target=target,
+        hpBefore={[char]={hp=prior,maxHP=hum.MaxHealth}},
+        extendedOnly=true,extendedClaimValid=true}
+    table.insert(h.transactions,tx)
+    h:stepCombat(s,w.time)
+    assert(tx.classified)
+    eq(h.extendedConfidence[char],nil)
+    eq(h.ledger.counts.extended_contact_unconfirmed,nil)
+    eq(h.ledger.counts.target_hp_decline_correlated,1)
+    h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
