@@ -43,8 +43,8 @@
       "bytes": 24950
     },
     "roblox": {
-      "sha256": "350194dc62ba1cfed34f39d6be8373f4a12912e4405ac977864e220ec80988b8",
-      "bytes": 61888
+      "sha256": "8b0e86aefe2d337fd7875d978941186b61ab0d4ee56038d3c23ab6bccbbc5ae4",
+      "bytes": 62171
     },
     "zoom": {
       "sha256": "885fa4d9db1d2eb4c4ce49b9dc44956017f6482af2315c04f78e4ee69231bdea",
@@ -55,8 +55,8 @@
       "bytes": 17478
     },
     "controller": {
-      "sha256": "46c57ac51a7ec1c938308b3c974c36506ed40379533bb1779b86861c7a8b3e03",
-      "bytes": 47267
+      "sha256": "6bc5d97e7f0f79b3764452ff954cca9cfbd39c5d4e8a2fa705b4b93b8cca6229",
+      "bytes": 47877
     },
     "amber_ledger": {
       "sha256": "d81f49ce6c742e898d2e8dc2c2f93aa7c00d704f0b9498579712492aa760254f",
@@ -107,7 +107,7 @@
       "bytes": 5209
     }
   },
-  "bundle_sha256": "4967b536fc34b56ab08eda9489cadef622f1bc5cea4454caebb1f3d84ab086d4",
-  "bundle_bytes": 409376,
+  "bundle_sha256": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30",
+  "bundle_bytes": 410269,
   "stable_clean_v14_overwritten": false
 }
