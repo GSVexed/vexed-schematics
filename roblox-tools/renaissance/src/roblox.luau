@@ -1088,10 +1088,12 @@ function Roblox.new(Core, environment)
         local point=target.root.Position
         local a,bv=target.root.AssemblyLinearVelocity,s.root.AssemblyLinearVelocity
         if typeof(a)~="Vector3" or typeof(bv)~="Vector3" then return point end
-        local lead=(a-bv)*math.min(.35,self:biteDelay(s.char))
+        -- A one-frame velocity replication spike can steer the bite beyond
+        -- the current hitbox. Reduce the speculative lead on fast movement.
+        local lead=(a-bv)*math.min(.20,self:biteDelay(s.char))
         lead=Vector3.new(lead.X,0,lead.Z)
         if not Core.finite(lead.Magnitude) then return point end
-        if lead.Magnitude>4 then lead=lead.Unit*4 end
+        if lead.Magnitude>2.25 then lead=lead.Unit*2.25 end
         return point+lead
     end
     function b:autoAttackTarget(s,guide,values)
@@ -1100,7 +1102,14 @@ function Roblox.new(Core, environment)
         if not target.root.Parent or (target.root.Position-s.root.Position).Magnitude>45
             or not self:combatEligible(target.char) then return false end
         local geometry=self:geometry(values,s,target)
-        return geometry~=nil and geometry.valid and not self:occluded(s,target)
+        if not geometry or not geometry.valid or self:occluded(s,target) then return false end
+        -- Stock-valid auto hits take priority. Extended-only contacts can
+        -- still be probed, but not spammed during repeated no-reply windows.
+        local base=self.originalAutoCombat and self:geometry(self.originalAutoCombat,s,target)
+            or guide.baseline
+        if base and base.valid then return true end
+        local entry=self.extendedConfidence and self.extendedConfidence[target.char]
+        return not entry or (s.now or 0)>=(entry.waitUntil or 0)
     end
     function b:select(s, baseline, changed, all)
         local previousAssist=self.reachTarget
@@ -1117,6 +1126,7 @@ function Roblox.new(Core, environment)
         local assisted,assistScore = nil,math.huge
         local selectionModel = table.clone(changed)
         selectionModel.biteLook = baseline.biteLook
+        self.originalAutoCombat=baseline
         for _,target in ipairs(eligible) do
                 local geometry = self:geometry(selectionModel,s,target)
                 if geometry and geometry.withinBodyRange then
@@ -1134,13 +1144,29 @@ function Roblox.new(Core, environment)
                 local base = self:geometry(baseline,s,target)
                 local extended = self:geometry(changed,s,target)
                 if base or extended then
-                    local rank = (extended and extended.score or math.huge) + (extended and extended.valid and 0 or 1000)
-                    if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
+                    local blocked=target.protected or self:occluded(s,target)
+                    -- A clear stock-valid candidate outranks a speculative
+                    -- extended-only target. Never prefer a wall over a
+                    -- nearby unobstructed animal.
+                    local rank=(extended and extended.score or math.huge)
+                        +(extended and extended.valid and 0 or 1000)
+                        +(base and base.valid and -30 or 0)
+                        +(blocked and 1500 or 0)
+                    if rank<score then
+                        best,score={
+                            target=target,baseline=base,extended=extended,obstruction=blocked,
+                        },rank
+                    end
                 end
         end
         if best then
-            best.obstruction=best.target.protected or self:occluded(s,best.target)
             best.blocked=best.obstruction
+            -- Native biteLook must prefer the same stock-clear target the
+            -- guide displays. Extended-only rear/tree aim retains the
+            -- existing sticky assist until a stock-valid option appears.
+            if best.baseline and best.baseline.valid and not best.blocked then
+                self.reachTarget=best.target
+            end
         end
         return best
     end
