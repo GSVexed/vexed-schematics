@@ -421,8 +421,10 @@ function Controller.new(M,bridge,options)
             tx.focusExtendedOnly=fresh and guide.extended and guide.extended.valid
                 and not (guide.baseline and guide.baseline.valid) or false
             local valid=fresh and guide and guide.baseline and guide.baseline.valid
+            -- Reuse the already checked guide, avoiding extra expensive or
+            -- throwable world queries within a native attribute callback.
             local clear=valid and focus and focus.root and focus.root.Parent
-                and bridge:combatEligible(focus.char) and not bridge:occluded(s,focus)
+                and guide.blocked~=true and guide.obstruction~=true
             tx.rateTarget=clear and focus or nil
             tx.rateEligible=tx.rateTarget~=nil and self.registry.byId.attackSpeed.requested
                 and (self.combatInput.held~=nil or self.registry.byId.autoBite.requested)
@@ -697,8 +699,10 @@ function Controller.new(M,bridge,options)
                     tx.sampled = true
                     if tx.rateEligible and tx.rateTarget and self.features.originalCombat
                         and tx.rateTarget.root and tx.rateTarget.root.Parent then
-                        local geo=bridge:geometry(self.features.originalCombat,s,tx.rateTarget)
-                        tx.rateAtClaim=geo and geo.valid and not bridge:occluded(s,tx.rateTarget) or false
+                        local geometryOK,geo=pcall(bridge.geometry,bridge,
+                            self.features.originalCombat,s,tx.rateTarget)
+                        local rayOK,blocked=pcall(bridge.occluded,bridge,s,tx.rateTarget)
+                        tx.rateAtClaim=geometryOK and geo and geo.valid and rayOK and blocked==false or false
                     end
                     local target=tx.focusTarget or self.guide and self.guide.target
                     if target and target.root and target.root.Parent then
