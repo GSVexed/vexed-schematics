@@ -1,0 +1,44 @@
+{
+  "version": "15.8.0",
+  "status": "candidate",
+  "date": "2026-11-26",
+  "base_commit": "7dcd03d78d7b3701e1cc9980f3ece6b510c21a2b",
+  "bundle": "../feral-renaissance-v15.8.0.lua",
+  "bundle_sha256": "e9c51181e1cc34e15dfb885bb5582d91dd78222b9f796ffc230ff0e2c5fe0079",
+  "module_count": 27,
+  "feature_records": 26,
+  "game_baseline": 2412,
+  "scope": "Shared feature candidates and Hippo-specific additions only",
+  "catalogue_items_applicable": 25,
+  "catalogue_items_excluded": 15,
+  "implementation_ledger": "docs/V15_8_HIPPO_COMBAT.md",
+  "core_regressions": {
+    "total": 243,
+    "passed": 243,
+    "failed": 0
+  },
+  "core_compiled": 32,
+  "amber_regressions": {
+    "total": 263,
+    "passed": 263,
+    "failed": 0
+  },
+  "amber_compiled": 24,
+  "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+  "live_gameplay_tested": false,
+  "server_outcomes": "unverified",
+  "unimplemented_authority_dependent_goals": [
+    "uncapped Hippo damage",
+    "faster accepted full-power charge",
+    "ability cooldown bypass",
+    "stronger authoritative knockback or injury",
+    "earlier authoritative grab breaking"
+  ],
+  "defaults": {
+    "attackSpeed": true,
+    "autoBite": false,
+    "hippoMove": true,
+    "hippoRelease": false
+  },
+  "stable_release_metadata_unchanged": true
+}

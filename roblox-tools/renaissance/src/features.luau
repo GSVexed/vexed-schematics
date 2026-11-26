@@ -105,10 +105,13 @@ function Features.new(Core, bridge, registry)
                 if target and target.char and target.char.Parent and target.root.Parent and root
                     and bridge:combatEligible(target.char) then
                     local diff = target.root.Position-root.Position
+                    if bridge.predictionActive and char==bridge.player.Character then
+                        diff=bridge:leadPoint({char=char,root=root},target)-root.Position
+                    end
                     local flat = Vector3.new(diff.X,0,diff.Z)
                     local look = Vector3.new(native.X,0,native.Z)
                     if diff.Magnitude <= 45 and flat.Magnitude > .05
-                        and (target.sameTree or look.Magnitude < .01 or look.Unit:Dot(flat.Unit) < .3) then
+                        and (bridge.predictionActive or target.sameTree or look.Magnitude < .01 or look.Unit:Dot(flat.Unit) < .3) then
                         return flat.Unit
                     end
                 end
@@ -147,6 +150,9 @@ function Features.new(Core, bridge, registry)
                 end
             end
             zero(n,"SWIM_DRAIN_MULT");zero(n,"WATER_DRAIN_NONSWIM")
+            -- v2412 NeedsConfig.BURST has its own finite DRAIN scalar.
+            -- Keep native start eligibility, speed, animation and stamina values.
+            zero(n.BURST,"DRAIN")
             local passive=bridge:config("PassiveConfig")
             local climber=passive and passive.CLIMBER
             if type(climber)=="table" then
@@ -168,6 +174,23 @@ function Features.new(Core, bridge, registry)
             local status=bridge:config("StatusConfig")
             for _,key in ipairs({"STAMINA_BASE","STAMINA_PER_POINT"}) do zero(status and status.VENOM,key) end
             return Features.uniquePlan(plan)
+        elseif id == "attackSpeed" then
+            local species=bridge:config("Species")
+            if game.PlaceVersion~=2412 or type(species)~="table" or type(species.biteCooldown)~="function" then
+                return nil,"compatible native bite cadence unavailable"
+            end
+            local original=species.biteCooldown
+            local wrapper=function(name,growth,...)
+                local value=original(name,growth,...)
+                local char=bridge.player.Character
+                if not char or not char.Parent or game.PlaceVersion~=2412
+                    or name~=(bridge:attribute(char,"Species") or species.DEFAULT)
+                    or not Core.finite(value) or value<=0 or value>30 then return value end
+                -- Keep delayed claims ordered; never slow an already faster
+                -- native profile. The server may enforce its original cadence.
+                return math.min(value,math.max(value*.55,bridge:biteDelay(char)+.05,.08))
+            end
+            return {entry(species,"biteCooldown",wrapper,"function")}
         elseif id == "recovery" then
             if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
             if n.HEALTH_REST_MULT < 1 then return nil,"native HP Rest multiplier unavailable" end
@@ -256,8 +279,59 @@ function Features.new(Core, bridge, registry)
             self.hippoCharge=at
         else self.hippoCharge=nil;self.hippoBurstIntent=nil end
     end
+    -- One decision drives both the charge-speed calculation and the native
+    -- HUD presentation. Never change WolfController's gait or Burst flags.
+    function f:hippoTier(char,field,hippo,needs)
+        if bridge.player.Character~=char or not char or not char.Parent
+            or bridge:attribute(char,"Species")~="Hippo" or game.PlaceVersion~=2412 then return nil end
+        local charge=bridge:attribute(char,"FeralCrushAt")
+        if charge==nil or charge==false or bridge:attribute(char,"WolfRest")==true
+            or bridge:attribute(char,"FeralCrouch")==true
+            or bridge:attribute(char,"FeralPinned")==true or bridge:attribute(char,"FeralCarried")==true
+            or bridge:attribute(char,"FeralDragged")==true or bridge.UserInputService:GetFocusedTextBox()
+            or bridge:attribute(bridge.player,"FeralMenuOpen")==true then return nil end
+        local combat=bridge:config("CombatConfig")
+        if combat and type(combat.hobbled)=="function" then
+            local ok,hobbled=pcall(combat.hobbled,char)
+            if not ok or hobbled then return nil end
+        end
+        local shift=false
+        pcall(function()shift=bridge.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)end)
+        local burst=self.hippoIntentChar==char and self.hippoBurstIntent==true
+        local denial=bridge:attribute(bridge.player,"HudBurstNo")
+        if denial==true or Core.finite(denial) and bridge.clock()>=denial and bridge.clock()-denial<1.7
+            or bridge:attribute(char,"StaminaOut")==true then burst=false;self.hippoBurstIntent=false end
+        if not shift and not burst then return nil end
+        local multiplier=1
+        if burst then
+            local boost=needs and needs.BURST
+            local key=field=="swimSpeed" and "SWIM_SPEED" or "SPEED"
+            local n=boost and (boost[key] or boost.SPEED)
+            if not boost or boost.ENABLED~=true or not Core.finite(n) or n<1 or n>3 then
+                if not shift then return nil end
+                burst=false
+            else multiplier=n end
+        end
+        if field=="swimSpeed" then
+            if not Core.finite(hippo.swimSprint) or hippo.swimSprint<=0 then return nil end
+        elseif not Core.finite(needs and needs.RUN_SPEED) or needs.RUN_SPEED<=0
+            or not Core.finite(hippo.speed) then return nil end
+        return burst and "burst" or "sprint",multiplier
+    end
+    function f:paintHippoGait()
+        local record=self.hippoScaled
+        local char=bridge.player.Character
+        local tier
+        if registry.byId.hippoMove.requested and record and record.char==char
+            and self.leases:valid("hippoGait") and char and char.Parent then
+            local field=bridge:attribute(char,"FeralSwimLocal")==true and "swimSpeed" or "gait"
+            tier=self:hippoTier(char,field,record.profile,bridge:config("NeedsConfig"))
+        end
+        bridge:paintHippoGait(tier)
+    end
     function f:reconcileHippoGait(s)
-        local cfg=s.alive and s.species=="Hippo" and bridge:config("Species")
+        if not registry.byId.hippoMove.requested then self.hippoGaitConflict=nil end
+        local cfg=registry.byId.hippoMove.requested and s.alive and s.species=="Hippo" and bridge:config("Species")
         local hippo=cfg and cfg.List and cfg.List.Hippo
         if self.hippoScaled and (not hippo or self.hippoScaled.cfg~=cfg or self.hippoScaled.char~=s.char
             or self.hippoScaled.profile~=hippo) then
@@ -276,37 +350,10 @@ function Features.new(Core, bridge, registry)
             local result=original(species,field,growth,...)
             if species~="Hippo" or (field~="gait" and field~="swimSpeed") or bridge.player.Character~=char
                 or not char.Parent or game.PlaceVersion~=2412 or cfg.List.Hippo~=hippo then return result end
-            local charge=bridge:attribute(char,"FeralCrushAt")
-            if charge==nil or charge==false or bridge:attribute(char,"WolfRest")==true
-                or bridge:attribute(char,"FeralCrouch")==true
-                or bridge:attribute(char,"FeralPinned")==true or bridge:attribute(char,"FeralCarried")==true
-                or bridge:attribute(char,"FeralDragged")==true or bridge.UserInputService:GetFocusedTextBox()
-                or bridge:attribute(bridge.player,"FeralMenuOpen")==true then return result end
-            local combat=bridge:config("CombatConfig")
-            if combat and type(combat.hobbled)=="function" then
-                local ok,hobbled=pcall(combat.hobbled,char)
-                if not ok or hobbled then return result end
-            end
-            local shift=false
-            pcall(function()shift=bridge.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)end)
-            local burst=self.hippoIntentChar==char and self.hippoBurstIntent==true
-            local denial=bridge:attribute(bridge.player,"HudBurstNo")
-            if denial==true or Core.finite(denial) and bridge.clock()>=denial and bridge.clock()-denial<1.7
-                or bridge:attribute(char,"StaminaOut")==true then burst=false;self.hippoBurstIntent=false end
-            if not shift and not burst then return result end
             local needs=bridge:config("NeedsConfig")
-            local boost=needs and needs.BURST
-            local multiplier=1
-            if burst then
-                local key=field=="swimSpeed" and "SWIM_SPEED" or "SPEED"
-                local n=boost and (boost[key] or boost.SPEED)
-                if not boost or boost.ENABLED~=true or not Core.finite(n) or n<1 or n>3 then
-                    if not shift then return result end
-                    burst=false
-                else multiplier=n end
-            end
+            local tier,multiplier=self:hippoTier(char,field,hippo,needs)
+            if not tier then return result end
             if field=="swimSpeed" then
-                if not Core.finite(hippo.swimSprint) or hippo.swimSprint<=0 then return result end
                 local speed=original(species,"swimSprint",growth,...)
                 return Core.finite(speed) and speed*multiplier or result
             end
@@ -320,7 +367,7 @@ function Features.new(Core, bridge, registry)
             local run=needs and needs.RUN_SPEED
             local speed=original(species,"speed",growth,...)
             if not Core.finite(walk) or walk<=0 or not Core.finite(run) or run<=0 or not Core.finite(speed) then return result end
-            self.hippoStatus=burst and "BURST_SPEED_REQUESTED" or "SPRINT_SPEED_REQUESTED"
+            self.hippoStatus=tier=="burst" and "BURST_SPEED_REQUESTED" or "SPRINT_SPEED_REQUESTED"
             return speed*run*multiplier*(42/16.8)/walk
         end
         local ok=self.leases:apply("hippoGait",{entry(cfg,"scaled",wrapper,"function")})
@@ -332,7 +379,7 @@ function Features.new(Core, bridge, registry)
     -- This does not activate a burst gait; the server may still impose a slow.
     function f:reconcileHippo(s)
         self:reconcileHippoGait(s)
-        local hippo=s.alive and s.species=="Hippo"
+        local hippo=registry.byId.hippoMove.requested and s.alive and s.species=="Hippo"
         local ability=hippo and bridge:config("AbilityConfig")
         local base=hippo and bridge:config("AbilityConfigBase")
         local profile
@@ -354,7 +401,10 @@ function Features.new(Core, bridge, registry)
             self.leases:release("hippoCrush")
             self.hippoProfile,self.hippoCharacter=nil,nil
         end
-        if not hippo then self.hippoStatus="OFF";return end
+        if not hippo then
+            self.hippoStatus=registry.byId.hippoMove.requested and "WAITING" or "OFF"
+            return
+        end
         if self.leases.owners.hippoCrush then
             if self.leases:valid("hippoCrush") then
                 self.hippoStatus="CLIENT";return
@@ -376,9 +426,10 @@ function Features.new(Core, bridge, registry)
     function f:reconcile(s, now, force)
         if not force and now < self.nextReconcile then return end
         self.nextReconcile = now+1.25
-        for _, id in ipairs({ "reach","stamina","recovery","effects","mobility","speed","leap","climb" }) do
+        for _, id in ipairs({ "reach","stamina","recovery","effects","mobility","speed","leap","climb","attackSpeed" }) do
             local dependencies = {
                 reach = {"CombatConfig"},stamina = {"NeedsConfig","FlightConfig","PassiveConfig","VenomConfig","StatusConfig"},
+                attackSpeed = {"Species"},
                 recovery = {"NeedsConfig"},effects = {"StatusConfig"},
                 mobility = {"NeedsConfig","StatusConfig"},speed = {"NeedsConfig"},
                 leap = {"JumpLeapConfig"},climb = {"PassiveConfig"},
@@ -395,7 +446,8 @@ function Features.new(Core, bridge, registry)
                 identity.levels=climb and climb.levels or false
                 identity.sprint=climb and climb.CLIMB_SPRINT or false
                 identity.venom=type(identity.StatusConfig)=="table" and identity.StatusConfig.VENOM or false
-                for _,name in ipairs({"climb","levels","sprint","venom"}) do
+                identity.burst=type(identity.NeedsConfig)=="table" and identity.NeedsConfig.BURST or false
+                for _,name in ipairs({"climb","levels","sprint","venom","burst"}) do
                     if self.configIdentity[id] and self.configIdentity[id][name]~=identity[name] then changed=true end
                 end
                 for level=1,3 do
@@ -437,6 +489,7 @@ function Features.new(Core, bridge, registry)
         end
     end
     function f:close()
+        bridge:paintHippoGait(nil)
         self:releaseFlag()
         self.leases:close()
     end

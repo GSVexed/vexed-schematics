@@ -104,6 +104,9 @@ Core.specs = {
     { "escape", "Survival", "Auto Escape", "Native struggle actions; friendly baby carry preserved" },
     { "reach", "Combat", "Bite Reach", "Always enabled client geometry; server range unknown", permanent = true },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
+    { "attackSpeed", "Combat", "Faster Bites", "55% client cooldown with delayed-contact floor; server rate unverified", default = true },
+    { "holdBite", "Combat", "Hold to Repeat Bites", "Hold left click or R2; native attacks repeat at readiness", default = true },
+    { "autoBite", "Combat", "Auto Bite", "Selected clear target only; native readiness required" },
     { "combat", "Combat", "Combat Core", "Native attempts and feedback; no extra hit claims", permanent = true },
     { "climb", "Movement", "Climb Assist", "Native Q buffer and one guarded retry" },
     { "flight", "Movement", "Flight Assistance", "Surface takeoff assistance; no underwater flight" },
@@ -117,6 +120,8 @@ Core.specs = {
     { "finder", "Vision", "Long-Range Player Finder", "Replicated players; up to 24 results", permanent = true },
     { "menu", "Vision", "Right Shift Menu Toggle", "Single menu; focused text keeps keyboard input", permanent = true },
     { "settings", "Vision", "Saved Settings", "Explicit ON and OFF reconciliation", permanent = true },
+    { "hippoMove", "Hippo", "Move During Charge", "Hippo only; native sprint and Burst inputs", default = true },
+    { "hippoRelease", "Hippo", "Smart Crusher Release", "Release full charge at a clear target; manual holds by default" },
 }
 
 function Core.registry()

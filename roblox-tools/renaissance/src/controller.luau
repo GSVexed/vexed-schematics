@@ -1,8 +1,33 @@
 local Controller = {}
+-- Replies have no recovered transaction identifier. Prefer a matching native
+-- target and timing, and retain ambiguity instead of assigning the newest bite.
+function Controller.matchFeedback(Core,transactions,data,now)
+    if type(data)~="table" or data.v==nil then return nil,false end
+    local best,bestRank,bestTime,secondTime=nil,math.huge,math.huge,math.huge
+    for _,tx in ipairs(transactions) do
+        local corrected=tx.feedback and not tx.feedback.safe and tx.feedback.v==data.v
+            and Core.finite(tx.feedback.dmg) and tx.feedback.dmg==0 and Core.finite(data.dmg) and data.dmg>0
+        if tx.nativeAt and not tx.classified and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<1.8 then
+            local target=tx.nativeTarget or tx.target and tx.target.char
+            local rank=target==data.v and 0 or target==nil and tx.hpBefore and tx.hpBefore[data.v] and 1 or nil
+            if rank then
+                local delta=math.abs(now-(tx.claimDue or tx.nativeAt))
+                if rank<bestRank then
+                    best,bestRank,bestTime,secondTime=tx,rank,delta,math.huge
+                elseif rank==bestRank then
+                    if delta<bestTime then best,secondTime,bestTime=tx,bestTime,delta
+                    elseif delta<secondTime then secondTime=delta end
+                end
+            end
+        end
+    end
+    local ambiguous=best~=nil and secondTime-bestTime<=.040001
+    return not ambiguous and best or nil,ambiguous
+end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.7.0", tokenIdentity = tokenIdentity,
+    local h = { version = "15.8.3", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -23,6 +48,8 @@ function Controller.new(M,bridge,options)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
     h.rescue = M.rescue.new(bridge,h.ledger)
+    h.hippo = M.hippo.new(Core,bridge,h.ledger)
+    h.tests = M.test_features.new(Core,bridge,h)
     h.zoom = M.zoom.new(bridge.player)
     h.settingsAvailable = bridge:io().available ~= false
     function h:save()
@@ -141,6 +168,7 @@ function Controller.new(M,bridge,options)
         local feature = assert(self.registry.byId[id],"unknown feature")
         if feature.permanent or feature.linked then return false end
         self.registry:request(id,on)
+        self.tests:record("feature_changed",{feature=id,requested=on==true})
         local now = bridge.clock()
         if id == "recovery" and not on then self.recovery.enabled = false; self.recovery:release("OFF",now) end
         if id == "minigame" then
@@ -151,6 +179,9 @@ function Controller.new(M,bridge,options)
         if id == "flight" and not on then self:clearFlight() end
         if id == "robloxAFK" then self.idleUnavailable = nil end
         if id == "climb" and not on then self.climbQueue = nil end
+        if id=="autoBite" and not on then self.combatInput:cancel() end
+        if id=="holdBite" and not on then self.combatInput.held=nil end
+        if id=="attackSpeed" then bridge.biteTiming=nil;self.combatInput.nextAttempt=0 end
         self.features.nextReconcile = 0
         local s = bridge:snapshot(now,false)
         self.features:reconcile(s,now,true) -- both true AND false are reconciled
@@ -160,6 +191,7 @@ function Controller.new(M,bridge,options)
     end
     function h:characterChanged(generation)
         local now = bridge.clock()
+        bridge:paintHippoGait(nil)
         self.recovery:release("animal changed",now)
         self.recovery:clearPose()
         self.recovery.lastAutomaticCharacter,self.recovery.previous = nil,nil
@@ -171,6 +203,7 @@ function Controller.new(M,bridge,options)
         self.grabInput:release()
         self.feeding:close(now)
         self.combatInput:cancel()
+        self.hippo:reset()
         self.rescue:cancel("animal changed")
         self:stopWalk("animal changed")
         self:clearFlight()
@@ -181,6 +214,7 @@ function Controller.new(M,bridge,options)
         self.ledger.staminaObservation=nil
         self.anchor,self.anchorChar = nil,nil
         self.ledger:event("character_generation",now,{generation = generation})
+        self.tests:characterChanged(bridge.character)
         self.nextWalk = now+90
     end
     function h:physicalInput(kind)
@@ -298,7 +332,9 @@ function Controller.new(M,bridge,options)
             or key == Enum.KeyCode.Q or key == Enum.KeyCode.Space then
             self.policy:input("action",now)
             self.recovery:release("manual native action",now)
-            self.combatInput:cancel()
+            -- Preserve a physically held primary attack across temporary
+            -- ability/movement actions. Native readiness still gates a bite.
+            self.combatInput.pending=nil
             if key ~= Enum.KeyCode.Space then self.rescue:cancel() end
         end
     end
@@ -323,11 +359,19 @@ function Controller.new(M,bridge,options)
         local now = bridge.clock()
         local s = bridge:snapshot(now,false)
         if key=="FeralCrushAt" then self.features:hippoAttribute(s) end
+        if key=="FeralCrushAt" or key=="FeralCrushBiteAt" then self.hippo:observe(s,now) end
+        if key=="FeralCrushBiteAt" and s.species=="Hippo" and Core.finite(bridge:attribute(s.char,key)) then
+            self.policy:input("attack",now)
+            self.recovery:release("native Crusher release",now)
+            self:stopWalk("native Crusher release")
+            self.ledger:event("hippo_native_bite_marker",now,{damageAcceptance="unverified"})
+        end
         if key == "WolfRest" then self.recovery:echo(s,now)
         elseif key == "WolfBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
             bridge.biteTiming=nil
             if not s.alive then return end
-            self.combatInput:cancel()
+            self.combatInput:marker(s,now)
+            self.tests:observeBite(s,now)
             self.policy.attackUntil = math.max(self.policy.attackUntil,now+1.1)
             self.recovery:release("native bite marker",now)
             local tx = self.lastIntent
@@ -358,19 +402,19 @@ function Controller.new(M,bridge,options)
             if key=="FeralTalonLock" or key=="FeralDiveLocal" then self:stepFlightHandoff(s,now) end
         end
     end
-    function h:nativeEvent(kind,event,data)
+    function h:nativeEvent(kind,event,data,...)
         if self.closed or not self.active then return end
+        if kind == "hippo" then self.tests:hippoReply(event,data,...);return end
         if kind == "feedback" then
+            self.tests:feedback(event,data)
             self.ledger:event("native_hit_feedback",bridge.clock(),{damageAcceptance = "unverified"})
             if event=="hit" and type(data)=="table" and data.a==bridge.player.Character then
-                for index=#self.transactions,1,-1 do
-                    local tx=self.transactions[index]
-                    if tx.nativeAt and not tx.classified and bridge.clock()-tx.nativeAt<1.8 then
-                        tx.feedback=data;tx.nativeTarget=data.v
-                        self.ledger:event("native_outgoing_hit_reply",bridge.clock(),{safe=data.safe==true,damage=data.dmg})
-                        break
-                    end
-                end
+                local now=bridge.clock()
+                self.hippo:feedback(data,now)
+                local tx,ambiguous=Controller.matchFeedback(Core,self.transactions,data,now)
+                if tx then tx.feedback=data;tx.nativeTarget=data.v end
+                self.ledger:event("native_outgoing_hit_reply",now,{safe=data.safe==true,damage=data.dmg,
+                    matched=tx~=nil,ambiguous=ambiguous==true})
             end
             return
         end
@@ -503,6 +547,22 @@ function Controller.new(M,bridge,options)
             local f = r.byId[id]
             r:ack(id,f.requested,f.requested and "CLIENT" or "OFF",f.detail)
         end
+        local auto=r.byId.autoBite
+        local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
+        local hold=r.byId.holdBite
+        r:ack("holdBite",hold.requested and native,not hold.requested and "OFF" or native and "ARMED" or "WAITING",
+            hold.requested and self.combatInput.status or hold.detail)
+        r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
+            auto.requested and self.combatInput.status or auto.detail)
+        local movement=r.byId.hippoMove
+        local hippo=s.alive and s.species=="Hippo"
+        local moved=hippo and self.features.leases:valid("hippoGait")
+        r:ack("hippoMove",movement.requested and moved,not movement.requested and "OFF" or moved and "CLIENT" or "WAITING",
+            not hippo and "waiting for Hippo" or moved and "charge movement inputs applied; displacement unverified" or self.features.hippoStatus)
+        local release=r.byId.hippoRelease
+        local releaseReady=hippo and self.hippo.native~=nil
+        r:ack("hippoRelease",release.requested and releaseReady,not release.requested and "OFF" or releaseReady and "ARMED" or "WAITING",
+            self.hippo.releaseStatus)
         for _,id in ipairs({"robloxAFK","survivalAFK","minigame","escape","flight"}) do
             local f = r.byId[id]
             if not f.requested then r:ack(id,false,"OFF",f.detail)
@@ -705,7 +765,18 @@ function Controller.new(M,bridge,options)
         self:stepFlightHandoff(s,now)
         self.rescue:tick(s,now)
         self.activity=self.policy:activity(s,now)
-        self.combatInput:tick(s,now)
+        bridge.predictionActive=s.attackHeld or self.registry.byId.autoBite.requested
+        local auto=self.registry.byId.autoBite.requested and not (self.territory and self.territory.agent.enabled)
+        local clear=auto and bridge:autoAttackTarget(s,self.guide,self.features.combat)
+        self.combatInput:tick(s,now,{
+            repeatHeld=self.registry.byId.holdBite.requested,automatic=auto,targetValid=clear,
+            uiBlocked=self.ui:contains(bridge.UserInputService:GetMouseLocation()),
+            beforeAttempt=function()
+                self.policy:input("attack",now)
+                self.recovery:release("native cadence input",now)
+                self.rescue:cancel();self:stopWalk("native cadence input")
+            end,
+        })
         if not critical then self.features:reconcile(s,now) end
         self.recovery.enabled = self.registry.byId.recovery.requested or self.territoryRecoveryOwner~=nil
         self.recovery:tick(s,now)
@@ -723,6 +794,7 @@ function Controller.new(M,bridge,options)
             self.guideAt=now
             self.ui:syncTracked(bridge.tracked)
         end
+        self.hippo:tick(s,now,self.registry.byId.hippoRelease.requested,self.guide,self.features.originalCombat)
         if slow and not critical then
             self.nextSlow = now+.25
             self:stepFlight(s,now)
@@ -738,6 +810,7 @@ function Controller.new(M,bridge,options)
             end
             self.lastSurvival = s.survival
         end
+        self.tests:tick(now,critical)
     end
     function h:maskPose()
         local now = bridge.clock()
@@ -756,6 +829,7 @@ function Controller.new(M,bridge,options)
         if self.guide and self.snapshot and self.features.leases:valid("reach") then
             bridge:refreshGuide(self.snapshot,self.features.originalCombat,self.features.combat,self.guide)
         end
+        self.features:paintHippoGait()
         self.ui:render(dt,bridge.clock())
         self.recovery:afterAnimationFrame(bridge.clock())
     end
@@ -782,6 +856,7 @@ function Controller.new(M,bridge,options)
         self.active = true
         self.zoom:set(self.registry.byId.zoom.requested)
         if M.amber_runtime then self.territory=M.amber_runtime.start(M,self) end
+        self.tests:start()
         self.registry:ack("settings",true,"CLIENT","loaded settings; full reconciliation pending")
         return self
     end
@@ -798,6 +873,8 @@ function Controller.new(M,bridge,options)
             function() self.grabInput:close() end,
             function() self.feeding:close(bridge.clock()) end,
             function() self.combatInput:cancel();self.rescue:cancel() end,
+            function() self.hippo:close();bridge.predictionActive=nil end,
+            function() self.tests:close() end,
             function() bridge:closeNativeScan() end,
             function() self:stopWalk("shutdown") end,
             function() self:clearFlight() end,

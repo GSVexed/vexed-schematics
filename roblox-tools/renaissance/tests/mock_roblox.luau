@@ -61,7 +61,7 @@ function Mock.new()
         setmetatable(o,{
             __index=function(self,k)
                 if methods[k] then return methods[k] end
-                if k=="Activated" or k=="OnClientEvent" or k=="Event" then
+                if k=="Activated" or k=="OnClientEvent" or k=="Event" or k=="HealthChanged" then
                     self._signals[k]=self._signals[k] or signal();return self._signals[k]
                 end
                 return self._props[k]
@@ -79,9 +79,12 @@ function Mock.new()
                     end
                     if v then assert(not v._destroyed,"parent was destroyed");table.insert(v._children,self) end
                 end
+                local previous=self._props[k]
                 self._props[k]=v
                 local changed=self._signals["property:"..k]
                 if changed then changed:Fire() end
+                if self.ClassName=="Humanoid" and k=="Health" and previous~=v
+                    and self._signals.HealthChanged then self._signals.HealthChanged:Fire(v) end
             end,
         })
         table.insert(w.objects,o)
@@ -209,9 +212,10 @@ function Mock.new()
         w.renders[name]={priority=priority,fn=fn}
     end
     function run:UnbindFromRenderStep(name) w.renders[name]=nil end
-    local uis={InputBegan=signal(),InputChanged=signal(),JumpRequest=signal()}
+    local uis={InputBegan=signal(),InputEnded=signal(),InputChanged=signal(),JumpRequest=signal()}
     function uis:GetFocusedTextBox() return w.chat end
     function uis:IsMouseButtonPressed(button) return w.held==button end
+    function uis:IsGamepadButtonDown(_,key)return w.padHeld==key end
     function uis:GetMouseLocation() return V2.new(1200,850) end
     local cas={}
     function cas:BindActionAtPriority(name,fn,_,priority,...)
@@ -380,15 +384,22 @@ function Mock.new()
                 table.insert(self.nativeClaims,{at=self.time+.27,char=char,target=target})
             end
         end
+        local function biteCooldown()
+            local cfg=w.configs.Species
+            local char=player.Character
+            local value=cfg and type(cfg.biteCooldown)=="function"
+                and cfg.biteCooldown(char:GetAttribute("Species"),char:GetAttribute("Growth") or 1) or .5
+            local passive=w.configs.PassiveConfig
+            return value*(passive and type(passive.biteCdMult)=="function" and passive.biteCdMult(char) or 1)
+        end
         local function tryBite()
             self.nativeBiteAttempts=(self.nativeBiteAttempts or 0)+1
             local char=player.Character
             if char:GetAttribute("FeralPinned")==true or char:FindFirstChild("FeralClamp")
                 or (char:GetAttribute("FeralNoBiteUntil") or 0)>self.time+1000
-                or self.time-(self.lastBiteAt or -100)<.5 or mode then return end
+                or self.time-(self.lastBiteAt or -100)<biteCooldown() or mode then return end
             doBite()
         end
-        local function biteCooldown()return .5 end
         self:registerNative(biteCooldown,"WolfController","biteCooldown",function()return {}end)
         self:registerNative(doBite,"WolfController","doBite",function()
             return {[1]=player,[2]=self.nativeRestWanted==true,[3]=self.nativeRestActive==true,
@@ -420,6 +431,41 @@ function Mock.new()
                 mode,started=nil,false;player.Character:SetAttribute("WolfFeed",false)
             end
         end)
+    end
+    -- Retained v2412 FeralHippoClient.finish interface: active state, player,
+    -- native time function, ability proxy and FeralHippo remote. No damage input.
+    function w:enableNativeHippo()
+        local remote=rs:FindFirstChild("FeralHippo")
+        if not remote then remote=new("RemoteEvent");remote.Name="FeralHippo";remote.Parent=rs end
+        local profile={SPEED_CAP="trot",CHARGE_TIME=6,MULT_START=.9,MULT_MAX=3.5,CURVE=2,OVERHOLD=8,
+            CD_HIT=50,CD_MISS=20}
+        w:addConfig("AbilityConfig",{CrusherBite=profile})
+        local state=nil
+        local function now()return w.time+1000 end
+        local function finish()
+            if not state then return end
+            state=nil
+            w.nativeHippoReleases=(w.nativeHippoReleases or 0)+1
+            local char=player.Character
+            char:SetAttribute("FeralCrushAt",nil)
+            char:SetAttribute("FeralCrushBiteAt",now())
+            remote:FireServer("release",now())
+        end
+        w:registerNative(finish,"FeralHippoClient","finish",function()
+            return {[1]=state,[2]=player,[3]=now,[4]=profile,[5]=remote}
+        end)
+        local function onEnd(input)
+            if input.KeyCode==enum.KeyCode.F then finish() end
+        end
+        w:registerNative(onEnd,"FeralHippoClient","onEnd",function()return {finish}end)
+        uis.InputEnded:Connect(onEnd)
+        w.startHippoCharge=function()
+            state={at=now(),src="key",stage=1}
+            player.Character:SetAttribute("FeralCrushAt",state.at)
+            remote:FireServer("start",now())
+        end
+        w.nativeHippoFinish,w.nativeHippoState=finish,function()return state end
+        return profile
     end
     function w:enableNativeConnections()
         env.getconnections=function(event)
@@ -585,7 +631,7 @@ function Mock.new()
     end
     function w:connections()
         local n=0
-        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do n+=s:Count() end
+        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputEnded,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do n+=s:Count() end
         for _ in pairs(self.renders) do n+=1 end
         for _ in pairs(self.bindings) do n+=1 end
         for _,o in ipairs(self.objects) do for _,s in pairs(o._signals) do n+=s:Count() end end
