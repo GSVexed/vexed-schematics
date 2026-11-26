@@ -116,7 +116,7 @@ Core.specs = {
     { "survivalAFK", "Survival", "Survival Bonus AFK", "Bounded safe walks; survival credit observed separately" },
     { "minigame", "Survival", "Automatic Minigames", "Native sessions; grades come from game replies" },
     { "escape", "Survival", "Auto Escape", "Native struggle actions; friendly baby carry preserved" },
-    { "reach", "Combat", "Bite Reach", "Always enabled client geometry; server range unknown", permanent = true },
+    { "reach", "Combat", "Experimental Bite Reach", "OFF preserves native bite geometry; expanded range may be rejected", default = false },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
     { "combat", "Combat", "Combat Core", "Native attempts and feedback; no extra hit claims", permanent = true },
     { "climb", "Movement", "Climb Assist", "Native Q buffer and one guarded retry" },
