@@ -197,7 +197,10 @@ function Recovery.new(bridge, policy, ledger)
         self.purpose = effects and "effects" or "health"
         local allowed, reason = policy:allowed("recovery", s, now,self.purpose)
         if not allowed then self:release(reason, now); return end
-        if now < self.backoffUntil then self.state = "waiting after action"; return end
+        if now < self.backoffUntil then
+            if self.state~="native Rest renewal unavailable" then self.state = "waiting after action" end
+            return
+        end
         self:echo(s, now)
         if policy.manualRest or now < self.backoffUntil then return end
         -- Request only for an actual deficit. Keeping Rest primed at full
