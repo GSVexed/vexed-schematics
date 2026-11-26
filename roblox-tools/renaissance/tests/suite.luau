@@ -616,7 +616,7 @@ test("closing an active minigame owner restores working native manual input",fun
     w:input(E.KeyCode.Space);eq(w.nativeManualPresses,1);w:advance(.6);eq(h.grab.presses,0)
 end)
 test("missing executor introspection is reported as partial minigame support",function()
-    local w=Mock.new();w:enableNativeGrab();w.env.getconnections=nil
+    local w=Mock.new();w:enableNativeGrab();w.env.getconnections=nil;w.env.getgc=function()return {} end
     local h=load(w,{settings={states={minigame=true}}});w:step(.02)
     local r=w:remote("FeralGrabV2")
     r.OnClientEvent:Fire("begin",{f=34,role="prey"});w:advance(.4)
@@ -776,7 +776,7 @@ test("native feeding approach longer than the old action pause keeps Rest releas
     w.finishFeedApproach();w:advance(.2);eq(h.recovery.owned,nil);eq(w.nativeFeedMode(),"eat");h:close()
 end)
 test("feeding intent protects native approach even without executor introspection",function()
-    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil;w.feedApproach=true;w.hum.Health=50
+    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end;w.feedApproach=true;w.hum.Health=50
     w.player.Character:SetAttribute("FeedCan","drink")
     local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
     w:input(E.KeyCode.E);w:advance(3);eq(h.feeding.busy,true);eq(h.recovery.owned,nil);h:close()
@@ -822,7 +822,7 @@ test("an attack ends native feeding before the game's ordinary bite callback",fu
     eq(w.nativeFeedMode(),nil);eq(w.nativeBites,1);eq(h.ledger.counts.native_feed_cancel_for_attack,1);h:close()
 end)
 test("missing native feeding access leaves the game session intact instead of fabricating progress",function()
-    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil
+    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
     w.player.Character:SetAttribute("Thirst",40);w.player.Character:SetAttribute("FeedCan","drink")
     local h=load(w,{settings={states={}}});w:advance(.1);w:input(E.KeyCode.E);w:advance(9)
     eq(w.nativeFeedToggles,1);eq(w.nativeFeedMode(),"drink");eq(w.player.Character:GetAttribute("Thirst"),40)
@@ -1613,9 +1613,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.8.7 presents its actual version in the active controller",function()
+test("Renaissance 16.1.0 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.8.7")
+    eq(h.version,"16.1.0")
     h:close()
 end)
 
@@ -2225,7 +2225,7 @@ test("held M1 replays safe real input when WolfController closures are private",
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
     w:enableNativeActions()
-    w.env.getconnections=nil
+    w.env.getconnections=nil;w.env.getgc=function()return {} end
     w.virtualBiteAvailable=true
     local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
     w:advance(.15);eq(h.bridge.wolfActions,nil)
@@ -2243,7 +2243,7 @@ test("held input fallback pauses through actual minigames even with private call
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
     w:enableNativeActions();w:enableNativeGrab()
-    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    w.env.getconnections=nil;w.env.getgc=function()return {} end;w.virtualBiteAvailable=true
     local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
     w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
     w:advance(.3)
@@ -2261,7 +2261,7 @@ end)
 test("no virtual backend never invents a repeated bite or damage",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w.env.getconnections=nil
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
     local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
     w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
     local first=w.nativeBites
@@ -2343,7 +2343,7 @@ test("minigame begin during fallback M1 instantly releases the owned synthetic p
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
     w:enableNativeActions();w:enableNativeGrab()
-    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    w.env.getconnections=nil;w.env.getgc=function()return {} end;w.virtualBiteAvailable=true
     w.virtualStartsGrab=true
     local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
     w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
@@ -2359,7 +2359,7 @@ end)
 test("private native callback can repeat through paired executor mouse APIs",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w.env.getconnections=nil
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
     local pairDown,pairUp=0,0
     w.env.mouse1press=function()
         pairDown+=1
@@ -2386,7 +2386,7 @@ end)
 test("held fallback resets a logically down mouse before every native press",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w.env.getconnections=nil
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
     w.virtualBiteAvailable=true
     local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
     w:advance(.2)
@@ -2461,7 +2461,7 @@ test("prey grabs do not auto-repeat bite and preserve native minigame automation
 end)
 test("no native callback never creates synthetic M1 during hunter minigame",function()
     local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
-    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    w.env.getconnections=nil;w.env.getgc=function()return {} end;w.virtualBiteAvailable=true
     local h=load(w,{settings={states={holdBite=true,minigame=true}}});w:advance(.2)
     w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=822,role="hunter"})
     w:advance(.15)
@@ -2484,7 +2484,7 @@ end)
 test("unacknowledged virtual input automatically switches to paired executor edges",function()
     local w=Mock.new();w:enableNativeActions()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w.env.getconnections=nil;w.virtualBiteAvailable=true;w.virtualDropInput=true
+    w.env.getconnections=nil;w.env.getgc=function()return {} end;w.virtualBiteAvailable=true;w.virtualDropInput=true
     local pairedDown,pairedUp=0,0
     w.env.mouse1press=function()
         pairedDown+=1
@@ -2508,7 +2508,7 @@ test("compatible newer FERAL place version still supports held bite via native i
     local w=Mock.new();w:enableNativeActions()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
     w.env.game.PlaceVersion=2413
-    w.env.getconnections=nil
+    w.env.getconnections=nil;w.env.getgc=function()return {} end
     w.virtualBiteAvailable=true
     local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
     w:advance(.2)
@@ -2649,6 +2649,80 @@ test("stale stock-valid guide cannot bypass extended auto-contact pacing after t
     assert(not current or not current.valid)
     eq(h.bridge:autoAttackTarget(snapshot,h.guide,h.features.combat),false)
     h:close()
+end)
+test("native hold-to-repeat recovers validated WolfController closure with getgc when connections are hidden",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions()
+    w.env.getconnections=nil -- keep native getgc: separate executor capability
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.15)
+    assert(not (h.bridge.wolfActions and h.bridge.wolfActions.tryBite))
+    w.held=E.UserInputType.MouseButton1
+    local original=w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.8)
+    assert(h.bridge.wolfActions and type(h.bridge.wolfActions.tryBite)=="function")
+    eq(h.bridge.wolfActions.discovery,"validated own heap closure")
+    assert((w.nativeBites or 0)>=3,"native repeated bites must dispatch through recovered original")
+    eq(w.virtualBiteCalls,nil) -- do not route synthetic events through grab automation
+    assert(w.metrics.heap>=1)
+    w.held=nil;w.uis.InputEnded:Fire(original)
+    local before=w.nativeBites
+    w:advance(.7);eq(w.nativeBites,before)
+    h:close()
+end)
+test("unvalidated heap closure cannot dispatch repeated attacks",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    local original=w.env.getgc
+    w.env.getgc=function()
+        local pool=original()
+        -- Deliberately supply only unrelated closures. A source/name match
+        -- is insufficient unless the upvalue identities match our player.
+        local function unrelated()end
+        return {unrelated}
+    end
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.7)
+    assert(not (h.bridge.wolfActions and h.bridge.wolfActions.tryBite))
+    eq(w.nativeBites,1)
+    w.held=nil;h:close()
+end)
+test("synthetic InputEnded cannot cancel the original physically held M1",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    w.env.getgc=function()return {}end
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton1
+    local realInput=w:input(nil,E.UserInputType.MouseButton1)
+    assert(h.combatInput.held and h.physicalM1Input==realInput)
+    h.bridge.syntheticM1={release=function()end}
+    h.bridge.syntheticM1Until=w.time+.2
+    h:inputEnded({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    assert(h.combatInput.held~=nil,"synthetic release must preserve original human hold")
+    h:inputEnded(realInput)
+    eq(h.combatInput.held,nil)
+    h.bridge.syntheticM1=nil
+    h:close()
+end)
+test("native game cooldown still gates a getgc recovered held bite",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return 1.0 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.7)
+    assert((w.nativeBites or 0)<=1)
+    w:advance(2.2)
+    assert((w.nativeBites or 0)>=3 and (w.nativeBites or 0)<=4)
+    w.held=nil;h:close()
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
