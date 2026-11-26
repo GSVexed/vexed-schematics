@@ -861,6 +861,12 @@ function Controller.new(M,bridge,options)
         self.ui:activate()
         self.active = true
         self.zoom:set(self.registry.byId.zoom.requested)
+        -- The earlier stand-alone trial must not apply a second attenuation scale.
+        -- Automatically retire it before the integrated owner starts.
+        local olderVoice=bridge.env.FERAL_VOICE_HEARING
+        if type(olderVoice)=="table" and type(olderVoice.close)=="function" then
+            pcall(olderVoice.close,olderVoice)
+        end
         self.voice:setEnabled(self.registry.byId.voice.requested)
         if M.amber_runtime then self.territory=M.amber_runtime.start(M,self) end
         self.tests:start()
