@@ -774,6 +774,42 @@ function Roblox.new(Core, environment)
         local hit = self.Workspace:Raycast(s.root.Position,target.root.Position-s.root.Position,params)
         return hit ~= nil and not hit.Instance:IsDescendantOf(target.char)
     end
+    function b:imminentBiteTarget(s,stock,all)
+        -- Release automatic Rest *before* contact, when a real eligible target
+        -- is either within normal bite reach or the animal is closing on it.
+        -- This does not claim extra hit range or force an attack.
+        if not s or not s.alive or not stock or not s.root or not s.hum then return nil end
+        local movement=s.hum.MoveDirection
+        local velocity=s.root.AssemblyLinearVelocity
+        local horizontal=Vector3.new(velocity.X,0,velocity.Z)
+        local speed=math.max(18,horizontal.Magnitude)
+        local anticipate=math.clamp(self:restLock(s.char)*speed+3,6,22)
+        local checked=0
+        for _,target in ipairs(all or {}) do
+            if target.distance>32 then break end
+            if target.affiliation~="same" and not target.protected
+                and self:combatEligible(target.char) and target.root and target.root.Parent then
+                checked+=1
+                if checked>10 then break end
+                local geometric=self:geometry(stock,s,target)
+                if geometric then
+                    local diff=target.root.Position-s.root.Position
+                    local horizontalDiff=Vector3.new(diff.X,0,diff.Z)
+                    local closing=movement.Magnitude>.13 and horizontalDiff.Magnitude>.1
+                        and movement.Unit:Dot(horizontalDiff.Unit)>.25
+                    local allowance=closing and anticipate or 3
+                    local vertical=math.abs(diff.Y)
+                    local verticalLimit=(s.hum.HipHeight+target.hum.HipHeight)
+                        *stock.MAX_DY+2
+                    if geometric.gap <= geometric.reach+allowance
+                        and vertical<=verticalLimit and (target.sameTree or not self:occluded(s,target)) then
+                        return target
+                    end
+                end
+            end
+        end
+        return nil
+    end
     function b:select(s, baseline, changed, all)
         local previousAssist=self.reachTarget
         self.treeTarget = nil
