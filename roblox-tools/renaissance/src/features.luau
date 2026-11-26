@@ -6,13 +6,13 @@ local Features = {}
 function Features.uniquePlan(plan)
     local result,seen={},{}
     for _,item in ipairs(plan) do
-        if type(item.target)~="table" or item.key==nil then return nil,"invalid stamina field" end
+        if type(item.target)~="table" or item.key==nil then return nil,"invalid feature field" end
         local fields=seen[item.target]
         if not fields then fields={};seen[item.target]=fields end
         local previous=fields[item.key]
         if previous then
             if previous.value~=item.value or previous.kind~=item.kind then
-                return nil,"conflicting aliased stamina field: "..tostring(item.key)
+                return nil,"conflicting aliased feature field: "..tostring(item.key)
             end
         else
             fields[item.key]=item;table.insert(result,item)
@@ -37,12 +37,22 @@ function Features.new(Core, bridge, registry)
         if flag then bridge:restoreAttribute(flag.char, "WolfDbgNoStamina", true, flag.before) end
     end
     function f:flagCharacter(s, on)
-        if self.flag and (not on or self.flag.char ~= s.char) then self:releaseFlag() end
+        if self.flag and (not on or not s.alive or self.flag.char ~= s.char) then self:releaseFlag() end
+        if not on or self.flagConflict~=s.char then self.flagConflict=nil end
         if on and s.alive then
-            if not self.flag then
-                self.flag = { char = s.char, before = bridge:attribute(s.char, "WolfDbgNoStamina") }
+            if self.flagConflict==s.char then return false end
+            if self.flag then
+                if bridge:attribute(s.char,"WolfDbgNoStamina")==true then return true end
+                -- The game/another owner replaced our value. Never repeatedly
+                -- overwrite it; keep the independently valid config profile.
+                self.flag,self.flagConflict=nil,s.char
+                return false
             end
-            return bridge:setAttribute(s.char, "WolfDbgNoStamina", true)
+            local before=bridge:attribute(s.char,"WolfDbgNoStamina")
+            if bridge:setAttribute(s.char,"WolfDbgNoStamina",true) then
+                self.flag={char=s.char,before=before};return true
+            end
+            return false
         end
         return not on
     end
@@ -59,6 +69,15 @@ function Features.new(Core, bridge, registry)
             if type(c.coneFor) == "function" then
                 local stock = c.coneFor
                 original.coneFor = function(char)
+                    -- Captured CombatConfig.coneFor (p1) adds AnimProfile,
+                    -- then Species, BITE_CONE_ADD to CONE. Clamping the native
+                    -- closure to stock CONE lost the legitimate species bonus
+                    -- after our own shared CONE change.
+                    if game.PlaceVersion==2412 and type(original.BITE_CONE_ADD)=="table" then
+                        local add=original.BITE_CONE_ADD[bridge:attribute(char,"AnimProfile") or ""]
+                            or original.BITE_CONE_ADD[bridge:attribute(char,"Species") or ""] or 0
+                        return original.CONE+(Core.finite(add) and add or 0)
+                    end
                     local ok,value = pcall(stock,char)
                     return ok and Core.finite(value) and math.min(value,original.CONE) or original.CONE
                 end
@@ -90,7 +109,7 @@ function Features.new(Core, bridge, registry)
                     local ok,native = pcall(nativeCone,char)
                     if ok and Core.finite(native) then value = math.max(value,native) end
                 end
-                return value
+                return math.clamp(value,0,180)
             end))
             -- A single candidate selected from the shared snapshot feeds both
             -- climb aim and the guide; no extra tree scan or hit request.
@@ -102,7 +121,7 @@ function Features.new(Core, bridge, registry)
                 end
                 local target = bridge.reachTarget
                 local root = char and char:FindFirstChild("HumanoidRootPart")
-                if target and target.char and target.char.Parent and target.root.Parent and root
+                if bridge:currentTargetBody(target) and root and char==bridge.player.Character
                     and bridge:combatEligible(target.char) then
                     local diff = target.root.Position-root.Position
                     if bridge.predictionActive and char==bridge.player.Character then
@@ -123,7 +142,8 @@ function Features.new(Core, bridge, registry)
                     local ok,value = pcall(original.dyMult,char)
                     if ok and Core.finite(value) and value > 0 then native = value end
                 end
-                if bridge:isClimbing(char) and bridge.treeTarget and bridge.treeTarget.sameTree then
+                if char==bridge.player.Character and bridge:isClimbing(char)
+                    and bridge:currentTargetBody(bridge.treeTarget) and bridge.treeTarget.sameTree then
                     return math.min(native*2.50,3.5)
                 end
                 return native*1.35
@@ -198,10 +218,10 @@ function Features.new(Core, bridge, registry)
         elseif id == "recovery" then
             if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
             if n.HEALTH_REST_MULT < 1 then return nil,"native HP Rest multiplier unavailable" end
-            -- Keep the game's real Rest factor. Flattening it to one removed
-            -- the distinction between an actual Rest window and a local edit.
-            -- Cap only the local Rest reference at 2x; never edit combat exclusion.
-            return { entry(n,"HEALTH_REGEN",n.HEALTH_REGEN*math.min(1,2/n.HEALTH_REST_MULT),"number"),
+            -- Preserve both native rates. A higher newly observed Rest factor
+            -- is not a reason to lower ordinary healing to fit an old label.
+            -- Native Rest signaling, not a client-side rate edit, is the feature.
+            return { entry(n,"HEALTH_REGEN",n.HEALTH_REGEN,"number"),
                 entry(n,"HEALTH_REST_MULT",n.HEALTH_REST_MULT,"number") }
         elseif id == "effects" then
             local status = bridge:config("StatusConfig")
@@ -212,9 +232,9 @@ function Features.new(Core, bridge, registry)
                     return nil, "StatusConfig " .. pair[1] .. " schema unavailable"
                 end
                 if c.REST_MULT < 1 then return nil,"native condition Rest multiplier unavailable" end
-                -- Preserve native Rest=4 and ordinary base decay. Never
-                -- advertise a faster HUD calculation as a gameplay cure.
-                table.insert(plan,entry(c,pair[2],c[pair[2]]*math.min(1,4/c.REST_MULT),"number"))
+                -- Keep every independently supplied native condition rate,
+                -- including profiles whose Rest factor differs from v2412.
+                table.insert(plan,entry(c,pair[2],c[pair[2]],"number"))
                 table.insert(plan,entry(c,"REST_MULT",c.REST_MULT,"number"))
             end
             return plan
@@ -256,7 +276,7 @@ function Features.new(Core, bridge, registry)
             for _, level in ipairs({1,2}) do
                 if type(c.levels[level]) == "table" then table.insert(plan,entry(c.levels[level],"sprintGrab",true)) end
             end
-            return plan
+            return Features.uniquePlan(plan)
         end
         return nil, "unknown config feature"
     end
@@ -383,7 +403,7 @@ function Features.new(Core, bridge, registry)
     -- This does not activate a burst gait; the server may still impose a slow.
     function f:reconcileHippo(s)
         self:reconcileHippoGait(s)
-        local hippo=registry.byId.hippoMove.requested and s.alive and s.species=="Hippo"
+        local hippo=registry.byId.hippoMove.requested and s.alive and s.species=="Hippo" and game.PlaceVersion==2412
         local ability=hippo and bridge:config("AbilityConfig")
         local base=hippo and bridge:config("AbilityConfigBase")
         local profile
@@ -406,14 +426,21 @@ function Features.new(Core, bridge, registry)
             self.hippoProfile,self.hippoCharacter=nil,nil
         end
         if not hippo then
-            self.hippoStatus=registry.byId.hippoMove.requested and "WAITING" or "OFF"
-            return
+            self.hippoCapConflict=nil
+            self.hippoStatus=not registry.byId.hippoMove.requested and "OFF"
+                or s.species=="Hippo" and game.PlaceVersion~=2412 and "UNVERIFIED_VERSION" or "WAITING";return
         end
+        local conflict=self.hippoCapConflict
+        if conflict and conflict.char==s.char and (not profile or conflict.profile==profile) then
+            self.hippoStatus="CONFLICT";return
+        end
+        self.hippoCapConflict=nil
         if self.leases.owners.hippoCrush then
             if self.leases:valid("hippoCrush") then
                 self.hippoStatus="CLIENT";return
             end
             -- An external edit owns this value now; don't overwrite it.
+            self.hippoCapConflict={profile=self.hippoProfile,char=s.char}
             self.leases:release("hippoCrush")
             self.hippoProfile,self.hippoCharacter=nil,nil
             self.hippoStatus="CONFLICT";return
@@ -426,6 +453,11 @@ function Features.new(Core, bridge, registry)
         })
         self.hippoStatus=applied and "CLIENT" or "WAITING"
         if applied then self.hippoProfile,self.hippoCharacter=profile,s.char end
+    end
+    -- Ordinary combat and the guide must remain available without a geometry lease.
+    function f:combatProfileReady()
+        return self.originalCombat~=nil and self.combat~=nil
+            and (self.combatProfileMode=="native" or self.leases:valid("reach"))
     end
     function f:reconcile(s, now, force)
         if not force and now < self.nextReconcile then return end
@@ -460,6 +492,45 @@ function Features.new(Core, bridge, registry)
                     if self.configIdentity[id] and self.configIdentity[id][name]~=identity[name] then changed=true end
                 end
             end
+            local function reference(key,value)
+                identity[key]=value or false
+                if self.configIdentity[id] and self.configIdentity[id][key]~=identity[key] then changed=true end
+            end
+            if id=="effects" or id=="mobility" then
+                local status=identity.StatusConfig
+                for _,kind in ipairs(id=="mobility" and {"INJURY"} or {"INJURY","BLEED","VENOM"}) do
+                    reference("status:"..kind,type(status)=="table" and status[kind])
+                end
+            elseif id=="leap" then
+                reference("bodyLengths",type(identity.JumpLeapConfig)=="table" and identity.JumpLeapConfig.BODY_LENGTHS)
+            elseif id=="climb" then
+                local passive=identity.PassiveConfig
+                local climb=type(passive)=="table" and passive.CLIMBER
+                reference("climb",climb)
+                reference("levels",type(climb)=="table" and climb.levels)
+                for level=1,2 do
+                    reference("climbLevel"..level,type(climb)=="table" and type(climb.levels)=="table" and climb.levels[level])
+                end
+            elseif id=="reach" then
+                local combat=identity.CombatConfig
+                for _,key in ipairs({"HIT2","BITE_CONE_ADD"}) do reference(key,type(combat)=="table" and combat[key]) end
+            end
+            if id=="stamina" then
+                local sprint=identity.sprint
+                local count=0
+                if type(sprint)=="table" then
+                    for species,profile in pairs(sprint) do
+                        if type(species)=="string" then
+                            count+=1;reference("sprint:"..species,profile)
+                        end
+                    end
+                end
+                reference("sprintCount",count)
+                -- Removed profiles must also retire their ownership.
+                for key in pairs(self.configIdentity[id] or {}) do
+                    if type(key)=="string" and key:sub(1,7)=="sprint:" and identity[key]==nil then changed=true end
+                end
+            end
             if changed then self.leases:release(id);self.failures[id] = nil end
             self.configIdentity[id] = identity
             local record = registry.byId[id]
@@ -484,6 +555,24 @@ function Features.new(Core, bridge, registry)
                     local applied, reason = self.leases:apply(id,plan)
                     registry:ack(id,applied,applied and "CLIENT" or "UNAVAILABLE",reason)
                 else registry:ack(id,false,"WAITING",why) end
+            end
+            if id=="reach" then
+                if record.applied then
+                    self.combatProfileMode="experimental"
+                else
+                    -- Native compatibility is deliberately read-only: the guide
+                    -- and ordinary attacks share the unmodified game profile.
+                    local c=bridge:config("CombatConfig")
+                    local changedProfile=self.combatProfileMode~="native" or self.originalCombat~=c
+                    if numeric(c,{"REACH","HIT_SCALE","CONE","SLACK","MAX_DY"})
+                        and type(c.bodyGap)=="function" then
+                        self.originalCombat,self.combat=c,c
+                        self.combatProfileMode="native"
+                    else
+                        self.originalCombat,self.combat,self.combatProfileMode=nil,nil,nil
+                    end
+                    if changedProfile then bridge.reachTarget,bridge.treeTarget=nil,nil end
+                end
             end
         end
         self:reconcileHippo(s)

@@ -1,3 +1,5 @@
+> Historical feature record. For the current 16.1.1 implementation, configurable controls and verification status, see [the current engineering report](V16_1_1_ENGINEERING_REPORT.md). Counts and permanent-control descriptions below refer to earlier releases.
+
 # All 21 retained features — source trace and completion record
 
 Baseline: v2412 bytecode, independently rechecked (943 payloads; 383 programs; 6,386 prototypes; 866,208 instruction words). Exact trace hashes and capture IDs are in source-traces.json. CLEAN v14 is unchanged.

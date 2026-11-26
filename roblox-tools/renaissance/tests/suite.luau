@@ -31,7 +31,7 @@ test("28 features retain original controls plus optional local proximity hearing
     local M=modules();local r=M.core.registry()
     eq(#r.order,28);eq(M.settings.sanitize({},M.core.specs).states.holdBite,true)
     eq(M.settings.sanitize({},M.core.specs).states.voice,true)
-    r:request("reach",false);eq(r.byId.reach.requested,true)
+    r:request("reach",false);eq(r.byId.reach.requested,false)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
 end)
@@ -1302,7 +1302,8 @@ test("the action coordinator gives minigames, capture and actual attack the prop
     eq(p:activity(s,10),"minigame");s.grab=false;eq(p:activity(s,10),"capture")
     s.captured=false;eq(p:activity(s,10),"attack");s.attackHeld=false;eq(p:activity(s,10),"ability")
     s.ability=false;eq(p:activity(s,10),"feeding");s.feeding=false;s.swimming=true
-    eq(p:allowed("recovery",s,10,"health"),false)
+    eq(p:allowed("recovery",s,10,"health"),true)
+    s.underwater=true;eq(p:allowed("recovery",s,10,"health"),false)
 end)
 test("stamina covers native swim, climb and venom consumption inputs with exact restoration",function()
     local w=Mock.new();local n=w.configs.NeedsConfig;n.SWIM_DRAIN_MULT=1.15;n.WATER_DRAIN_NONSWIM=1.5
@@ -1613,9 +1614,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 16.1.0 presents its actual version in the active controller",function()
+test("candidate version is injected from the build manifest",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"16.1.0")
+    eq(h.version,modules().release.version)
     h:close()
 end)
 
@@ -2743,5 +2744,363 @@ test("held-input event keeps active recovery out of Rest even when mouse polling
     eq(h.combatInput.held,nil)
     h:close()
 end)
+
+-- Restored distinct behavioral regressions from the 16.0.2 branch.
+
+
+test("nearby animals alone preserve recovery until actual attack input",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50;w:enableNativeActions()
+    local h=load(w,{settings={states={recovery=true,holdBite=false,attackSpeed=false}}});w:advance(.1)
+    assert(h.recovery.owned)
+    w:enemy(2,Mock.V3.new(0,3,-4))
+    w:advance(1.2);eq(h.recovery.owned,w.player.Character)
+    eq(h.ledger.counts.native_bite_approach_prepared,nil)
+    w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.recovery.owned,nil);assert(h.combatInput.pending)
+    w:advance(.9);eq(w.nativeBites,1)
+    w:advance(1.4);eq(h.recovery.owned,w.player.Character)
+    h:close()
+end)
+
+test("mixpacked movement and nearby bodies do not indefinitely disable recovery",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+    local _,friend=w:enemy(1,Mock.V3.new(0,3,-6))
+    local _,protected=w:enemy(2,Mock.V3.new(0,3,-6))
+    local force=w.new("ForceField");force.Parent=protected
+    local h=load(w,{settings={states={recovery=true}}})
+    w:advance(.1);eq(h.recovery.owned,w.player.Character)
+    local _,enemy=w:enemy(2,Mock.V3.new(0,3,-18))
+    w.hum.MoveDirection=Mock.V3.new(0,0,-1)
+    w.root.AssemblyLinearVelocity=Mock.V3.new(0,0,-22)
+    w:advance(.2)
+    eq(h.recovery.owned,w.player.Character)
+    eq(h.policy.combatApproachUntil,0)
+    h:close()
+end)
+
+test("hub version text always follows the actual controller version",function()
+    local w,h=boot()
+    eq(h.ui.versionLabel.Text,"RENAISSANCE  /  "..h.version)
+    h:close()
+end)
+
+test("native stock-range target outranks a nearer speculative extended-only target",function()
+    local w,h=boot({biteHelper=true,reach=true})
+    local _,rear=w:enemy(2,Mock.V3.new(0,3,2))
+    local _,front=w:enemy(2,Mock.V3.new(0,3,-6))
+    w:advance(.2)
+    assert(h.guide and h.guide.baseline and h.guide.baseline.valid)
+    eq(h.guide.target.char,front)
+    eq(h.bridge.reachTarget.char,front)
+    h:close()
+end)
+
+test("an overlapping native hit reply matches its own local target, not the latest bite",function()
+    local w=Mock.new();w:enableNativeActions()
+    local _,a=w:enemy(2,Mock.V3.new(0,3,-4))
+    local _,b=w:enemy(2,Mock.V3.new(0,3,-6))
+    local h=load(w,{settings={states={recovery=false}}});w:advance(.2)
+    w:input(nil,E.UserInputType.MouseButton1)
+    w:remote("FeralBiteLocal").Event:Fire(a)
+    w:advance(.55);w:input(nil,E.UserInputType.MouseButton1)
+    w:remote("FeralBiteLocal").Event:Fire(b)
+    w:remote("FeralHit").OnClientEvent:Fire("hit",{a=w.player.Character,v=a,dmg=7})
+    eq(h.transactions[1].feedback.dmg,7)
+    eq(h.transactions[1].nativeTarget,a)
+    eq(h.transactions[2].feedback,nil)
+    h:close()
+end)
+
+test("two ambiguous unmatched bites cannot claim one unrelated target's hit",function()
+    local w=Mock.new();w:enableNativeActions()
+    local _,stranger=w:enemy(2)
+    local h=load(w,{settings={states={recovery=false}}});w:advance(.2)
+    w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.55);w:input(nil,E.UserInputType.MouseButton1)
+    w:remote("FeralHit").OnClientEvent:Fire("hit",{a=w.player.Character,v=stranger,dmg=10})
+    eq(h.transactions[1].feedback,nil);eq(h.transactions[2].feedback,nil)
+    eq(h.ledger.counts.native_outgoing_hit_reply_unmatched,1)
+    h:close()
+end)
+
+test("a game's actual hit target overrules a different local impact cue",function()
+    local w=Mock.new();w:enableNativeActions()
+    local _,localTarget=w:enemy(2,Mock.V3.new(0,3,-4))
+    local _,realTarget,realHum=w:enemy(2,Mock.V3.new(0,3,-6))
+    local h=load(w,{settings={states={recovery=false}}});w:advance(.2)
+    w:input(nil,E.UserInputType.MouseButton1)
+    w:remote("FeralBiteLocal").Event:Fire(localTarget)
+    w:remote("FeralHit").OnClientEvent:Fire("hit",{a=w.player.Character,v=realTarget,dmg=11})
+    local tx=h.transactions[1]
+    eq(tx.localTarget,localTarget);eq(tx.nativeTarget,realTarget);eq(tx.targetMismatch,true)
+    realHum.Health=89
+    w:advance(1.15)
+    assert(h.combatStatus:find("local/server target differed",1,true))
+    h:close()
+end)
+
+test("target selection for HP attribution is frozen at the native bite marker",function()
+    local w=Mock.new();w:enableNativeActions()
+    local _,a,_,ar=w:enemy(2,Mock.V3.new(0,3,-4))
+    local _,b,_,br=w:enemy(2,Mock.V3.new(0,3,-6))
+    local h=load(w,{settings={states={recovery=false}}});w:advance(.2)
+    eq(h.guide.target.char,a)
+    w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.transactions[1].focusTarget.char,a)
+    ar.Position=Mock.V3.new(0,3,-40);br.Position=Mock.V3.new(0,3,-3)
+    w:advance(.4)
+    eq(h.guide.target.char,b)
+    eq(h.transactions[1].target.char,a)
+    h:close()
+end)
+
+
+
+test("recovery defaults on for new settings but permits explicit manual OFF",function()
+    local M=modules()
+    eq(M.settings.sanitize(nil,M.core.specs).states.recovery,true)
+    eq(M.settings.sanitize({states={recovery=false}},M.core.specs).states.recovery,false)
+end)
+
+test("an unproductive native Rest request stays continuous instead of being flipped OFF",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=40
+    w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(20)
+    eq(h.recovery.owned,w.player.Character)
+    assert((h.ledger.counts.native_rest_renewed or 0)>=8)
+    eq(h.ledger.counts.native_rest_no_progress_repair,nil)
+    local trueRequests,falseRequests=0,0
+    for _,c in ipairs(w.calls) do
+        if c.name=="WolfActions" and c.args[1]=="Rest" then
+            if c.args[2]==true then trueRequests+=1 else falseRequests+=1 end
+        end
+    end
+    assert(trueRequests>=9)
+    eq(falseRequests,0)
+    eq(w.player.Character:GetAttribute("WolfRest"),false)
+    h:close()
+end)
+
+test("brief missing negative-effect attributes do not cancel active native Rest",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=100
+    local char=w.player.Character;char:SetAttribute("FeralVenomAmt",5)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    eq(h.recovery.owned,char)
+    char:SetAttribute("FeralVenomAmt",nil);w:advance(.6)
+    eq(h.recovery.owned,char)
+    w:advance(.5)
+    eq(h.recovery.owned,nil)
+    h:close()
+end)
+
+test("condition-only recovery remains eligible with unknown combat time",function()
+    local M=modules();local policy=M.policy.new()
+    local s={alive=true,combat=nil,swimming=true}
+    local allowed,reason=policy:allowed("recovery",s,10,"effects")
+    eq(allowed,true);assert(reason:find("HP excluded",1,true))
+    eq(policy:allowed("recovery",s,10,"health"),false)
+    s.combat=true;eq(policy:allowed("recovery",s,10,"effects"),true)
+    s.captured=true;eq(policy:allowed("recovery",s,10,"effects"),false)
+end)
+
+test("explicit native combat mode preserves every attack profile field while retaining the guide",function()
+    local w=Mock.new();local c=w.configs.CombatConfig
+    c.HIT2={PREDICT=true}
+    local before=table.clone(c)
+    local h=load(w,{settings={states={reach=false,recovery=false,biteHelper=true}}})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    eq(h.registry.byId.reach.requested,false)
+    eq(h.features.leases.owners.reach,nil)
+    eq(h.features.combatProfileMode,"native")
+    assert(h.guide and h.guide.target.char==char)
+    eq(h.guide.extended.valid,h.guide.baseline.valid)
+    for k,v in pairs(before) do eq(c[k],v) end
+    for k,v in pairs(c) do eq(before[k],v) end
+    eq(c.HIT2.PREDICT,true)
+    h:close()
+end)
+
+test("disabling experimental reach immediately restores original attack geometry and a native guide",function()
+    local w=Mock.new();local c=w.configs.CombatConfig
+    c.HIT2={PREDICT=true}
+    local before=table.clone(c)
+    local h=load(w,{settings={states={reach=true,recovery=false,biteHelper=true}}})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.2)
+    assert(h.features.leases:valid("reach"))
+    h:set("reach",false)
+    for k,v in pairs(before) do eq(c[k],v) end
+    for k,v in pairs(c) do eq(before[k],v) end
+    eq(c.HIT2.PREDICT,true)
+    eq(h.features.leases.owners.reach,nil)
+    w:advance(.3)
+    eq(h.features.combatProfileMode,"native")
+    assert(h.guide and h.guide.target.char==char)
+    h:close()
+end)
+
+test("failed native recovery renewal relinquishes owned pose and cannot appear active",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.15)
+    assert(h.recovery.owned)
+    local old=h.bridge.rest
+    h.bridge.rest=function(self,char,on)
+        if on then return false end
+        return old(self,char,on)
+    end
+    w:advance(2.1)
+    eq(h.ledger.counts.native_rest_renew_failed,1)
+    eq(h.recovery.owned,nil);eq(h.recovery.pose,nil)
+    eq(w.player.Character:GetAttribute("WolfDbgRestP"),nil)
+    assert(h.recovery:summary():find("renewal unavailable",1,true))
+    h:close()
+end)
+
+test("failed Rest exit leaves native state visible and never schedules a deferred attack",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+    local h=load(w,{settings={states={recovery=true,reach=true}}});w:advance(.15)
+    local char=w.player.Character
+    assert(h.recovery.owned==char)
+    local old=h.bridge.rest
+    h.bridge.rest=function(self,who,on)
+        if not on then return false end
+        return old(self,who,on)
+    end
+    w:input(nil,E.UserInputType.MouseButton1)
+    eq(h.recovery.owned,nil);eq(h.recovery.pose,nil)
+    eq(h.recovery.releaseFailedChar,char)
+    eq(h.combatInput.pending,nil);eq(h.lastIntent.restExitFailed,true)
+    eq(h.ledger.counts.native_rest_exit_failed,1)
+    eq(h.ledger.counts.owned_rest_released,nil)
+    char:SetAttribute("WolfRest",true)
+    w:advance(3)
+    eq(char:GetAttribute("WolfRest"),true)
+    eq(char:GetAttribute("WolfDbgRestP"),nil)
+    eq(h.recovery.owned,nil)
+    eq(h.ledger.counts.native_bite_buffer_released,nil)
+    assert(h.recovery:summary():find("exit failed",1,true))
+    h.recovery:manual(w.time)
+    eq(h.recovery.releaseFailedChar,nil)
+    eq(h.policy.manualRest,true)
+    h:close()
+end)
+
+test("character change retires all stale combat targets before the next scan",function()
+    local w,h=boot({biteHelper=true,reach=true,recovery=false})
+    w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    assert(h.guide and h.bridge.reachTarget)
+    h.bridge.treeTarget=h.guide.target
+    h.recovery.releaseFailedChar=w.player.Character
+    w:spawn("Wolf")
+    eq(h.guide,nil);eq(h.snapshot,nil)
+    eq(h.bridge.reachTarget,nil);eq(h.bridge.treeTarget,nil)
+    eq(#h.bridge.allCandidates,0);eq(#h.bridge.tracked,0)
+    eq(h.recovery.releaseFailedChar,nil)
+    eq(#h.transactions,0)
+    w:advance(.3);eq(h.active,true)
+    assert(h.features.leases:valid("reach"))
+    h:close()
+end)
+
+test("replaced opponent body retires the old guide without a respawn of our animal",function()
+    local w,h=boot({biteHelper=true,reach=true,recovery=false})
+    local p,old=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    local cached=h.guide.target
+    eq(cached.char,old);eq(h.bridge.reachTarget,cached)
+    h.bridge.treeTarget=cached
+    local new=w:animal("Wolf",Mock.V3.new(0,3,-7))
+    p.Character=new
+    h.nextScan=w.time+10
+    h:render(.016)
+    eq(h.guide.invalid,true)
+    eq(h.bridge.reachTarget,nil);eq(h.bridge.treeTarget,nil)
+    eq(h.bridge:currentTargetBody(cached),false)
+    h.nextScan=0;w:advance(.3)
+    assert(h.guide and h.guide.target.char==new)
+    h:close()
+end)
+
+test("disconnected or replaced feedback listeners rebind without stale events",function()
+    local w,h=boot({recovery=false})
+    local remote=w:remote("FeralHit")
+    local first=h.bridge.remoteConnections.FeralHit.connection
+    first:Disconnect()
+    h.bridge:bindNative(h)
+    local nextConn=h.bridge.remoteConnections.FeralHit.connection
+    assert(first~=nextConn and nextConn.Connected)
+    remote.OnClientEvent:Fire("hit",{})
+    eq(h.ledger.counts.native_hit_feedback,1)
+    remote.Parent=nil
+    local replacement=w.new("RemoteEvent");replacement.Name="FeralHit";replacement.Parent=w.rs
+    remote.OnClientEvent:Fire("hit",{})
+    eq(h.ledger.counts.native_hit_feedback,1)
+    h.bridge:bindNative(h)
+    eq(nextConn.Connected,false)
+    replacement.OnClientEvent:Fire("hit",{})
+    eq(h.ledger.counts.native_hit_feedback,2)
+    h:close()
+end)
+test("focus loss suspends held attacks until a fresh gameplay input after focus return",function()
+    local w=Mock.new();w:enableNativeActions()
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.8);assert((w.nativeBites or 0)>=2)
+    w.uis.WindowFocusReleased:Fire();local count=w.nativeBites
+    w:advance(.8);eq(w.nativeBites,count);eq(h.combatInput.held,nil)
+    w.uis.WindowFocused:Fire();w:advance(.8);eq(w.nativeBites,count)
+    w:input(nil,E.UserInputType.MouseButton1);w:advance(.8)
+    assert(w.nativeBites>count)
+    h:close();eq(w.uis.WindowFocusReleased:Count(),0);eq(w.uis.WindowFocused:Count(),0)
+end)
+
+test("text focus cannot resurrect a held attack from stale mouse polling",function()
+    local w=Mock.new();w:enableNativeActions()
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.7);w.chat={};w:advance(.1);local count=w.nativeBites
+    w:advance(.7);eq(w.nativeBites,count)
+    w.chat=nil;w:advance(.7);eq(w.nativeBites,count)
+    w:input(nil,E.UserInputType.MouseButton1);w:advance(.7);assert(w.nativeBites>count)
+    h:close()
+end)
+
+test("processed held input cannot rearm repeats through mouse polling",function()
+    local w=Mock.new();w:enableNativeActions()
+    local h=load(w,{settings={states={holdBite=true,recovery=false,attackSpeed=false}}})
+    w:advance(.2)
+    w.cas:BindActionAtPriority("ExternalModal",function()return E.ContextActionResult.Sink end,
+        false,3500,E.UserInputType.MouseButton1)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.5);eq(w.nativeBites,nil);eq(h.combatInput.held,nil)
+    w.cas:UnbindAction("ExternalModal")
+    w:advance(.7);eq(w.nativeBites,nil)
+    w:input(nil,E.UserInputType.MouseButton1);w:advance(.7);assert((w.nativeBites or 0)>0)
+    h:close()
+end)
+
+test("hold toggle OFF cancels a scheduled synthetic Down while the mouse remains held",function()
+    local w=Mock.new();w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {}end
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,recovery=false,attackSpeed=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    assert(h.bridge:tryHeldInputBite(h.bridge:snapshot(w.time,false),w.time))
+    h:set("holdBite",false);w:advance(.2)
+    eq(w.virtualBiteDowns or 0,0);eq(h.bridge.syntheticM1,nil)
+    h:close()
+end)
+
+test("runtime reports identify the exact source build and preserve unknown combat state",function()
+    local w,h=boot({recovery=false})
+    local manifest=modules().release
+    local report=h.tests:bridgeReport()
+    eq(report.version,h.version);eq(report.sourceFingerprint,manifest.sourceFingerprint)
+    assert(type(report.sourceFingerprint)=="string" and #report.sourceFingerprint==64)
+    h.snapshot.combat=nil
+    local snapshot=h.tests:snapshot();eq(snapshot.combat,nil);eq(snapshot.combatKnown,false)
+    h.snapshot.combat=false;snapshot=h.tests:snapshot()
+    eq(snapshot.combat,false);eq(snapshot.combatKnown,true)
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

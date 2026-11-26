@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministically package fourteen core and ten integrated Territory modules."""
+"""Deterministically package Renaissance and its integrated Territory modules."""
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -14,11 +15,22 @@ def module_path(name):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "16.1.0"
+RELEASE = json.loads((ROOT / "version.json").read_text())
+VERSION = RELEASE["version"]
+TERRITORY_VERSION = RELEASE["territory_version"]
+CHANNEL = RELEASE["channel"]
+GAME_BASELINE = RELEASE["game_baseline"]
+TOOLCHAIN = RELEASE["toolchain_commit"]
+assert re.fullmatch(r"\d+\.\d+\.\d+", VERSION), "Invalid candidate version"
+assert re.fullmatch(r"\d+\.\d+\.\d+", TERRITORY_VERSION), "Invalid Territory version"
+assert CHANNEL == "candidate", "This build must not silently promote stable"
+assert isinstance(GAME_BASELINE, int) and GAME_BASELINE > 0, "Invalid game baseline"
+assert re.fullmatch(r"[0-9a-f]{40}", TOOLCHAIN), "Toolchain must be an immutable commit"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
+    "feral-renaissance-v16.1.0.lua": "5c1084a21dc59b0fe0d343c15c3d92ed0141299cf8ddd7c51c98c76e0115b92b",
     "feral-renaissance-v16.0.2.lua": "06a07fb509bbd217b059c5e282cd4bfaaf7a90595e13873b955953a8cea19f5c",
     "feral-renaissance-v15.8.7.lua": "b65b4a3750c8e521d43d4fb702fefa11db2070fe795c427dbdbd633aafcb6da3",
     "feral-renaissance-v15.8.6.lua": "28c6a2589cd5faee4a9fbf71b1560f3e60e46c18736e5a9a1f175ada1e66a9ed",
@@ -75,6 +87,7 @@ for _, pair in ipairs({
 }) do
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
+M.release = __RELEASE_METADATA__
 if options.inspect then return M end
 if game.PlaceId ~= 108901361810209 then error("Open FERAL Animal Survival",0) end
 local env = type(getgenv) == "function" and getgenv() or _G
@@ -105,7 +118,11 @@ if previous and type(previous.close) == "function" then
         error("Previous hub shutdown failed: " .. tostring(failure),0)
     end
 end
-candidate:activate()
+local activated, failure = xpcall(function() candidate:activate() end,function(e) return tostring(e) end)
+if not activated then
+    pcall(candidate.close,candidate)
+    error("Renaissance activation failed; candidate cleaned up: " .. tostring(failure),0)
+end
 candidate.marker = {
     version = candidate.version,
     close = function() candidate:close() end,
@@ -115,14 +132,16 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 16.1.0] Ready · Right Shift · Native Hold-to-Bite")
+print("[FERAL Renaissance " .. candidate.version .. "] Ready · Right Shift · Native Hold-to-Bite")
 return candidate
 '''
 
 
 def build():
     verify_protected_artifacts()  # Do not overwrite the bundle/manifest on a damaged baseline.
-    chunks = [f"-- FERAL Project Renaissance {VERSION} | v2412 client baseline",
+    if DEST.name in PROTECTED_HASHES:
+        raise RuntimeError("Candidate version would overwrite a protected release")
+    chunks = [f"-- FERAL Project Renaissance {VERSION} | v{GAME_BASELINE} client baseline",
               "-- Gameplay acceptance is unverified unless independently observed.",
               "local options = ...",
               'if type(options) ~= "table" then options = {} end',
@@ -135,11 +154,22 @@ def build():
         chunks.append(f'sources["{name}"] = [============[\n{content}]============]')
         manifest[name] = {"sha256": hashlib.sha256(content.encode()).hexdigest(),
                           "bytes": len(content.encode())}
+    # Identify the source independently of the distributable containing this
+    # value. Embedding the bundle's own hash would be self-referential.
+    fingerprint_input = {"release": RELEASE,
+                         "modules": [{"name": name, "sha256": manifest[name]["sha256"]}
+                                     for name in MODULES]}
+    source_fingerprint = hashlib.sha256(json.dumps(
+        fingerprint_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     chunks.append("local moduleOrder = {" + ",".join(json.dumps(n) for n in MODULES) + "}")
-    chunks.append(BOOT.strip())
+    metadata = "{version=" + json.dumps(VERSION) + ",territoryVersion=" + json.dumps(TERRITORY_VERSION) \
+        + ",channel=" + json.dumps(CHANNEL) + ",sourceFingerprint=" + json.dumps(source_fingerprint) + "}"
+    chunks.append(BOOT.replace("__RELEASE_METADATA__", metadata).strip())
     data = ("\n".join(chunks) + "\n").encode()
     DEST.write_bytes(data)
-    record = {"version": VERSION, "game_baseline": 2412, "modules": manifest,
+    record = {"version": VERSION, "channel": CHANNEL, "integrated_territory_version": TERRITORY_VERSION,
+              "game_baseline": GAME_BASELINE, "modules": manifest,
+              "source_fingerprint": source_fingerprint,
               "bundle_sha256": hashlib.sha256(data).hexdigest(), "bundle_bytes": len(data),
               "stable_clean_v14_overwritten": False}
     (ROOT / "manifest.json").write_text(json.dumps(record, indent=2) + "\n")

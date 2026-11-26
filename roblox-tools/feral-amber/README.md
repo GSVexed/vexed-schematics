@@ -1,8 +1,10 @@
 # FERAL Territory 0.8.0 candidate
 
-The current source is integrated into **Renaissance 16.0.0**. See the [consolidated candidate loader and instructions](../renaissance/README.md), [release report](../renaissance/docs/OVERHAUL_16_RELEASE.md), [all-scenario acceptance ledger](../renaissance/docs/OVERHAUL_16_ACCEPTANCE.md) and [current test results](test-results.json). The candidate adds recurring scent capacity and overload scheduling, stale-route/config/character isolation, manual gamepad/touch priority, critical minigame yields, safe feeding cleanup and outcome continuity. Territory still starts OFF.
+The current source is integrated into **Renaissance 16.1.1**. Use the [current candidate loader and instructions](../renaissance/README.md), [engineering report](../renaissance/docs/V16_1_1_ENGINEERING_REPORT.md), [combined verification](../renaissance/candidate.json) and [Territory test results](test-results.json).
 
-**305/305 automated Territory checks and 304/304 integrated core checks pass locally**, including all previous scenarios. The new source is tested inside the current 16.0.0 bundle as well as against the protected stable hub. Native autonomous climb, flight and underwater-depth routing remain unsupported; current-server acceptance, full-map retention and device performance remain unverified. The old T01–T44 and S01–S62 ledgers below remain historical requirements, not erased gaps.
+The 0.8 source and its 305 behavioral scenarios are retained from the 16.0.2 line. Recurring scent capacity/overload scheduling, stale-route/config/character isolation, manual gamepad/touch priority, minigame yields, feeding cleanup and outcome continuity remain included. Territory starts OFF.
+
+Tests use deterministic simulations and service mocks. Native autonomous climb, flight and underwater-depth routing remain unsupported. Current-server acceptance, full-map retention, income and live device performance remain unverified. Historical T01–T44 and S01–S62 ledgers below retain those gaps.
 
 ## Stable 0.7.0 instructions and retained behavior
 

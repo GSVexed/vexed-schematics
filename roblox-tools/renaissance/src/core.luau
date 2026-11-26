@@ -9,7 +9,10 @@ function Core.scope()
     local s = { closed = false, tasks = {}, errors = {} }
     function s:add(fn)
         assert(type(fn) == "function", "cleanup must be callable")
-        if self.closed then pcall(fn) else table.insert(self.tasks, fn) end
+        if self.closed then
+            local ok,err=pcall(fn)
+            if not ok then table.insert(self.errors,tostring(err)) end
+        else table.insert(self.tasks, fn) end
         return fn
     end
     function s:close()
@@ -59,7 +62,7 @@ function Core.leases()
             return self:valid(owner), "existing lease changed"
         end
         if #plan == 0 then return false, "no compatible fields" end
-        local seen = {}
+        local seen, prepared = {}, {}
         for _, e in ipairs(plan) do
             if type(e.target) ~= "table" or e.key == nil then return false, "invalid patch target" end
             local slots = self.slots[e.target]
@@ -71,10 +74,21 @@ function Core.leases()
             if not ok or (e.kind and type(value) ~= e.kind) then
                 return false, "incompatible field: " .. tostring(e.key)
             end
+            if type(e.value) == "number" and not Core.finite(e.value) then
+                return false, "invalid numeric patch: " .. tostring(e.key)
+            end
+            table.insert(prepared, {target=e.target,key=e.key,value=e.value,before=value})
         end
         self.owners[owner] = {}
-        for _, p in ipairs(plan) do
-            local e = { target = p.target, key = p.key, value = p.value, before = p.target[p.key] }
+        for _, e in ipairs(prepared) do
+            -- A getter can fail or another setter can change a later field
+            -- after preflight. Unwind the earlier writes without replacing
+            -- that intervening external value or leaking an owner slot.
+            local readable, current = pcall(function() return e.target[e.key] end)
+            if not readable or current ~= e.before then
+                self:release(owner)
+                return false, "field changed during patch: " .. tostring(e.key)
+            end
             table.insert(self.owners[owner], e)
             self.slots[e.target] = self.slots[e.target] or {}
             self.slots[e.target][e.key] = owner
@@ -96,13 +110,13 @@ end
 
 Core.specs = {
     { "stamina", "Survival", "Infinite Stamina", "Client consumption profile; gameplay unverified" },
-    { "recovery", "Survival", "Active Recovery + Fast Effects", "One recovery owner; native effects unverified" },
+    { "recovery", "Survival", "Active Recovery + Fast Effects", "On by default; native effects unverified", default = true },
     { "effects", "Survival", "Fast Negative-Effect Recovery", "Injury, bleed and venom measured separately", linked = "recovery" },
     { "robloxAFK", "Survival", "Roblox Anti-AFK", "Best-effort platform idle input" },
     { "survivalAFK", "Survival", "Survival Bonus AFK", "Bounded safe walks; survival credit observed separately" },
     { "minigame", "Survival", "Automatic Minigames", "Native sessions; grades come from game replies" },
     { "escape", "Survival", "Auto Escape", "Native struggle actions; friendly baby carry preserved" },
-    { "reach", "Combat", "Bite Reach", "Always enabled client geometry; server range unknown", permanent = true },
+    { "reach", "Combat", "Bite Reach", "Existing expanded reach; OFF restores normal game geometry", default = true },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
     { "attackSpeed", "Combat", "Adaptive Faster Bites", "62% to 55% after positive hit replies; backs off on repeated unconfirmed stock-range contacts", default = true },
     { "holdBite", "Combat", "Hold to Repeat Bites", "Re-armed M1 edges; native hunter bites can run beside separate minigame presses", default = true },
@@ -165,9 +179,22 @@ function Core.ledger(limit)
     end
     -- Unknown or disappeared status attributes never count as a cure.
     function l:sample(s, mode)
+        if type(s) ~= "table" or not Core.finite(s.now) then
+            self.previous,self.staminaObservation=nil,nil
+            return
+        end
+        -- Keep observations independent of the mutable snapshot shared by the
+        -- action owners. Reusing a snapshot must not rewrite our baseline.
+        s=table.clone(s)
+        mode=type(mode)=="string" and mode or "UNKNOWN"
+        s.mode=mode
         local previous = self.previous
         self.previous = s
+        if previous and (previous.char~=s.char or previous.species~=s.species) then
+            self.rates={}
+        end
         if previous and previous.char==s.char and previous.species==s.species
+            and previous.mode==mode
             and previous.locomotion==s.locomotion and previous.maxStamina==s.maxStamina
             and previous.moving==s.moving and previous.combat==s.combat
             and Core.finite(previous.stamina) and Core.finite(s.stamina)
@@ -183,20 +210,23 @@ function Core.ledger(limit)
         if not previous or previous.char ~= s.char or previous.mode ~= mode
             or previous.combat ~= s.combat or previous.moving ~= s.moving
             or previous.species ~= s.species or previous.maxHP ~= s.maxHP or s.now-previous.now < .1
-            or s.now-previous.now > 1.5 then s.mode = mode; return end
-        s.mode = mode
+            or s.now-previous.now > 1.5 then return end
         local dt = s.now-previous.now
         local key = mode .. ":" .. tostring(s.combat) .. ":" .. (s.moving and "moving" or "still")
         local bucket = self.rates[key] or { seconds = 0, hp = 0, effects = {}, stamina = {} }
         self.rates[key] = bucket
         bucket.seconds += dt
-        if Core.finite(s.hp) and Core.finite(previous.hp) and previous.hp < previous.maxHP-.2 then
-            if s.hp >= previous.hp then bucket.hp += s.hp-previous.hp
+        if Core.finite(s.hp) and Core.finite(previous.hp) and Core.finite(previous.maxHP)
+            and previous.maxHP>0 and previous.hp>=0 and s.hp<=s.maxHP and previous.hp < previous.maxHP-.2 then
+            if s.hp >= previous.hp then
+                bucket.hp += s.hp-previous.hp
+                bucket.hpSeconds=(bucket.hpSeconds or 0)+dt
+                bucket.hpNormalized=(bucket.hpNormalized or 0)+(s.hp-previous.hp)/s.maxHP
             else bucket.damage = (bucket.damage or 0)+1 end
         end
         for _, name in ipairs({ "injury", "bleed", "venom" }) do
             local a, b = previous[name], s[name]
-            if Core.finite(a) and Core.finite(b) and a > 0 and b <= a then
+            if Core.finite(a) and Core.finite(b) and a > 0 and b >= 0 and b <= a then
                 local effect = bucket.effects[name] or { seconds = 0, decrease = 0 }
                 bucket.effects[name] = effect
                 effect.seconds += dt

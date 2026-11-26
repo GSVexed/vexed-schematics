@@ -3,37 +3,47 @@ local Controller = {}
 -- target and timing, and retain ambiguity instead of assigning the newest bite.
 function Controller.matchFeedback(Core,transactions,data,now)
     if type(data)~="table" or data.v==nil then return nil,false end
-    local best,bestRank,bestTime,secondTime=nil,math.huge,math.huge,math.huge
+    local best,bestRank,matches,abilityOverlap=nil,math.huge,0,false
     for _,tx in ipairs(transactions) do
         local corrected=tx.feedback and not tx.feedback.safe and tx.feedback.v==data.v
             and Core.finite(tx.feedback.dmg) and tx.feedback.dmg==0 and Core.finite(data.dmg) and data.dmg>0
-        if tx.nativeAt and not tx.classified and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
-            local target=tx.nativeTarget or tx.focusTarget and tx.focusTarget.char or tx.target and tx.target.char
+        if tx.nativeAt and not tx.closed and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
+            local target=tx.focusTarget and tx.focusTarget.char or tx.target and tx.target.char
             local seenVictim=tx.hpBefore and tx.hpBefore[data.v]~=nil
             -- Real FeralHit replies may involve a different nearby victim
             -- than the client's projected target. Prefer exact matches but
             -- allow a unique weaker nearby-victim match.
-            local rank=target==data.v and 0
-                or (target==nil and seenVictim) and 1
-                or (target~=nil and seenVictim) and 2 or nil
+            local rank=tx.nativeTarget==data.v and 0
+                or tx.localTarget==data.v and 1
+                or target==data.v and 2
+                or seenVictim and 3 or nil
             if rank then
-                local delta=math.abs(now-(tx.claimDue or tx.nativeAt))
-                if rank<bestRank then
-                    best,bestRank,bestTime,secondTime=tx,rank,delta,math.huge
+                if tx.abilityAmbiguous then
+                    abilityOverlap=true
+                elseif rank<bestRank then
+                    best,bestRank,matches=tx,rank,1
                 elseif rank==bestRank then
-                    if delta<bestTime then best,secondTime,bestTime=tx,bestTime,delta
-                    elseif delta<secondTime then secondTime=delta end
+                    matches+=1
                 end
             end
         end
     end
-    local ambiguous=best~=nil and secondTime-bestTime<=.085001
+    -- Neither timing proximity nor a shared target is a transaction ID.
+    -- Do not train cadence or label damage when multiple equal candidates fit.
+    local ambiguous=abilityOverlap or best~=nil and matches>1
     return not ambiguous and best or nil,ambiguous
+end
+local function nativeState(native)
+    if not native or type(native.state)~="function" then return nil,false end
+    local ok,state,known=pcall(native.state)
+    if ok then return state,known end
+    return nil,false
 end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "16.1.0", tokenIdentity = tokenIdentity,
+    local h = { version = M.release and M.release.version or "unbundled",
+        sourceFingerprint = M.release and M.release.sourceFingerprint, tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -61,7 +71,8 @@ function Controller.new(M,bridge,options)
     -- A pending synthetic reset can outlive the current Heartbeat. Never
     -- press during an asynchronously arriving native grab begin.
     bridge.combatPulseBlocked = function()
-        return h.closed or h.nativeGrabBusy==true or h.grab.active==true
+        return h.closed or h.inputSuspended==true or not h.registry.byId.holdBite.requested
+            or h:hasNativeGrab(bridge.clock())
     end
     h.rescue = M.rescue.new(bridge,h.ledger)
     h.hippo = M.hippo.new(Core,bridge,h.ledger)
@@ -69,6 +80,36 @@ function Controller.new(M,bridge,options)
     h.zoom = M.zoom.new(bridge.player)
     h.voice = M.voice.new(bridge.Players,bridge.player)
     h.settingsAvailable = bridge:io().available ~= false
+    function h:hasNativeGrab(now)
+        if self.grab.active then return true end
+        local observed=self.nativeGrabSession
+        return observed~=nil and observed.char==bridge.player.Character
+            and observed.generation==bridge.generation and now-observed.at<=8
+    end
+    function h:focusChanged(focused)
+        if self.closed then return end
+        self.windowFocused=focused==true
+        -- Focus return does not resurrect a hold whose release was missed.
+        -- A fresh gameplay input must establish ownership again.
+        self.inputSuspended=true
+        self.physicalM1Input=nil
+        self.combatInput:cancel()
+        self:stopWalk("window focus changed")
+    end
+    function h:observeCombatAbility(s,now)
+        if not s.alive then return end
+        -- FeralHit does not identify which ordinary bite or ability caused
+        -- damage. Keep the real reply, but suspend ordinary-bite attribution
+        -- across this bounded overlap rather than training cadence on it.
+        self.abilityEvidenceUntil=now+2.6
+        for _,tx in ipairs(self.transactions) do
+            if tx.generation==s.generation and tx.nativeAt and not tx.closed
+                and not tx.feedback and not tx.abilityAmbiguous
+                and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
+                tx.abilityAmbiguous,tx.rateEligible,tx.dirty=true,false,true
+            end
+        end
+    end
     function h:save()
         if self.closed then return false end
         for id in pairs(self.settings.states) do self.settings.states[id] = self.registry.byId[id].requested end
@@ -89,11 +130,18 @@ function Controller.new(M,bridge,options)
     function h:clearFlight()
         self:releaseFlightRepair()
         self.flightEpisode,self.flightStatus=nil,nil
-        self.features.leases:release("surface")
-        self.surfaceUntil = nil
+        self:releaseSurface()
         if self.drop then
             bridge:restoreAttribute(self.drop.char,"FeralFlyDrop",true,self.drop.before)
             self.drop = nil
+        end
+    end
+    function h:releaseSurface()
+        self.features.leases:release("surface")
+        self.surfaceUntil = nil
+        local request=self.surfaceRequest;self.surfaceRequest=nil
+        if request then
+            bridge:restoreAttribute(request.char,"FeralFlyRequest",request.value,request.before)
         end
     end
     function h:releaseFlightRepair()
@@ -104,8 +152,13 @@ function Controller.new(M,bridge,options)
         end
     end
     function h:noteFlightCancel(input,s,now)
-        if not self.registry.byId.flight.requested or self.grab.active
-            or bridge:attribute(s.char,"Species")~="Vulture" or s.talonLock==nil then return end
+        if not self.registry.byId.flight.requested or self:hasNativeGrab(now)
+            or s.talonLock==nil then return false end
+        local config=bridge:config("FlightConfig")
+        local compatible,eligible=pcall(function() return config.canFly(s.char) end)
+        if not compatible or eligible~=true then return false end
+        -- The captured Talon controller owns Space/ButtonB for any eligible
+        -- animal using this binding. Dive has a different native cancel path.
         local info=bridge.ContextActionService:GetAllBoundActionInfo().FeralTalonLetGo
         for _,key in ipairs(info and info.inputTypes or {}) do
             if key==input.KeyCode then
@@ -116,14 +169,15 @@ function Controller.new(M,bridge,options)
                 end
                 q.cancelAt=now
                 q.airborne=q.airborne or s.flying or s.hum.FloorMaterial==Enum.Material.Air
-                return
+                return true
             end
         end
+        return false
     end
     function h:stepFlightHandoff(s,now)
         if self.flightRepair then
             local r=self.flightRepair
-            if not s.alive or r.char~=s.char or s.grab or s.captured or s.ability or s.chat or s.gameMenu
+            if not s.alive or r.char~=s.char or r.generation~=s.generation or s.grab or s.captured or s.ability or s.chat or s.gameMenu
                 or now-r.at>1.5 then self:releaseFlightRepair()
             elseif (s.root.Position-r.position).Magnitude>1.5 and s.root.AssemblyLinearVelocity.Magnitude>2 then
                 self.flightStatus="Movement observed after native restart; cause unverified"
@@ -173,7 +227,7 @@ function Controller.new(M,bridge,options)
         -- v2412 FeralFlight consumes these normal drop/relaunch intents. Never
         -- edit native movers, anchors, velocities, capture flags or positions.
         q.restarted=true
-        self.flightRepair={char=s.char,at=now,position=s.root.Position}
+        self.flightRepair={char=s.char,generation=s.generation,at=now,position=s.root.Position}
         local a=bridge:setAttribute(s.char,"FeralFlyRelaunch",now)
         local b=a and bridge:setAttribute(s.char,"FeralFlyDrop",true)
         if not b then self:releaseFlightRepair() end
@@ -197,12 +251,20 @@ function Controller.new(M,bridge,options)
         if id == "robloxAFK" then self.idleUnavailable = nil end
         if id == "climb" and not on then self.climbQueue = nil end
         if id=="autoBite" and not on then self.combatInput:cancel() end
-        if id=="holdBite" and not on then self.combatInput.held=nil end
+        if id=="holdBite" and not on then
+            self.physicalM1Input=nil
+            self.combatInput:cancel()
+        end
         if id=="attackSpeed" then bridge.biteTiming=nil;self.combatInput.nextAttempt=0;self.combatInput:resetRate() end
         if id=="voice" then self.voice:setEnabled(on) end
         self.features.nextReconcile = 0
         local s = bridge:snapshot(now,false)
         self.features:reconcile(s,now,true) -- both true AND false are reconciled
+        if id=="reach" then
+            self.guide,self.guideAt=nil,nil
+            self.nextScan=0
+            self.policy.combatApproachUntil=0
+        end
         self:ackLocal(s)
         self:save()
         return self.registry.byId[id].applied == (on == true)
@@ -214,15 +276,24 @@ function Controller.new(M,bridge,options)
         self.recovery:clearPose()
         self.recovery.lastAutomaticCharacter,self.recovery.previous = nil,nil
         self.recovery.observations,self.recovery.nativeEchoObserved = {},false
+        self.recovery.conditionChar,self.recovery.conditionSeenUntil,self.recovery.conditionSeen=nil,0,{}
+        self.recovery.backoffUntil,self.recovery.nextObserve=0,0
+        self.recovery.releaseFailedChar,self.recovery.releasingChar=nil,nil
+        bridge:clearCombatTargets()
         bridge.biteTiming,bridge.deferNativeDiscovery=nil,false
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.nativeGrabBusy,self.nativeGrabSession,self.nativeGrabUntil=false,nil,nil
+        self.abilityEvidenceUntil=nil
+        self.policy.attackUntil,self.policy.actionUntil,self.policy.lastRestRelease=0,0,-math.huge
+        self.policy.combatApproachUntil=0
         self.grab:reset("animal changed")
+        self.nativeGrabSession=nil
         self:cancelGrabWake()
         self.grabInput:release()
         bridge:releaseSyntheticBite()
         self.feeding:close(now)
         self.combatInput:cancel()
+        self.physicalM1Input=nil
         self.combatInput:resetRate()
         self.extendedConfidence=setmetatable({},{__mode="k"})
         bridge.extendedConfidence=self.extendedConfidence
@@ -233,12 +304,17 @@ function Controller.new(M,bridge,options)
         self.features:releaseFlag()
         self.features.nextReconcile = 0
         self.climbQueue,self.guide,self.transactions,self.lastIntent = nil,nil,{},nil
+        self.snapshot=nil
         self.ledger.previous = nil
         self.ledger.staminaObservation=nil
+        self.lastSurvival,self.lastGrabClock,self.lastGrabPending,self.combatStatusAt=nil,nil,nil,nil
+        self.combatStatus,self.biteReadiness=nil,nil
+        self.nextScan,self.nextSlow,self.nextSample,self.nextGrabPoll=0,0,0,0
         self.anchor,self.anchorChar = nil,nil
         self.ledger:event("character_generation",now,{generation = generation})
         self.tests:characterChanged(bridge.character)
         self.nextWalk = now+90
+        self.nextFlight,self.nextEscape,self.rescue.nextAt=0,0,0
     end
     function h:physicalInput(kind)
         local now = bridge.clock()
@@ -293,7 +369,7 @@ function Controller.new(M,bridge,options)
     function h:carryInput(input)
         if not self.active or self.closed or bridge:grabTextFocused() then return false end
         local now=bridge.clock()
-        local s=bridge:snapshot(now,true);s.grab=self.grab.active
+        local s=bridge:snapshot(now,true);s.grab=self:hasNativeGrab(now)
         local handled=self.rescue:input(s,now)
         if handled then
             self.earlyInputs[input]=now
@@ -311,22 +387,26 @@ function Controller.new(M,bridge,options)
         if kind==Enum.UserInputType.MouseButton1
             and (bridge.syntheticPressing or now<(bridge.syntheticM1Until or 0)
                 and bridge.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)) then return end
-        if kind==Enum.UserInputType.MouseButton1 then
-            -- Roblox returns the same physical InputObject on its real
-            -- Begin/End pair. A synthetic repeat creates a different one.
-            -- Preserve that identity so a delayed virtual InputEnded cannot
-            -- cancel the user's original held button.
-            self.physicalM1Input=input
-        end
         local previous = self.earlyInputs[input]
         if previous and now-previous < .1 then return end
         self.earlyInputs[input] = now
         local click = kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.MouseButton2
         local primary = kind == Enum.UserInputType.MouseButton1
         local point = bridge.UserInputService:GetMouseLocation()
-        if click and self.ui:contains(point) then return end
+        if (click or key==Enum.KeyCode.ButtonR2) and self.ui:contains(point) then
+            if primary or key==Enum.KeyCode.ButtonR2 then
+                self.inputSuspended=true
+                self.physicalM1Input=nil
+                self.combatInput:cancel()
+            end
+            return
+        end
         local s = bridge:snapshot(now,false)
-        if s.gameMenu then return end
+        if s.gameMenu or self.windowFocused==false then return end
+        if primary or key==Enum.KeyCode.ButtonR2 then
+            self.inputSuspended=false
+            if primary then self.physicalM1Input=input end
+        end
         self.features:hippoInput(s,key)
         if key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonY
             or ((primary or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
@@ -340,8 +420,15 @@ function Controller.new(M,bridge,options)
             self:cancelGrabWake()
             return
         end
-        if key==Enum.KeyCode.Space or key==Enum.KeyCode.ButtonB then self:noteFlightCancel(input,s,now) end
-        if key == Enum.KeyCode.E or (primary or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
+        local flightCancel=(key==Enum.KeyCode.Space or key==Enum.KeyCode.ButtonB) and self:noteFlightCancel(input,s,now)
+        if flightCancel then
+            self.policy:input("action",now);self.recovery:release("manual native flight release",now)
+            self.combatInput:cancel();return
+        end
+        -- WolfController binds E/ButtonB to native feeding. Preserve flight's
+        -- active ButtonB cancellation, which has priority over feeding.
+        if key == Enum.KeyCode.E or key==Enum.KeyCode.ButtonB and not (s.ability or s.flying)
+            or (primary or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
             self.feeding:input(s,now)
             self.policy:input("action",now)
             self.recovery:release("manual feeding input",now)
@@ -350,15 +437,17 @@ function Controller.new(M,bridge,options)
         end
         if primary or key == Enum.KeyCode.ButtonR2 then
             self.policy:input("attack",now)
-            self.recovery:release("attack input",now)
+            local restReleased=self.recovery:release("attack input",now)
             if primary or key == Enum.KeyCode.ButtonR2 then
                 self.feeding:attack(s,now);self.rescue:cancel()
-                local tx = { intent = now, lock = self.policy:restLocked(now), generation = s.generation }
+                local tx = { intent = now, input=input,lock = self.policy:restLocked(now),
+                    generation = s.generation,restExitFailed=not restReleased }
                 self.lastIntent = tx
                 table.insert(self.transactions,tx)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
                 self.ledger:event("attack_intent",now,{restLock = tx.lock})
-                self.combatInput:input(s,now,primary and "M1" or "R2")
+                if restReleased then self.combatInput:input(s,now,primary and "M1" or "R2",input)
+                else self.combatInput:cancel() end
             end
         elseif key == Enum.KeyCode.E or key == Enum.KeyCode.F or key == Enum.KeyCode.G
             or key==Enum.KeyCode.Z or key==Enum.KeyCode.X
@@ -376,9 +465,31 @@ function Controller.new(M,bridge,options)
         if kind==Enum.UserInputType.MouseButton1 and bridge.syntheticPressing then return end
         if kind == Enum.UserInputType.MouseButton2 and bridge.clock() < (self.syntheticUntil or 0) then return end
         self:physicalInput("other")
+        if processed then
+            -- Native movement/ability bindings consume their own keyboard
+            -- events too. Preserve those observations (e.g. X/Z gait intent),
+            -- while consumed attack inputs never establish held ownership.
+            if kind~=Enum.UserInputType.MouseButton1 and key~=Enum.KeyCode.ButtonR2
+                and not bridge.UserInputService:GetFocusedTextBox() then
+                self:preInput(input)
+            end
+            -- A later native/UI binding can consume the original event after
+            -- our priority observer. Never turn its consumed click into a
+            -- delayed attack through the optional Rest-exit buffer.
+            local pending,held=self.combatInput.pending,self.combatInput.held
+            if kind==Enum.UserInputType.MouseButton1 or key==Enum.KeyCode.ButtonR2
+                or pending and pending.input==input or held and held.input==input then
+                self.combatInput:cancel()
+                self.physicalM1Input=nil
+                self.inputSuspended=true
+            end
+            if self.lastIntent and self.lastIntent.input==input and not self.lastIntent.nativeAt then
+                self.lastIntent.consumed=true
+            end
+            return
+        end
         if bridge.UserInputService:GetFocusedTextBox() then return end
         self:preInput(input)
-        if processed then return end
         if key == Enum.KeyCode.Q and self.registry.byId.climb.requested then
             local s = bridge:snapshot(bridge.clock(),false)
             local allowed = self.policy:allowed("climb",s,s.now)
@@ -392,13 +503,15 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         local kind,key=input.UserInputType,input.KeyCode
         if kind==Enum.UserInputType.MouseButton1 then
+            -- Owned synchronous releases may reuse the engine's mouse object.
+            -- Suppress those before consulting optional InputObject identity.
+            if bridge.syntheticReleasing or bridge.syntheticPressing then return end
             if input==self.physicalM1Input then
                 self.physicalM1Input=nil
                 self.combatInput:release("M1",bridge.clock())
                 return
             end
-            if bridge.syntheticReleasing or bridge.syntheticPressing
-                or bridge.syntheticM1~=nil
+            if bridge.syntheticM1~=nil
                 or bridge.clock()<(bridge.syntheticM1Until or 0) then
                 return
             end
@@ -415,6 +528,9 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         local now = bridge.clock()
         local s = bridge:snapshot(now,false)
+        if s.ability or key=="FeralCrushBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
+            self:observeCombatAbility(s,now)
+        end
         if key=="FeralCrushAt" then self.features:hippoAttribute(s) end
         if key=="FeralCrushAt" or key=="FeralCrushBiteAt" then self.hippo:observe(s,now) end
         if key=="FeralCrushBiteAt" and s.species=="Hippo" and Core.finite(bridge:attribute(s.char,key)) then
@@ -438,6 +554,7 @@ function Controller.new(M,bridge,options)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
             end
             tx.nativeAt,tx.claimDue,tx.classified = now,now+bridge:biteDelay(s.char),false
+            tx.abilityAmbiguous=s.ability==true or now<(self.abilityEvidenceUntil or 0)
             -- Only confirmed *stock*-range contacts can train attack cadence.
             -- Extended-only reach, predictive FX, and a bare bite sound are
             -- never treated as server proof.
@@ -457,18 +574,19 @@ function Controller.new(M,bridge,options)
                 and guide.blocked~=true and guide.obstruction~=true
             tx.rateTarget=clear and focus or nil
             tx.rateEligible=tx.rateTarget~=nil and self.registry.byId.attackSpeed.requested
-                and (self.combatInput.held~=nil or self.registry.byId.autoBite.requested)
+                and (self.combatInput.held~=nil or self.registry.byId.autoBite.requested) and not tx.abilityAmbiguous
+            tx.observeUntil=tx.claimDue+2.0
             tx.hpBefore={}
             for _,target in ipairs(bridge.allCandidates or {}) do
-                if target.root.Parent and (target.root.Position-s.root.Position).Magnitude<=45 then
-                    tx.hpBefore[target.char]={hp=target.hum.Health,maxHP=target.hum.MaxHealth}
+                if bridge:currentTargetBody(target) and (target.root.Position-s.root.Position).Magnitude<=45 then
+                    tx.hpBefore[target.char]={hp=target.hum.Health,maxHP=target.hum.MaxHealth,hum=target.hum}
                 end
             end
             self.ledger:event("native_bite_marker",now,{requestObserved = false,claimObserved = false})
         else
             -- Native actions can begin between heartbeats. Release competing
             -- automation on the actual state change, preserving manual input.
-            s.grab,s.rescuing = self.grab.active,self.rescue.pending~=nil
+            s.grab,s.rescuing = self:hasNativeGrab(now),self.rescue.pending~=nil
             s.feeding = s.feeding or self.feeding.busy
             local allowed,why=self.policy:allowed("recovery",s,now,self.recovery.purpose)
             if self.recovery.owned and not allowed then self.recovery:release(why,now) end
@@ -490,7 +608,8 @@ function Controller.new(M,bridge,options)
                 self.hippo:feedback(data,now)
                 local tx,ambiguous=Controller.matchFeedback(Core,self.transactions,data,now)
                 if tx then
-                    tx.feedback=data;tx.nativeTarget=data.v
+                    tx.feedback=data;tx.nativeTarget=data.v;tx.dirty=true
+                    tx.targetMismatch=tx.localTarget~=nil and tx.localTarget~=data.v
                     if Core.finite(data.dmg) and data.dmg>0 and data.safe~=true then
                         tx.positiveReply=true
                         local confidence=self.extendedConfidence[data.v]
@@ -514,6 +633,10 @@ function Controller.new(M,bridge,options)
                     self.lastUnmatchedGameHit=now
                     self.combatStatus="Game reports a hit · local bite association uncertain"
                 end
+                if not tx then
+                    self.ledger:event("native_outgoing_hit_reply_unmatched",now,
+                        {reason=ambiguous and "ambiguous overlapping attacks" or "no matching native bite"})
+                end
             end
             return
         end
@@ -522,27 +645,49 @@ function Controller.new(M,bridge,options)
             return
         end
         if kind=="biteLocal" then
-            -- A client-side FX signal can arrive late or refer to a different
-            -- attack when bites are rapid. It is not an authoritative target
-            -- identity and must never remap a more recent hit transaction.
-            self.ledger:event("client_bite_fx_only",bridge.clock(),{claimObserved=false})
+            local at=bridge.clock()
+            self.ledger:event("client_bite_fx_only",at,{claimObserved=false})
+            local candidates,due={},{}
+            for index=#self.transactions,1,-1 do
+                local tx=self.transactions[index]
+                if tx.generation==bridge.generation and tx.nativeAt and not tx.classified
+                    and not tx.localTarget and at>=tx.nativeAt and at-tx.nativeAt<1.5 then
+                    table.insert(candidates,tx)
+                    if at>=(tx.claimDue or tx.nativeAt)-.03 then table.insert(due,tx) end
+                end
+            end
+            -- Never attach an old delayed impact to a new bite whose claim
+            -- has not occurred. Ambiguous overlaps remain local observations.
+            local tx=#candidates==1 and candidates[1] or #due==1 and due[1] or nil
+            if tx then
+                tx.localTarget,tx.localImpactAt,tx.dirty=event,at,true
+                self.ledger:event("native_client_bite_candidate",at,{claimObserved=false})
+            else self.ledger:event("native_client_bite_candidate_unmatched",at,{claimObserved=false}) end
             return
         end
-        local now = bridge:serverNow()
-        if kind=="grab" then
-            local session=type(data)=="table" and data.f
-            if event=="begin" then
-                self.nativeGrabSession=session
-                self.nativeGrabBusy=true
-                self.nativeGrabUntil=bridge.clock()+35
-                -- Release any partially held synthetic M1 before the grab
-                -- minigame can interpret that input as an unwanted press.
-                bridge:releaseSyntheticBite()
-                self.combatInput.awaiting=nil
-            elseif event=="end" and (self.nativeGrabSession==nil or session==self.nativeGrabSession) then
-                self.nativeGrabBusy,self.nativeGrabSession=false,nil
+        -- Observe the game's action ownership even with automation OFF.
+        -- This never schedules presses or leases its controls while disabled.
+        if kind=="grab" and type(data)=="table" then
+            local session=data.f or (event=="begin" and data.id)
+            local observed=self.nativeGrabSession
+            local at=bridge.clock()
+            if M.grab.validId(session) then
+                if event=="begin" then
+                    self.nativeGrabSession={id=session,char=bridge.player.Character,generation=bridge.generation,at=at}
+                    self.recovery:release("native minigame",at);self:stopWalk("native minigame")
+                elseif observed and tostring(observed.id)==tostring(session)
+                    and observed.generation==bridge.generation then
+                    if event=="end" then self.nativeGrabSession=nil
+                    elseif event=="strike" or event=="res" or event=="bite" or event=="n" then observed.at=at end
+                end
             end
         end
+        local now = bridge:serverNow()
+        if kind=="grab" and event=="begin" then
+            bridge:releaseSyntheticBite()
+            self.combatInput.awaiting=nil
+        end
+        self.nativeGrabBusy=self:hasNativeGrab(bridge.clock())
         if not now then return end
         local c = bridge:config("GrabV2Config")
         local handled = self.grab:event(event,data,now,bridge.generation,c and c.PERFECT or .32,c and c.PASSES or 2.5,
@@ -574,7 +719,9 @@ function Controller.new(M,bridge,options)
         self:cancelGrabWake()
         if not self.active or self.closed or not self.grab.enabled or not p or (p.wakes or 0)>=4 then return end
         local now=bridge:serverNow()
-        if not now or p.at<=now then return end
+        if not now then return end
+        p.localEnds=p.localEnds or bridge.clock()+math.max(0,p.ends-now)
+        if p.at<=now then return end
         wake={pending=p,at=p.at};self.grabWake=wake
         wake.handle=bridge:delay(math.max(.001,p.at-now),function()
             if self.grabWake~=wake then return end
@@ -592,14 +739,19 @@ function Controller.new(M,bridge,options)
         if not clock or not s.alive then return end
         local native=bridge.grabController
         if sync and native then
-            local state,known=native.state()
+            local state,known=nativeState(native)
             local cfg=bridge:config("GrabV2Config")
             if state or known==true then
                 self.grab:syncNative(state,clock,s.generation,cfg and cfg.PERFECT or .32,cfg and cfg.PASSES or 2.5,now)
             end
         end
         local p=self.grab.pending
-        if not p then return end
+        if not p then
+            -- Session timeout must also run between strikes; otherwise a lost
+            -- end packet with no private UI handle can block recovery forever.
+            self.grab:tick(clock,s.generation,false,function()return false end)
+            return
+        end
         if self.lastGrabClock==clock and self.lastGrabPending==p then return end
         self.lastGrabClock,self.lastGrabPending=clock,p
         s.grab=true
@@ -607,10 +759,15 @@ function Controller.new(M,bridge,options)
             -- Native-issued IDs and the actual current server clock only.
             -- Recheck after inspection; never backdate or anticipate a press.
             local at=bridge:serverNow()
-            if not at or at<p.t0 or at>=p.ends-.002
-                or math.abs(M.grab.triangle(at,p.t0,p.speed,p.from)-p.target)>p.half*.98 then return false end
+            if not at then return false end
+            if at<p.t0 or at>=p.ends-.002
+                or math.abs(M.grab.triangle(at,p.t0,p.speed,p.from)-p.target)>p.half*.98 then
+                return false,"clock_moved",at
+            end
             local sent=bridge:fire("FeralGrabV2","press",session,strike,at)
-            if sent then bridge:markGrabPress(session,strike,now) end
+            -- An optional native-UI annotation cannot turn an already issued
+            -- press into a failed dispatch and allow a duplicate submission.
+            if sent then pcall(bridge.markGrabPress,bridge,session,strike,now) end
             return sent
         end)
     end
@@ -618,7 +775,7 @@ function Controller.new(M,bridge,options)
         local now = bridge.clock()
         if not self.active or self.closed or not self.registry.byId.flight.requested or now < (self.nextFlight or 0) then return false end
         local s = bridge:snapshot(now,true)
-        s.grab = self.grab.active
+        s.grab,s.rescuing = self:hasNativeGrab(now),self.rescue.pending~=nil
         local c = bridge:config("FlightConfig")
         local ok,canFly = pcall(function() return c.canFly(s.char) end)
         if not ok or canFly ~= true or s.flying or not s.surface or s.underwater
@@ -628,6 +785,7 @@ function Controller.new(M,bridge,options)
         local applied = self.features.leases:apply("surface",{
             {target = c.WATER,key = "NO_TAKEOFF",value = false,kind = "boolean"} })
         if not applied then return false end
+        self.surfaceRequest={char=s.char,value=now,before=bridge:attribute(s.char,"FeralFlyRequest")}
         if not bridge:setAttribute(s.char,"FeralFlyRequest",now) then self:clearFlight(); return false end
         self.surfaceUntil,self.nextFlight = now+1.15,now+.75
         self.ledger:event("surface_takeoff_requested",now)
@@ -746,81 +904,104 @@ function Controller.new(M,bridge,options)
     end
     function h:stepCombat(s,now)
         for _,tx in ipairs(self.transactions) do
-            if not tx.classified and tx.generation == s.generation then
+            if tx.generation == s.generation and not tx.closed then
                 if not tx.nativeAt and now-tx.intent > .45 and not self.combatInput.pending then
-                    tx.classified = true
-                    self.combatStatus = tx.lock and "No native bite marker · recent Rest lock possible" or "No native bite marker observed"
-                    self.ledger:event("no_native_bite_marker",now,{recentRest = tx.lock == true})
-                elseif tx.nativeAt and not tx.sampled and now >= tx.claimDue then
-                    tx.sampled = true
-                    if tx.rateEligible and tx.rateTarget and self.features.originalCombat
-                        and tx.rateTarget.root and tx.rateTarget.root.Parent then
-                        local geometryOK,geo=pcall(bridge.geometry,bridge,
-                            self.features.originalCombat,s,tx.rateTarget)
-                        local rayOK,blocked=pcall(bridge.occluded,bridge,s,tx.rateTarget)
-                        tx.rateAtClaim=geometryOK and geo and geo.valid and rayOK and blocked==false or false
-                    end
-                    local target=tx.focusTarget or self.guide and self.guide.target
-                    if target and target.root and target.root.Parent then
-                        local before=tx.hpBefore and tx.hpBefore[target.char]
-                        tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
-                        if tx.focusTarget then
-                            tx.extendedOnly=tx.focusExtendedOnly==true
-                        else
-                            tx.extendedOnly=self.guide and self.guide.extended and self.guide.extended.valid
-                                and not (self.guide.baseline and self.guide.baseline.valid) or false
+                    if not tx.classified then
+                        tx.classified = true
+                        local status = tx.consumed and "Input handled by native UI or another binding"
+                            or tx.restExitFailed and "Native Rest exit failed; normal input preserved"
+                            or tx.lock and "No native bite marker · recent Rest lock possible" or "No native bite marker observed"
+                        if not self.combatStatusAt or tx.intent>=self.combatStatusAt then
+                            self.combatStatus,self.combatStatusAt=status,tx.intent
                         end
-                        if tx.extendedOnly and tx.focusTarget and tx.focusTarget.char==target.char then
-                            -- At contact time, an unobstructed extended
-                            -- candidate is a credible auto-reach probe.
-                            local ok,geo=pcall(bridge.geometry,bridge,self.features.combat,s,target)
-                            local clear,blocked=pcall(bridge.occluded,bridge,s,target)
-                            tx.extendedClaimValid=ok and geo and geo.valid and clear and not blocked
+                        self.ledger:event("no_native_bite_marker",now,{recentRest = tx.lock == true,consumed=tx.consumed==true})
+                    end
+                elseif tx.nativeAt and now>=tx.claimDue then
+                    if not tx.sampled then
+                        tx.sampled = true
+                        local target = tx.focusTarget
+                        if tx.rateEligible and tx.rateTarget and self.features.originalCombat
+                            and bridge:currentTargetBody(tx.rateTarget) then
+                            local geometryOK,geo=pcall(bridge.geometry,bridge,self.features.originalCombat,s,tx.rateTarget)
+                            local rayOK,blocked=pcall(bridge.occluded,bridge,s,tx.rateTarget)
+                            tx.rateAtClaim=geometryOK and geo and geo.valid and rayOK and blocked==false or false
+                        end
+                        if target and bridge:currentTargetBody(target) then
+                            local before=tx.hpBefore and tx.hpBefore[target.char]
+                            tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
+                            tx.extendedOnly = tx.focusExtendedOnly==true
+                            if tx.extendedOnly then
+                                local ok,geo=pcall(bridge.geometry,bridge,self.features.combat,s,target)
+                                local clear,blocked=pcall(bridge.occluded,bridge,s,target)
+                                tx.extendedClaimValid=ok and geo and geo.valid and clear and blocked==false or false
+                            end
+                        end
+                        self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
+                    end
+                    if now>=(tx.nextHPRead or 0) or tx.dirty then
+                        tx.nextHPRead=now+.1
+                        local char=tx.nativeTarget or tx.localTarget or tx.target and tx.target.char
+                        if tx.observedChar~=char then
+                            tx.observedChar,tx.hpDrop,tx.hpInvalid=char,false,false
+                        end
+                        local ok,hum=pcall(function()return char and char:FindFirstChildOfClass("Humanoid")end)
+                        local before=char and tx.hpBefore and tx.hpBefore[char]
+                        if ok and hum and hum.Parent and before then
+                            if (before.hum and hum~=before.hum or hum.MaxHealth~=before.maxHP) and not tx.hpInvalid then
+                                tx.hpInvalid,tx.dirty=true,true
+                            end
+                            if not tx.hpInvalid and Core.finite(hum.Health) and Core.finite(before.hp)
+                                and hum.Health<before.hp-.05 and not tx.hpDrop then
+                                tx.hpDrop,tx.dirty=true,true
+                            end
                         end
                     end
-                    self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
-                elseif tx.nativeAt and tx.sampled and now>=tx.claimDue+.8
-                    and (tx.feedback or now>=tx.claimDue+2.0 or self:correlatedHPDrop(tx)) then
-                    tx.classified = true
-                    local target = tx.target
-                    local char=tx.nativeTarget or target and target.char
-                    local ok,hum=pcall(function()return char and char:FindFirstChildOfClass("Humanoid")end)
-                    local before=char and tx.hpBefore and tx.hpBefore[char]
-                    local drop=ok and hum and hum.Parent and before and hum.MaxHealth==before.maxHP and hum.Health<before.hp-.05
-                    local damage=tx.feedback and tx.feedback.dmg
-                    -- Two silent, clear extended-only contacts will
-                    -- temporarily pause *automatic* speculative attempts.
-                    -- This is a confidence guard, not proof of server rejection.
-                    if tx.extendedOnly and tx.extendedClaimValid and target and target.char
-                        and not drop and not tx.positiveReply and not tx.feedback
-                        and not (self.lastUnmatchedGameHit and now-self.lastUnmatchedGameHit<1.2) then
-                        local entry=self.extendedConfidence[target.char]
-                        if not entry then
-                            entry={misses=0,waitUntil=0}
-                            self.extendedConfidence[target.char]=entry
+                    if now>=tx.claimDue+.8 and (not tx.classified or tx.dirty) then
+                        local first=not tx.classified
+                        tx.classified,tx.dirty = true,false
+                        local drop=tx.hpDrop and not tx.hpInvalid
+                        local damage=tx.feedback and tx.feedback.dmg
+                        tx.status = tx.abilityAmbiguous and "Native ability overlaps · ordinary bite impact unassigned"
+                            or tx.feedback and tx.feedback.safe==true and "Game reply: target protected"
+                            or Core.finite(damage) and damage>0 and (string.format("Game reply reports %.1f damage",damage)
+                                ..(drop and " · HP decline correlated" or " · HP change unconfirmed"))
+                            or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
+                            or drop and "Target HP fell after native marker · attribution unverified"
+                            or tx.localTarget and "Local bite impact only · server hit/HP change unconfirmed"
+                            or "Native marker observed · no matching HP decline observed"
+                        if tx.targetMismatch then tx.status ..= " · local/server target differed" end
+                        if not self.combatStatusAt or tx.nativeAt>=self.combatStatusAt then
+                            self.combatStatus,self.combatStatusAt=tx.status,tx.nativeAt
                         end
-                        entry.misses+=1
-                        if entry.misses>=2 then
-                            entry.waitUntil=now+math.min(4,1.5+entry.misses*.5)
+                        if first or drop and not tx.dropReported then
+                            self.ledger:event(drop and "target_hp_decline_correlated" or "no_correlated_hp_decline",now,
+                                {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,late=not first,
+                                 targetMismatch=tx.targetMismatch==true,damageAcceptance = "unverified"})
+                            if drop then tx.dropReported=true end
                         end
-                        self.ledger:event("extended_contact_unconfirmed",now,{
-                            count=entry.misses,autoWait=entry.waitUntil>now,
-                        })
                     end
-                    if tx.rateEligible and tx.rateAtClaim and not tx.fastConfirmed
-                        and not drop and not (tx.feedback and tx.feedback.safe==true)
-                        and (not tx.feedback or tx.rateTarget and tx.feedback.v==tx.rateTarget.char) then
-                        self.combatInput:suspect(now)
+                    if now>=(tx.observeUntil or tx.claimDue+2) then
+                        local drop=tx.hpDrop and not tx.hpInvalid
+                        local target=tx.target
+                        -- Wait for the entire evidence window before adapting
+                        -- optional auto-attempts. Silence is not server rejection.
+                        if not tx.abilityAmbiguous and tx.extendedOnly and tx.extendedClaimValid and target and target.char
+                            and not drop and not tx.positiveReply and not tx.feedback
+                            and not (self.lastUnmatchedGameHit and now-self.lastUnmatchedGameHit<1.2) then
+                            local entry=self.extendedConfidence[target.char]
+                            if not entry then entry={misses=0,waitUntil=0};self.extendedConfidence[target.char]=entry end
+                            entry.misses+=1
+                            if entry.misses>=2 then entry.waitUntil=now+math.min(4,1.5+entry.misses*.5) end
+                            self.ledger:event("extended_contact_unconfirmed",now,
+                                {count=entry.misses,autoWait=entry.waitUntil>now})
+                        end
+                        if not tx.abilityAmbiguous and tx.rateEligible and tx.rateAtClaim and not tx.fastConfirmed and not drop
+                            and not (tx.feedback and tx.feedback.safe==true)
+                            and (not tx.feedback or tx.rateTarget and tx.feedback.v==tx.rateTarget.char) then
+                            self.combatInput:suspect(now)
+                        end
+                        tx.closed=true;tx.hpBefore=nil
                     end
-                    self.combatStatus = tx.feedback and tx.feedback.safe==true and "Game reply: target protected"
-                        or Core.finite(damage) and damage>0 and (string.format("Game reply reports %.1f damage",damage)
-                            ..(drop and " · HP decline correlated" or " · HP change unconfirmed"))
-                        or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
-                        or drop and "Target HP fell after native marker · attribution unverified"
-                        or "Native marker observed · no matching server hit reply"
-                    self.ledger:event(drop and "target_hp_decline_correlated" or "no_correlated_hp_decline",now,
-                        {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,damageAcceptance = "unverified"})
-                    tx.hpBefore=nil
                 end
             end
         end
@@ -875,8 +1056,7 @@ function Controller.new(M,bridge,options)
     function h:stepFlight(s,now)
         if self.surfaceUntil and (now >= self.surfaceUntil or s.underwater or s.flying
             or s.captured or s.grab or s.chat or s.gameMenu or s.attackHeld) then
-            self.features.leases:release("surface")
-            self.surfaceUntil = nil
+            self:releaseSurface()
         end
         if self.drop then
             if not s.flying then self.ledger:event("underwater_flight_exit_observed",now) end
@@ -905,7 +1085,6 @@ function Controller.new(M,bridge,options)
     function h:tick(dt)
         if not self.active or self.closed then return end
         local now = bridge.clock()
-        if self.territory then self.territory:tick(now) end
         if Core.finite(dt) and dt>0 then
             self.frameInterval=(self.frameInterval or dt)*.85+math.min(dt,.25)*.15
         end
@@ -913,15 +1092,25 @@ function Controller.new(M,bridge,options)
         local critical=self.registry.byId.minigame.requested and self.grab.active and self.grab.pending~=nil
         self.timingCritical,bridge.deferNativeDiscovery=critical,critical
         local s = bridge:snapshot(now,not critical and slow and self.registry.byId.flight.requested)
+        if s.ability then self:observeCombatAbility(s,now) end
+        if s.chat or s.gameMenu then
+            self.inputSuspended=true
+            self.physicalM1Input=nil
+            self.combatInput:cancel()
+        end
+        if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held=false,false,false end
         self.snapshot = s
         self.grab.enabled = self.registry.byId.minigame.requested
         local clock = s.serverNow
         if clock then
+            self.grabClockLostAt=nil
             local cfg = self.grab.enabled and bridge:config("GrabV2Config")
             local native = self.grab.enabled and self.grabInput:controller(now)
             local nativeState,nativeKnown
             if native and (self.grab.active or now >= (self.nextGrabPoll or 0)) then
-                nativeState,nativeKnown=native.state();self.nextGrabPoll=now+.25
+                local ok,state,known=pcall(native.state)
+                if ok then nativeState,nativeKnown=state,known end
+                self.nextGrabPoll=now+.25
             end
             if native and s.alive and (nativeState or nativeKnown==true) then
                 self.grab:syncNative(nativeState,clock,s.generation,cfg and cfg.PERFECT or .32,
@@ -930,15 +1119,27 @@ function Controller.new(M,bridge,options)
             critical=critical or self.grab.enabled and self.grab.active and self.grab.pending~=nil
             self.timingCritical,bridge.deferNativeDiscovery=critical,critical
             if not s.alive and self.grab.active then self.grab:reset("animal unavailable") end
-            s.grab,s.afkWalking = self.grab.active,self.walk ~= nil
+            s.grab,s.afkWalking = self:hasNativeGrab(now),self.walk ~= nil
             self.grabInput:update(self.grab,now,native,nativeState)
             self:pumpGrab(s,false)
+            s.grab=self:hasNativeGrab(now)
+            if not self.grab.active and self.grabInput.lease then self.grabInput:release() end
             self:updateGrabWake()
-        else self.grab.pending = nil; s.grab,s.afkWalking = self.grab.active,self.walk ~= nil end
-        if self.nativeGrabBusy and now>=(self.nativeGrabUntil or 0) then
-            self.nativeGrabBusy,self.nativeGrabSession=false,nil
+        else
+            self.grabClockLostAt=self.grabClockLostAt or now
+            local p=self.grab.pending
+            if not s.alive or now-self.grabClockLostAt>8 then
+                self.grab:reset(not s.alive and "animal unavailable" or "server clock unavailable; session paused")
+                self.grabInput:release()
+            elseif p and p.localEnds and now>p.localEnds+.1 then
+                self.grab.pending=nil;self.grab.status="strike expired while server clock unavailable"
+            end
+            self:cancelGrabWake()
+            s.grab,s.afkWalking = self:hasNativeGrab(now),self.walk ~= nil
         end
-        s.grab=s.grab or self.nativeGrabBusy==true
+        -- Both observed and newly adopted native strikes get their first legal
+        -- dispatch before any Territory discovery, routing or driver work.
+        if self.territory then self.territory:tick(now) end
         if not critical and now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
         local care=self.territory and self.territory.agent.enabled and self.territory.agent.goal
         self.feeding:tick(s,now,care and (care.kind=="EAT" or care.kind=="DRINK"))
@@ -951,14 +1152,17 @@ function Controller.new(M,bridge,options)
         -- re-enter owned Rest in the middle of that human-held attack.
         local repeatActive=self.registry.byId.holdBite.requested
             and (self.combatInput.held~=nil or s.attackHeld==true)
-            and s.alive and not s.chat and not s.gameMenu and not self.policy.manualRest
+            and s.alive and not s.chat and not s.gameMenu and not self.inputSuspended and not self.policy.manualRest
         if repeatActive then
             self.policy.attackUntil=math.max(self.policy.attackUntil,now+1.1)
-            if self.recovery.owned then self.recovery:release("held bite priority",now) end
+            if self.recovery.owned and not self.recovery:release("held bite priority",now) then
+                self.combatInput:cancel()
+            end
         end
         local auto=self.registry.byId.autoBite.requested and not (self.territory and self.territory.agent.enabled)
         local clear=auto and bridge:autoAttackTarget(s,self.guide,self.features.combat)
-        local grabActive=self.nativeGrabBusy==true or self.grab.active==true
+        self.nativeGrabBusy=self:hasNativeGrab(now)
+        local grabActive=self.nativeGrabBusy==true
             or self.grabInput.lease~=nil
         local lease=self.grabInput.lease
         -- WolfController.tryBite does not use CAS M1 binding. Its native
@@ -973,34 +1177,42 @@ function Controller.new(M,bridge,options)
         local strike=self.grab.pending
         local nearPress=strike and s.serverNow and math.abs(strike.at-s.serverNow)<.095 or false
         self.combatInput:tick(s,now,{
-            repeatHeld=self.registry.byId.holdBite.requested,automatic=auto,targetValid=clear,
+            repeatHeld=self.registry.byId.holdBite.requested and not self.inputSuspended,
+            automatic=auto and not self.inputSuspended,targetValid=clear,
+            inputSuspended=self.inputSuspended==true,
             minigameBusy=grabActive,nativeMinigame=nativeMini==true,
             minigamePressNear=nearPress==true,
             uiBlocked=self.ui:contains(bridge.UserInputService:GetMouseLocation()),
             beforeAttempt=function()
                 self.policy:input("attack",now)
-                self.recovery:release("native cadence input",now)
+                local released=self.recovery:release("native cadence input",now)
                 self.rescue:cancel();self:stopWalk("native cadence input")
+                return released
             end,
         })
         if not critical then self.features:reconcile(s,now) end
+        if not critical and now >= self.nextScan then
+            self.nextScan = now+((s.combat==true or s.attackHeld) and .12
+                or math.clamp((self.frameInterval or .02)*6,.12,.3))
+            local candidates = bridge:candidates(s,self.settings.range)
+            if self.features:combatProfileReady() then
+                self.guide = bridge:select(s,self.features.originalCombat,self.features.combat,candidates)
+
+            else
+                self.guide=nil
+                self.policy.combatApproachUntil=0
+            end
+            self.guideAt=now
+            self.ui:syncTracked(bridge.tracked)
+        end
+        self.hippo:tick(s,now,self.registry.byId.hippoRelease.requested,self.guide,self.features.originalCombat)
+        -- Recovery follows observed action ownership, never nearby-player distance.
         self.recovery.enabled = self.registry.byId.recovery.requested or self.territoryRecoveryOwner~=nil
         self.recovery:tick(s,now)
         self:stepClimb(s,now)
         self:stepEscape(s,now)
         if not critical then self:stepCombat(s,now) end
         self.biteReadiness=bridge:biteReadiness(s,now,self.policy)
-        if not critical and now >= self.nextScan then
-            self.nextScan = now+((s.combat==true or s.attackHeld) and .12
-                or math.clamp((self.frameInterval or .02)*6,.12,.3))
-            local candidates = bridge:candidates(s,self.settings.range)
-            if self.features.originalCombat and self.features.leases:valid("reach") then
-                self.guide = bridge:select(s,self.features.originalCombat,self.features.combat,candidates)
-            else self.guide = nil end
-            self.guideAt=now
-            self.ui:syncTracked(bridge.tracked)
-        end
-        self.hippo:tick(s,now,self.registry.byId.hippoRelease.requested,self.guide,self.features.originalCombat)
         if slow and not critical then
             self.nextSlow = now+.25
             self:stepFlight(s,now)
@@ -1032,7 +1244,7 @@ function Controller.new(M,bridge,options)
             self:updateGrabWake()
         end
         self:maskPose()
-        if self.guide and self.snapshot and self.features.leases:valid("reach") then
+        if self.guide and self.snapshot and self.features:combatProfileReady() then
             bridge:refreshGuide(self.snapshot,self.features.originalCombat,self.features.combat,self.guide)
         end
         self.features:paintHippoGait()
@@ -1078,6 +1290,7 @@ function Controller.new(M,bridge,options)
         self.active = false
         self.closed = true
         self.physicalM1Input=nil
+        self.nativeGrabSession=nil
         self.cleanupErrors = {}
         for _,cleanup in ipairs({
             function() if self.territory then self.territory.close() end end,
@@ -1098,7 +1311,11 @@ function Controller.new(M,bridge,options)
             local ok,why = pcall(cleanup)
             if not ok then table.insert(self.cleanupErrors,tostring(why)) end
         end
-        self.scope:close()
+        local closed,why=pcall(self.scope.close,self.scope)
+        if not closed then table.insert(self.cleanupErrors,tostring(why)) end
+        for _,scopeError in ipairs(self.scope.errors or {}) do
+            table.insert(self.cleanupErrors,tostring(scopeError))
+        end
         if bridge.env.FERAL_RENAISSANCE_ACTIVE == self then bridge.env.FERAL_RENAISSANCE_ACTIVE = nil end
         if bridge.env.FERAL_NOVA_PRIME_ACTIVE == self.marker then bridge.env.FERAL_NOVA_PRIME_ACTIVE = nil end
     end
