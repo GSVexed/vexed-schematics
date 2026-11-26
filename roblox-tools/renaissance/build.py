@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "zoom", "ui", "controller")
+CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "hippo", "features", "roblox", "zoom", "voice", "test_features", "ui", "controller")
 AMBER_MODULES=("ledger","model","planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
 MODULES=(*CORE_MODULES,*("amber_"+name for name in AMBER_MODULES))
 def module_path(name):
@@ -14,11 +14,17 @@ def module_path(name):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "15.7.0"
+VERSION = "15.8.7"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
+    "feral-renaissance-v15.8.6.lua": "28c6a2589cd5faee4a9fbf71b1560f3e60e46c18736e5a9a1f175ada1e66a9ed",
+    "feral-renaissance-v15.8.5.lua": "833f7767c817ae22a775d12ec2121e7243985f95ba76e52367d4f7b112421675",
+    "feral-renaissance-v15.8.4.lua": "1d25dee4390ba9d0256df1d0df8b6c867e94732380857bfe6f0be3e7cda9feae",
+    "feral-renaissance-v15.8.2.lua": "d6a00b02e97f5c1e440eefb78262a2cc211b1f3eff322c67a68a1a82062bf32f",
+    "feral-renaissance-v15.8.0.lua": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30",
+    "feral-renaissance-v15.7.0.lua": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb",
     "feral-renaissance-v15.6.2.lua": "c1275bd161e5548522d7ab47e9c791eba361d5d383337535d751dfab9afafa98",
     "feral-renaissance-v15.6.1.lua": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",
     "feral-renaissance-v15.6.0.lua": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
@@ -62,7 +68,8 @@ end
 for _, pair in ipairs({
     {"core","scope"},{"core","leases"},{"settings","sanitize"},{"policy","new"},
     {"grab","new"},{"grab_input","new"},{"recovery","new"},{"feeding","new"},{"combat_input","new"},{"rescue","new"},{"features","new"},{"roblox","new"},
-    {"zoom","new"},{"ui","mount"},{"controller","new"},
+    {"zoom","new"},{"voice","new"},{"ui","mount"},{"controller","new"},
+    {"hippo","new"},{"test_features","new"},
 }) do
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
@@ -106,7 +113,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.7.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.8.7] Ready · Right Shift · Server-first Ghost-hit Guard")
 return candidate
 '''
 

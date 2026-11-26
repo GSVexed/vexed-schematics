@@ -104,6 +104,9 @@ Core.specs = {
     { "escape", "Survival", "Auto Escape", "Native struggle actions; friendly baby carry preserved" },
     { "reach", "Combat", "Bite Reach", "Always enabled client geometry; server range unknown", permanent = true },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
+    { "attackSpeed", "Combat", "Adaptive Faster Bites", "62% to 55% after positive hit replies; backs off on repeated unconfirmed stock-range contacts", default = true },
+    { "holdBite", "Combat", "Hold to Repeat Bites", "Re-armed M1 edges; native hunter bites can run beside separate minigame presses", default = true },
+    { "autoBite", "Combat", "Auto Bite", "Prefers clear stock hits; paces repeated unconfirmed extended contacts" },
     { "combat", "Combat", "Combat Core", "Native attempts and feedback; no extra hit claims", permanent = true },
     { "climb", "Movement", "Climb Assist", "Native Q buffer and one guarded retry" },
     { "flight", "Movement", "Flight Assistance", "Surface takeoff assistance; no underwater flight" },
@@ -114,9 +117,12 @@ Core.specs = {
     { "esp", "Vision", "Outline ESP", "Hollow outlines for replicated characters" },
     { "colours", "Vision", "Faction / Health Colours", "Health-coloured hollow outlines; pack-coloured names", permanent = true },
     { "tags", "Vision", "Name Tags", "Small labels with independent visibility" },
+    { "voice", "Vision", "Extended Proximity Hearing", "25% farther local voice rolloff when supported", default = true },
     { "finder", "Vision", "Long-Range Player Finder", "Replicated players; up to 24 results", permanent = true },
     { "menu", "Vision", "Right Shift Menu Toggle", "Single menu; focused text keeps keyboard input", permanent = true },
     { "settings", "Vision", "Saved Settings", "Explicit ON and OFF reconciliation", permanent = true },
+    { "hippoMove", "Hippo", "Move During Charge", "Hippo only; native sprint and Burst inputs", default = true },
+    { "hippoRelease", "Hippo", "Smart Crusher Release", "Release full charge at a clear target; manual holds by default" },
 }
 
 function Core.registry()

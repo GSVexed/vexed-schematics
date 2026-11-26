@@ -44,6 +44,7 @@ function Grab.new()
         self.active, self.pending, self.session = false, nil, nil
         self.seen, self.results, self.submitted, self.history = {}, {}, {}, {}
         self.highestStrike,self.pauseUntil = 0,0
+        self.role=nil -- never retain hunter privileges from a prior grab
         self.status = reason or "waiting for native session"
         self.sequence += 1
     end

@@ -36,6 +36,58 @@ function Roblox.new(Core, environment)
         end
         return false
     end
+    -- FeralHUD v2412 builds a Cluster with three named gait outlines. Paint
+    -- those native keycaps only; HudTrot/HudSprint/HudBurst also feed other
+    -- scripts and cannot be used as presentation-only flags.
+    function b:paintHippoGait(tier)
+        local painted=self.hippoGaitPaint
+        local function restore()
+            self.hippoGaitPaint=nil
+            if not painted then return end
+            for _,record in pairs(painted.keys) do
+                if record.rim.Parent and record.rim.Color==record.paintedColor then
+                    pcall(function()record.rim.Color=record.beforeColor end)
+                end
+                if record.cap.Parent and record.cap.BackgroundTransparency==record.paintedAlpha then
+                    pcall(function()record.cap.BackgroundTransparency=record.beforeAlpha end)
+                end
+            end
+        end
+        if tier~="sprint" and tier~="burst" or game.PlaceVersion~=2412 then
+            restore();return false
+        end
+        local gui=self.player:FindFirstChild("PlayerGui")
+        gui=gui and gui:FindFirstChild("FeralHUD")
+        local cluster=painted and painted.gui==gui and painted.cluster.Parent and painted.cluster
+            or gui and gui:FindFirstChild("Cluster",true)
+        if not cluster then restore();return false end
+        if painted and painted.cluster~=cluster then restore();painted=nil end
+        if not painted then
+            local keys={}
+            for _,name in ipairs({"trot","sprint","burst"}) do
+                local outline=cluster:FindFirstChild(name,true)
+                local cap=outline and outline:IsA("Frame") and outline:FindFirstChild("Cap")
+                local rim=cap and cap:IsA("Frame") and cap:FindFirstChildOfClass("UIStroke")
+                if not rim then return false end
+                keys[name]={outline=outline,cap=cap,rim=rim,
+                    beforeColor=rim.Color,beforeAlpha=cap.BackgroundTransparency}
+            end
+            painted={gui=gui,cluster=cluster,keys=keys};self.hippoGaitPaint=painted
+        end
+        local activeColor=painted.keys.trot.beforeColor
+        local quietColor=painted.keys.sprint.beforeColor
+        for name,record in pairs(painted.keys) do
+            if not record.outline:IsDescendantOf(cluster) or record.cap.Parent~=record.outline
+                or record.rim.Parent~=record.cap then restore();return false end
+            local selected=name==tier
+            local desiredColor=selected and activeColor or quietColor
+            local desiredAlpha=selected and painted.keys.trot.beforeAlpha or painted.keys.sprint.beforeAlpha
+            if record.rim.Color~=desiredColor then record.rim.Color=desiredColor end
+            if record.cap.BackgroundTransparency~=desiredAlpha then record.cap.BackgroundTransparency=desiredAlpha end
+            record.paintedColor,record.paintedAlpha=desiredColor,desiredAlpha
+        end
+        return true
+    end
     function b:config(name)
         local world = self.ReplicatedStorage:FindFirstChild("FeralWorld")
         local object = world and world:FindFirstChild(name)
@@ -293,6 +345,7 @@ function Roblox.new(Core, environment)
     end
     function b:closeNativeScan()
         self.nativeScan,self.wolfDiscovery,self.grabDiscovery=nil,nil,nil
+        self.hippoActions,self.hippoDiscovery=nil,nil
         self.biteTiming=nil
     end
     function b:upvalues(fn)
@@ -414,7 +467,255 @@ function Roblox.new(Core, environment)
     end
     function b:tryNativeBite(now)
         local native = self:nativeWolfActions(now)
+        self.biteTiming=nil
         return native and native.tryBite and pcall(native.tryBite) or false
+    end
+    -- This fallback is only for a physically held bite when the same client's
+    -- private native callback cannot be reached. Roblox's own input handler
+    -- continues to own every hit claim, cooldown, range and permission check.
+    function b:combatInputCompatible()
+        if game.PlaceId~=108901361810209 then return false end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local wolf=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        local species=self:config("Species")
+        return wolf~=nil and wolf:IsA("LocalScript")
+            and remote~=nil and remote:IsA("RemoteEvent")
+            and type(species)=="table" and type(species.biteCooldown)=="function"
+    end
+    function b:hasHeldInputBackend()
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then return true end
+        if type(mouse1click)=="function" then return true end
+        local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
+        return ok and virtual~=nil
+    end
+    function b:visibleBiteWindow(s,now)
+        if not self:combatInputCompatible() or not s.alive or s.char~=self.player.Character
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding or not Core.finite(s.serverNow) then return false end
+        local species=self:config("Species")
+        if not species or type(species.biteCooldown)~="function" then return false end
+        local ok,cd=pcall(species.biteCooldown,self:attribute(s.char,"Species") or species.DEFAULT,
+            self:attribute(s.char,"Growth") or 1)
+        if not ok or not Core.finite(cd) or cd<.03 or cd>30 then return false end
+        local passive=self:config("PassiveConfig")
+        if passive and passive.biteCdMult~=nil then
+            local valid,m=pcall(passive.biteCdMult,s.char)
+            if not valid or not Core.finite(m) or m<=0 or m>20 then return false end
+            cd*=m
+        end
+        local marker=self:attribute(s.char,"WolfBiteAt")
+        if marker~=nil and (not Core.finite(marker) or marker>s.serverNow+1) then return false end
+        if Core.finite(marker) and s.serverNow-marker<cd-.005 then return false end
+        local input=self.combatGovernor
+        if input and input.lastDispatch>0 and now-input.lastDispatch<cd-.005
+            and not Core.finite(marker) then return false end
+        return true
+    end
+    -- A pcall succeeding on VirtualInputManager does not mean FERAL received
+    -- a native bite. After two unmarked pulses try a different available
+    -- real-input backend automatically, without user diagnostics.
+    function b:noteHeldInputTimeout()
+        self.heldInputMisses=(self.heldInputMisses or 0)+1
+        local count=self.heldInputModes or 1
+        if self.heldInputMisses>=2 and count>1 then
+            self.heldInputIndex=((self.heldInputIndex or 1)%count)+1
+            self.heldInputMisses=0
+        end
+    end
+    function b:noteHeldInputMarker()
+        self.heldInputMisses=0
+    end
+    function b:releaseSyntheticBite()
+        local pulse=self.syntheticM1
+        if not pulse then return end
+        self.syntheticM1=nil
+        if pulse.timer and type(task)=="table" and type(task.cancel)=="function" then
+            pcall(task.cancel,pulse.timer)
+        end
+        self.syntheticReleasing=true
+        pcall(pulse.release)
+        self.syntheticReleasing=false
+    end
+    -- A physical held M1 is already in the Down state. Simply sending
+    -- another Down is ignored by input systems that require a new edge.
+    -- Re-arm one short Up -> Down -> Up pulse, with a single owner, unless
+    -- an active native grab session has priority. No Bite/BiteHit remotes.
+    function b:tryHeldInputBite(s,now)
+        if self.syntheticM1 then return false end
+        if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding then return false end
+        local position=self.UserInputService:GetMouseLocation()
+        if not position then return false end
+        local gui=self.player:FindFirstChildOfClass("PlayerGui")
+        if gui then
+            local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,position.X,position.Y)
+            if ok and type(under)=="table" then
+                for _,object in ipairs(under) do
+                    if object:IsA("GuiButton") or object:IsA("TextBox") then return false end
+                end
+            end
+        end
+        local modes={}
+        local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
+        if ok and virtual then table.insert(modes,{
+            name="VIRTUAL_MOUSE",
+            down=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)end,
+            up=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)end,
+        }) end
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then
+            table.insert(modes,{name="EXECUTOR_PAIRED",down=mouse1press,up=mouse1release})
+        end
+        if type(mouse1click)=="function" then
+            table.insert(modes,{name="EXECUTOR_CLICK",click=mouse1click})
+        end
+        if #modes==0 then return false end
+        self.heldInputModes=#modes
+        local index=self.heldInputIndex or 1
+        if index>#modes then index=1 end
+        self.heldInputIndex=index
+        local mode=modes[index]
+        local down,up,backend=mode.down,mode.up,mode.name
+        self.heldInputBackend=backend
+        if mode.click then
+            self.syntheticM1Until=now+.18
+            self.syntheticPressing=true
+            local clicked=pcall(mode.click)
+            self.syntheticPressing=false
+            if not clicked then self:noteHeldInputTimeout() end
+            return clicked
+        end
+        self.syntheticM1Until=now+.3
+        local pulse={release=up,method=backend,didPress=false}
+        self.syntheticM1=pulse
+        local function safeUp()
+            self.syntheticReleasing=true
+            local success=pcall(up)
+            self.syntheticReleasing=false
+            return success
+        end
+        local function stop()
+            if self.syntheticM1==pulse then self:releaseSyntheticBite() end
+        end
+        -- Reset the logical button state while preserving the real human-held
+        -- intent in CombatInput (synthetic InputEnded events are ignored).
+        if not safeUp() then
+            self.syntheticM1=nil
+            self.heldInputIndex=(index%#modes)+1
+            self.heldInputMisses=0
+            return false
+        end
+        local function beginPress()
+            if self.syntheticM1~=pulse then return end -- a grab began meanwhile
+            if self.combatPulseBlocked and self.combatPulseBlocked() then
+                stop();return
+            end
+            self.syntheticPressing=true
+            local pressed=pcall(down)
+            self.syntheticPressing=false
+            if not pressed then stop();return end
+            pulse.didPress=true
+            if self.syntheticM1~=pulse then return end -- reentrant grab begin
+            if type(task)=="table" and type(task.delay)=="function" then
+                local scheduled,timer=pcall(task.delay,.055,stop)
+                if scheduled then pulse.timer=timer else stop() end
+            else stop() end
+        end
+        if type(task)=="table" and type(task.delay)=="function" then
+            local scheduled,timer=pcall(task.delay,.025,beginPress)
+            if scheduled then pulse.timer=timer;return true end
+        end
+        -- Never leave a held synthetic button if delayed input isn't supported.
+        beginPress()
+        return pulse.didPress
+    end
+    -- FeralHippoClient.finish uses the native clock and release path. Validate
+    -- its captured own-player/remote layout before retaining or calling it.
+    function b:hippoHandleValid(native)
+        if game.PlaceVersion~=2412 or not native or type(native.finish)~="function" then return false end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local own=scripts and scripts:FindFirstChild("FeralHippoClient")
+        local remote=self.ReplicatedStorage:FindFirstChild("FeralHippo")
+        if not own or own~=native.script or not remote or remote~=native.remote then return false end
+        local ok,source,name=pcall(debug.info,native.finish,"sn")
+        if not ok or name~="finish" or type(source)~="string" or not source:find("FeralHippoClient",1,true) then return false end
+        if type(getfenv)=="function" then
+            local valid,env=pcall(getfenv,native.finish)
+            if valid and type(env)=="table" and env.script~=nil and env.script~=own then return false end
+        end
+        local v=self:upvalues(native.finish)
+        return v[2]==self.player and type(v[3])=="function" and type(v[4])=="table" and v[5]==remote
+    end
+    function b:nativeHippoActions(now)
+        if self.hippoActions and self:hippoHandleValid(self.hippoActions) then return self.hippoActions end
+        self.hippoActions=nil
+        if self.deferNativeDiscovery or game.PlaceVersion~=2412 or type(getconnections)~="function"
+            or type(debug)~="table" or type(debug.info)~="function" then return nil end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local own=scripts and scripts:FindFirstChild("FeralHippoClient")
+        local remote=self.ReplicatedStorage:FindFirstChild("FeralHippo")
+        if not own or not remote or not remote:IsA("RemoteEvent") then return nil end
+        local scan=self.hippoDiscovery
+        if scan and (scan.script~=own or scan.remote~=remote) then scan=nil;self.hippoDiscovery=nil end
+        if not scan then
+            if now<(self.nextHippoDiscovery or 0) then return nil end
+            local signals={}
+            if self.UserInputService.InputEnded then table.insert(signals,self.UserInputService.InputEnded) end
+            if self.RunService.RenderStepped then table.insert(signals,self.RunService.RenderStepped) end
+            table.insert(signals,self.player:GetAttributeChangedSignal("FeralCrushTouchUp"))
+            scan={script=own,remote=remote,signals=signals,signalIndex=1,queue={},cursor=1,seen={}}
+            self.hippoDiscovery=scan
+        end
+        local started,checked=self.clock(),0
+        while checked<24 and self.clock()-started<.001 do
+            local item=scan.queue[scan.cursor]
+            if item then
+                scan.cursor+=1;checked+=1
+                local fn=item.fn
+                if type(fn)~="function" or scan.seen[fn] or item.depth>3 then continue end
+                scan.seen[fn]=true
+                local ok,source,name=pcall(debug.info,fn,"sn")
+                local owned=ok and type(source)=="string" and source:find("FeralHippoClient",1,true)
+                if type(getfenv)=="function" then
+                    local valid,env=pcall(getfenv,fn)
+                    if valid and type(env)=="table" and env.script~=nil then owned=env.script==own end
+                end
+                if not owned and item.depth~=0 then continue end
+                if owned and name=="finish" then
+                    local native={finish=fn,script=own,remote=remote}
+                    if self:hippoHandleValid(native) then
+                        self.hippoActions=native;self.hippoDiscovery=nil;return native
+                    end
+                end
+                local count=0
+                for _,value in pairs(self:upvalues(fn)) do
+                    count+=1;if count>32 then break end
+                    if type(value)=="function" and #scan.queue<192 then table.insert(scan.queue,{fn=value,depth=item.depth+1}) end
+                end
+            elseif scan.connections then
+                local record=scan.connections[scan.connectionIndex]
+                if not record or scan.connectionIndex>96 then scan.connections=nil;continue end
+                scan.connectionIndex+=1;checked+=1
+                local ok,fn=pcall(function()return record.Function end)
+                if ok and type(fn)=="function" and #scan.queue<192 then table.insert(scan.queue,{fn=fn,depth=0}) end
+            else
+                local signal=scan.signals[scan.signalIndex]
+                if not signal then self.hippoDiscovery=nil;self.nextHippoDiscovery=now+10;return nil end
+                scan.signalIndex+=1;checked+=1
+                local ok,connections=pcall(getconnections,signal)
+                if ok and type(connections)=="table" then scan.connections,scan.connectionIndex=connections,1 end
+            end
+        end
+        return nil
+    end
+    function b:finishNativeHippo(s,startedAt,now)
+        if not s.alive or s.species~="Hippo" or s.char~=self.player.Character then return false end
+        local native=self:nativeHippoActions(now)
+        if not native or not self:hippoHandleValid(native) then return false end
+        local state=self:upvalues(native.finish)[1]
+        if type(state)~="table" or state.at~=startedAt or self:attribute(s.char,"FeralCrushAt")~=startedAt then return false end
+        return pcall(native.finish) -- no supplied timestamp, multiplier or damage
     end
     function b:biteDelay(char)
         local c = self:config("CombatConfig")
@@ -466,6 +767,7 @@ function Roblox.new(Core, environment)
             local r=result(s.serverNow-at>=cd*mult,s.serverNow-at>=cd*mult
                 and "visible client checks clear; private state unverified" or "native cooldown")
             r.timingSource="native config and own bite marker";r.privateStateKnown=false
+            if not r.ready then r.nextAt=now+math.max(.015,cd*mult-(s.serverNow-at)) end
             return r
         end
         local timing=self.biteTiming
@@ -487,7 +789,9 @@ function Roblox.new(Core, environment)
             self.biteTiming=timing
         end
         if timing.resting or now-timing.lastRest<self:restLock(s.char) then return result(false,"native Rest lock") end
-        if now-timing.lastBite<timing.cd then return result(false,"native cooldown") end
+        if now-timing.lastBite<timing.cd then
+            local r=result(false,"native cooldown");r.nextAt=timing.lastBite+timing.cd;return r
+        end
         local r=result(true,"client checks clear; gameplay unverified")
         r.privateStateKnown=true;r.timingSource="validated own native closures"
         return r
@@ -568,7 +872,13 @@ function Roblox.new(Core, environment)
         s.burst = self:attribute(self.player,"HudBurst") == true or self:attribute(char,"FeralFlyBurst") == true
         -- v2412 WolfController input callback accepts MouseButton1/R2.
         -- MouseButton2 is a camera control, not a continuously held bite.
-        s.attackHeld = self.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+        local mouseOK,mouseDown=pcall(self.UserInputService.IsMouseButtonPressed,
+            self.UserInputService,Enum.UserInputType.MouseButton1)
+        s.mouseHeld=mouseOK and mouseDown==true
+        local padOK,padHeld=pcall(self.UserInputService.IsGamepadButtonDown,self.UserInputService,
+            Enum.UserInputType.Gamepad1,Enum.KeyCode.ButtonR2)
+        s.r2Held=padOK and padHeld==true
+        s.attackHeld=s.mouseHeld or s.r2Held
         local velocity = root.AssemblyLinearVelocity
         s.moving = hum.MoveDirection.Magnitude > .13 or Vector3.new(velocity.X,0,velocity.Z).Magnitude >= 2
         local clamp = char:FindFirstChild("FeralClamp")
@@ -774,6 +1084,39 @@ function Roblox.new(Core, environment)
         local hit = self.Workspace:Raycast(s.root.Position,target.root.Position-s.root.Position,params)
         return hit ~= nil and not hit.Instance:IsDescendantOf(target.char)
     end
+    function b:leadPoint(s,target)
+        local point=target.root.Position
+        local a,bv=target.root.AssemblyLinearVelocity,s.root.AssemblyLinearVelocity
+        if typeof(a)~="Vector3" or typeof(bv)~="Vector3" then return point end
+        -- A one-frame velocity replication spike can steer the bite beyond
+        -- the current hitbox. Reduce the speculative lead on fast movement.
+        local lead=(a-bv)*math.min(.20,self:biteDelay(s.char))
+        lead=Vector3.new(lead.X,0,lead.Z)
+        if not Core.finite(lead.Magnitude) then return point end
+        if lead.Magnitude>2.25 then lead=lead.Unit*2.25 end
+        return point+lead
+    end
+    function b:autoAttackTarget(s,guide,values)
+        if not guide or guide.invalid or not guide.target or not s.alive then return false end
+        local target=guide.target
+        if not target.root.Parent or (target.root.Position-s.root.Position).Magnitude>45
+            or not self:combatEligible(target.char) then return false end
+        local geometry=self:geometry(values,s,target)
+        if not geometry or not geometry.valid or self:occluded(s,target) then return false end
+        -- Stock-valid auto hits take priority. Extended-only contacts can
+        -- still be probed, but not spammed during repeated no-reply windows.
+        local base
+        if self.originalAutoCombat then
+            -- An out-of-range animal must not inherit a stale green guide
+            -- from the preceding scan when deciding whether to auto-bite.
+            base=self:geometry(self.originalAutoCombat,s,target)
+        else
+            base=guide.baseline
+        end
+        if base and base.valid then return true end
+        local entry=self.extendedConfidence and self.extendedConfidence[target.char]
+        return not entry or (s.now or 0)>=(entry.waitUntil or 0)
+    end
     function b:select(s, baseline, changed, all)
         local previousAssist=self.reachTarget
         self.treeTarget = nil
@@ -789,6 +1132,7 @@ function Roblox.new(Core, environment)
         local assisted,assistScore = nil,math.huge
         local selectionModel = table.clone(changed)
         selectionModel.biteLook = baseline.biteLook
+        self.originalAutoCombat=baseline
         for _,target in ipairs(eligible) do
                 local geometry = self:geometry(selectionModel,s,target)
                 if geometry and geometry.withinBodyRange then
@@ -796,7 +1140,7 @@ function Roblox.new(Core, environment)
                     local rank = target.distance+(target.affiliation == "unknown" and .5 or 0)
                         -(stock and stock.valid and .75 or 0)
                     if previousAssist and previousAssist.char==target.char then rank-=.65 end
-                    if rank < assistScore and (target.sameTree or not self:occluded(s,target)) then
+                    if rank < assistScore and not self:occluded(s,target) then
                         assisted,assistScore = target,rank
                     end
                 end
@@ -806,13 +1150,35 @@ function Roblox.new(Core, environment)
                 local base = self:geometry(baseline,s,target)
                 local extended = self:geometry(changed,s,target)
                 if base or extended then
-                    local rank = (extended and extended.score or math.huge) + (extended and extended.valid and 0 or 1000)
-                    if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
+                    local blocked=target.protected or self:occluded(s,target)
+                    -- A clear stock-valid candidate outranks a speculative
+                    -- extended-only target. Never prefer a wall over a
+                    -- nearby unobstructed animal.
+                    -- Stock validity comes from the unmodified biteLook.
+                    -- Calculate its tier BEFORE the extended geometry score:
+                    -- the latter depends on the currently assisted aim target
+                    -- and otherwise creates a feedback loop favouring ghosts.
+                    local stockValid=base and base.valid
+                    local extendedValid=extended and extended.valid
+                    local tier=stockValid and 0 or extendedValid and 100 or 2000
+                    local scoreValue=stockValid and base.score
+                        or extended and extended.score or 1000
+                    local rank=tier+scoreValue+(blocked and 4000 or 0)
+                    if rank<score then
+                        best,score={
+                            target=target,baseline=base,extended=extended,obstruction=blocked,
+                        },rank
+                    end
                 end
         end
         if best then
-            best.obstruction=best.target.protected or self:occluded(s,best.target)
             best.blocked=best.obstruction
+            -- Native biteLook must prefer the same stock-clear target the
+            -- guide displays. Extended-only rear/tree aim retains the
+            -- existing sticky assist until a stock-valid option appears.
+            if best.baseline and best.baseline.valid and not best.blocked then
+                self.reachTarget=best.target
+            end
         end
         return best
     end
@@ -948,6 +1314,7 @@ function Roblox.new(Core, environment)
         return ok
     end
     function b:attach(hub,scope)
+        scope:add(function() self:releaseSyntheticBite() end)
         local function connect(signal,fn)
             local c = signal:Connect(function(...)
                 if hub.active and not hub.closed then fn(...) end
@@ -984,6 +1351,10 @@ function Roblox.new(Core, environment)
             hub.combatInput:cancel();hub.feeding:cancel("manual rest control",now);hub.rescue:cancel()
         end)
         connect(self.UserInputService.InputBegan,function(input,processed) hub:input(input,processed) end)
+        connect(self.UserInputService.InputEnded,function(input) hub:inputEnded(input) end)
+        if self.UserInputService.WindowFocusReleased then
+            connect(self.UserInputService.WindowFocusReleased,function() hub.combatInput:cancel() end)
+        end
         connect(self.UserInputService.InputChanged,function(input)
             local kind = input.UserInputType
             if kind == Enum.UserInputType.MouseMovement or kind == Enum.UserInputType.MouseWheel
@@ -1030,7 +1401,7 @@ function Roblox.new(Core, environment)
         end)
     end
     function b:bindNative(hub)
-        for _, item in ipairs({{"FeralGrabV2","grab"},{"FeralHit","feedback"},{"WolfActions","actions"},
+        for _, item in ipairs({{"FeralGrabV2","grab"},{"FeralHit","feedback"},{"FeralHippo","hippo"},{"WolfActions","actions"},
             {"FeralBiteLocal","biteLocal","BindableEvent"}}) do
             local remote = self.ReplicatedStorage:FindFirstChild(item[1])
             local old = self.remoteConnections[item[1]]

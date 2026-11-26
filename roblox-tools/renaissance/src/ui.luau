@@ -67,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.7.0",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  "..hub.version,18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -108,7 +108,7 @@ function UI.mount(hub, bridge, scope)
         if u.pageView and u.pageView.close then pcall(u.pageView.close,u.pageView) end
         u.pageView=nil
         for _, child in ipairs(cards:GetChildren()) do child:Destroy() end
-        u.rows,u.combatReadout,u.finderReadout = {},nil,nil
+        u.rows,u.combatReadout,u.finderReadout,u.hippoReadout,u.testsReadout,u.testsToggle = {},nil,nil,nil,nil,nil
         title.Text = string.upper(u.tab)
         subtitle.Text="Simple controls. Native gameplay remains in charge."
         if u.pages[u.tab] then
@@ -118,13 +118,38 @@ function UI.mount(hub, bridge, scope)
         elseif u.tab=="Territory" then
             info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
         elseif u.tab == "Combat" then
-            info(0,"BITE REACH  ·  ALWAYS ON","Wider client range with rear and vertical assistance. Server acceptance unverified.",78)
-            row("biteHelper",94)
-            info(161,"RANGE COLOURS","Teal: stock-reference range. Amber: extended only. Grey: blocked, cooling down or readiness unknown.",80)
-            u.combatReadout = info(258,"NATIVE COMBAT","Waiting for an animal.",100)
+            info(0,"BITE REACH  ·  ALWAYS ON","Teal: stock range. Amber: extended only. Grey: blocked or not ready.",58)
+            row("biteHelper",65);row("attackSpeed",122);row("holdBite",179);row("autoBite",236)
+            u.combatReadout = info(293,"NATIVE COMBAT","Waiting for an animal.",70)
+        elseif u.tab == "Hippo" then
+            info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)
+            row("hippoMove",74);row("hippoRelease",131)
+            u.hippoReadout=info(193,"CHARGE","Waiting for Hippo.",106)
+            info(309,"POWER LIMIT","Damage beyond full charge and shorter ability cooldowns remain unverified.",55)
+        elseif u.tab == "Test Features" then
+            subtitle.Text="Own-character observations for every animal."
+            info(0,"DAMAGE & ABILITY EVIDENCE","Records HP loss, Rest, effects, Hippo replies and hub feature states. The client shell formula is not proof of protection.",60)
+            u.testsReadout=info(68,"LIVE RECORDER","Waiting for your animal.",96)
+            local save=button(cards,"SAVE REPORT",0,174,238,34)
+            save.Activated:Connect(function()
+                if hub.active then hub.tests:save();u.nextText=0 end
+            end)
+            local copy=button(cards,"COPY REPORT",252,174,238,34)
+            copy.Activated:Connect(function()
+                if hub.active then hub.tests:copy();u.nextText=0 end
+            end)
+            u.testsToggle=button(cards,"RECORDING: ON",0,216,490,34)
+            u.testsToggle.Activated:Connect(function()
+                if hub.active then hub.tests:setEnabled(not hub.tests.enabled);u.nextText=0 end
+            end)
+            local cross=button(cards,"ONE-SHOT TURTLE / CRUSHER REQUEST",0,258,490,34)
+            cross.Activated:Connect(function()
+                if hub.active then hub.tests:crossSpecies();u.nextText=0 end
+            end)
+            info(300,"CONTROLLED TRIAL","Only while naturally resting as Turtle in FERAL v2412. No shell or reduced damage is claimed.",64)
         elseif u.tab == "Vision" then
-            row("esp",0); row("tags",57)
-            local c = card(123,52)
+            row("esp",0); row("tags",57); row("voice",114)
+            local c = card(171,52)
             text(c,"Tracking range",14,8,270,20,13)
             text(c,"Real players only · up to 24",14,29,320,17,10,palette.sub)
             local range = button(c,tostring(hub.settings.range) .. " STUDS",350,10,124,30)
@@ -135,15 +160,15 @@ function UI.mount(hub, bridge, scope)
                 range.Text = tostring(hub.settings.range) .. " STUDS"
                 hub:save(); hub.nextScan = 0
             end)
-            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,187,490,32)
+            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,231,490,30)
             walls.Activated:Connect(function()
                 if not hub.active then return end
                 hub.settings.walls = not hub.settings.walls
                 walls.Text = "Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF")
                 hub:save()
             end)
-            info(232,"HEALTH / PACK","Outlines: green → yellow → red as HP falls. Real players only; name colour shows pack.",70)
-            u.finderReadout = info(313,"PLAYER FINDER","Waiting for replicated players.",50)
+            info(269,"HEALTH / PACK","Health-coloured outlines; pack-coloured names.",47)
+            u.finderReadout = info(317,"PLAYER FINDER","Waiting for replicated players.",48)
         else
             local order = u.tab == "Survival"
                 and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
@@ -153,8 +178,8 @@ function UI.mount(hub, bridge, scope)
         for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end
         u.nextText = 0
     end
-    for i,name in ipairs({"Survival","Combat","Movement","Vision","Territory"}) do
-        local btn = button(side,string.upper(name),12,113+(i-1)*44,141,35)
+    for i,name in ipairs({"Survival","Combat","Movement","Vision","Territory","Hippo","Test Features"}) do
+        local btn = button(side,string.upper(name),12,106+(i-1)*39,141,32)
         tabs[name] = btn
         btn.Activated:Connect(function()
             if not hub.active then return end
@@ -308,11 +333,14 @@ function UI.mount(hub, bridge, scope)
             or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu")
         if self.combatReadout then
             assign(self.combatReadout,"Text",(hub.biteReadiness and hub.biteReadiness.reason or "Native timing unmeasured")
-                .."\n"..(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.rescue.status)
+                .."\n"..(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.combatInput.status)
         end
         if self.finderReadout then
             assign(self.finderReadout,"Text",string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range))
         end
+        if self.hippoReadout then assign(self.hippoReadout,"Text",hub.hippo:summary()) end
+        if self.testsReadout then assign(self.testsReadout,"Text",hub.tests:summary().."\n"..hub.tests.notice) end
+        if self.testsToggle then assign(self.testsToggle,"Text",hub.tests.enabled and "RECORDING: ON" or "RECORDING: PAUSED") end
     end
     function u:activate()
         gui.Enabled = true
