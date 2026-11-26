@@ -1154,10 +1154,16 @@ function Roblox.new(Core, environment)
                     -- A clear stock-valid candidate outranks a speculative
                     -- extended-only target. Never prefer a wall over a
                     -- nearby unobstructed animal.
-                    local rank=(extended and extended.score or math.huge)
-                        +(extended and extended.valid and 0 or 1000)
-                        +(base and base.valid and -30 or 0)
-                        +(blocked and 1500 or 0)
+                    -- Stock validity comes from the unmodified biteLook.
+                    -- Calculate its tier BEFORE the extended geometry score:
+                    -- the latter depends on the currently assisted aim target
+                    -- and otherwise creates a feedback loop favouring ghosts.
+                    local stockValid=base and base.valid
+                    local extendedValid=extended and extended.valid
+                    local tier=stockValid and 0 or extendedValid and 100 or 2000
+                    local scoreValue=stockValid and base.score
+                        or extended and extended.score or 1000
+                    local rank=tier+scoreValue+(blocked and 4000 or 0)
                     if rank<score then
                         best,score={
                             target=target,baseline=base,extended=extended,obstruction=blocked,
