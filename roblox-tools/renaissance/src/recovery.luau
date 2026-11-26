@@ -197,7 +197,10 @@ function Recovery.new(bridge, policy, ledger)
         self.purpose = effects and "effects" or "health"
         local allowed, reason = policy:allowed("recovery", s, now,self.purpose)
         if not allowed then self:release(reason, now); return end
-        if now < self.backoffUntil then self.state = "waiting after action"; return end
+        if now < self.backoffUntil then
+            if self.state~="native Rest renewal unavailable" then self.state = "waiting after action" end
+            return
+        end
         self:echo(s, now)
         if policy.manualRest or now < self.backoffUntil then return end
         -- Request only for an actual deficit. Keeping Rest primed at full
@@ -239,8 +242,15 @@ function Recovery.new(bridge, policy, ledger)
                 self.renewals += 1
                 ledger:event("native_rest_renewed", now, { moving=s.moving, purpose=self.purpose })
             else
-                self.state="native Rest renewal unavailable"
+                -- A failed request is not a continuing active recovery session.
+                -- Relinquish its local ownership and restore the owned pose;
+                -- do not keep an invisible Rest override indefinitely.
                 ledger:event("native_rest_renew_failed",now)
+                self:release("native Rest renewal unavailable",now)
+                self:clearPose()
+                self.backoffUntil=now+3
+                self.observations={}
+                self.previous=nil
             end
         end
     end

@@ -46,7 +46,7 @@ end)
 
 test("overhaul replacement predicted impact settings preserve real native hit feedback",function()
     local w=Mock.new();local old={PREDICT=true};w.configs.CombatConfig.HIT2=old
-    local h=load(w);w:advance(.2);eq(old.PREDICT,false)
+    local h=load(w,{settings={states={reach=true}}});w:advance(.2);eq(old.PREDICT,false)
     local replacement={PREDICT=true};w.configs.CombatConfig.HIT2=replacement;w:advance(1.4)
     eq(old.PREDICT,true);eq(replacement.PREDICT,false)
     h:close();eq(replacement.PREDICT,true)
@@ -59,7 +59,7 @@ test("overhaul stock geometry retains captured species and animation cone bonuse
         return c.CONE+(c.BITE_CONE_ADD[char:GetAttribute("AnimProfile") or ""]
             or c.BITE_CONE_ADD[char:GetAttribute("Species") or ""] or 0)
     end
-    w:spawn("SnappingTurtle");local h=load(w);w:advance(.2)
+    w:spawn("SnappingTurtle");local h=load(w,{settings={states={reach=true}}});w:advance(.2)
     close(h.features.originalCombat.coneFor(w.player.Character),81)
     w.player.Character:SetAttribute("AnimProfile","AdultTurtle")
     close(h.features.originalCombat.coneFor(w.player.Character),86)

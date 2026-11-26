@@ -401,6 +401,11 @@ function Features.new(Core, bridge, registry)
         self.hippoStatus=applied and "CLIENT" or "WAITING"
         if applied then self.hippoProfile,self.hippoCharacter=profile,s.char end
     end
+    -- Ordinary combat and the guide must remain available without a geometry lease.
+    function f:combatProfileReady()
+        return self.originalCombat~=nil and self.combat~=nil
+            and (self.combatProfileMode=="native" or self.leases:valid("reach"))
+    end
     function f:reconcile(s, now, force)
         if not force and now < self.nextReconcile then return end
         self.nextReconcile = now+1.25
@@ -496,9 +501,23 @@ function Features.new(Core, bridge, registry)
                     registry:ack(id,applied,applied and "CLIENT" or "UNAVAILABLE",reason)
                 else registry:ack(id,false,"WAITING",why) end
             end
-            if id=="reach" and not record.applied then
-                self.originalCombat,self.combat=nil,nil
-                bridge.reachTarget,bridge.treeTarget=nil,nil
+            if id=="reach" then
+                if record.applied then
+                    self.combatProfileMode="experimental"
+                else
+                    -- Native compatibility is deliberately read-only: the guide
+                    -- and ordinary attacks share the unmodified game profile.
+                    local c=bridge:config("CombatConfig")
+                    local changedProfile=self.combatProfileMode~="native" or self.originalCombat~=c
+                    if numeric(c,{"REACH","HIT_SCALE","CONE","SLACK","MAX_DY"})
+                        and type(c.bodyGap)=="function" then
+                        self.originalCombat,self.combat=c,c
+                        self.combatProfileMode="native"
+                    else
+                        self.originalCombat,self.combat,self.combatProfileMode=nil,nil,nil
+                    end
+                    if changedProfile then bridge.reachTarget,bridge.treeTarget=nil,nil end
+                end
             end
         end
         self:reconcileHippo(s)

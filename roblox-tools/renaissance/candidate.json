@@ -1,54 +1,46 @@
 {
-  "version": "16.0.0",
+  "version": "16.0.1",
   "integrated_territory_version": "0.8.0",
   "date": "2026-11-26",
-  "status": "candidate; automated validation complete; live acceptance open",
-  "branch": "renaissance/ultimate-overhaul-2026-11-26",
-  "source_commit": "6c2e10c268d681d45d312ec5cb8a0de5100243fa",
-  "source_bundle": "roblox-tools/feral-renaissance-v16.0.0.lua",
-  "bundle_sha256": "53e348fb1574d7a7fd334ac316fac645b8801f4ab9706fd6288f7df91c642b29",
-  "bundle_bytes": 463094,
+  "status": "native compatibility candidate; validation pending; live acceptance open",
+  "branch": "renaissance/native-combat-compatibility-2026-11-26",
+  "source_commit": "45c6a24e2d396ac3a5956c225c70c59451838b90",
+  "source_bundle": "roblox-tools/feral-renaissance-v16.0.1.lua",
+  "bundle_sha256": "776cc09a7f3c14e60d40a367aee8c408dbcf8f2787b30817daed498e18672211",
+  "bundle_bytes": 464677,
   "territory_bundle_sha256": "b699951444285fb75ca26ccf688431050040dc9f061d41a4129f8b9e9926c4da",
   "module_count": 26,
-  "reviewed_module_count": 26,
-  "changed_module_count": 23,
+  "reviewed_module_count": 5,
+  "changed_module_count": 5,
   "retained_features": 22,
   "territory_enabled_by_default": false,
   "stable_promoted": false,
   "game_capture_baseline": 2412,
   "current_live_game_version": null,
   "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
-  "core_regressions": {
-    "total": 304,
-    "passed": 304,
-    "failed": 0
-  },
-  "territory_regressions": {
-    "total": 305,
-    "passed": 305,
-    "failed": 0
-  },
+  "core_regressions": null,
+  "territory_regressions": null,
   "baseline_regressions": {
-    "core": 214,
-    "territory": 263
+    "core": 304,
+    "territory": 305
   },
   "new_regressions": {
-    "core": 90,
-    "territory": 42
+    "core": 3,
+    "territory": 0
   },
-  "source_parity": true,
-  "deterministic_rebuild": true,
-  "historical_artifacts_unchanged": true,
+  "source_parity": null,
+  "deterministic_rebuild": null,
+  "historical_artifacts_unchanged": null,
   "protected_artifacts_by_runner": {
     "core": 22,
     "territory": 18
   },
-  "core_results": "test-results.json",
-  "territory_results": "../feral-amber/test-results.json",
-  "ci_evidence": "Exact published branch-head results and links are recorded on the consolidated pull request; local results do not imply hosted CI success.",
+  "core_results": null,
+  "territory_results": null,
+  "ci_evidence": "Pending validation of the exact 16.0.1 package; 16.0.0 results are not reused as candidate results.",
   "live_gameplay_tested": false,
   "full_acceptance_complete": false,
-  "release_report": "docs/OVERHAUL_16_RELEASE.md",
+  "release_report": "docs/NATIVE_COMPATIBILITY_16_0_1.md",
   "acceptance_ledger": "docs/OVERHAUL_16_ACCEPTANCE.md",
   "native_mechanisms": "docs/NATIVE_MECHANISMS_16.md",
   "stable_rollback": {
@@ -58,9 +50,9 @@
     "bundle_sha256": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb"
   },
   "integrated_baseline": {
-    "version": "15.8.0",
-    "source_commit": "bcc9c3699b41b6a2bd74a2d91324a493ee48b2c2",
-    "bundle_sha256": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30"
+    "version": "16.0.0",
+    "source_commit": "6c2e10c268d681d45d312ec5cb8a0de5100243fa",
+    "bundle_sha256": "53e348fb1574d7a7fd334ac316fac645b8801f4ab9706fd6288f7df91c642b29"
   },
   "dependency_heads": {
     "recovery_pr13": "da2145a4903e04e365cbeb4387825658d1f65a35",
@@ -68,6 +60,8 @@
     "combat_pr15": "bcc9c3699b41b6a2bd74a2d91324a493ee48b2c2"
   },
   "limitations": [
+    "Experimental reach is optional and defaults OFF. The native profile and guide are read-only in this state.",
+    "Recovery renewal failures now release owned pose state. Neither 2x HP nor 4x condition clearance has been established on the current live game.",
     "Current live game version and paired server-accepted recovery, status clearance, hit rate, minigame grades, flight, motion, stamina, feeding and reward outcomes were not verified.",
     "Territory autonomous native climb, flight/altitude and underwater-depth route adapters remain unsupported; native/manual controls retain priority.",
     "Recurring Territory capacity is implemented and simulation-tested; real whole-map retention, deadline calibration and unattended multi-hour outcomes remain unverified.",
@@ -75,5 +69,6 @@
     "Actual device frame times, memory and current-game visual behavior remain unmeasured; operation-count comparisons and simulated durations are not live performance.",
     "Fixed private native layouts and the Hippo scalar adapter are restricted to captured build 2412; missing introspection preserves ordinary native input without guaranteeing optional buffered retries.",
     "Same-place lobby/respawn lifecycle is covered in mocks; cross-place teleport reinjection is not provided."
-  ]
+  ],
+  "experimental_reach_enabled_by_default": false
 }

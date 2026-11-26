@@ -8,7 +8,7 @@ end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "16.0.0", tokenIdentity = tokenIdentity,
+    local h = { version = "16.0.1", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -179,6 +179,11 @@ function Controller.new(M,bridge,options)
         self.features.nextReconcile = 0
         local s = bridge:snapshot(now,false)
         self.features:reconcile(s,now,true) -- both true AND false are reconciled
+        if id=="reach" then
+            self.guide,self.guideAt=nil,nil
+            self.nextScan=0
+            self.policy.combatApproachUntil=0
+        end
         self:ackLocal(s)
         self:save()
         return self.registry.byId[id].applied == (on == true)
@@ -892,7 +897,7 @@ function Controller.new(M,bridge,options)
             self.nextScan = now+((s.combat==true or s.attackHeld) and .12
                 or math.clamp((self.frameInterval or .02)*6,.12,.3))
             local candidates = bridge:candidates(s,self.settings.range)
-            if self.features.originalCombat and self.features.leases:valid("reach") then
+            if self.features:combatProfileReady() then
                 self.guide = bridge:select(s,self.features.originalCombat,self.features.combat,candidates)
                 local target=bridge:imminentBiteTarget(s,self.features.originalCombat,candidates)
                 local hadContact=now<(self.policy.combatApproachUntil or 0)
@@ -945,7 +950,7 @@ function Controller.new(M,bridge,options)
             self:updateGrabWake()
         end
         self:maskPose()
-        if self.guide and self.snapshot and self.features.leases:valid("reach") then
+        if self.guide and self.snapshot and self.features:combatProfileReady() then
             bridge:refreshGuide(self.snapshot,self.features.originalCombat,self.features.combat,self.guide)
         end
         self.ui:render(dt,bridge.clock())

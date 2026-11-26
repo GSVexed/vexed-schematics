@@ -143,10 +143,10 @@ function UI.mount(hub, bridge, scope)
         elseif u.tab=="Territory" then
             info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
         elseif u.tab == "Combat" then
-            info(0,"BITE REACH  ·  ALWAYS ON","Wider client range with rear and vertical assistance. Server acceptance unverified.",78)
-            row("biteHelper",94)
-            info(161,"BITE GUIDE","One small marker for every animal. Cobra: teal in stock range, amber for extended range. Grey means blocked or uncertain; other animals keep a neutral marker.",80)
-            u.combatReadout = info(258,"NATIVE COMBAT","Waiting for an animal.",100)
+            row("reach",0)
+            row("biteHelper",57)
+            info(124,"BITE GUIDE","OFF for experimental reach preserves normal game geometry. Cobra: teal in stock range; amber is unverified extended range. Grey means blocked or uncertain.",80)
+            u.combatReadout = info(221,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Vision" then
             row("esp",0); row("tags",57)
             local c = card(123,52)
