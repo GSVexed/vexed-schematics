@@ -6,9 +6,13 @@ This candidate reconciles the missing 16.0.2 reliability work with the newer 16.
 
 ## Open this build
 
-Use the pinned **16.1.1 candidate** loader recorded below after publication. Confirm `RENAISSANCE / 16.1.1` in the window. The old `main/roblox-tools/feral-renaissance.lua` URL still selects the separately recorded **15.7.0 stable baseline**; it does not select this candidate.
+Use the pinned **16.1.1 candidate** loader below. Confirm `RENAISSANCE / 16.1.1` in the window. The old `main/roblox-tools/feral-renaissance.lua` URL still selects the separately recorded **15.7.0 stable baseline**; it does not select this candidate.
 
-<!-- PINNED_CANDIDATE_LOADER -->
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/cb5ebf20e3366639f76c5e807c43f925a167cae1/roblox-tools/feral-renaissance-v16.1.1.lua"))()
+```
+
+The immutable [source commit](https://github.com/GSVexed/vexed-schematics/commit/cb5ebf20e3366639f76c5e807c43f925a167cae1) contains the exact tested source and bundle. The separate [candidate launcher](../feral-renaissance-candidate.lua) selects the same bundle. Its SHA-256 is `0c11487d5c1f7af9cd6aff57023ecc45052907bc98c8008ebe1df1cbe904ebb3`.
 
 The integrated hub opens with **Right Shift**. On touch devices, the small reopen button remains available when the window is hidden. All controls remain in their existing pages; longer pages scroll.
 

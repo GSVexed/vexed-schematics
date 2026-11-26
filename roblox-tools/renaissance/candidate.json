@@ -3,9 +3,9 @@
   "channel": "candidate",
   "integrated_territory_version": "0.8.0",
   "game_baseline": 2412,
-  "source_commit": null,
-  "source_base_commit": "0b4183de81a530bbcbb15e660ecad14f7d84dce3",
-  "source_status": "validated workspace; source commit not yet pinned",
+  "source_commit": "cb5ebf20e3366639f76c5e807c43f925a167cae1",
+  "source_base_commit": "cb5ebf20e3366639f76c5e807c43f925a167cae1",
+  "source_status": "commit verified",
   "source_inputs": {
     "roblox-tools/renaissance/version.json": "91d15b3b57019f185f8d2593213527290d18f38d60bcb65e8818d156bd4b8f86",
     "roblox-tools/renaissance/build.py": "42a88b8742360190585720149470142035e609d4c82017555a2f6d1ffcceb500",
