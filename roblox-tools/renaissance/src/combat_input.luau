@@ -44,6 +44,7 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:cancel()
         self.pending,self.held,self.awaiting=nil,nil,nil
+        bridge.wantHeldNativeDiscovery=false
         self.nextAttempt=0
     end
     function c:release(kind,now)
@@ -52,6 +53,7 @@ function CombatInput.new(bridge,policy,ledger)
             -- deliver its one buffered native bite after M1/R2 is released.
             -- Only the continuous repeat intent stops on InputEnded.
             self.held,self.awaiting=nil,nil
+            bridge.wantHeldNativeDiscovery=false
             self.nextAttempt=now or 0
             self.status=self.pending and "one Rest-exit bite queued" or "released"
         end
