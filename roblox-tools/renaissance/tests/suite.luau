@@ -1759,7 +1759,7 @@ test("recovery defaults on for new settings but permits explicit manual OFF",fun
 end)
 test("stalled native recovery repairs are bounded without endless Rest toggling",function()
     local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=40
-    local h=load(w,{settings={states={recovery=true}}});w:advance(43)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(53)
     local count=h.ledger.counts.native_rest_no_progress_repair or 0
     assert(count>=1 and count<=2,"bounded rest retries expected")
     eq(h.recovery.repairAttempts,2)
