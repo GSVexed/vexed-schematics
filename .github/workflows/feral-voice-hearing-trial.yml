@@ -51,6 +51,6 @@ jobs:
           marker='local source = assert(io.open("roblox-tools/feral-voice-hearing-experiment-v0.1.lua","r")):read("*a")'
           assert marker in text
           assert ']====================]' not in source
-          p.write_text(text.replace(marker,'local source = [====================[\\n'+source+']====================]'))
+          p.write_text(text.replace(marker,'local source = [====================['+chr(10)+source+']====================]'))
           PY
           /tmp/feral-luau/luau /tmp/feral-hearing-tests.luau
