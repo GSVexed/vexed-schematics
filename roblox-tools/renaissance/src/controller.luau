@@ -166,6 +166,7 @@ function Controller.new(M,bridge,options)
         self.recovery.observations,self.recovery.nativeEchoObserved = {},false
         bridge.biteTiming,bridge.deferNativeDiscovery=nil,false
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
+        self.policy.combatApproachUntil=0
         self.grab:reset("animal changed")
         self:cancelGrabWake()
         self.grabInput:release()
@@ -707,22 +708,33 @@ function Controller.new(M,bridge,options)
         self.activity=self.policy:activity(s,now)
         self.combatInput:tick(s,now)
         if not critical then self.features:reconcile(s,now) end
-        self.recovery.enabled = self.registry.byId.recovery.requested or self.territoryRecoveryOwner~=nil
-        self.recovery:tick(s,now)
-        self:stepClimb(s,now)
-        self:stepEscape(s,now)
-        if not critical then self:stepCombat(s,now) end
-        self.biteReadiness=bridge:biteReadiness(s,now,self.policy)
         if not critical and now >= self.nextScan then
             self.nextScan = now+((s.combat==true or s.attackHeld) and .12
                 or math.clamp((self.frameInterval or .02)*6,.12,.3))
             local candidates = bridge:candidates(s,self.settings.range)
             if self.features.originalCombat and self.features.leases:valid("reach") then
                 self.guide = bridge:select(s,self.features.originalCombat,self.features.combat,candidates)
-            else self.guide = nil end
+                local target=bridge:imminentBiteTarget(s,self.features.originalCombat,candidates)
+                local hadContact=now<(self.policy.combatApproachUntil or 0)
+                self.policy.combatApproachUntil=target and now+.5 or 0
+                if target and not hadContact then
+                    self.ledger:event("native_bite_approach_prepared",now,{distance=target.distance})
+                end
+            else
+                self.guide=nil
+                self.policy.combatApproachUntil=0
+            end
             self.guideAt=now
             self.ui:syncTracked(bridge.tracked)
         end
+        -- Scan existing targets before recovery: otherwise automatic Rest
+        -- can re-arm in the frame a real enemy enters immediate bite range.
+        self.recovery.enabled = self.registry.byId.recovery.requested or self.territoryRecoveryOwner~=nil
+        self.recovery:tick(s,now)
+        self:stepClimb(s,now)
+        self:stepEscape(s,now)
+        if not critical then self:stepCombat(s,now) end
+        self.biteReadiness=bridge:biteReadiness(s,now,self.policy)
         if slow and not critical then
             self.nextSlow = now+.25
             self:stepFlight(s,now)
