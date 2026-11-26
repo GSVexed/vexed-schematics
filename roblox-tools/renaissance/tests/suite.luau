@@ -2635,5 +2635,20 @@ test("extended contact with observed HP decline is not counted as a ghost miss",
     eq(h.ledger.counts.target_hp_decline_correlated,1)
     h:close()
 end)
+test("stale stock-valid guide cannot bypass extended auto-contact pacing after target moves",function()
+    local w,h=boot({autoBite=true,biteHelper=true})
+    local _,char,_,root=w:enemy(2,Mock.V3.new(0,3,-4))
+    w:advance(.3)
+    local selected=h.guide and h.guide.target
+    assert(selected and selected.char==char and h.guide.baseline and h.guide.baseline.valid)
+    local snapshot=h.bridge:snapshot(w.time,false)
+    root.Position=Mock.V3.new(0,3,-8)
+    h.extendedConfidence[char]={misses=3,waitUntil=w.time+3}
+    assert(h.bridge:geometry(h.features.combat,snapshot,selected).valid)
+    local current=h.bridge:geometry(h.features.originalCombat,snapshot,selected)
+    assert(not current or not current.valid)
+    eq(h.bridge:autoAttackTarget(snapshot,h.guide,h.features.combat),false)
+    h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
