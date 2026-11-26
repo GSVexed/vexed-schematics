@@ -1885,7 +1885,7 @@ test("a bite without a native marker pauses held retries",function()
     c:input(s,0)
     for _,now in ipairs({0,.1,.2,.3,.36,.5,.62,.83,.94}) do c:tick(s,now,{repeatHeld=true}) end
     eq(count,2);eq(events[2],"native_bite_marker_timeout")
-    s.attackHeld=false;c:tick(s,.61,{repeatHeld=true});eq(c.held,nil)
+    c:release("mouse",.95);eq(c.held,nil)
 end)
 test("Auto Bite requires current clear contact and stops for a newly friendly target",function()
     local w=Mock.new();w:enableNativeActions()
