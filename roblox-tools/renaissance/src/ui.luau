@@ -168,7 +168,7 @@ function UI.mount(hub, bridge, scope)
                 hub:save()
             end)
             info(269,"HEALTH / PACK","Health-coloured outlines; pack-coloured names.",47)
-            u.finderReadout = info(322,"PLAYER FINDER","Waiting for replicated players.",43)
+            u.finderReadout = info(317,"PLAYER FINDER","Waiting for replicated players.",48)
         else
             local order = u.tab == "Survival"
                 and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
