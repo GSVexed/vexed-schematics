@@ -1,0 +1,7 @@
+{
+  "version": "16.1.1",
+  "territory_version": "0.8.0",
+  "channel": "candidate",
+  "game_baseline": 2412,
+  "toolchain_commit": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38"
+}

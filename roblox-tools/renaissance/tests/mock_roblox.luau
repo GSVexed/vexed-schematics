@@ -218,7 +218,8 @@ function Mock.new()
         w.renders[name]={priority=priority,fn=fn}
     end
     function run:UnbindFromRenderStep(name) w.renders[name]=nil end
-    local uis={InputBegan=signal(),InputEnded=signal(),InputChanged=signal(),JumpRequest=signal()}
+    local uis={InputBegan=signal(),InputEnded=signal(),InputChanged=signal(),JumpRequest=signal(),
+        WindowFocused=signal(),WindowFocusReleased=signal()}
     function uis:GetFocusedTextBox() return w.chat end
     function uis:IsMouseButtonPressed(button) return w.held==button end
     function uis:IsGamepadButtonDown(_,key)return w.padHeld==key end
@@ -294,7 +295,8 @@ function Mock.new()
         game=gameObject,workspace=workspace,Enum=enum,Vector3=V3,Vector2=V2,
         Color3={fromRGB=function(r,g,b)return {_type="Color3",R=r/255,G=g/255,B=b/255}end},
         UDim={new=function(a,b)return {Scale=a,Offset=b}end},
-        UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end},
+        UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end,
+            new=function(xs,xo,ys,yo)return {X={Scale=xs,Offset=xo},Y={Scale=ys,Offset=yo}}end},
         Instance={new=new},RaycastParams={new=function()return {}end},OverlapParams={new=function()return {}end},
         typeof=kind,os=mockOS,
         task={spawn=function(fn)fn()end,defer=function(fn)fn()end,delay=function(seconds,fn)
@@ -679,7 +681,8 @@ function Mock.new()
     end
     function w:connections()
         local n=0
-        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputEnded,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do
+        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputEnded,uis.InputChanged,uis.JumpRequest,
+            uis.WindowFocused,uis.WindowFocusReleased,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do
             -- Amber's input shim uses the same listeners/Connected structure but
             -- does not expose the test-only Count helper.
             if type(s.Count)=="function" then n+=s:Count()

@@ -1,0 +1,58 @@
+name: FERAL candidate source and regression verification
+on:
+  push:
+    branches: ['renaissance/reliability-audit-*']
+    paths:
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-amber/**'
+      - 'roblox-tools/feral-renaissance*.lua'
+      - 'roblox-tools/feral-amber-autopilot-*.lua'
+      - '.github/workflows/feral-renaissance-candidate-verify.yml'
+  pull_request:
+    paths:
+      - 'roblox-tools/renaissance/**'
+      - 'roblox-tools/feral-amber/**'
+      - 'roblox-tools/feral-renaissance*.lua'
+      - 'roblox-tools/feral-amber-autopilot-*.lua'
+      - '.github/workflows/feral-renaissance-candidate-verify.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the pinned official Luau toolchain
+        run: |
+          python3 - <<'PY'
+          import json,os,re,subprocess
+          from pathlib import Path
+          version=json.loads(Path('roblox-tools/renaissance/version.json').read_text())
+          commit=version['toolchain_commit']
+          assert re.fullmatch(r'[0-9a-f]{40}',commit)
+          directory=str(Path(os.environ['RUNNER_TEMP'])/'feral-luau')
+          subprocess.run(['git','clone','--quiet','https://github.com/luau-lang/luau.git',directory],check=True)
+          subprocess.run(['git','-C',directory,'checkout','--quiet',commit],check=True)
+          subprocess.run(['make','-s','-C',directory,'config=release','-j2','luau','luau-compile'],check=True)
+          PY
+      - name: Verify both suites, immutable rollbacks and reproducible packaging
+        run: |
+          python3 roblox-tools/renaissance/verify_candidate.py \
+            --luau "$RUNNER_TEMP/feral-luau/luau" \
+            --compiler "$RUNNER_TEMP/feral-luau/luau-compile" \
+            --source-commit "$GITHUB_SHA" \
+            --check-tracked-bundle
+      - name: Upload complete verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feral-candidate-verification
+          path: |
+            roblox-tools/renaissance/candidate.json
+            roblox-tools/renaissance/manifest.json
+            roblox-tools/renaissance/test-results.json
+            roblox-tools/feral-amber/test-results.json

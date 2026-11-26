@@ -1,5 +1,20 @@
 -- One compact window and one owner for all hub outlines, tags and the bite dot.
 local UI = {}
+function UI.fit(viewport,centre)
+    local x,y=viewport and viewport.X,viewport and viewport.Y
+    if type(x)~="number" or type(y)~="number" or x~=x or y~=y or x<80 or y<80 or x>=1e8 or y>=1e8 then return nil end
+    local scale=math.min((x-24)/704,(y-24)/505,1)
+    local halfX,halfY=352*scale,252.5*scale
+    return scale,Vector2.new(math.clamp(centre and centre.X or x/2,halfX+12,x-halfX-12),
+        math.clamp(centre and centre.Y or y/2,halfY+12,y-halfY-12))
+end
+
+function UI.markerTone(species,ready,stock)
+    if not ready then return "sub" end
+    if species=="KingCobra" then return stock and "same" or "unknown" end
+    return "text"
+end
+
 function UI.healthColour(hp,maxHP)
     if type(hp) ~= "number" or type(maxHP) ~= "number" or hp ~= hp or maxHP ~= maxHP
         or math.abs(hp) >= 1e12 or math.abs(maxHP) >= 1e12 or maxHP <= 0 then
@@ -43,6 +58,7 @@ function UI.mount(hub, bridge, scope)
     end
     local function button(parent,body,x,y,w,h)
         return round(make("TextButton",{Text = body, AutoButtonColor = true,
+            Selectable = true,
             BackgroundColor3 = palette.off, BorderSizePixel = 0, TextColor3 = palette.text,
             Font = Enum.Font.GothamMedium, TextSize = 11, Position = UDim2.fromOffset(x,y),
             Size = UDim2.fromOffset(w,h)},parent),7)
@@ -63,22 +79,30 @@ function UI.mount(hub, bridge, scope)
         Position = UDim2.fromScale(.5,.5), AnchorPoint = Vector2.new(.5,.5),
         BackgroundColor3 = palette.bg, BorderSizePixel = 0, Active = true},gui),15)
     u.frame = frame
-    local scale = make("UIScale",{},frame)
+    local scale = make("UIScale",{Scale=1},frame)
+    u.scale=scale
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  "..hub.version,18,52,140,18,10,palette.same)
+    u.versionLabel=text(side,"RENAISSANCE  /  "..tostring(hub.version),18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
     local subtitle = text(content,"Simple controls. Native gameplay remains in charge.",10,34,480,20,11,palette.sub)
-    local cards = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(10,68),
-        Size = UDim2.fromOffset(490,365)},content)
+    local cards = make("ScrollingFrame",{BackgroundTransparency = 1,BorderSizePixel=0,
+        Position = UDim2.fromOffset(10,68),Size = UDim2.fromOffset(490,365),
+        CanvasSize=UDim2.fromOffset(0,365),AutomaticCanvasSize=Enum.AutomaticSize.Y,
+        ScrollBarThickness=3,ScrollBarImageColor3=palette.line,ScrollingDirection=Enum.ScrollingDirection.Y,
+        ClipsDescendants=true},content)
     text(content,"Client changes and predictions · gameplay results unverified",10,440,485,18,10,palette.sub)
     local footer = text(side,"Ready",14,452,140,39,10,palette.sub)
     footer.TextWrapped = true
     local hide = button(side,"HIDE  ·  RIGHT SHIFT",12,378,141,30)
     local unload = button(side,"UNLOAD",12,414,141,27)
+    local launcher = button(gui,"FERAL",16,16,82,34)
+    launcher.Position=UDim2.new(0,16,1,-50)
+    launcher.Visible=false
+    u.launcher=launcher
     local tabs = {}
     local function card(y,height)
         return round(make("Frame",{Position = UDim2.fromOffset(0,y),Size = UDim2.fromOffset(490,height),
@@ -108,6 +132,7 @@ function UI.mount(hub, bridge, scope)
         if u.pageView and u.pageView.close then pcall(u.pageView.close,u.pageView) end
         u.pageView=nil
         for _, child in ipairs(cards:GetChildren()) do child:Destroy() end
+        cards.CanvasPosition=Vector2.new(0,0)
         u.rows,u.combatReadout,u.finderReadout,u.hippoReadout,u.testsReadout,u.testsToggle = {},nil,nil,nil,nil,nil
         title.Text = string.upper(u.tab)
         subtitle.Text="Simple controls. Native gameplay remains in charge."
@@ -118,9 +143,9 @@ function UI.mount(hub, bridge, scope)
         elseif u.tab=="Territory" then
             info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
         elseif u.tab == "Combat" then
-            info(0,"BITE REACH  ·  ALWAYS ON","Teal: stock range. Amber: extended only. Grey: blocked or not ready.",58)
-            row("biteHelper",65);row("attackSpeed",122);row("holdBite",179);row("autoBite",236)
-            u.combatReadout = info(293,"NATIVE COMBAT","Waiting for an animal.",70)
+            row("reach",0);row("biteHelper",57);row("attackSpeed",114);row("holdBite",171);row("autoBite",228)
+            info(285,"BITE GUIDE","Cobra: teal in stock range; amber is unverified extended range. Other animals use the neutral marker. Grey means blocked or uncertain.",70)
+            u.combatReadout = info(365,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Hippo" then
             info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)
             row("hippoMove",74);row("hippoRelease",131)
@@ -209,21 +234,73 @@ function UI.mount(hub, bridge, scope)
     end
     function u:toggle()
         self.visible = not self.visible
+        self.drag=nil
         frame.Visible = self.visible
+        launcher.Visible = not self.visible
         hub.policy.menuOpen = self.visible
         self.nextText=0
         if self.visible then hub:stopWalk("menu opened") end
     end
     function u:contains(point)
-        if not self.visible or not gui.Enabled then return false end
-        local p,s = frame.AbsolutePosition,frame.AbsoluteSize
+        if not gui.Enabled then return false end
+        local surface=self.visible and frame or launcher
+        if not surface.Visible then return false end
+        local p,s = surface.AbsolutePosition,surface.AbsoluteSize
         return point.X >= p.X and point.X <= p.X+s.X and point.Y >= p.Y and point.Y <= p.Y+s.Y
     end
+    function u:fit()
+        local camera=bridge.Workspace.CurrentCamera
+        local amount,centre=UI.fit(camera and camera.ViewportSize,self.windowCentre)
+        if not amount then return end
+        self.windowCentre=centre
+        assign(scale,"Scale",amount)
+        if self.windowX~=centre.X or self.windowY~=centre.Y then
+            self.windowX,self.windowY=centre.X,centre.Y
+            frame.Position=UDim2.fromOffset(centre.X,centre.Y)
+        end
+    end
+    function u:beginDrag(point,input)
+        if not hub.active or not self.visible or not self:contains(point) then return false end
+        if point.Y>frame.AbsolutePosition.Y+76*scale.Scale then return false end
+        self.drag={origin=point,centre=self.windowCentre or frame.AbsolutePosition+frame.AbsoluteSize*.5,input=input}
+        return true
+    end
+    function u:moveDrag(point)
+        if not self.drag or not self.visible then return end
+        self.windowCentre=self.drag.centre+point-self.drag.origin
+        self:fit()
+    end
+    local inputService=bridge.UserInputService
+    local function pointOf(input)
+        if input.UserInputType==Enum.UserInputType.Touch and input.Position then
+            return Vector2.new(input.Position.X,input.Position.Y)
+        end
+        return inputService:GetMouseLocation()
+    end
+    local function listen(signal,callback)
+        local connection=signal:Connect(callback)
+        scope:add(function()connection:Disconnect()end)
+    end
+    listen(inputService.InputBegan,function(input)
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+            u:beginDrag(pointOf(input),input)
+        end
+    end)
+    listen(inputService.InputChanged,function(input)
+        if u.drag and (input==u.drag.input or input.UserInputType==Enum.UserInputType.MouseMovement) then
+            u:moveDrag(pointOf(input))
+        end
+    end)
+    listen(inputService.InputEnded,function(input)
+        if u.drag and (input==u.drag.input or input.UserInputType==Enum.UserInputType.MouseButton1) then u.drag=nil end
+    end)
     hide.Activated:Connect(function() if hub.active then u:toggle() end end)
+    launcher.Activated:Connect(function() if hub.active then u:toggle() end end)
     unload.Activated:Connect(function() if hub.active then hub:close() end end)
     local dot = round(make("Frame",{Name = "BiteRangeMarker",BackgroundTransparency = 1,
         Size = UDim2.fromOffset(15,15),AnchorPoint = Vector2.new(.5,.5),Visible = false},gui),50)
     local dotStroke = make("UIStroke",{Thickness = 1.5,Transparency = .05,Color = palette.same},dot)
+    u.dot,u.dotStroke=dot,dotStroke
     function u:syncTracked(tracked)
         local keep = {}
         for _, target in ipairs(tracked) do
@@ -253,20 +330,28 @@ function UI.mount(hub, bridge, scope)
     end
     function u:render(dt,now)
         local camera = bridge.Workspace.CurrentCamera
-        if not camera then return end
+        if not camera then
+            for _,record in pairs(self.records) do
+                assign(record.highlight,"Enabled",false);assign(record.label,"Visible",false)
+            end
+            assign(dot,"Visible",false)
+            self.lastPoint,self.lastTarget=nil,nil
+            return
+        end
         if now >= self.nextFit then
             self.nextFit = now+.5
-            local size = camera.ViewportSize
-            assign(scale,"Scale",math.clamp(math.min((size.X-25)/704,(size.Y-30)/505,1),.5,1))
+            self:fit()
         end
         local registry = hub.registry.byId
         for char,record in pairs(self.records) do
             local target = record.target
             local valid = target.player and target.player.Parent~=nil and target.player.Character==char
-                and char.Parent ~= nil and target.root.Parent ~= nil and target.hum.Parent ~= nil and target.hum.Health > 0
+                and char.Parent ~= nil and target.root and target.root.Parent ~= nil
+                and target.hum and target.hum.Parent ~= nil and target.hum.Health > 0
+            valid=valid==true
             local colour = palette[target.affiliation] or palette.unknown
             assign(record.highlight,"FillTransparency",1)
-            if registry.esp.requested then
+            if valid and registry.esp.requested then
                 local hp,maxHP=target.hum.Health,target.hum.MaxHealth
                 if record.hp~=hp or record.maxHP~=maxHP then
                     record.hp,record.maxHP=hp,maxHP
@@ -286,7 +371,7 @@ function UI.mount(hub, bridge, scope)
             local show=valid and registry.tags.requested and onScreen==true and projected.Z>0
             assign(record.label,"Visible",show)
             if show then
-                local x,y = projected.X,math.max(20,projected.Y-6)
+                local x,y = math.clamp(projected.X,90,math.max(90,camera.ViewportSize.X-90)),math.max(20,projected.Y-6)
                 if not record.x or math.abs(x-record.x)>=.25 or math.abs(y-record.y)>=.25 then
                     record.x,record.y=x,y;record.label.Position=UDim2.fromOffset(x,y)
                 end
@@ -310,10 +395,10 @@ function UI.mount(hub, bridge, scope)
                 local readiness=hub.biteReadiness
                 local stale=now-(hub.guideAt or -math.huge)>.35
                 local locked=not readiness or not readiness.ready
-                if guide.blocked or locked or stale then assign(dotStroke,"Color",palette.sub)
-                elseif guide.baseline and guide.baseline.valid then assign(dotStroke,"Color",palette.same)
-                else assign(dotStroke,"Color",palette.unknown) end
-            end
+                local species=hub.snapshot and hub.snapshot.species
+                assign(dotStroke,"Color",palette[UI.markerTone(species,not (guide.blocked or locked or stale),
+                    guide.baseline and guide.baseline.valid)])
+            else self.lastPoint,self.lastTarget=nil,nil end
         else self.lastPoint,self.lastTarget = nil,nil end
         assign(dot,"Visible",dotVisible)
         if not self.visible then return end

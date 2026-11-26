@@ -1,12 +1,11 @@
 -- A single native Rest owner. Manual Rest is never cancelled or masked.
 local Recovery = {}
-local function positive(value)
-    return type(value)=="number" and value==value and value>0 and value<1e12
-end
+local function finite(n) return type(n)=="number" and n==n and math.abs(n)<1e12 end
 function Recovery.new(bridge, policy, ledger)
     local r = { state = "OFF", owned = nil, enabled = false, echoes = 0,
         backoffUntil = 0, releaseAt = -math.huge, signalAt = -math.huge,
-        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {} }
+        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {},
+        conditionChar = nil, conditionSeenUntil = 0, conditionSeen = {}, renewals = 0 }
     function r:clearPose()
         local pose = self.pose
         self.pose = nil
@@ -38,23 +37,49 @@ function Recovery.new(bridge, policy, ledger)
         -- its first frame after a hitch. Time alone is not a rendered frame.
         if self.pose and not self.owned and now >= (self.poseUntil or 0) then self:clearPose() end
     end
+    function r:failedExit(char,now)
+        -- Do not hide a native Rest that we failed to end, claim a
+        -- successful exit, or retry the user's attack against unknown state.
+        self.releaseFailedChar=char
+        self.lastAutomaticCharacter=nil
+        self.nativeEchoObserved=false
+        self.previous,self.observations=nil,{}
+        self:clearPose()
+        self.state="native Rest exit failed; use manual Rest"
+        ledger:event("native_rest_exit_failed",now)
+        return false
+    end
     function r:release(reason, now)
         local char = self.owned
         self.owned = nil
         if char then
-            self.releaseAt, policy.lastRestRelease = now, now
-            bridge:rest(char, false)
-            -- Only an echo attributed to this owner's Rest request is cleared.
-            if not policy.manualRest then bridge:maskRest(char) end
-            self.poseUntil = now+.35 -- let the animator consume the reset after release
-            ledger:event("owned_rest_released", now, { reason = reason })
+            if char~=bridge.player.Character or not char.Parent then
+                self:clearPose()
+                self.lastAutomaticCharacter=nil
+            else
+                self.releasingChar=char
+                local dispatched=bridge:rest(char,false)
+                self.releasingChar=nil
+                if not dispatched then return self:failedExit(char,now) end
+                self.releaseAt, policy.lastRestRelease = now, now
+                -- Only an echo attributed to this owner's dispatched exit is cleared.
+                if not policy.manualRest then bridge:maskRest(char) end
+                self.poseUntil = now+.35
+                ledger:event("owned_rest_released", now, { reason = reason })
+            end
+        end
+        if self.releaseFailedChar and self.releaseFailedChar==bridge.player.Character then
+            self.state="native Rest exit failed; use manual Rest"
+            return false
         end
         self.state = reason or "OFF"
+        return true
     end
     function r:manual(now)
         -- Yield ownership without emitting false; native/manual Rest takes over.
         self.owned = nil
         self.lastAutomaticCharacter = nil
+        self.releaseFailedChar=nil
         self:clearPose()
         policy.manualRest = true
         self.state = "MANUAL"
@@ -62,7 +87,7 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:echo(s, now)
         if not s or not s.char then return end
-        if policy.manualRest then return end
+        if policy.manualRest or self.releasingChar==s.char or self.releaseFailedChar==s.char then return end
         if self.owned == s.char and s.rest then
             if now <= policy.manualIntentUntil then self:manual(now); return end
             self.nativeEchoObserved = true
@@ -96,7 +121,8 @@ function Recovery.new(bridge, policy, ledger)
         self.previous = {char=s.char,now=now,maxHP=s.maxHP,moving=s.moving,combat=s.combat,mode=mode,
             hp=s.hp,injury=s.injury,bleed=s.bleed,venom=s.venom}
         if not previous or previous.char ~= s.char or previous.mode ~= mode or previous.combat ~= s.combat
-            or previous.moving ~= s.moving or previous.maxHP ~= s.maxHP or now-previous.now > 1.5 then
+            or previous.moving ~= s.moving or previous.maxHP ~= s.maxHP
+            or now<=previous.now or now-previous.now > 1.5 then
             self.observations = {};return
         end
         if mode == "idle" then self.observations = {};return end
@@ -104,7 +130,7 @@ function Recovery.new(bridge, policy, ledger)
             local a,b = previous[key],s[key]
             if key == "hp" and s.combat ~= false or type(a) ~= "number" or type(b) ~= "number"
                 or a ~= a or b ~= b or math.abs(a)>=1e12 or math.abs(b)>=1e12
-                or key ~= "hp" and a <= 0 then self.observations[key]=nil;continue end
+                or a<0 or b<0 or key ~= "hp" and a <= 0 then self.observations[key]=nil;continue end
             local delta = key == "hp" and b-a or a-b
             if delta < 0 then self.observations[key]=nil;continue end
             local item=self.observations[key] or {samples={}}
@@ -147,7 +173,20 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:tick(s, now)
         self:guardPose(now)
-        if s and s.alive then self:observe(s,now) end
+        if self.releaseFailedChar then
+            if s and s.char==self.releaseFailedChar then
+                self.state="native Rest exit failed; use manual Rest"
+                return
+            end
+            self.releaseFailedChar=nil
+        end
+        if s and s.alive then
+            if self.conditionChar~=s.char then
+                self.conditionChar=s.char
+                self.conditionSeenUntil,self.conditionSeen=0,{}
+            end
+            self:observe(s,now)
+        end
         if policy.manualRest then
             if self.enabled and s and s.alive and s.rest and s.hum.MoveDirection.Magnitude>.13
                 and not s.captured and not s.grab and not s.ability and now>policy.manualIntentUntil then
@@ -156,7 +195,11 @@ function Recovery.new(bridge, policy, ledger)
                 policy.manualRest,policy.manualIntentUntil=false,0
                 self.lastAutomaticCharacter=s.char
                 self:holdPose(s.char,now);self.poseUntil=now+.35
-                bridge:rest(s.char,false);bridge:maskRest(s.char)
+                self.releasingChar=s.char
+                local dispatched=bridge:rest(s.char,false)
+                self.releasingChar=nil
+                if not dispatched then self:failedExit(s.char,now);return end
+                bridge:maskRest(s.char)
                 self.releaseAt,policy.lastRestRelease=now,now
                 self.backoffUntil=math.max(self.backoffUntil,now+.75)
                 self.state="manual Rest ended by movement"
@@ -173,16 +216,35 @@ function Recovery.new(bridge, policy, ledger)
         end
         if self.owned and (not s or self.owned ~= s.char) then self:release("animal changed", now) end
         if not self.enabled then self:release("OFF", now); return end
-        local effects = s and (
-            positive(s.injury) or positive(s.bleed) or positive(s.venom))
+        local effects=false
+        self.conditionSeenUntil=0
+        if s and s.alive then
+            for _,key in ipairs({"injury","bleed","venom"}) do
+                local value=s[key]
+                if finite(value) and value>=0 then
+                    -- Explicit zero ends this condition immediately; only an
+                    -- unknown amount gets the bounded replication-gap grace.
+                    self.conditionSeen[key]=value>0 and now+.9 or nil
+                end
+                local untilAt=self.conditionSeen[key] or 0
+                if now<untilAt then effects=true end
+                self.conditionSeenUntil=math.max(self.conditionSeenUntil,untilAt)
+            end
+        end
         self.purpose = effects and "effects" or "health"
         local allowed, reason = policy:allowed("recovery", s, now,self.purpose)
         if not allowed then self:release(reason, now); return end
-        if now < self.backoffUntil then self.state = "waiting after action"; return end
+        if now < self.backoffUntil then
+            if self.state~="native Rest renewal unavailable" then self.state = "waiting after action" end
+            return
+        end
         self:echo(s, now)
         if policy.manualRest or now < self.backoffUntil then return end
         -- Request only for an actual deficit. Keeping Rest primed at full
         -- health needlessly exposes the next bite to native Rest timing.
+        if not effects and (not finite(s.hp) or not finite(s.maxHP) or s.maxHP<=0) then
+            self:release("health data unavailable",now);return
+        end
         local deficit = effects or s.hp < s.maxHP-.35
         if not deficit then self:release("armed; no recovery deficit", now); return end
         if not self.owned then
@@ -190,23 +252,43 @@ function Recovery.new(bridge, policy, ledger)
             if not self:holdPose(s.char,now) then
                 self.state="native pose control unavailable";self.backoffUntil=now+3;return
             end
+            local previousAutomatic=self.lastAutomaticCharacter
             self.owned = s.char
             self.lastAutomaticCharacter = s.char
             self.echoes, self.nativeEchoObserved = 0, false
             self.echoWindow = now
-            self.signalAt, self.nextRefresh = now, now+5
+            self.signalAt, self.nextRefresh = now, now+2
             self.state = "REQUESTED"
             if not bridge:rest(s.char, true) then
                 self.owned = nil
+                self.lastAutomaticCharacter=previousAutomatic
+                self:clearPose()
                 self.state = "native Rest unavailable"
                 self.backoffUntil = now+3
                 return
             end
             ledger:event("native_rest_requested", now, { moving = s.moving,purpose = self.purpose,combatHPExcluded = s.combat ~= false })
         elseif now >= self.nextRefresh then
-            -- Bounded renewal while deficit persists. A request is not an acknowledgement.
-            self.nextRefresh = now+5
-            if bridge:rest(s.char, true) then ledger:event("native_rest_renewed", now) end
+            -- v1.1 live Bear measurements supported the native Rest request
+            -- while moving. Renew ONLY Rest(true) at a bounded interval so
+            -- native locomotion transitions cannot leave long unsignalled
+            -- gaps. Do not flip it to false just because HP/status changes are
+            -- not yet observed: the prior no-progress retries interrupted it.
+            self.nextRefresh = now+2
+            if bridge:rest(s.char, true) then
+                self.renewals += 1
+                ledger:event("native_rest_renewed", now, { moving=s.moving, purpose=self.purpose })
+            else
+                -- A failed request is not a continuing active recovery session.
+                -- Relinquish its local ownership and restore the owned pose;
+                -- do not keep an invisible Rest override indefinitely.
+                ledger:event("native_rest_renew_failed",now)
+                self:release("native Rest renewal unavailable",now)
+                self:clearPose()
+                self.backoffUntil=now+3
+                self.observations={}
+                self.previous=nil
+            end
         end
     end
     function r:close(now)
@@ -214,6 +296,8 @@ function Recovery.new(bridge, policy, ledger)
         self:release("CLOSED", now)
         self:clearPose()
         self.previous,self.observations,self.lastAutomaticCharacter = nil,{},nil
+        self.conditionChar,self.conditionSeenUntil,self.conditionSeen = nil,0,{}
+        self.releaseFailedChar,self.releasingChar=nil,nil
     end
     return r
 end

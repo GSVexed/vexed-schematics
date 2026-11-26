@@ -10,6 +10,14 @@ function CombatInput.new(bridge,policy,ledger)
         speedFactor=.62, goodStreak=0, suspectStreak=0,
         lastRateChange=-math.huge, lastMarker=nil, lastDispatch=0,
     }
+    local function stopDiscovery()
+        bridge.wantHeldNativeDiscovery=false
+        -- A cancelled, unfinished lookup has not established unavailability.
+        -- A fresh press may restart it; completed negative searches retain
+        -- the bridge's normal retry backoff.
+        if bridge.wolfHeapScan then bridge.nextWolfHeapScan=0 end
+        bridge.wolfHeapScan=nil
+    end
     function c:factor()
         return self.speedFactor
     end
@@ -44,7 +52,8 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:cancel()
         self.pending,self.held,self.awaiting=nil,nil,nil
-        bridge.wantHeldNativeDiscovery=false
+        stopDiscovery()
+        if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
         self.nextAttempt=0
     end
     function c:release(kind,now)
@@ -53,7 +62,8 @@ function CombatInput.new(bridge,policy,ledger)
             -- deliver its one buffered native bite after M1/R2 is released.
             -- Only the continuous repeat intent stops on InputEnded.
             self.held,self.awaiting=nil,nil
-            bridge.wantHeldNativeDiscovery=false
+            stopDiscovery()
+            if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
             self.nextAttempt=now or 0
             self.status=self.pending and "one Rest-exit bite queued" or "released"
         end
@@ -70,29 +80,34 @@ function CombatInput.new(bridge,policy,ledger)
         self.unavailableUntil=0
         self.status="native bite marker observed; impact unverified"
     end
-    function c:input(s,now,kind)
+    function c:input(s,now,kind,inputObject)
         if not s.alive then return end
-        self.held={char=s.char,generation=s.generation,key=kind or "mouse",source="event"}
+        self.held={char=s.char,generation=s.generation,key=kind or "mouse",source="event",input=inputObject}
         self.nextAttempt=math.max(self.nextAttempt,now+.025)
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
         local at=math.max(now+.025,policy.lastRestRelease+bridge:restLock(s.char)+.035)
         self.pending={char=s.char,generation=s.generation,at=at,untilAt=math.max(now+1.6,at+.35),
-            marker=bridge:attribute(s.char,"WolfBiteAt")}
+            marker=bridge:attribute(s.char,"WolfBiteAt"),input=inputObject}
         policy.attackUntil=math.max(policy.attackUntil,at+.3)
         ledger:event("bite_waiting_for_rest_exit",now)
     end
     function c:tick(s,now,options)
         options=options or {}
+        if options.inputSuspended then
+            self:cancel()
+            self.status="input suspended; waiting for a fresh press"
+            return
+        end
         local physical=s.attackHeld==true
         if not options.repeatHeld then
-            self.held=nil
+            if self.held then self:release(nil,now) end
         elseif physical and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
             -- Restore a missed InputBegan (e.g. hub enabled after M1 went down).
             self.held={char=s.char,generation=s.generation,key="poll",source="poll"}
             self.nextAttempt=math.max(self.nextAttempt,now+.025)
         elseif self.held and (self.held.char~=s.char or self.held.generation~=s.generation
             or self.held.source=="poll" and not physical) then
-            self.held=nil
+            self:release(nil,now)
         end
         local inGrab=s.grab==true or options.minigameBusy==true
         local nativeGrabLane=inGrab and options.nativeMinigame==true
@@ -102,6 +117,8 @@ function CombatInput.new(bridge,policy,ledger)
         if not s.alive or s.chat or s.gameMenu or inGrab and not nativeGrabLane
             or policy.manualRest or options.uiBlocked then
             self.pending,self.awaiting=nil,nil
+            stopDiscovery()
+            if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
             -- Preserve the event-held state across a *known* minigame, so
             -- continuing to hold resumes after its native end. OFF and
             -- InputEnded always clear it; menus/text clear it immediately.
@@ -123,6 +140,7 @@ function CombatInput.new(bridge,policy,ledger)
         end
         if s.feeding or s.captured or s.holding or s.ability or s.rest then
             self.pending=nil
+            if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
             self.status="native action lock; hold retained"
             return
         end
@@ -171,7 +189,16 @@ function CombatInput.new(bridge,policy,ledger)
             self.nextAttempt=readiness.nextAt and math.max(now+.015,readiness.nextAt) or now+.08
             return
         end
-        if options.beforeAttempt then options.beforeAttempt(s,now) end
+        if options.beforeAttempt then
+            local ok,released=pcall(options.beforeAttempt,s,now)
+            if not ok or released==false then
+                self.pending,self.awaiting=nil,nil
+                self.nextAttempt=now+.2
+                self.status="native action release not confirmed"
+                ledger:event("native_bite_preparation_failed",now,{callbackSucceeded=ok})
+                return
+            end
+        end
         -- Clear prior to calling native code: synchronous WolfBiteAt callbacks
         -- reenter the hub during tryBite and must never issue a second bite.
         self.pending=nil

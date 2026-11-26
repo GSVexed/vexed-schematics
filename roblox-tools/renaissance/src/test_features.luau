@@ -31,6 +31,8 @@ function Tests.new(Core,bridge,hub)
             if computed and finite(value) then shell=value end
         end
         local current=hub.snapshot
+        local combat
+        if current and current.char==char and type(current.combat)=="boolean" then combat=current.combat end
         return {species=type(species)=="string" and #species<=31 and species:match("^[A-Za-z][A-Za-z0-9]*$") and species or "unknown",
             rest=attr(char,"WolfRest")==true,
             restAt=finite(attr(char,"WolfRestAt")) and attr(char,"WolfRestAt") or nil,
@@ -48,7 +50,7 @@ function Tests.new(Core,bridge,hub)
             survival=current and current.char==char and finite(current.survival) and current.survival or nil,
             locomotion=current and current.char==char and current.locomotion or "NONE",
             moving=current and current.char==char and current.moving==true or false,
-            combat=current and current.char==char and current.combat==true or false,
+            combat=combat,combatKnown=combat~=nil,
             shellFormulaClientOnly=shell}
     end
     function t:record(kind,fields)
@@ -254,7 +256,8 @@ function Tests.new(Core,bridge,hub)
             events={}
             for i=math.max(1,#self.events-39),#self.events do table.insert(events,self.events[i]) end
         end
-        return {schema=SCHEMA,version="16.1.0",placeId=game.PlaceId,placeVersion=game.PlaceVersion,
+        return {schema=SCHEMA,version=hub.version,sourceFingerprint=hub.sourceFingerprint,
+            placeId=game.PlaceId,placeVersion=game.PlaceVersion,
             savedAt=os.time(),source="own client observations; server damage reduction unverified",
             events=events,samples=self.samples,species=self.species,snapshot=self:snapshot(),
             features=self:featureStates(),ledgerCounts=counts,ledgerRates=rates,

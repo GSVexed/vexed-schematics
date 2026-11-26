@@ -66,7 +66,8 @@ function Voice.new(players,localPlayer)
         if not record then return end
         v.records[emitter]=nil
         local ok=pcall(function()
-            if emitter.Parent==nil then return end
+            -- Detachment is not destruction. Restore an owned curve even
+            -- between parents so a later reattach cannot scale it twice.
             if emitter.DistanceAttenuationMode~=record.mode then
                 v.conflicts+=1;return
             end
@@ -125,7 +126,14 @@ function Voice.new(players,localPlayer)
             local wrote=pcall(function() emitter.DistanceAttenuationBounds=desired end)
             local read,after=pcall(function() return emitter.DistanceAttenuationBounds end)
             if not wrote or not read or not sameBounds(after,desired) then
-                v.skipped+=1;return
+                v.skipped+=1
+                -- A property setter can change the value before reporting a
+                -- failure. Undo only the exact attempted value, just as the
+                -- custom-curve path does, so OFF/unload cannot miss this write.
+                if read and sameBounds(after,desired) then
+                    pcall(function() emitter.DistanceAttenuationBounds=before end)
+                end
+                return
             end
             v.records[emitter]={player=remote,mode=mode,custom=false,original=before,modified=desired}
         end
