@@ -474,6 +474,7 @@ function Roblox.new(Core, environment)
     -- private native callback cannot be reached. Roblox's own input handler
     -- continues to own every hit claim, cooldown, range and permission check.
     function b:hasHeldInputBackend()
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then return true end
         if type(mouse1click)=="function" then return true end
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         return ok and virtual~=nil
@@ -561,6 +562,26 @@ function Roblox.new(Core, environment)
             end
             -- A partial failing virtual press is never followed with a
             -- second executor click; unwind any partially owned input.
+            self:releaseSyntheticBite()
+            return false
+        end
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then
+            local pulse={release=mouse1release}
+            self.syntheticM1=pulse
+            self.syntheticPressing=true
+            local pressed=pcall(mouse1press)
+            self.syntheticPressing=false
+            if pressed then
+                if self.syntheticM1~=pulse then return true end
+                if type(task)=="table" and type(task.delay)=="function" then
+                    local scheduled,timer=pcall(task.delay,.07,function()
+                        if self.syntheticM1==pulse then self:releaseSyntheticBite() end
+                    end)
+                    if scheduled then pulse.timer=timer
+                    else self:releaseSyntheticBite() end
+                else self:releaseSyntheticBite() end
+                return true
+            end
             self:releaseSyntheticBite()
             return false
         end
