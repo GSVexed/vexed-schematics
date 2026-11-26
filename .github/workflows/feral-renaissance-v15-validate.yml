@@ -1,4 +1,4 @@
-name: FERAL Renaissance v15 compile and regression gate
+name: FERAL Renaissance integrated compile and regression gate
 on:
   push:
     branches: [main, 'renaissance/**']
@@ -35,5 +35,5 @@ jobs:
         run: git diff --exit-code -- roblox-tools/feral-renaissance-v*.lua roblox-tools/renaissance/manifest.json
       - uses: actions/upload-artifact@v4
         with:
-          name: renaissance-v15-regression-results
+          name: renaissance-integrated-regression-results
           path: /tmp/renaissance-results.json

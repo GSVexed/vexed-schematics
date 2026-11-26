@@ -1,55 +1,58 @@
-# FERAL Project Renaissance 15.7.0
+# FERAL Renaissance 16.0.0 candidate
 
-Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records plus Zoom Unlock and Amber 0.7.0.
+One integrated hub: **22 retained feature records, 14 core modules and 12 Territory modules**. Territory 0.8.0 uses the same five-tab window, scheduler, settings and unload lifecycle. This branch consolidates the recovery work from PR #13, combat integration from PR #15 and the full execution specifications from PR #14.
+
+**16.0.0 is a candidate, not a promoted stable release.** Automated compilation and regression evidence are recorded in [test-results.json](test-results.json) and the [Territory results](../feral-amber/test-results.json). No current live Roblox gameplay was executed for this overhaul. Server-accepted recovery, hits, grades, motion, resources and rewards remain live verification gates.
+
+## Load the candidate
+
+Use the separate [candidate loader](../feral-renaissance-candidate.lua). Its URL is pinned to the immutable implementation commit in [candidate.json](candidate.json); it does not follow an evolving branch. The complete [16.0.0 bundle](../feral-renaissance-v16.0.0.lua) includes all 26 modules and makes no runtime Territory source downloads.
+
+Recovery and Zoom retain their existing new-install defaults. Every saved explicit OFF is preserved. **Territory always starts OFF**; open its tab and choose START FARMING when wanted. Changing tabs or hiding the hub does not stop an active farming session; STOP or Unload releases it.
+
+Right Shift toggles the menu. A small FERAL button reopens a hidden menu without a keyboard. The window fits and clamps to the viewport, supports dragging, and retains the compact bite marker, hollow health outlines and independent pack-coloured names.
+
+## What changed
+
+- Recovery reserves attack priority through native stand-up timing, treats each negative condition independently, and restores owned pose state immediately after a failed request.
+- Deferred bites cancel when the native attack already succeeded. Target geometry preserves native species bonuses, rejects stale targets, prefers clear eligible targets, and shares the stock eligibility calculation with Territory hunting.
+- Hit replies, local impact and observed target HP remain separate. Delayed replies can update the correct bounded transaction; ambiguous overlapping damage remains unattributed.
+- Minigame timing and native session adoption run before background Territory work. Legal timing recovery, clock gaps, session retirement, manual bindings and automation-OFF session ownership are covered.
+- Native callbacks and nested configuration leases follow actual script/table identities. Game updates cannot silently reuse private v2412 offsets.
+- Feeding, carrying, flight, swimming, climbing, gamepad input, AFK, camera limits, settings backup and cleanup received targeted repairs.
+- Territory estimates recurring scent work, defers expansion under overload, respects manual input, discards stale asynchronous routes, and checks real resource/HP continuity.
+
+See the [release report and rollback](docs/OVERHAUL_16_RELEASE.md), [native mechanism evidence](docs/NATIVE_MECHANISMS_16.md), and [all-feature/module/acceptance ledger](docs/OVERHAUL_16_ACCEPTANCE.md) for exact changes and remaining limits. Autonomous Territory climb, flight and underwater-depth routing remain unsupported; they release ground steering instead of claiming completion.
+
+## Stable and rollback
+
+The existing main launcher remains pinned to **15.7.0 / Territory 0.7.0**. Its source, release metadata and earlier versioned bundles are unchanged. To load that exact stable bundle:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/3434396b4a9057bdba8c1f146325bd26f697d1ce/roblox-tools/feral-renaissance-v15.7.0.lua"))()
 ```
 
-Open **Territory** and select **START FARMING** after spawning and joining a pack. Farming starts disabled. The existing combined Amber launcher opens this page directly. Hiding the hub or changing tabs keeps farming running; STOP or unloading the hub releases its owned input.
+Use the hub's Unload control first when manually rolling back. The bootstrap also retires an existing compatible owner on successful hot reload. If candidate staging fails, it keeps the previous owner; if activation fails after retirement, it cleans the candidate and asks for the pinned stable loader rather than pretending to resurrect closed legacy callbacks.
 
-The 0.7 upgrade adds observed travel costs, stable priority-aware itineraries, nearby region entry, scent deadline estimates, body-width support checks, longer checked obstacle routes, spatial recovery memory, unified survival decisions and complete-cycle accounting. It also corrects the actual Hippo ability speed calculation. See the [0.7 report](../feral-amber/docs/V0_7_RELEASE.md) and [all 44 prep items](../feral-amber/docs/PREPARATION_EXECUTION_LEDGER.md).
+## Build and verify
 
-**Validation:** 202/202 retained Renaissance regressions plus 263/263 Amber regressions pass with the pinned official Luau compiler/interpreter. All 26 embedded modules, complete bundle, fixtures and launcher compile; source parity and earlier rollback hashes pass. Published checks are recorded on the release pull request.
-
-**Live gameplay remains unverified for this version.** No authenticated game-execution connection is available here; the approved PC metadata check confirmed running apps only. Tests do not establish accepted speed, NPC damage, full-map retention, income, sustained stamina or recovery effects. Previous core features retain their earlier limits.
-
-The [15.6.1 Territory patch report](../feral-amber/docs/V0_6_1_RELEASE.md) covers false native gait flags, close-prey facing, rejected virtual mouse fallback and retained attack evidence. The broader 0.6 navigation and survival overhaul remains.
-
-## Build
+Official Luau revision: `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`.
 
 ```bash
 python3 roblox-tools/feral-amber/build.py
 python3 roblox-tools/renaissance/run_tests.py \
   --luau /path/to/luau --compiler /path/to/luau-compile
 python3 roblox-tools/feral-amber/run_tests.py \
-  --luau /path/to/luau --compiler /path/to/luau-compile
+  --luau /path/to/luau --compiler /path/to/luau-compile \
+  --output roblox-tools/feral-amber/test-results.json
 ```
 
-Official Luau commit: `97b2f4bf9cd935bed666f3e643a3b749b4d22f38`. The complete bundle embeds fourteen core modules and twelve Amber modules; no runtime Amber source downloads are needed.
+The core runner deterministically rebuilds the bundle and manifest, compiles every module and fixture, checks exact embedded-source parity, protects historical hashes, and validates both the stable pin and candidate pin. The Territory runner now tests the current manifest's integrated candidate and separately retains stable-hub compatibility coverage.
 
-## Rollback
+## Project records
 
-All prior versioned bundles remain unchanged. Previous Renaissance 15.6.2 with integrated Amber 0.6.1:
+- [Execution directive](docs/PRO_ONE_SHOT_FULL_OVERHAUL_HANDOFF_2026-11-26.md), [70 original acceptance scenarios](docs/FULL_HUB_PERFECTION_ACCEPTANCE_MATRIX_2026-11-26.md), [combat investigation](docs/P0_COMBAT_GHOST_HITS_AND_MISSING_BITES_PREPARATION_2026-11-26.md).
+- [Current architecture](docs/ARCHITECTURE.md), [historical feature audit](docs/FEATURE_AUDIT.md), [release history](docs/RELEASE_NOTES.md), [historical live evidence](docs/LIVE_EVIDENCE.md).
+- [Territory T01–T44](../feral-amber/docs/PREPARATION_EXECUTION_LEDGER.md), [S01–S62](../feral-amber/docs/V0_7_SCENARIOS.md), [native contracts](../feral-amber/docs/native-contracts.json).
 
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/71051c5b707076f3a78080e745c649ae95ee4ae2/roblox-tools/feral-renaissance-v15.6.2.lua"))()
-```
-
-The 15.6.2 rollback includes its Territory page and Zoom Unlock. Earlier companion releases remain unchanged.
-
-## Records
-
-- [Current release report](../feral-amber/docs/V0_7_RELEASE.md), [release metadata](release.json), [test results](test-results.json).
-- [Architecture](docs/ARCHITECTURE.md), [21-feature audit](docs/FEATURE_AUDIT.md), [historical release notes](docs/RELEASE_NOTES.md).
-- [Native territory/input contracts](../feral-amber/docs/native-contracts.json), [previous live evidence](docs/LIVE_EVIDENCE.md).
-
-There is no diagnostics tab or automatic report upload. Territory has an optional local COPY STATUS button.
-
-### Zoom Unlock (15.6.2)
-
-Enabled by default; use **Movement → Zoom Unlock** to switch it off. The normal mouse wheel can zoom from 0.5 to 100,000 studs where the standard camera supports it. Native limit changes are observed and reapplied, with current game defaults restored on OFF/unload. Scripted camera poses, collision behavior, camera subject and FOV stay under the existing camera controller. No extra overlay or keybind. This camera feature is retained in the 0.7 Territory release.
-
-### Hippo ability speed (15.7.0)
-
-The captured v2412 controller forces its run boolean off during Crusher Bite and consumes a trot-scaled Species value. The earlier cap-only patch did not change this calculation. A reversible, Hippo-only adapter now supplies the corresponding native sprint or Burst tier for Shift/X, on land and in surface water. Ordinary walk/trot, native denial, ability timing and cleanup remain covered. Server-accepted speed remains live-unverified; see the [native contract evidence](../feral-amber/docs/V0_7_RELEASE.md#hippo-ability-speed).
+Historical live observations are not current-server validation. There is no automatic diagnostic upload, raw native capture, credential, or local health/resource forgery in the candidate.

@@ -1,5 +1,5 @@
 -- Built-in Territory engine. Renaissance owns scheduling, UI and shutdown.
-local Runtime={version="0.7.0"}
+local Runtime={version="0.8.0"}
 function Runtime.start(M,hub)
     assert(hub and hub.ui and type(hub.ui.registerPage)=="function","Update Renaissance for its built-in Territory page")
     local env=(type(getgenv)=="function" and getgenv()) or _G
@@ -11,7 +11,7 @@ function Runtime.start(M,hub)
     local nav=Nav.new(game:GetService("PathfindingService"),game:GetService("Workspace"),module("gait"),model)
     local bridge=Bridge.new(nav);bridge.ownerHub=hub
     local agent=Agent.new(module("planner"),bridge,module("hunt"),module("care"),module("ledger"))
-    local attached,driver=pcall(module("driver").new,bridge.player,nav,function()return bridge:manualInput()end)
+    local attached,driver=pcall(module("driver").new,bridge.player,nav,function(direction)return bridge:manualInput(direction)end)
     if not attached then pcall(bridge.close,bridge);nav.closed=true;error(driver,0) end
     local h={version=Runtime.version,ownerHub=hub,agent=agent,bridge=bridge,nav=nav,driver=driver,closed=false,nextCounts=0}
     function h.setEnabled(on) if not h.closed then agent:setEnabled(on==true,os.clock()) end end
@@ -51,6 +51,17 @@ function Runtime.start(M,hub)
     function h:tick(now)
         if self.closed then return end
         if hub.closed then self.close();return end
+        if hub.timingCritical then
+            -- The core has already pumped the legal minigame window. Avoid
+            -- scans/pathfinding/gait requests until that deadline has passed.
+            if agent.enabled and not self.deadlinePaused then
+                self.deadlinePaused=true
+                pcall(agent.pause,agent,{now=now},"Native minigame input has priority")
+                pcall(nav.releaseKeys,nav);pcall(bridge.releaseInputs,bridge)
+            end
+            return
+        end
+        self.deadlinePaused=nil
         local started=os.clock();local wasEnabled=agent.enabled
         local ok,why=pcall(function()
             if agent.enabled then driver:tick() end
@@ -83,7 +94,10 @@ function Runtime.start(M,hub)
     if prior and type(prior.close)=="function" then
         local ok,why=pcall(prior.close)
         if not ok then h.close();error(why,0) end
-        if prior.driver and driver.original==prior.driver.wrapper then driver.original=prior.driver.original end
+        if prior.driver and driver.original==prior.driver.wrapper then
+            driver.original=prior.driver.original
+            if driver.binding then driver.binding.original=prior.driver.original end
+        end
     end
     env.FERAL_AMBER_ACTIVE=h;hub.territory=h
     return h

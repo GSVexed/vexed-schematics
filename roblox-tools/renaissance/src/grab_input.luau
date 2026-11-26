@@ -2,14 +2,20 @@
 -- Temporarily remove the native MouseButton1 minigame action.
 -- Native Space/gamepad presses are retained under this owner's separate binding.
 local GrabInput = {}
+local function read(native)
+    if not native or type(native.state)~="function" then return nil,false end
+    local ok,state,known=pcall(native.state)
+    if ok then return state,known end
+    return nil,false
+end
 function GrabInput.new(bridge,token)
     local i = { lease = nil, status = "waiting for native session", name = "FERAL_GRAB_INPUT_" .. token }
     function i:release()
-        bridge:unbindGrabManual(self.name)
         local lease = self.lease
         self.lease = nil
+        pcall(bridge.unbindGrabManual,bridge,self.name)
         if not lease then return end
-        local current,known = lease.controller.state()
+        local current,known = read(lease.controller)
         local same=current==lease.state or current==nil and known~=true
         if same and lease.state.ended ~= true and not bridge:nativeGrabBound()
             and (not lease.controller.script or lease.controller.script.Parent ~= nil)
@@ -27,7 +33,7 @@ function GrabInput.new(bridge,token)
             return false
         end
         native = native or self:controller(now)
-        state = state or native and native.state()
+        state = state or read(native)
         if not state or state.ended or tostring(state.id) ~= tostring(grab.session) then
             local lease=self.lease
             if not state and lease and lease.controller==native and not lease.state.ended
@@ -52,11 +58,11 @@ function GrabInput.new(bridge,token)
                 return false
             end
             local bound = pcall(bridge.bindGrabManual,bridge,self.name,function()
-                if not grab.enabled or not grab.active or self.lease ~= lease or bridge:grabTextFocused() then return end
-                local current = native.state()
-                if current ~= state or current.ended or tostring(current.id) ~= tostring(grab.session) then return end
+                if not grab.enabled or not grab.active or self.lease ~= lease or bridge:grabTextFocused() then return false end
+                local current = read(native)
+                if current ~= state or current.ended or tostring(current.id) ~= tostring(grab.session) then return false end
                 grab:manual()
-                pcall(native.press)
+                return pcall(native.press)
             end)
             if not bound then self:release();self.status = "manual input binding unavailable";return false end
         end

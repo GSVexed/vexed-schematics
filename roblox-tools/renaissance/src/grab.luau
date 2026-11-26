@@ -39,21 +39,35 @@ function Grab.new()
         seen = {}, results = {}, grades = { perfect = 0, good = 0, miss = 0 },
         status = "OFF", rejected = 0, presses = 0, lastAt = 0, sequence = 0,
         highestStrike = 0, hunters = 1, pauseUntil = 0, retimed = 0, nativeResumes = 0,
-        submitted = {}, history = {}, firstWindows = 0, dispatches = {} }
+        submitted = {}, history = {}, firstWindows = 0, dispatches = {}, retired = {}, retirementOrder = {} }
+    function g:retire()
+        if not self.session then return end
+        local key=tostring(self.session)
+        if self.retired[key]==self.generation then return end
+        self.retired[key]=self.generation
+        table.insert(self.retirementOrder,{key=key,generation=self.generation})
+        if #self.retirementOrder>32 then
+            local old=table.remove(self.retirementOrder,1)
+            if self.retired[old.key]==old.generation then self.retired[old.key]=nil end
+        end
+    end
     function g:reset(reason)
         self.active, self.pending, self.session = false, nil, nil
         self.seen, self.results, self.submitted, self.history = {}, {}, {}, {}
         self.highestStrike,self.pauseUntil = 0,0
+        self.role,self.hunters=nil,1
         self.status = reason or "waiting for native session"
         self.sequence += 1
     end
     function g:event(event, data, now, generation, perfect, passes, context)
-        if not self.enabled or type(event) ~= "string" or type(data) ~= "table" then return false end
+        if not self.enabled or not finite(now) or type(event) ~= "string" or type(data) ~= "table" then return false end
         local session = data.f or (event == "begin" and data.id)
         if not id(session) then self.rejected += 1; return false end
         local sessionKey = tostring(session)
         if event == "begin" then
+            if self.retired[sessionKey]==generation then self.rejected+=1;return false end
             if tostring(self.session) ~= sessionKey or self.generation ~= generation then
+                self:retire()
                 self:reset()
                 self.session, self.generation = session, generation
             end
@@ -66,7 +80,7 @@ function Grab.new()
         if not self.active or tostring(self.session) ~= sessionKey or self.generation ~= generation then
             self.rejected += 1; return false
         end
-        if event == "end" then self:reset("native session ended"); return true end
+        if event == "end" then self:retire();self:reset("native session ended"); return true end
         if event == "n" then
             if finite(data.n) and data.n >= 0 and data.n <= 128 then self.hunters = data.n end
             self.lastAt = now -- joining/leaving hunters does not cancel the strike
@@ -74,7 +88,8 @@ function Grab.new()
         end
         if event == "bite" then
             self.pending, self.lastAt = nil, now
-            self.pauseUntil = now+(context and context.bitePause or .6)
+            local pause=context and context.bitePause
+            self.pauseUntil = now+(finite(pause) and pause>=0 and math.min(pause,3) or .6)
             self.status = "native bite pause"
             return true
         end
@@ -141,11 +156,16 @@ function Grab.new()
             return
         end
         if state.ended or state.practice or not id(state.id) then
-            if self.active and tostring(self.session) == tostring(state.id) then self:reset("native session ended") end
+            if self.active then
+                -- This is the current native UI state, not an unrelated event.
+                -- Practice or an ended replacement retires the previous fight.
+                if state.ended or state.practice then self:retire() end
+                self:reset(state.practice and "practice session excluded" or "native session ended")
+            end
             return
         end
         if not self.active or self.generation ~= generation or tostring(self.session) ~= tostring(state.id) then
-            self:event("begin",{f=state.id,role=state.role,n=state.n},now,generation,perfect,passes)
+            if not self:event("begin",{f=state.id,role=state.role,n=state.n},now,generation,perfect,passes) then return end
             self.nativeResumes += 1
         end
         self.lastAt = now
@@ -175,6 +195,7 @@ function Grab.new()
     end
     function g:tick(now, generation, allowed, send)
         if not self.enabled then if self.active or self.pending then self:reset("OFF") end; return end
+        if not finite(now) then return end
         if generation ~= self.generation then self:reset("animal changed"); return end
         if self.active and now-self.lastAt > 8 then self:reset("native session timeout"); return end
         local p = self.pending
@@ -196,7 +217,7 @@ function Grab.new()
         end
         local sequence=self.sequence
         self.pending = nil -- clear before calling out, including re-entrant replies
-        local ok, sent = pcall(send, p.session, p.strike, now)
+        local ok, sent,why,actual = pcall(send, p.session, p.strike, now)
         if ok and sent == true then
             self.presses += 1
             if self.sequence==sequence then self.submitted[tostring(p.strike)] = true end
@@ -205,8 +226,20 @@ function Grab.new()
                 later=p.later==true,error=error,perfectHalf=p.half})
             if #self.dispatches>32 then table.remove(self.dispatches,1) end
             if self.sequence==sequence and not self.results[tostring(p.strike)] then self.status = "press sent; game grade unknown" end
-        else self.status = "native press unavailable" end
-        self.lastAt = now
+        elseif ok and sent==false and why=="clock_moved" and finite(actual)
+            and self.sequence==sequence and self.active and self.pending==nil
+            and not self.results[tostring(p.strike)] and (p.dispatchChecks or 0)<3 then
+            -- The final actual-time check can cross the window while the
+            -- callback is being inspected. No press was issued on this path,
+            -- so retain the real strike for its next legal interval.
+            p.dispatchChecks=(p.dispatchChecks or 0)+1
+            local at,closes=Grab.crossing(math.max(actual,now+.001),p)
+            if at then
+                p.at,p.closes,p.later=at,closes,true
+                self.pending=p;self.retimed+=1;self.status="actual clock moved; next legal crossing"
+            else self.status="no valid crossing left" end
+        elseif self.sequence==sequence and self.pending==nil then self.status = "native press unavailable" end
+        self.lastAt = math.max(self.lastAt,now)
     end
     return g
 end

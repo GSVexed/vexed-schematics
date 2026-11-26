@@ -16,6 +16,10 @@ local function signal()
     function s:Fire(...)
         for _,c in ipairs(table.clone(self.listeners))do if c.Connected then c.fn(...)end end
     end
+    function s:Count()
+        local count=0;for _,c in ipairs(self.listeners)do if c.Connected then count+=1 end end
+        return count
+    end
     return s
 end
 local function world(native)
@@ -28,7 +32,7 @@ local function world(native)
         if parent then obj.Parent=parent end
         return obj
     end
-    w.uis.InputEnded=signal();w.keys={};w.keyEvents={}
+    w.uis.InputEnded=signal();w.uis.GamepadDisconnected=signal();w.keys={};w.keyEvents={}
     function w.uis:IsKeyDown(key)return w.keys[key]==true end
     w.workspace.CurrentCamera.CFrame={LookVector=V.new(0,0,-1),RightVector=V.new(1,0,0)}
     local groundRay=w.workspace.Raycast
@@ -78,7 +82,7 @@ local function world(native)
     return w,w.owner.territory
 end
 test("Renaissance contains Territory by default with one window and scheduler",function()
-    local w,h=world();eq(h.version,"0.7.0");eq(h.agent.enabled,false)
+    local w,h=world();eq(h.version,"0.8.0");eq(h.agent.enabled,false)
     eq(w:count("ScreenGui"),1);eq(w.run.Heartbeat:Count(),1)
     assert(w.owner.ui:selectTab("Territory"));assert(w.owner.ui.frame:FindFirstChild("TerritoryStart",true))
     w.owner:close()
@@ -134,7 +138,7 @@ test("COPY STATUS is available on the native page without other player names",fu
     local w,h=world();local copied;w.env.setclipboard=function(value)copied=value end
     w.owner.ui:selectTab("Territory");w.owner.ui.frame:FindFirstChild("TerritoryCopy",true).Activated:Fire()
     assert(copied);local data=w.env.game:GetService("HttpService"):JSONDecode(copied)
-    eq(data.version,"0.7.0");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
+    eq(data.version,"0.8.0");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
     w.owner:close()
 end)
 test("closing the hub invalidates deferred path computations",function()
@@ -263,7 +267,7 @@ test("core feeding cannot race Territory's owned stalled-session repair",functio
     local w,h=world();local c=w.player.Character;c:SetAttribute("WolfFeed","drink")
     c:SetAttribute("FeedCan","drink");c:SetAttribute("Thirst",50)
     w.owner.bridge.nativeFeedState=function()return "drink",true,true end
-    local calls=0;w.owner.bridge.toggleNativeFeed=function()calls+=1;return true end
+    local calls=0;w.owner.bridge.stopNativeFeed=function()calls+=1;return true end
     local s=w.owner.bridge:snapshot(w.time);w.owner.feeding:tick(s,w.time,true)
     w.owner.feeding:tick(s,w.time+5.1,true);eq(calls,0)
     w.owner.feeding:tick(s,w.time+5.2,false);eq(calls,1)
@@ -506,5 +510,137 @@ test("native helper cost reports distinguish opaque discovery from local candida
     eq(h.status().nativeHelperCosts["FeedFinder.waterAround"].calls,1)
     assert(h.bridge.operations.surface<=100);w.owner:close()
 end)
+test("same-parent native module replacement invalidates cached capability and generation",function()
+    local w,h=world();local first=h.bridge:snapshot(w.time)
+    local worldFolder=w.rs:FindFirstChild("FeralWorld")
+    worldFolder:FindFirstChild("NeedsConfig"):Destroy()
+    w:addConfig("NeedsConfig",{HUNGER_MAX=50,THIRST_MAX=100,SWIM_SPEED=1})
+    w.player.Character:SetAttribute("Hunger",40)
+    local nextState=h.bridge:snapshot(w.time+.1)
+    eq(nextState.hungerMax,50);assert(nextState.generation>first.generation)
+    w.owner:close()
+end)
+test("removed territory module cannot leave stale claim geometry available",function()
+    local w,h=world();h.bridge:snapshot(w.time)
+    w.rs:FindFirstChild("FeralWorld"):FindFirstChild("TerritoryConfig"):Destroy()
+    h.bridge:refresh(w.time+.2);eq(h.bridge.cfg,nil);eq(#h.bridge.hexes,0)
+    eq(h.bridge:territory("H0_0"),nil);w.owner:close()
+end)
+test("held gamepad stick pauses Territory until genuinely released",function()
+    local w,h=world();local key="Enum.KeyCode.Thumbstick1"
+    w.uis.InputChanged:Fire({KeyCode=key,Position=Mock.V3.new(.7,0,0)})
+    w:advance(2);eq(h.bridge:manualInput(),true)
+    w.uis.InputChanged:Fire({KeyCode=key,Position=Mock.V3.new()})
+    w:advance(.7);eq(h.bridge:manualInput(),false);w.owner:close()
+end)
+test("held gamepad combat button remains manual beyond the input debounce",function()
+    local w,h=world();local input={KeyCode="Enum.KeyCode.ButtonR2"}
+    w.uis.InputBegan:Fire(input,false);w:advance(2)
+    eq(h.bridge:manualInput(),true);w.uis.InputEnded:Fire(input,false)
+    eq(h.bridge:manualInput(),false);w.owner:close()
+end)
+test("touch movement wins on the same native PlayerModule frame",function()
+    local w,h=world();h.setEnabled(true);w:step(.25);assert(h.nav.desiredPoint)
+    local direction=Mock.V3.new(.6,0,.2)
+    w.controls.moveFunction(w.player,direction,true)
+    eq(h.nav.desiredPoint,nil);eq(w.hum.MoveDirection,direction)
+    eq(h.bridge:manualInput(),true);w.owner:close()
+end)
+test("previous-animal care and attack snapshots cannot dispatch after respawn",function()
+    local w,h=world(true);local s=h.bridge:snapshot(w.time);s.feedCan="drink";s.nativeFeedKnown=true
+    local calls=0;w.owner.bridge.toggleNativeFeed=function()calls+=1;return true end
+    w:spawn("Wolf")
+    eq(h.bridge:feed(s,"drink"),false);eq(calls,0)
+    eq(h.bridge:bite(s,{model={}}),false);eq(h.bridge:cancelFeed(s),false)
+    w.owner:close()
+end)
+test("closed Territory bridge rejects all deferred action entry points",function()
+    local w,h=world();local s=h.bridge:snapshot(w.time);s.feedCan="drink"
+    h.close();eq(h.bridge:feed(s,"drink"),false);eq(h.bridge:bite(s,{model={}}),false)
+    eq(h.bridge:move({x=100,z=0},s),"WAIT");w.owner:close()
+end)
+test("critical minigame window yields once without scanning or losing its goal",function()
+    local w,h=world();h.setEnabled(true);w:step(.25);local goal=h.agent.goal
+    local snapshots=0;local snapshot=h.bridge.snapshot
+    h.bridge.snapshot=function(self,...)snapshots+=1;return snapshot(self,...)end
+    w.owner.timingCritical=true;h:tick(w.time+.1);h:tick(w.time+.2)
+    eq(snapshots,0);eq(h.agent.goal,goal);eq(h.nav.desiredPoint,nil);eq(h.agent.phase,"PAUSED")
+    w.owner.timingCritical=false;h:tick(w.time+1)
+    assert(snapshots>0);eq(h.agent.goal,goal);w.owner:close()
+end)
+test("observed scent decay supplies recurrence only from a real falling window",function()
+    local w,h=world();h.bridge:snapshot(w.time)
+    local t=w.rs:FindFirstChild("FeralTerritory")
+    h.bridge.observationNow=w.time;h.bridge:territory("H0_0")
+    t:SetAttribute("H0_0_hold",.6);h.bridge.observationNow=w.time+10
+    local observed=h.bridge:territory("H0_0")
+    assert(observed.decayPerSecond and observed.decayPerSecond>0)
+    assert(observed.deadlineSeconds and observed.deadlineSeconds>0)
+    t:SetAttribute("H0_0_owner",2);t:SetAttribute("H0_0_hold",1)
+    h.bridge.observationNow=w.time+11;h.bridge:territory("H0_0")
+    w.owner:close()
+end)
+test("current Territory entry remains compatible with protected stable hub",function()
+    local w,h=world();w.owner:close()
+    w.owner=assert(w.env.loadstring(STABLE_RENAISSANCE_SRC,"=ProtectedStableHub"))()
+    eq(w.owner.version,"15.7.0");eq(w.owner.territory.version,"0.7.0")
+    local upgraded=assert(w.env.loadstring(BUNDLE_SRC,"=CurrentTerritoryOnStable"))()
+    eq(upgraded.version,"0.8.0");eq(upgraded.ownerHub,w.owner);eq(upgraded.agent.enabled,false)
+    eq(w:count("ScreenGui"),1);w.owner:close();eq(w.controls.moveFunction,w.originalMove)
+end)
+
+test("a missing first scent sample bootstraps only after numeric replication returns",function()
+    local w,h=world();local t=w.rs:FindFirstChild("FeralTerritory")
+    t:SetAttribute("H0_0_hold",nil);h.bridge:snapshot(w.time)
+    eq(h.bridge:territory("H0_0").decayPerSecond,nil)
+    t:SetAttribute("H0_0_hold",.7);h.bridge.observationNow=w.time+1
+    eq(h.bridge:territory("H0_0").decayPerSecond,nil)
+    t:SetAttribute("H0_0_hold",.6);h.bridge.observationNow=w.time+11
+    assert(h.bridge:territory("H0_0").decayPerSecond>0)
+    t:SetAttribute("H0_0_hold",nil);h.bridge.observationNow=w.time+12
+    eq(h.bridge:territory("H0_0").decayPerSecond,nil);w.owner:close()
+end)
+test("Territory hunt geometry reuses the core stock formula with conservative margins",function()
+    local w,h=world();local prey=w:npc(nil,Mock.V3.new(0,3,-3),false)
+    local s=h.bridge:snapshot(w.time);local p=h.bridge:checkPrey({model=prey},s);local calls=0
+    w.owner.features.originalCombat=table.clone(w.configs.CombatConfig)
+    w.owner.bridge.geometry=function(_,cfg,own,target)
+        calls+=1;eq(cfg,w.owner.features.originalCombat);eq(own.char,s.char);eq(target.char,prey)
+        return {gap=9.3,reach=10,angle=1,cone=70,vertical=10}
+    end
+    local geometry=h.bridge:attackGeometry(s,p)
+    eq(calls,1);eq(geometry.inRange,false);eq(geometry.valid,false)
+    w.owner:close()
+end)
+test("missing bite-corridor evidence cannot trigger a guessed Territory attack",function()
+    local w,h=world();local prey=w:npc(nil,Mock.V3.new(0,3,-3),false)
+    local s=h.bridge:snapshot(w.time);local p=h.bridge:checkPrey({model=prey},s)
+    w.workspace.Raycast=function()error("Streamed collision query unavailable")end
+    local geometry=h.bridge:attackGeometry(s,p)
+    assert(geometry);eq(geometry.clear,false);eq(geometry.valid,false);w.owner:close()
+end)
+
+test("in-place native territory schema removal invalidates old geometry",function()
+    local w,h=world();h.bridge:snapshot(w.time);assert(#h.bridge.hexes>0)
+    w.configs.TerritoryConfig.hexCenter=nil
+    h.bridge:refresh(w.time+.2);eq(#h.bridge.hexes,0);eq(h.bridge:territory("H0_0"),nil)
+    w.owner:close()
+end)
+test("gamepad disconnection clears held analog and button ownership",function()
+    local w,h=world()
+    w.uis.InputBegan:Fire({KeyCode="Enum.KeyCode.ButtonR2"},false)
+    w.uis.InputChanged:Fire({KeyCode="Enum.KeyCode.Thumbstick1",Position=Mock.V3.new(1,0,0)})
+    eq(h.bridge:manualInput(),true);w.uis.GamepadDisconnected:Fire();w:advance(.7)
+    eq(h.bridge:manualInput(),false);w.owner:close();eq(w.uis.GamepadDisconnected:Count(),0)
+end)
+
+test("native minigame owns Territory input even when automated minigames are off",function()
+    local w,h=world();w.owner:set("minigame",false);w.owner.grab.active=false
+    w.owner.hasNativeGrab=function()return true end
+    local s=h.bridge:snapshot(w.time);eq(s.ability,true)
+    h.setEnabled(true);h:tick(w.time+.2);eq(h.agent.phase,"PAUSED");eq(h.nav.desiredPoint,nil)
+    w.owner:close()
+end)
+
 print(string.format("AMBER_LIFECYCLE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Integrated lifecycle regressions failed")

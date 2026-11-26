@@ -1,62 +1,62 @@
 {
-  "version": "15.8.0",
+  "version": "16.0.0",
   "game_baseline": 2412,
   "modules": {
     "core": {
-      "sha256": "a0cb28c778973863d6a873f4a1529004bc24f7d5f4beee9886d28c3e7ba9fb67",
-      "bytes": 10642
+      "sha256": "8e138e3a9ecfcec3821b3b6cc18bdbdcd9ada3c264b178f89fa6af91f8e2288c",
+      "bytes": 12223
     },
     "settings": {
-      "sha256": "f6e675ef8128ec7c48431973d0742e59675e8ad906c2fe5e503a36aa63a05b11",
-      "bytes": 2664
+      "sha256": "61266183c2f61728679177fc9a72ba4987cb742a31e4490f846ec23b496dc325",
+      "bytes": 3928
     },
     "policy": {
-      "sha256": "af5ecb6ec72f49087728cfe019c0513afbcbc48004eea2dd9c1b73088ef0a126",
-      "bytes": 5272
+      "sha256": "2db9d00f2e639ae20331af0e5142d117282ad3895cbdd8f56193659507f42e19",
+      "bytes": 5535
     },
     "grab": {
-      "sha256": "b8fb7a5a3524ae5de1148f7d82c2a8692ab57f6b9989c9681f1f42559653d817",
-      "bytes": 11132
+      "sha256": "b88d7666d020ca0d69c32d44b662a2d18ffc6afc1192beeb95843589d124db87",
+      "bytes": 13171
     },
     "grab_input": {
-      "sha256": "c6aa5c0fad2da9c2d37674c90546954f12e5f9e757be2f8cd3092d1eff3f82f5",
-      "bytes": 3583
+      "sha256": "8bf5d669c52aa3ec3cdeee661fb9cf2994eb414003e0e47d2d88544bff03139b",
+      "bytes": 3812
     },
     "recovery": {
-      "sha256": "3115c2b8ed1e58a5cea224a32233d09237520e580746812eb4d22db076e8ac8d",
-      "bytes": 12611
+      "sha256": "5e82100f08b394a177bac98a5b432e17c08eb8c151c8b3d95ec9a096e08540ed",
+      "bytes": 13317
     },
     "feeding": {
-      "sha256": "e1017d927e4834f4a3e5b0cce980059472cd3b4bea0f6b68ec15ccb43e911fa3",
-      "bytes": 5920
+      "sha256": "4f03841709f72ce8cd22eec26eeb3a205896c0465aa9fd6720f8e674acb6f27c",
+      "bytes": 6701
     },
     "combat_input": {
-      "sha256": "8f86e05a4dc5b94b793fa09b7f7aec8a8c97217b7abc134a8738f4054f25abbd",
-      "bytes": 1194
+      "sha256": "c7941c6656c17f15b2f5292bd1ed1edeac0c40c28b7bb745bddebe288bf63cdf",
+      "bytes": 2434
     },
     "rescue": {
-      "sha256": "5b089c7dd1a2f9e358351a4080cee3548493ba3cd48bbf08f627802800fcdc5e",
-      "bytes": 2717
+      "sha256": "f1be4288bfbe47a55c7c74f6895966ce5f199055d7286d10ad0976bc04b5fecb",
+      "bytes": 3008
     },
     "features": {
-      "sha256": "bafb9c42d044ba874eac6ae5d16647274dcfdcab8b3f4271ada1dd25f64e4bbb",
-      "bytes": 24950
+      "sha256": "4f9be7f5bfdde489fad334e71612057dd84f6a6bf2149406cf824932f79497b6",
+      "bytes": 28959
     },
     "roblox": {
-      "sha256": "8b0e86aefe2d337fd7875d978941186b61ab0d4ee56038d3c23ab6bccbbc5ae4",
-      "bytes": 62171
+      "sha256": "3c517069d7aefcf09d5d859465bbb1fb7035034827e8d2a278f30bc739bb5a8d",
+      "bytes": 69732
     },
     "zoom": {
-      "sha256": "885fa4d9db1d2eb4c4ce49b9dc44956017f6482af2315c04f78e4ee69231bdea",
-      "bytes": 3362
+      "sha256": "8446b1f187833685e25b5104dde57eb6c60c5f727bc65c032e704628b23707b3",
+      "bytes": 3565
     },
     "ui": {
-      "sha256": "3aaa70e784bb40ebd6133202f66682ebe22806f964d9585ef8de6d5348759a2b",
-      "bytes": 17478
+      "sha256": "577ec136e4b983ebb28083ef86bea9dc88e6cf4a17cc7c0b2d325486b6be33c2",
+      "bytes": 21376
     },
     "controller": {
-      "sha256": "6bc5d97e7f0f79b3764452ff954cca9cfbd39c5d4e8a2fa705b4b93b8cca6229",
-      "bytes": 47877
+      "sha256": "beac4a07e7da52a3666d716be02c243f08a5bbc985932dc255c4b2c25eeb507f",
+      "bytes": 56389
     },
     "amber_ledger": {
       "sha256": "d81f49ce6c742e898d2e8dc2c2f93aa7c00d704f0b9498579712492aa760254f",
@@ -67,47 +67,47 @@
       "bytes": 3810
     },
     "amber_planner": {
-      "sha256": "d49fef7b717c90d6ecf4e63636433f72bb16405ba4b8d78ebeb86a0dcd6013c7",
-      "bytes": 16758
+      "sha256": "5e5436d28c6be5f69beafe268bfaea11acf46dbfc50db291832e459c4c146feb",
+      "bytes": 22646
     },
     "amber_gait": {
       "sha256": "0204c0a87b47156bd5450dcdd9f3c4e74b4b28399ff755cfb5d3763dee9b63de",
       "bytes": 7902
     },
     "amber_nav": {
-      "sha256": "d58041dc85067774c5d66c6bfbf4efe2cc20a7f75124551cc2b1ca1c735cfabd",
-      "bytes": 35320
+      "sha256": "d2d841beb6c6107752a094f35f0295207f25b90a9f03210f59e60821359aceef",
+      "bytes": 36600
     },
     "amber_hunt": {
-      "sha256": "f6db177db9ab5c37454853e91269cc7ff1c905a3b21caa92d5dbed7b60a99f9a",
-      "bytes": 10566
+      "sha256": "b3e39ae28311654dbef89c16bd5539c6198654f361b39732f0bb0c2f921979dd",
+      "bytes": 12438
     },
     "amber_care": {
-      "sha256": "c9212c9ca1fc6bbd8d138c935ef23f0f8ceed3825657f0a6778d34289cbc0d90",
-      "bytes": 4675
+      "sha256": "8da160adbe7f08a624f004a59314ec38747c28d01d41a4f4a0eb5bc406e92bbf",
+      "bytes": 5080
     },
     "amber_agent": {
-      "sha256": "7f97695336da8f48893e89c11bf3600f8609112957b42610848c3d64120aadfb",
-      "bytes": 37364
+      "sha256": "50c334681beb9992910a984aefb2c9ee51fa1853005991d0cad914ff50397f29",
+      "bytes": 39816
     },
     "amber_bridge": {
-      "sha256": "70da99732106d8c303e11c0f97c7bae23f042c0abf470bcb61ec814d79494d37",
-      "bytes": 59594
+      "sha256": "7f9136c212ed6466391303ea9333c82cad4c092a22b4c8a68dc0485abbd0581d",
+      "bytes": 65584
     },
     "amber_driver": {
-      "sha256": "c6d665c0f5394ca09746890e07cd5d7581dc084bd0b5601644f9b69cee9bae4e",
-      "bytes": 4272
+      "sha256": "00267c2ac18aab2bbe5d4cfa5053e29e9d9fa7d3d860b4f5d650c3a7bfbeab95",
+      "bytes": 5275
     },
     "amber_ui": {
-      "sha256": "8bad0086581240aaceeb416b5c102e9c53cff185cb55955b7fc9ec05e0957c64",
-      "bytes": 4290
+      "sha256": "b59a48e5ca1c8b24735a1021e636ab0e3d2798ed896c4028d88d4092728b8be3",
+      "bytes": 4566
     },
     "amber_runtime": {
-      "sha256": "2f736267b8caf1d907a7187d5aed8337302ab1d9f3b097a24836df9765064ca5",
-      "bytes": 5209
+      "sha256": "6fdeb6543d3bf4d93df1c393d2e374529822bcbc8c32670a7aea77710128415c",
+      "bytes": 5870
     }
   },
-  "bundle_sha256": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30",
-  "bundle_bytes": 410269,
+  "bundle_sha256": "53e348fb1574d7a7fd334ac316fac645b8801f4ab9706fd6288f7df91c642b29",
+  "bundle_bytes": 463094,
   "stable_clean_v14_overwritten": false
 }

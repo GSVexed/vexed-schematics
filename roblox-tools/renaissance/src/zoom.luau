@@ -14,6 +14,11 @@ function Zoom.new(player)
             for _,key in ipairs(fields) do assert(player[key]==desired[key],"Camera limit rejected") end
         end)
         self.writing=false;self.applied=ok
+        if not ok then
+            -- A rejected second property must not leave the first expanded or
+            -- retain observers on a half-applied camera lease.
+            self:close()
+        end
         self.reason=ok and "Mouse-wheel zoom · 0.5–100,000 studs" or "Camera limits unavailable or rejected"
         return ok
     end

@@ -11,8 +11,24 @@ end
 function Agent.new(planner,adapter,Hunt,Care,Ledger)
     local a={planner=planner,adapter=adapter,Hunt=Hunt,Care=Care,enabled=false,phase="OFF",goal=nil,
         cooldown={},careCooldown={},recent={},waitingSince={},events={},ticks=0,earned=0,claimed=0,scented=0,
-        feeds=0,hunts=0,failures=0,nextTick=0,reason="Disabled",generation=0,returns={},version="0.7.0"}
+        feeds=0,hunts=0,failures=0,nextTick=0,reason="Disabled",generation=0,returns={},version="0.8.0"}
     a.metrics=Ledger and Ledger.new() or nil
+    function a:planningOptions(extra)
+        local options={blockedUntil=self.cooldown,waitingSince=self.waitingSince,
+            maintenanceOnly=self.capacity and self.capacity.maintenanceOnly,retainOwned=self.capacity and self.capacity.retainOwned}
+        for key,value in pairs(extra or {}) do options[key]=value end
+        return options
+    end
+    function a:updateCapacity(hexes,state)
+        if not self.planner.capacity then return end
+        local care,active=0,self.metrics and self.metrics.active or 0
+        for phase,seconds in pairs(self.metrics and self.metrics.phases or {}) do
+            if phase:find("FOOD",1,true) or phase:find("WATER",1,true) or phase:find("HUNT",1,true)
+                or phase=="DRINKING" or phase=="EATING" or phase=="RECOVER" or phase=="FEED_APPROACH" then care+=seconds end
+        end
+        self.capacity=self.planner.capacity(hexes,state,{blockedUntil=self.cooldown,
+            careFraction=active>30 and math.clamp(care/active,0,.75) or 0})
+    end
     function a:selectTerritory(state,force)
         local hexes=self.adapter:territories(state)
         local byKey={}
@@ -21,8 +37,9 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             if self.planner.objective(hex,state,state.position,{blockedUntil=self.cooldown}) then self.waitingSince[hex.key]=self.waitingSince[hex.key] or state.now
             else self.waitingSince[hex.key]=nil end
         end
-        local options={blockedUntil=self.cooldown,recent=self.recent,waitingSince=self.waitingSince,
-            maxStops=6,regionCursor=self.regionCursor,regionDirection=self.regionDirection}
+        self:updateCapacity(hexes,state)
+        local options=self:planningOptions({recent=self.recent,maxStops=6,
+            regionCursor=self.regionCursor,regionDirection=self.regionDirection})
         if not force and self.itinerary then
             while #self.itinerary>0 do
                 local item=self.itinerary[1]
@@ -33,7 +50,6 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         end
         local route,strategy=self.planner.strategy(hexes,state,options)
         self.itinerary=route;self.strategy=strategy;self.regionCursor=strategy.cursor;self.regionDirection=strategy.direction or self.regionDirection
-        if self.planner.capacity then self.capacity=self.planner.capacity(hexes,state,options) end
         return route,strategy
     end
     function a:log(at,kind,msg)
@@ -42,8 +58,11 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         while #self.events>35 do table.remove(self.events,1) end
     end
     function a:setEnabled(on,now)
-        local ownedFeed=self.enabled and self.goal and self.goal.feedPending
-        self.generation+=1;self.enabled=on==true
+        local desired=on==true
+        if self.enabled==desired then return end
+        now=now or self.lastState and self.lastState.now or os.clock()
+        local ownedFeed=self.enabled and self.goal and self.goal.meal and self.goal.meal.owned
+        self.generation+=1;self.enabled=desired
         if not self.enabled then
             if self.metrics and self.metrics.run then self.metrics:sample(now or self.lastState and self.lastState.now or self.metrics.at,self.phase,self.phase=="PAUSED",false,self.goal,self.lastState,self.adapter.nav) end
             if self.adapter.recover then self.adapter:recover(self.lastState,false) end
@@ -55,6 +74,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             end
         else
             self.nextTick=0;self.prevAmber=nil;self.needWindow={};self.needRates={};self.depletionProfiles={}
+            self.capacity=nil;self.nextCapacityAt=0;self.nextPlanAt=0;self.nextUrgentCheck=0;self.pausedAt=nil
             self.itinerary=nil;self.regionCursor=nil;self.regionDirection=nil;self.earned=0;self.claimed=0;self.scented=0
             self.feeds,self.hunts,self.failures=0,0,0
             if self.metrics then self.metrics:start(now) end
@@ -74,6 +94,10 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         if self.metrics then self.metrics:count("failure",reason) end
         if self.adapter.recover then self.adapter:recover(state,false) end
         local g=self.goal
+        if g and g.meal and g.meal.owned and not g.meal.cancelAt and not g.emergencyStopAt and self.adapter.cancelFeed then
+            if self.adapter:cancelFeed(state) then g.meal.cancelAt=state.now end
+        end
+        if self.adapter.releaseInputs then self.adapter:releaseInputs() end
         if g and g.kind=="TERRITORY" then self.cooldown[g.key]=state.now+90
         elseif g then self.careCooldown[g.kind]=state.now+2 end
         if g and g.kind=="DRINK" and self.adapter.avoidWater then self.adapter:avoidWater(g.location,state.now) end
@@ -88,7 +112,8 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         self.goal={id=self.objectiveSerial,generation=self.generation,wallStart=state.now,
             kind=kind,key=target and target.key,detail=target,start=state.now,
             nextAction=0,tries=0,progressAt=state.now,
-            baseline=kind=="DRINK" and state.thirst or kind=="EAT" and state.hunger or nil}
+            baseline=kind=="DRINK" and state.thirst or kind=="EAT" and state.hunger or nil,
+            needMaximum=kind=="DRINK" and state.thirstMax or kind=="EAT" and state.hungerMax or nil}
         self.phase="PREPARE_"..kind;self.reason="Starting "..kind
         self:log(state.now,"goal",kind..":"..tostring(target and target.key or "-"))
     end
@@ -98,10 +123,10 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         local g=self.suspended;self.suspended=table.remove(self.returns)
         if g and g.kind=="TERRITORY" then
             local current=self.adapter:territory(g.key,state)
-            local detail=current and self.planner.objective(current,state,state.position,{blockedUntil=self.cooldown})
+            local detail=current and self.planner.objective(current,state,state.position,self:planningOptions())
             if detail then
                 if state.travelCost then
-                    local route,strategy=self.planner.strategy(self.adapter:territories(state),state,{blockedUntil=self.cooldown,regionCursor=self.regionCursor,maxStops=1})
+                    local route,strategy=self.planner.strategy(self.adapter:territories(state),state,self:planningOptions({regionCursor=self.regionCursor,maxStops=1}))
                     local alternate=route[1]
                     if alternate and alternate.key~=g.key and (strategy.phase=="URGENT_SCENT"
                         or alternate.score>detail.score*1.8 and alternate.travelSeconds<detail.travelSeconds*.55) then
@@ -158,7 +183,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             self.phase="WAIT";self.reason="Living animal unavailable"
             self.goal,self.suspended=nil,nil;self.returns={};self.itinerary=nil
             if self.adapter.recover then self.adapter:recover(state,false) end
-            self.adapter:stop("despawn");return
+            self.adapter:stop("despawn");if self.adapter.releaseInputs then self.adapter:releaseInputs() end;return
         end
         state.now=now;self.lastState=state;self.species,self.coat=state.species,state.coat
         local changed=self.initialized and (self.lastCharacter~=state.char or self.lastPack~=state.pack
@@ -168,7 +193,9 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             self.goal,self.suspended=nil,nil;self.returns={};self.cooldown,self.recent,self.careCooldown={},{},{}
             self.waitingSince={};self.regionCursor=nil;self.regionDirection=nil;self.itinerary=nil
             self.needWindow={};self.needRates={};self.depletionProfiles={}
-            self.prevAmber=nil
+            self.prevAmber=nil;self.capacity=nil;self.nextCapacityAt=0;self.nextPlanAt=0;self.nextUrgentCheck=0
+            if self.adapter.releaseInputs then self.adapter:releaseInputs() end
+            if self.adapter.recover then self.adapter:recover(state,false) end
             self.adapter:stop("animal / pack / map changed")
             self.lastTerritoryKey=nil;self.pausedAt=nil
             self:log(now,"reset","Changed animal, pack or map")
@@ -207,7 +234,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         if self.metrics then self.metrics:currency(state.amber,state.char) end
         if self.planner.capacity and now>=(self.nextCapacityAt or 0) then
             self.nextCapacityAt=now+10
-            self.capacity=self.planner.capacity(self.adapter:territories(state),state,{blockedUntil=self.cooldown})
+            self:updateCapacity(self.adapter:territories(state),state)
         end
         if finite(state.amber) then
             if finite(self.prevAmber) and state.amber>self.prevAmber then self.earned+=state.amber-self.prevAmber end
@@ -225,6 +252,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             self:pause(state,"Native feeding owns movement");return
         end
         if state.underwater then self:pause(state,"Underwater route requires manual surface recovery");return end
+        if state.combatKnown==false then self:pause(state,"Native combat timing unavailable");return end
         if state.combat and (not self.goal or self.goal.kind~="EAT") then self:pause(state,"Combat interruption");return end
         if self.pausedAt then
             if self.goal then
@@ -242,6 +270,11 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
         if need=="WAIT" then self:pause(state,decision.reason or "Native needs unavailable");return end
         if not self.goal and self.suspended and need=="TERRITORY" then self:resume(state) end
         local goal=self.goal
+        if goal and goal.kind=="TERRITORY" and not goal.nativeStarted and self.capacity and self.capacity.maintenanceOnly
+            and (goal.detail.kind=="CLAIM" or self.capacity.retainOwned and not self.capacity.retainOwned[goal.key]) then
+            self.goal=nil;self.itinerary=nil;goal=nil
+            self.adapter:stop("Maintenance workload displaced optional acquisition")
+        end
         if goal and goal.kind=="TERRITORY" and state.contested and state.contested[goal.key] then
             self.cooldown[goal.key]=now+15
             self.lastSkip="Non-pack player occupies "..goal.key
@@ -280,8 +313,8 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             local completed=current and (goal.detail.kind=="CLAIM" and current.owner==state.pack
                 or goal.detail.kind=="SCENT" and current.hold and current.hold>=.985)
             if not completed and not almostDone and not urgentGoal and flat(state.position,goal.detail.center)>(state.claimRadius or 15) then
-                local route,strategy=self.planner.strategy(self.adapter:territories(state),state,{
-                    blockedUntil=self.cooldown,regionCursor=self.regionCursor,maxStops=1})
+                local route,strategy=self.planner.strategy(self.adapter:territories(state),state,
+                    self:planningOptions({regionCursor=self.regionCursor,maxStops=1}))
                 if strategy.phase=="URGENT_SCENT" and route[1] and route[1].key~=goal.key then
                     self:suspend(goal);self.strategy=strategy
                     self:takeGoal(state,"TERRITORY",route[1]);goal=self.goal
@@ -343,7 +376,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
                     self.phase="PATROL";self.reason="Territories maintained; checking the next area"
                     self.adapter:move(patrol,state,{navKey="PATROL:"..tostring(patrol.key),moveRadius=12})
                 else
-                    self.phase="WATCH";self.reason="Territories maintained or deferred; watching native scent and survival"
+                    self.phase="WATCH";self.reason=self.capacity and self.capacity.maintenanceOnly and self.capacity.policy or "Territories maintained or deferred; watching native scent and survival"
                     self.adapter:stop("no available target")
                 end
                 return
@@ -507,7 +540,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             end
             self.phase="TRAVEL_WATER";self.reason="Approaching observed water access"
             local result=self.adapter:move(goal.location,state,{navKey="WATER:"..tostring(goal.locationAt),moveRadius=4})
-            if result=="STUCK" then
+            if result=="STUCK" or result=="BLOCKED" then
                 if self.adapter.avoidWater then self.adapter:avoidWater(goal.location,now) end
                 goal.location=nil;goal.arrivedAt=nil
             end
@@ -520,7 +553,7 @@ function Agent.new(planner,adapter,Hunt,Care,Ledger)
             goal.food=food;self.phase="TRAVEL_FOOD";self.reason="Approaching native edible food"
             local result=self.adapter:move(food.position,state,{navKey=food.model or "FOOD",moveRadius=2})
             if result=="REACHED" then goal.foodArrived=goal.foodArrived or now end
-            if result=="STUCK" or goal.foodArrived and now-goal.foodArrived>2.5 then
+            if result=="STUCK" or result=="BLOCKED" or goal.foodArrived and now-goal.foodArrived>2.5 then
                 if food.model and self.adapter.foodBlocked then self.adapter.foodBlocked[food.model]=now+80 end
                 goal.food=nil;goal.foodArrived=nil
             end

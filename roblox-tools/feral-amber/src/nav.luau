@@ -78,9 +78,10 @@ function Nav.new(pathService,workspace,Gait,model)
         end
         self.epoch+=1;self.pending=nil
         self.desiredPoint,self.desiredRoot,self.desiredHum=nil,nil,nil
-        if active then self.gaits:stop(self.lastState,self.lastAt or 0) end
+        local sameBody=not self.bodyRoot or self.bodyRoot==root
+        if active then self.gaits:stop(sameBody and self.lastState or nil,self.lastAt or 0) end
         self:releaseKeys();self.gait="STOP"
-        if active and hum then pcall(hum.Move,hum,Vector3.zero,false) end
+        if active and sameBody and hum then pcall(hum.Move,hum,Vector3.zero,false) end
         self.destination,self.body,self.identity=nil,nil,nil
         self.points,self.index={},1;self.lastPosition=nil
         self.lastReason=reason or "IDLE"
@@ -307,14 +308,22 @@ function Nav.new(pathService,workspace,Gait,model)
         local epoch=self.epoch
         local request={at=now,epoch=epoch,origin=root.Position,goal=self.destination}
         self.pending=request;self.activeJobs=(self.activeJobs or 0)+1
+        -- ComputeAsync may yield through an animal/goal replacement. Isolate
+        -- every cache and collision side effect before the adoption lease is
+        -- checked, rather than merely rejecting the eventual waypoint list.
+        local worker=table.clone(self)
+        worker.operations={rays=0,surfaces=0,paths=0};worker.surfaceCache={}
+        worker.overlapAt=nil;worker.overlapParts=nil
         task.spawn(function()
             local started=os.clock()
-            local ok,points,reason=pcall(self.compute,self,request.origin,root,hum,char,
+            local ok,points,reason=pcall(worker.compute,worker,request.origin,root,hum,char,
                 table.clone(state or {}),request.goal,self.replans)
             self.pathWall=(self.pathWall or 0)+math.max(0,os.clock()-started)
             self.activeJobs-=1
+            for name,count in pairs(worker.operations) do self.operations[name]=(self.operations[name] or 0)+count end
             if self.closed or self.epoch~=epoch or self.pending~=request then return end
             self.pending=nil
+            self.lastSafety=worker.lastSafety;self.lastObstacle=worker.lastObstacle
             if not ok or not points then
                 self.routeFailures+=1;self.failures+=1
                 self.lastFailure=ok and reason or "PATH_COMPUTATION_ERROR"
@@ -406,7 +415,12 @@ function Nav.new(pathService,workspace,Gait,model)
         if self.closed or not destination or not char or not hum or not root or hum.Health<=0 then
             self:stop(hum,root,"NO_LIVING_ANIMAL");return "WAIT"
         end
+        if state.flying or state.climbing or state.underwater then
+            self:stop(hum,root,"UNSUPPORTED_NATIVE_ROUTE_MODE");return "BLOCKED"
+        end
         local identity=state.navKey or "STATIC"
+        local replacedRoot=self.bodyRoot and self.bodyRoot~=root
+        local replacedGeneration=self.characterGeneration~=nil and self.characterGeneration~=state.generation
         self.bodyRoot=root
         self.clearance=math.clamp(root.Size.X*.5+.65,2,12)
         self.bodyHeight=math.clamp(root.Size.Y*.8,1,10)
@@ -415,7 +429,13 @@ function Nav.new(pathService,workspace,Gait,model)
         self.maxDrop=math.clamp(hum.HipHeight*.75,2,4)
         self.maxStepUp=math.clamp(hum.HipHeight,2,4)
         self.minGroundNormal=math.cos(math.rad(math.clamp(hum.MaxSlopeAngle or 55,20,55)))
-        if not self.destination or self.body~=char or self.identity~=identity then self:reset(destination,char,now,identity) end
+        if not self.destination or self.body~=char or self.identity~=identity or replacedRoot or replacedGeneration then
+            if replacedRoot or replacedGeneration then
+                self.gaits:stop(nil,now);self:releaseKeys()
+            end
+            self:reset(destination,char,now,identity)
+        end
+        self.characterGeneration=state.generation
         local targetShift=flat(destination,self.destination)
         self.destination=destination
         self.arrivalRadius=state.moveRadius or 8

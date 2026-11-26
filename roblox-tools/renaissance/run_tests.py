@@ -51,8 +51,9 @@ def main():
             raise AssertionError("missing rollback accepted")
     manifest = build()
     compiled = []
+    extra_suites = sorted((ROOT / "tests").glob("overhaul_*.luau"))
     compile_paths = [*(module_path(name) for name in MODULES),
-                     ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", ROOT/"tests/performance.luau", DEST]
+                     ROOT/"tests/mock_roblox.luau", ROOT/"tests/suite.luau", ROOT/"tests/performance.luau", *extra_suites, DEST]
     launcher = ROOT.parent/"feral-renaissance.lua"
     if launcher.exists():
         compile_paths.append(launcher)
@@ -62,6 +63,19 @@ def main():
         assert pin in launcher.read_text(), "launcher differs from released source pin"
         released = ROOT.parent/f'feral-renaissance-v{release["version"]}.lua'
         assert hashlib.sha256(released.read_bytes()).hexdigest() == release["bundle_sha256"], "released bundle hash"
+    candidate_path = ROOT/"candidate.json"
+    candidate_loader = ROOT.parent/"feral-renaissance-candidate.lua"
+    assert candidate_path.exists() == candidate_loader.exists(), "candidate metadata/loader pair"
+    if candidate_path.exists():
+        candidate = json.loads(candidate_path.read_text())
+        assert candidate["version"] == manifest["version"], "candidate version"
+        assert candidate["bundle_sha256"] == manifest["bundle_sha256"], "candidate bundle hash"
+        assert candidate["module_count"] == len(MODULES), "candidate module count"
+        assert candidate["stable_promoted"] is False, "candidate cannot silently promote stable"
+        assert re.fullmatch(r"[0-9a-f]{40}", candidate["source_commit"]), "candidate commit pin"
+        candidate_pin = f'{candidate["source_commit"]}/roblox-tools/feral-renaissance-v{candidate["version"]}.lua'
+        assert candidate_pin in candidate_loader.read_text(), "candidate loader source pin"
+        compile_paths.append(candidate_loader)
     for p in compile_paths:
         result = subprocess.run([args.compiler, "--null", str(p)], capture_output=True, text=True)
         if result.returncode:
@@ -90,11 +104,16 @@ def main():
     assert not re.search(r'\bgetgc\s*\(', source), "runtime heap enumeration forbidden"
     assert not re.search(r'\.Health\s*(?:[+*/-]?=)',source), "local HP writes forbidden"
     assert not re.search(r'(?:setAttribute|SetAttribute)\([^\n]*["\'](?:Hunger|Thirst|Stamina|StaminaMax|FeralInjury|FeralBleed|FeralVenomAmt)["\']\s*,',source), "local resource/status writes forbidden"
+    suite = (ROOT/"tests/suite.luau").read_text()
+    summary_marker = 'print(string.format("RENAISSANCE_TEST_RESULT'
+    assert suite.count(summary_marker) == 1, "test summary injection point"
+    suite = suite.replace(summary_marker, "\n".join(path.read_text() for path in extra_suites) + "\n" + summary_marker)
     script = "local BUNDLE = " + long_string(source) + "\nlocal MOCK_SOURCE = " + long_string(
         (ROOT/"tests/mock_roblox.luau").read_text()) + "\nlocal BASELINE = " + long_string(
         (ROOT.parent/"feral-renaissance-v15.2.1.lua").read_text()) + "\nlocal PERF_SOURCE = " + long_string(
         (ROOT/"tests/performance.luau").read_text()) + "\nlocal PREVIOUS = " + long_string(
-        (ROOT.parent/"feral-renaissance-v15.3.0.lua").read_text()) + "\n" + (ROOT/"tests/suite.luau").read_text()
+        (ROOT.parent/"feral-renaissance-v15.3.0.lua").read_text()) + "\nlocal INTEGRATED_BASELINE = " + long_string(
+        (ROOT.parent/"feral-renaissance-v15.8.0.lua").read_text()) + "\n" + suite
     with tempfile.TemporaryDirectory(prefix="renaissance-test-") as directory:
         path = pathlib.Path(directory)/"regression.luau"
         path.write_text(script)
@@ -105,11 +124,14 @@ def main():
     match = re.search(r"RENAISSANCE_TEST_RESULT total=(\d+) passed=(\d+) failed=(\d+)", result.stdout)
     summary = {"version": manifest["version"], "bundle_sha256": manifest["bundle_sha256"],
                "compiled": compiled, "module_parity": True, "rollback_hashes_unchanged": True,
+               "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+               "protected_artifacts": len(PROTECTED_HASHES),
+               "candidate_pin_validated": candidate_path.exists(),
                "regressions": dict(zip(("total","passed","failed"), map(int,match.groups()))) if match else None,
                "runtime_exit_code": result.returncode, "gameplay_success_claimed": False,
                "results": result.stdout.splitlines()}
     args.output.write_text(json.dumps(summary, indent=2) + "\n")
-    if result.returncode or not match:
+    if result.returncode or not match or int(match.group(1)) < 214 or int(match.group(3)) != 0:
         raise SystemExit(1)
 
 

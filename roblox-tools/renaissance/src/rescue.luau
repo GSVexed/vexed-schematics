@@ -7,7 +7,13 @@ function Rescue.new(bridge,ledger)
         if reason then self.status=reason end
     end
     function r:input(s,now)
-        if self.pending then self:cancel("Cub rescue cancelled");return true end
+        if self.pending then
+            local carrying=s.holding or bridge:carrying(s,self.pending.target.char)
+            self:cancel("Cub rescue cancelled")
+            -- A native pickup may complete between heartbeats. The next G
+            -- must reach the game's drop binding rather than being swallowed.
+            return not carrying
+        end
         if now<self.nextAt or not s.alive or s.chat or s.gameMenu or s.holding or s.captured or s.feeding or s.grab
             or s.ability or s.flying or s.climbing then return false end
         local target=bridge:waterCub(s)
@@ -27,7 +33,7 @@ function Rescue.new(bridge,ledger)
             return
         end
         if not s.alive or p.char~=s.char or p.generation~=s.generation or s.chat or s.gameMenu
-            or s.captured or s.grab or s.feeding or s.attackHeld or s.ability or now>p.untilAt then
+            or s.captured or s.grab or s.feeding or s.attackHeld or s.ability or s.holding or now>p.untilAt then
             self:cancel(p.sent and "No native carry observed; game water rules may block pickup" or "Cub rescue ended; move to the bank and use G")
             return
         end

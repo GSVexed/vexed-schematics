@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-26",
+  "baseline_commit": "bcc9c3699b41b6a2bd74a2d91324a493ee48b2c2",
+  "baseline_version": "15.8.0",
+  "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+  "core": {
+    "bundle_sha256": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30",
+    "regressions": {
+      "total": 214,
+      "passed": 214,
+      "failed": 0
+    },
+    "module_parity": true,
+    "rollback_hashes_unchanged": true,
+    "runtime_exit_code": 0
+  },
+  "territory": {
+    "version": "0.7.0",
+    "total": 263,
+    "passed": 263,
+    "bundle_sha256": "18949113ea36458a2db37581cfdfa458f53a28923580ad45afbb3566acd4ad74",
+    "compiled": 24,
+    "protected_releases": 12
+  },
+  "live_gameplay_tested": false,
+  "method": "Unchanged detached worktree at baseline commit; original official runners and pinned Luau. Full candidate reports are separate."
+}
