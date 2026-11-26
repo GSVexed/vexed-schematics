@@ -37,23 +37,49 @@ function Recovery.new(bridge, policy, ledger)
         -- its first frame after a hitch. Time alone is not a rendered frame.
         if self.pose and not self.owned and now >= (self.poseUntil or 0) then self:clearPose() end
     end
+    function r:failedExit(char,now)
+        -- Do not hide a native Rest that we failed to end, claim a
+        -- successful exit, or retry the user's attack against unknown state.
+        self.releaseFailedChar=char
+        self.lastAutomaticCharacter=nil
+        self.nativeEchoObserved=false
+        self.previous,self.observations=nil,{}
+        self:clearPose()
+        self.state="native Rest exit failed; use manual Rest"
+        ledger:event("native_rest_exit_failed",now)
+        return false
+    end
     function r:release(reason, now)
         local char = self.owned
         self.owned = nil
         if char then
-            self.releaseAt, policy.lastRestRelease = now, now
-            bridge:rest(char, false)
-            -- Only an echo attributed to this owner's Rest request is cleared.
-            if not policy.manualRest then bridge:maskRest(char) end
-            self.poseUntil = now+.35 -- let the animator consume the reset after release
-            ledger:event("owned_rest_released", now, { reason = reason })
+            if char~=bridge.player.Character or not char.Parent then
+                self:clearPose()
+                self.lastAutomaticCharacter=nil
+            else
+                self.releasingChar=char
+                local dispatched=bridge:rest(char,false)
+                self.releasingChar=nil
+                if not dispatched then return self:failedExit(char,now) end
+                self.releaseAt, policy.lastRestRelease = now, now
+                -- Only an echo attributed to this owner's dispatched exit is cleared.
+                if not policy.manualRest then bridge:maskRest(char) end
+                self.poseUntil = now+.35
+                ledger:event("owned_rest_released", now, { reason = reason })
+            end
+        end
+        if self.releaseFailedChar and self.releaseFailedChar==bridge.player.Character then
+            self.state="native Rest exit failed; use manual Rest"
+            return false
         end
         self.state = reason or "OFF"
+        return true
     end
     function r:manual(now)
         -- Yield ownership without emitting false; native/manual Rest takes over.
         self.owned = nil
         self.lastAutomaticCharacter = nil
+        self.releaseFailedChar=nil
         self:clearPose()
         policy.manualRest = true
         self.state = "MANUAL"
@@ -61,7 +87,7 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:echo(s, now)
         if not s or not s.char then return end
-        if policy.manualRest then return end
+        if policy.manualRest or self.releasingChar==s.char or self.releaseFailedChar==s.char then return end
         if self.owned == s.char and s.rest then
             if now <= policy.manualIntentUntil then self:manual(now); return end
             self.nativeEchoObserved = true
@@ -147,6 +173,13 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:tick(s, now)
         self:guardPose(now)
+        if self.releaseFailedChar then
+            if s and s.char==self.releaseFailedChar then
+                self.state="native Rest exit failed; use manual Rest"
+                return
+            end
+            self.releaseFailedChar=nil
+        end
         if s and s.alive then
             if self.conditionChar~=s.char then
                 self.conditionChar=s.char
@@ -162,7 +195,11 @@ function Recovery.new(bridge, policy, ledger)
                 policy.manualRest,policy.manualIntentUntil=false,0
                 self.lastAutomaticCharacter=s.char
                 self:holdPose(s.char,now);self.poseUntil=now+.35
-                bridge:rest(s.char,false);bridge:maskRest(s.char)
+                self.releasingChar=s.char
+                local dispatched=bridge:rest(s.char,false)
+                self.releasingChar=nil
+                if not dispatched then self:failedExit(s.char,now);return end
+                bridge:maskRest(s.char)
                 self.releaseAt,policy.lastRestRelease=now,now
                 self.backoffUntil=math.max(self.backoffUntil,now+.75)
                 self.state="manual Rest ended by movement"
@@ -260,6 +297,7 @@ function Recovery.new(bridge, policy, ledger)
         self:clearPose()
         self.previous,self.observations,self.lastAutomaticCharacter = nil,{},nil
         self.conditionChar,self.conditionSeenUntil,self.conditionSeen = nil,0,{}
+        self.releaseFailedChar,self.releasingChar=nil,nil
     end
     return r
 end
