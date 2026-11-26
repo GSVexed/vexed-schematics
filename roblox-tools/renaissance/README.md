@@ -1,4 +1,11 @@
-# FERAL Project Renaissance — 15.8.6 hold-to-bite and minigame compatibility
+# FERAL Project Renaissance — 15.8.7 ghost-hit reliability candidate
+
+This revision preserves the held-M1, minigame and adaptive combat changes from 15.8.6. The reach guide now favours unobstructed stock-range targets before uncertain extended-only alternatives; it also aligns aim with the stock target when one exists and limits speculative relative-velocity lead to 2.25 studs over at most 0.20 seconds (formerly 4 studs/0.35 s).
+
+FeralHit server replies now match an alternate nearby victim when the original client target was wrong, provided that the timing match is unique. Delayed and ambiguous real replies are never treated as fake. Missing replies are given additional time before the hub reports an unverified contact. **Two clear extended-only contacts without a matching server reply briefly pause extended-only Auto Bite attempts against that victim; stock-range Auto Bite and all manual attacks remain available.** This reduces repetitive speculative auto-bites but does not establish the server's reach or guarantee accepted damage. Bite Reach's expanded client geometry and the original faster-bite, recovery, Hippo, Territory and hearing features are preserved.
+
+## Previous 15.8.6 candidate
+
 
 **15.8.6** fixes two known scheduler barriers: input backends cannot generate another InputBegan by pressing an already-held M1, and previous versions entirely disabled bites during all grab minigames. Repeated M1 now requests a single owned Up → Down → Up edge when no validated native bite callback is available; each edge is asynchronous and can be safely cancelled on respawn, unload, or a new minigame. When the executor exposes multiple input methods, two missing native bite markers automatically rotate to another method (VirtualInputManager, paired mouse press/release, or click) rather than continually treating a successful local call as a real hit.
 

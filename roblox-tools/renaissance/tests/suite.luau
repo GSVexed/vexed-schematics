@@ -1613,9 +1613,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.8.6 presents its actual version in the active controller",function()
+test("Renaissance 15.8.7 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.8.6")
+    eq(h.version,"15.8.7")
     h:close()
 end)
 
@@ -1912,7 +1912,7 @@ test("prediction uses bounded relative velocity without moving either character"
     local w,h=boot();local _,char,hum,root=w:enemy(2,Mock.V3.new(0,3,-4))
     root.AssemblyLinearVelocity=Mock.V3.new(100,10,0);w:advance(.2)
     local before=root.Position;local point=h.bridge:leadPoint(h.snapshot,{char=char,hum=hum,root=root})
-    close((point-before).Magnitude,4);eq(root.Position,before);eq(point.Y,before.Y);h:close()
+    close((point-before).Magnitude,2.25);eq(root.Position,before);eq(point.Y,before.Y);h:close()
 end)
 test("hit replies match the victim instead of the newest unrelated attack",function()
     local M=modules();local a,b={},{}
@@ -2523,6 +2523,95 @@ test("held input replay remains disabled without a matching FERAL WolfController
     local w,h=boot({holdBite=true})
     eq(h.bridge:combatInputCompatible(),false)
     eq(h.registry.byId.holdBite.applied,false)
+    h:close()
+end)
+test("a late real hit reply is not discarded as a ghost after the old 1.8 second window",function()
+    local M=modules();local victim={}
+    local tx={nativeAt=10,claimDue=10.27,nativeTarget=victim}
+    eq(M.controller.matchFeedback(M.core,{tx},{v=victim,dmg=8},12.15),tx)
+    eq(M.controller.matchFeedback(M.core,{tx},{v=victim,dmg=8},13.1),nil)
+end)
+test("unique real server reply to a different nearby victim corrects the guide's wrong prediction",function()
+    local M=modules();local guideVictim={},actualVictim={}
+    local tx={nativeAt=10,claimDue=10.27,focusTarget={char=guideVictim},
+        hpBefore={[guideVictim]={hp=100},[actualVictim]={hp=100}}}
+    local selected,ambiguous=M.controller.matchFeedback(M.core,{tx},{v=actualVictim,dmg=6},10.4)
+    eq(selected,tx);eq(ambiguous,false)
+    -- Never credit a remote victim that was not within the bite snapshot.
+    eq(M.controller.matchFeedback(M.core,{tx},{v={},dmg=8},10.4),nil)
+end)
+test("two similar client bite candidates never steal an ambiguous late game reply",function()
+    local M=modules();local predicted={},victim={}
+    local a={nativeAt=10.00,claimDue=10.27,focusTarget={char=predicted},
+        hpBefore={[victim]={hp=100}}}
+    local b={nativeAt=10.04,claimDue=10.31,focusTarget={char=predicted},
+        hpBefore={[victim]={hp=100}}}
+    local tx,ambiguous=M.controller.matchFeedback(M.core,{a,b},{v=victim,dmg=4},10.3)
+    eq(tx,nil);eq(ambiguous,true)
+end)
+test("clear stock-valid contact outranks a closer speculative extended target",function()
+    local w,h=boot({biteHelper=true})
+    local _,stock=w:enemy(2,Mock.V3.new(0,3,-5))
+    local _,extended=w:enemy(2,Mock.V3.new(0,3,3.9))
+    w:advance(.3)
+    assert(h.guide and h.guide.target)
+    local stockTarget
+    for _,item in ipairs(h.bridge.allCandidates or {}) do
+        if item.char==stock then stockTarget=item end
+    end
+    assert(stockTarget and h.bridge:geometry(h.features.originalCombat,h.snapshot,stockTarget).valid)
+    eq(h.guide.target.char,stock)
+    eq(h.bridge.reachTarget.char,stock)
+    h:close()
+end)
+test("a silent speculative auto-reach window paces Auto Bite but keeps manual reach",function()
+    local w,h=boot({autoBite=true,biteHelper=true})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-8))
+    w:advance(.3)
+    local target=h.guide and h.guide.target
+    assert(target and target.char==char)
+    local s=h.bridge:snapshot(w.time,false)
+    local stock=h.bridge:geometry(h.features.originalCombat,s,target)
+    local extended=h.bridge:geometry(h.features.combat,s,target)
+    assert(extended and extended.valid and (not stock or not stock.valid))
+    for i=1,2 do
+        local tx={nativeAt=w.time-3,claimDue=w.time-2.8,classifed=false,
+            sampled=true,generation=s.generation,target=target,
+            extendedOnly=true,extendedClaimValid=true}
+        table.insert(h.transactions,tx)
+        h:stepCombat(s,w.time)
+        assert(tx.classified==true)
+    end
+    local state=h.extendedConfidence[char]
+    assert(state and state.misses==2 and state.waitUntil>w.time)
+    eq(h.bridge:autoAttackTarget(s,h.guide,h.features.combat),false)
+    -- Extended local geometry and manual targeting remain enabled.
+    assert(h.bridge:geometry(h.features.combat,s,target).valid)
+    state.waitUntil=w.time-1
+    eq(h.bridge:autoAttackTarget(s,h.guide,h.features.combat),true)
+    h:close()
+end)
+test("a unique positive game reply immediately resets extended auto-contact pacing",function()
+    local w,h=boot({autoBite=true})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-8))
+    w:advance(.3)
+    h.extendedConfidence[char]={misses=4,waitUntil=w.time+4}
+    local tx={nativeAt=w.time-.1,claimDue=w.time+.2,generation=h.bridge.generation,
+        nativeTarget=char,classifed=false}
+    table.insert(h.transactions,tx)
+    h:nativeEvent("feedback","hit",{a=w.player.Character,v=char,dmg=8,safe=false})
+    eq(h.extendedConfidence[char].misses,0)
+    eq(h.extendedConfidence[char].waitUntil,0)
+    assert(tx.positiveReply)
+    h:close()
+end)
+test("a positive game reply with ambiguous local identity never becomes a ghost label",function()
+    local w,h=boot()
+    local _,char=w:enemy(2)
+    w:advance(.2)
+    h:nativeEvent("feedback","hit",{a=w.player.Character,v=char,dmg=7})
+    assert(h.combatStatus:find("Game reports a hit",1,true))
+    eq(h.ledger.counts.native_outgoing_hit_reply,1)
     h:close()
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
