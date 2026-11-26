@@ -508,7 +508,9 @@ function Roblox.new(Core, environment)
         if pulse.timer and type(task)=="table" and type(task.cancel)=="function" then
             pcall(task.cancel,pulse.timer)
         end
+        self.syntheticReleasing=true
         pcall(pulse.release)
+        self.syntheticReleasing=false
     end
     function b:tryHeldInputBite(s,now)
         if self.syntheticM1 then return false end -- no overlapping press edges
@@ -531,9 +533,11 @@ function Roblox.new(Core, environment)
         self.syntheticM1Until=now+.18
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then
+            self.syntheticPressing=true
             local pressed=pcall(function()
                 virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)
             end)
+            self.syntheticPressing=false
             if pressed then
                 -- Keep the press for a small real frame interval so the native
                 -- WolfController sees an InputBegan edge. Release is owned by

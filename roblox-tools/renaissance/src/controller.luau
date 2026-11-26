@@ -290,7 +290,9 @@ function Controller.new(M,bridge,options)
     function h:preInput(input)
         if self.closed or not self.active or bridge.UserInputService:GetFocusedTextBox() then return end
         local now,key,kind = bridge.clock(),input.KeyCode,input.UserInputType
-        if kind==Enum.UserInputType.MouseButton1 and now<(bridge.syntheticM1Until or 0) then return end
+        if kind==Enum.UserInputType.MouseButton1
+            and (bridge.syntheticPressing or now<(bridge.syntheticM1Until or 0)
+                and bridge.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)) then return end
         local previous = self.earlyInputs[input]
         if previous and now-previous < .1 then return end
         self.earlyInputs[input] = now
@@ -346,7 +348,7 @@ function Controller.new(M,bridge,options)
     end
     function h:input(input,processed)
         local kind,key = input.UserInputType,input.KeyCode
-        if kind==Enum.UserInputType.MouseButton1 and bridge.clock()<(bridge.syntheticM1Until or 0) then return end
+        if kind==Enum.UserInputType.MouseButton1 and bridge.syntheticPressing then return end
         if kind == Enum.UserInputType.MouseButton2 and bridge.clock() < (self.syntheticUntil or 0) then return end
         self:physicalInput("other")
         if bridge.UserInputService:GetFocusedTextBox() then return end
@@ -365,7 +367,15 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         local kind,key=input.UserInputType,input.KeyCode
         if kind==Enum.UserInputType.MouseButton1 then
-            if bridge.clock()<(bridge.syntheticM1Until or 0) then return end
+            if bridge.syntheticReleasing then return end
+            -- The virtual release callback is owned by the hub; a real
+            -- physical InputEnded must never be swallowed simply because
+            -- it happened within the last synthetic-click time window.
+            if bridge.clock()<(bridge.syntheticM1Until or 0) then
+                local ok,stillDown=pcall(bridge.UserInputService.IsMouseButtonPressed,
+                    bridge.UserInputService,Enum.UserInputType.MouseButton1)
+                if ok and stillDown==true then return end
+            end
             self.combatInput:release("M1",bridge.clock())
         elseif key==Enum.KeyCode.ButtonR2 then
             self.combatInput:release("R2",bridge.clock())
