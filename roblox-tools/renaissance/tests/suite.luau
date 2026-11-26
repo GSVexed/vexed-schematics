@@ -27,9 +27,11 @@ local function boot(settings)
 end
 local E=Mock.Enum
 
-test("22 features retain the original set and permanent reach",function()
+test("28 features retain original controls plus optional local proximity hearing",function()
     local M=modules();local r=M.core.registry()
-    eq(#r.order,22);r:request("reach",false);eq(r.byId.reach.requested,true)
+    eq(#r.order,28);eq(M.settings.sanitize({},M.core.specs).states.holdBite,true)
+    eq(M.settings.sanitize({},M.core.specs).states.voice,true)
+    r:request("reach",false);eq(r.byId.reach.requested,true)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
 end)
@@ -1611,9 +1613,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.7.0 presents its actual version in the active controller",function()
+test("Renaissance 15.8.6 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.7.0")
+    eq(h.version,"15.8.6")
     h:close()
 end)
 
@@ -1682,6 +1684,70 @@ local function hippoWorld()
     end
     return w,h,native,chargeSpeed
 end
+local function nativeGaitHUD(w)
+    local new=w.new
+    local gui=new("ScreenGui");gui.Name="FeralHUD";gui.Parent=w.player:FindFirstChild("PlayerGui")
+    local cluster=new("Frame");cluster.Name="Cluster";cluster.Parent=gui
+    local bright=w.env.Color3.fromRGB(255,190,120)
+    local quiet=w.env.Color3.fromRGB(95,95,95)
+    local keys={}
+    for _,name in ipairs({"trot","sprint","burst"}) do
+        local outline=new("Frame");outline.Name=name;outline.Parent=cluster
+        local cap=new("Frame");cap.Name="Cap";cap.Parent=outline
+        local rim=new("UIStroke");rim.Color=name=="trot" and bright or quiet;rim.Parent=cap
+        cap.BackgroundTransparency=name=="trot" and .15 or .42
+        keys[name]={cap=cap,rim=rim}
+    end
+    return gui,keys,bright,quiet
+end
+test("Hippo assisted sprint and Burst highlight the original HUD keycaps without changing gameplay flags",function()
+    local w,h,_,speed=hippoWorld();local gui,keys,bright,quiet=nativeGaitHUD(w)
+    local char=w.player.Character
+    w.player:SetAttribute("HudTrot",true);w.player:SetAttribute("HudSprint",false)
+    w.player:SetAttribute("HudBurst",false)
+    char:SetAttribute("FeralCrushAt",w.time+1000);w.keys[E.KeyCode.LeftShift]=true
+    w:step(.02);close(speed(1),30)
+    eq(keys.sprint.rim.Color,bright);eq(keys.sprint.cap.BackgroundTransparency,.15)
+    eq(keys.trot.rim.Color,quiet);eq(keys.trot.cap.BackgroundTransparency,.42)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    w:step(.02);close(speed(1),43.5)
+    eq(keys.burst.rim.Color,bright);eq(keys.sprint.rim.Color,quiet)
+    eq(w.player:GetAttribute("HudTrot"),true)
+    eq(w.player:GetAttribute("HudSprint"),false)
+    eq(w.player:GetAttribute("HudBurst"),false)
+    w.keys[E.KeyCode.LeftShift]=false;char:SetAttribute("FeralCrushAt",nil);w:step(.02)
+    eq(keys.trot.rim.Color,bright);eq(keys.sprint.rim.Color,quiet)
+    eq(keys.burst.cap.BackgroundTransparency,.42)
+    h:close();eq(gui._destroyed,false)
+end)
+test("Hippo HUD reverts on Burst denial, movement OFF, character change and unload",function()
+    local w,h=hippoWorld();local _,keys,bright,quiet=nativeGaitHUD(w)
+    local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    w:step(.02);eq(keys.burst.rim.Color,bright)
+    w.player:SetAttribute("HudBurstNo",true);w:step(.02)
+    eq(keys.trot.rim.Color,bright);eq(keys.burst.rim.Color,quiet)
+    w.player:SetAttribute("HudBurstNo",nil);w.keys[E.KeyCode.LeftShift]=true
+    w:step(.02);eq(keys.sprint.rim.Color,bright)
+    h:set("hippoMove",false);w:step(.02);eq(keys.trot.rim.Color,bright)
+    h:set("hippoMove",true);w:step(.02);eq(keys.sprint.rim.Color,bright)
+    w:spawn("Wolf");w:step(.02);eq(keys.trot.rim.Color,bright)
+    h:close();eq(keys.sprint.rim.Color,quiet)
+end)
+test("Hippo HUD survives absent and rebuilt native UI and respects external style changes",function()
+    local w,h=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000);w.keys[E.KeyCode.LeftShift]=true
+    w:step(.02);assert(h.active)
+    local gui,keys,bright=nativeGaitHUD(w);w:step(.02)
+    eq(keys.sprint.rim.Color,bright)
+    gui:Destroy();w:step(.02);assert(h.active)
+    local _,rebuilt,rebuiltBright=nativeGaitHUD(w);w:step(.02)
+    eq(rebuilt.sprint.rim.Color,rebuiltBright)
+    local external=w.env.Color3.fromRGB(20,225,35)
+    rebuilt.burst.rim.Color=external
+    h:close();eq(rebuilt.burst.rim.Color,external)
+end)
 test("Hippo charge sprint repairs the consumed gait calculation rather than only a cap label",function()
     local w,h,original,speed=hippoWorld();local char=w.player.Character
     char:SetAttribute("FeralCrushAt",w.time+1000);w.keys[E.KeyCode.LeftShift]=true
@@ -1750,6 +1816,714 @@ test("Hippo trot selection cancels Burst intent and unrelated crouch restriction
     close(speed(1),16.8/42*original("Hippo","gait",1)*.7)
     w.keys[E.KeyCode.LeftShift]=true;char:SetAttribute("FeralCrouch",true)
     close(speed(1),16.8/42*original("Hippo","gait",1)*.7);h:close()
+end)
+test("client bite cadence follows the actual native calculation and restores exactly",function()
+    local w=Mock.new();local original=function()return .6 end
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=original});w:enableNativeActions()
+    local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.2)
+    close(w.configs.Species.biteCooldown("Wolf",1),.372)
+    close(w.configs.Species.biteCooldown("Bear",1),.6)
+    eq(h.registry.byId.attackSpeed.applied,true);eq(h.registry.byId.attackSpeed.outcome,"unverified")
+    h:set("attackSpeed",false);eq(w.configs.Species.biteCooldown,original)
+    h:close()
+end)
+test("cadence adjustment never slows an already faster native profile",function()
+    local w=Mock.new();w:addConfig("Species",{biteCooldown=function()return .1 end})
+    local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.2)
+    close(w.configs.Species.biteCooldown("Wolf",1),.1);h:close()
+end)
+test("cadence refuses unknown game versions and preserves external ownership",function()
+    local w=Mock.new();local original=function()return .6 end
+    w:addConfig("Species",{biteCooldown=original});w.env.game.PlaceVersion=2413
+    local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.2)
+    eq(w.configs.Species.biteCooldown,original);eq(h.registry.byId.attackSpeed.applied,false)
+    w.env.game.PlaceVersion=2412;h.features.nextReconcile=0;w:advance(.2)
+    local external=function()return .9 end;w.configs.Species.biteCooldown=external
+    w:advance(1.4);eq(w.configs.Species.biteCooldown,external);eq(h.registry.byId.attackSpeed.applied,false)
+    h:close();eq(w.configs.Species.biteCooldown,external)
+end)
+test("held bite schedules original native attempts and stops immediately on release",function()
+    local w=Mock.new();w:addConfig("Species",{biteCooldown=function()return .6 end});w:enableNativeActions()
+    local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.3)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1);w:advance(1.4)
+    assert((w.nativeBites or 0)>=4 and w.nativeBites<=6)
+    local cadence=h.tests:bridgeReport().biteCadence
+    eq(cadence.markers,w.nativeBites)
+    assert(cadence.activeIntervals>=3 and cadence.measuredBitesPerSecond>1.9)
+    local count=w.nativeBites;w.held=nil
+    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w:advance(.8);eq(w.nativeBites,count)
+    eq(h.registry.byId.attackSpeed.outcome,"unverified");h:close()
+end)
+test("hold-to-repeat stays independent of faster bite cooldown and can be disabled",function()
+    local w=Mock.new();local base=function()return .6 end
+    w:addConfig("Species",{biteCooldown=base});w:enableNativeActions()
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}});w:advance(.3)
+    eq(w.configs.Species.biteCooldown,base)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1);w:advance(1.4)
+    assert((w.nativeBites or 0)>=3)
+    h:set("holdBite",false);local count=w.nativeBites;w:advance(.9)
+    eq(w.nativeBites,count);eq(w.configs.Species.biteCooldown,base)
+    h:close()
+end)
+test("held bite waits out Hippo ability then resumes while left click remains down",function()
+    local w=Mock.new();w:addConfig("Species",{biteCooldown=function()return .6 end});w:enableNativeActions()
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}});w:advance(.3)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1);w:advance(.15)
+    local char=w.player.Character;char:SetAttribute("FeralCrushAt",w.time+1000)
+    local count=w.nativeBites;w:advance(.9);eq(w.nativeBites,count)
+    char:SetAttribute("FeralCrushAt",nil);w:advance(.8)
+    assert(w.nativeBites>count);w.held=nil;h:close()
+end)
+test("a bite without a native marker pauses held retries",function()
+    local M=modules();local char={};local count,events=0,{}
+    local bridge={biteDelay=function()return .27 end,restLock=function()return .7 end,
+        attribute=function()return nil end, biteReadiness=function()return {ready=true}end,
+        wolfActions={tryBite=function()end},tryNativeBite=function()count+=1;return true end}
+    local policy={restLocked=function()return false end}
+    local ledger={event=function(_,name)table.insert(events,name)end}
+    local c=M.combat_input.new(bridge,policy,ledger)
+    local s={alive=true,char=char,generation=1,attackHeld=true}
+    c:input(s,0)
+    for _,now in ipairs({0,.1,.2,.3,.36,.5,.62,.83,.94}) do c:tick(s,now,{repeatHeld=true}) end
+    eq(count,2);eq(events[2],"native_bite_marker_timeout")
+    c:release("mouse",.95);eq(c.held,nil)
+end)
+test("Auto Bite requires current clear contact and stops for a newly friendly target",function()
+    local w=Mock.new();w:enableNativeActions()
+    local other,char=w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={autoBite=true,attackSpeed=false}}});w.blocked=true;w:advance(.6)
+    eq(w.nativeBites,nil);w.blocked=false;w:advance(.8);assert((w.nativeBites or 0)>0)
+    other:SetAttribute("FeralPack",1);char:SetAttribute("FeralPack",1)
+    local count=w.nativeBites;w:advance(.8);eq(w.nativeBites,count);h:close()
+end)
+test("Auto Bite never invents attacks when native callbacks are inaccessible",function()
+    local w=Mock.new();w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={autoBite=true}}});w:advance(1)
+    for _,call in ipairs(w.calls)do assert(call.name~="WolfActions" or call.args[1]~="Bite")end
+    eq(h.registry.byId.autoBite.applied,false);h:close()
+end)
+test("fresh attack checks reject a wall that appeared after target selection",function()
+    local w,h=boot();w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    assert(h.guide and h.bridge:autoAttackTarget(h.snapshot,h.guide,h.features.combat))
+    w.blocked=true;eq(h.bridge:autoAttackTarget(h.snapshot,h.guide,h.features.combat),false);h:close()
+end)
+test("prediction uses bounded relative velocity without moving either character",function()
+    local w,h=boot();local _,char,hum,root=w:enemy(2,Mock.V3.new(0,3,-4))
+    root.AssemblyLinearVelocity=Mock.V3.new(100,10,0);w:advance(.2)
+    local before=root.Position;local point=h.bridge:leadPoint(h.snapshot,{char=char,hum=hum,root=root})
+    close((point-before).Magnitude,4);eq(root.Position,before);eq(point.Y,before.Y);h:close()
+end)
+test("hit replies match the victim instead of the newest unrelated attack",function()
+    local M=modules();local a,b={},{}
+    local first={nativeAt=10,claimDue=10.27,nativeTarget=a}
+    local second={nativeAt=10.2,claimDue=10.47,nativeTarget=b}
+    eq(M.controller.matchFeedback(M.core,{first,second},{v=a,dmg=8},10.5),first)
+end)
+test("indistinguishable hit replies remain unmatched",function()
+    local M=modules();local victim={}
+    local tx,ambiguous=M.controller.matchFeedback(M.core,{
+        {nativeAt=10,claimDue=10.27,nativeTarget=victim},
+        {nativeAt=10.04,claimDue=10.31,nativeTarget=victim}}, {v=victim,dmg=8},10.29)
+    eq(tx,nil);eq(ambiguous,true)
+end)
+test("reply ambiguity uses the nearest two transactions regardless of iteration order",function()
+    local M=modules();local victim={}
+    local tx,ambiguous=M.controller.matchFeedback(M.core,{
+        {nativeAt=10,claimDue=10.1,nativeTarget=victim},
+        {nativeAt=10.03,claimDue=10.13,nativeTarget=victim},
+        {nativeAt=10.07,claimDue=10.17,nativeTarget=victim}}, {v=victim,dmg=8},10.2)
+    eq(tx,nil);eq(ambiguous,true)
+end)
+test("burst stamina drain follows a replaced native profile and restores both tables",function()
+    local w=Mock.new();local first={DRAIN=3.9,ENABLED=true}
+    w.configs.NeedsConfig.BURST=first
+    local h=load(w,{settings={states={stamina=true}}});w:advance(.2);eq(first.DRAIN,0)
+    local second={DRAIN=2,ENABLED=true};w.configs.NeedsConfig.BURST=second
+    w:advance(1.4);eq(first.DRAIN,3.9);eq(second.DRAIN,0)
+    h:close();eq(second.DRAIN,2);eq(second.ENABLED,true)
+end)
+test("small positive conditions retain recovery eligibility in combat",function()
+    local w=Mock.new();w.player.Character:SetAttribute("FeralVenomAmt",.01)
+    w.player:SetAttribute("FeralCombatUntil",w.time+1100)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.3)
+    eq(h.recovery.purpose,"effects");eq(h.recovery.owned,w.player.Character)
+    eq(w.configs.NeedsConfig.HEALTH_NO_REGEN_IN_COMBAT,true);h:close()
+end)
+test("nonfinite condition values never keep a healthy animal in automatic Rest",function()
+    local w=Mock.new();w.player.Character:SetAttribute("FeralVenomAmt",1/0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.3)
+    eq(h.recovery.owned,nil);h:close()
+end)
+test("new settings retain Hippo tab, explicit OFF and manual release by default",function()
+    local M=modules();local settings=M.settings.sanitize({tab="Hippo",states={attackSpeed=false,hippoMove=false}},M.core.specs)
+    eq(settings.tab,"Hippo");eq(settings.states.attackSpeed,false);eq(settings.states.hippoMove,false)
+    eq(settings.states.hippoRelease,false);eq(settings.states.autoBite,false)
+end)
+local function chargeWorld(smart)
+    local w=Mock.new();w:spawn("Hippo");local profile=w:enableNativeHippo()
+    local _,victim=w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={hippoRelease=smart,attackSpeed=false}}});w:advance(.3)
+    return w,h,profile,victim
+end
+test("smart Crusher waits for full charge then uses one original timestamp-free call",function()
+    local w,h,profile=chargeWorld(true);w.startHippoCharge();w:advance(5.8)
+    eq(w.nativeHippoReleases,nil);w:advance(.4);eq(w.nativeHippoReleases,1)
+    w:advance(.5);eq(w.nativeHippoReleases,1);eq(profile.MULT_MAX,3.5);eq(profile.CHARGE_TIME,6)
+    local releases=0
+    for _,call in ipairs(w.calls)do
+        if call.name=="FeralHippo" and call.args[1]=="release" then releases+=1;eq(call.args.n,2) end
+    end
+    eq(releases,1);eq(#h.hippo.history,1);eq(h.hippo.history[1].acceptedDamage,"unverified");h:close()
+end)
+test("manual Crusher holds retain the original multiplier, overhold and cooldowns",function()
+    local w,h,p=chargeWorld(false);w.startHippoCharge();w:advance(9)
+    eq(w.nativeHippoReleases,nil);close(h.hippo.session.multiplier,3.5)
+    eq(p.CHARGE_TIME,6);eq(p.OVERHOLD,8);eq(p.CD_HIT,50);eq(p.CD_MISS,20)
+    w.uis.InputEnded:Fire({KeyCode=E.KeyCode.F});eq(w.nativeHippoReleases,1)
+    close(h.hippo.history[1].heldFor,9);h:close()
+end)
+test("Crusher release keeps automatic recovery out of the native impact window",function()
+    local w,h=chargeWorld(true);h:set("recovery",true);w.hum.Health=60
+    w.startHippoCharge();w:advance(6.3);eq(w.nativeHippoReleases,1)
+    eq(h.recovery.owned,nil);w:advance(.5);eq(h.recovery.owned,nil)
+    w:advance(1);eq(h.recovery.owned,w.player.Character);h:close()
+end)
+test("smart release rechecks obstruction after reaching full charge",function()
+    local w,h=chargeWorld(true);w.blocked=true;w.startHippoCharge();w:advance(6.2)
+    eq(w.nativeHippoReleases,nil);w.blocked=false;w:advance(.3);eq(w.nativeHippoReleases,1);h:close()
+end)
+test("smart Crusher retains its charge in extended-only range",function()
+    local w,h=chargeWorld(true)
+    local target=h.guide.target.root;target.Position=Mock.V3.new(0,3,-9)
+    w.startHippoCharge();w:advance(6.2);eq(w.nativeHippoReleases,nil)
+    target.Position=Mock.V3.new(0,3,-4);w:advance(.3);eq(w.nativeHippoReleases,1);h:close()
+end)
+for _,guard in ipairs({"chat","menu","capture","feeding","holding","underwater","rest"})do
+    test("smart Crusher preserves native "..guard.." restrictions",function()
+        local w,h=chargeWorld(true);w.startHippoCharge()
+        if guard=="chat" then w.chat={}
+        elseif guard=="menu" then w.player:SetAttribute("FeralMenuOpen",true)
+        elseif guard=="capture" then w.player.Character:SetAttribute("FeralPinned",true)
+        elseif guard=="feeding" then w.player.Character:SetAttribute("WolfFeed","eat")
+        elseif guard=="holding" then w.player.Character:SetAttribute("FeralCarcassCarry",true)
+        elseif guard=="underwater" then w.player.Character:SetAttribute("FeralUnderwater",true)
+        elseif guard=="rest" then w.player.Character:SetAttribute("WolfRest",true) end
+        w:advance(6.2);eq(w.nativeHippoReleases,nil);h:close()
+    end)
+end
+test("smart release refuses a stale script or substituted remote",function()
+    local w,h=chargeWorld(true);assert(h.hippo.native)
+    local old=w:remote("FeralHippo");old.Parent=nil
+    local replacement=w.new("RemoteEvent");replacement.Name="FeralHippo";replacement.Parent=w.rs
+    w.startHippoCharge();w:advance(6.2);eq(w.nativeHippoReleases,nil);h:close()
+end)
+test("species change stops Hippo automation and leaves another crusher profile untouched",function()
+    local w,h,p=chargeWorld(true);local lockjaw={CHARGE_TIME=3,MULT_MAX=4}
+    w.configs.AbilityConfig.Lockjaw=lockjaw;w.startHippoCharge();w:advance(2)
+    w:spawn("SnappingTurtle");w:advance(5);eq(w.nativeHippoReleases,nil)
+    eq(lockjaw.CHARGE_TIME,3);eq(lockjaw.MULT_MAX,4);eq(p.MULT_MAX,3.5);h:close()
+end)
+test("turning smart release off or unloading never cancels a manual charge",function()
+    local w,h=chargeWorld(true);w.startHippoCharge();w:advance(2)
+    h:set("hippoRelease",false);w:advance(5);eq(w.nativeHippoReleases,nil)
+    local active=w.nativeHippoState();assert(active);h:close();eq(w.nativeHippoState(),active)
+end)
+test("Hippo charge and native release discovery need no heap enumeration",function()
+    local w,h=chargeWorld(true);assert(h.hippo.native)
+    eq(w.metrics.heap,0);h.ui:selectTab("Hippo");w:advance(.3)
+    assert(h.ui.hippoReadout.Text:find("3.50",1,true));h:close()
+end)
+test("Hippo move controls restore the shared scalar without removing ordinary speed assistance",function()
+    local w,h,original=hippoWorld();h:set("speed",true)
+    h:set("hippoMove",false);eq(w.configs.Species.scaled,original)
+    close(w.configs.NeedsConfig.RUN_SPEED,1.15)
+    h:set("hippoMove",true);assert(w.configs.Species.scaled~=original)
+    h:close();eq(w.configs.Species.scaled,original);close(w.configs.NeedsConfig.RUN_SPEED,1)
+end)
+test("R2 held assistance observes gamepad input and releases cleanly",function()
+    local w=Mock.new();w:enableNativeActions()
+    local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.2)
+    w.padHeld=E.KeyCode.ButtonR2;w:input(E.KeyCode.ButtonR2,E.UserInputType.Gamepad1);w:advance(1.1)
+    assert((w.nativeBites or 0)>=3);local count=w.nativeBites
+    w.padHeld=nil;w.uis.InputEnded:Fire({KeyCode=E.KeyCode.ButtonR2,UserInputType=E.UserInputType.Gamepad1})
+    w:advance(.8);eq(w.nativeBites,count);h:close()
+end)
+test("native minigames suppress automatic attack scheduling",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab();w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={autoBite=true,minigame=true}}});w:advance(.3)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=400,role="prey",n=4})
+    local count=w.nativeBites;w:advance(1);eq(w.nativeBites,count);h:close()
+end)
+test("automatic attacks preserve territory ownership",function()
+    local w=Mock.new();w:enableNativeActions();w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={autoBite=true}}})
+    h.territory.agent.enabled=true;h.territory.tick=function()end
+    w:advance(.8);eq(w.nativeBites,nil);h:close()
+end)
+test("a changed charge profile requires manual release for the existing session",function()
+    local w,h,p=chargeWorld(true);w.startHippoCharge();w:advance(2)
+    w.configs.AbilityConfig.CrusherBite=table.clone(p);w:advance(5)
+    eq(w.nativeHippoReleases,nil);h:close()
+end)
+test("unknown game versions never attempt smart release",function()
+    local w,h=chargeWorld(true);w.env.game.PlaceVersion=2413;w.startHippoCharge();w:advance(6.2)
+    eq(w.nativeHippoReleases,nil);eq(h.hippo.session,nil);h:close()
+end)
+test("a same-name release function from another script is rejected",function()
+    local w,h=chargeWorld(true)
+    w.nativeRecords[w.nativeHippoFinish].script="UnrelatedClient"
+    w.startHippoCharge();w:advance(6.2);eq(w.nativeHippoReleases,nil);h:close()
+end)
+test("malformed charge timing never becomes an automatic release",function()
+    local w,h,p=chargeWorld(true);p.CHARGE_TIME=0;w.startHippoCharge();w:advance(1)
+    eq(w.nativeHippoReleases,nil);eq(h.hippo.profileValue,nil);h:close()
+end)
+test("Hippo history is bounded and native damage replies remain unattributed",function()
+    local w,h,p,victim=chargeWorld(false)
+    for _=1,16 do w.startHippoCharge();w:advance(.04);w.nativeHippoFinish() end
+    eq(#h.hippo.history,12)
+    h.hippo:feedback({a=w.player.Character,v=victim,dmg=12},w.time)
+    local last=h.hippo.history[#h.hippo.history]
+    eq(last.gameReportedDamage,12);eq(last.attribution,"unverified");eq(last.acceptedDamage,"unverified")
+    h:close();eq(#h.hippo.history,0)
+end)
+test("Hippo callback discovery and tab rendering leave no hub listeners on unload",function()
+    local w=Mock.new();w:spawn("Hippo");w:enableNativeHippo();local before=w:connections()
+    local h=load(w,{settings={states={hippoRelease=true}}});w:advance(.3)
+    h.ui:selectTab("Hippo");w:advance(.2);h.ui:selectTab("Territory");h.ui:selectTab("Hippo")
+    w:advance(.2);assert(h.active);h:close();eq(w:connections(),before)
+end)
+test("Test Features saves own HP observations for every species without counting max-HP changes",function()
+    local w,h=boot()
+    h.ui:selectTab("Test Features")
+    eq(w.stored[h.tests.path]~=nil,true)
+    w.hum.Health=90
+    w.hum.MaxHealth=120
+    w.hum.Health=80
+    w.player.Character:SetAttribute("WolfRest",true)
+    w.hum.Health=72
+    eq(h.tests.species.Wolf.hits,2)
+    eq(h.tests.species.Wolf.damage,18)
+    eq(h.tests.species.Wolf.restHits,1)
+    local turtle=w:spawn("SnappingTurtle")
+    w.hum.Health=85
+    eq(h.tests.species.SnappingTurtle.hits,1)
+    h.tests:save()
+    local stored=w.env.game:GetService("HttpService"):JSONDecode(w.stored[h.tests.path])
+    eq(stored.schema,"FERAL_RENAISSANCE_TESTS_V1")
+    eq(stored.species.Wolf.damage,18)
+    eq(stored.snapshot.species,"SnappingTurtle")
+    eq(stored.features.zoom.requested,true)
+    assert(stored.ledgerCounts.character_generation>=2)
+    h:close();eq(w:connections(),0)
+end)
+test("Test Features one-shot Turtle request is gated and releases once",function()
+    local w=Mock.new();w:spawn("SnappingTurtle")
+    local remote=w.new("RemoteEvent");remote.Name="FeralHippo";remote.Parent=w.rs
+    local h=load(w)
+    eq(h.tests:crossSpecies(),false)
+    eq(#w.calls,0)
+    w.player.Character:SetAttribute("WolfRest",true)
+    w.player.Character:SetAttribute("WolfRestAt",w.time+998)
+    eq(h.tests:crossSpecies(),true)
+    eq(h.tests:crossSpecies(),false)
+    w:advance(6.2)
+    local requests=0
+    for _,call in ipairs(w.calls) do
+        if call.name=="FeralHippo" then requests+=1 end
+    end
+    eq(requests,2)
+    eq(h.tests.pending,nil)
+    eq(h.tests.attempts,1)
+    h:close();eq(w:connections(),0)
+end)
+test("voice curve stretching preserves volume and never mutates the original",function()
+    local M=modules()
+    local before={[0]=1,[10]=.8,[20]=0}
+    local after=M.voice.scaleCurve(before,1.25)
+    eq(after[0],1);eq(after[12.5],.8);eq(after[25],0)
+    eq(before[10],.8);eq(before[12.5],nil)
+    eq(M.voice.sameCurve(before,after),false)
+    eq(M.voice.sameCurve(after,{[0]=1,[12.5]=.8,[25]=0}),true)
+    eq(M.voice.scaleCurve({},1.25),nil)
+    eq(M.voice.scaleCurve(before,2),nil)
+    eq(M.voice.scaleCurve({[0]=1,[5]=2},1.25),nil)
+end)
+test("integrated voice defaults ON but respects saved OFF and unloads",function()
+    local w,h=boot()
+    eq(h.registry.byId.voice.requested,true)
+    eq(h.voice.enabled,true)
+    local p,char=w:enemy(2)
+    local input=w.new("AudioDeviceInput");input.Parent=p
+    local emitter=w.new("AudioEmitter");emitter.Name="AudioEmitter"
+    emitter.DistanceAttenuationMode=E.DistanceAttenuationMode.Custom
+    emitter._attenuation={[0]=1,[12]=.6,[30]=0}
+    emitter.Parent=char
+    h.voice:setEnabled(true)
+    local current=emitter:GetDistanceAttenuation()
+    eq(current[15],.6);eq(current[37.5],0)
+    h:set("voice",false)
+    eq(h.voice.enabled,false)
+    local restored=emitter:GetDistanceAttenuation()
+    eq(restored[12],.6);eq(restored[30],0)
+    h:close();eq(w:connections(),0)
+    local w2,h2=boot({voice=false})
+    eq(h2.registry.byId.voice.requested,false)
+    eq(h2.voice.enabled,false)
+    h2:close();eq(w2:connections(),0)
+end)
+test("voice affects only remote default emitters and leaves external edits alone",function()
+    local M,w=modules()
+    local remote,char=w:enemy(2)
+    local input=w.new("AudioDeviceInput");input.Parent=remote
+    local voice=w.new("AudioEmitter");voice.Name="AudioEmitter"
+    voice._attenuation={[0]=1,[10]=.7,[20]=0}
+    voice.DistanceAttenuationMode=E.DistanceAttenuationMode.Custom
+    voice.Parent=char
+    local unrelated=w.new("AudioEmitter");unrelated.Name="RainEmitter"
+    unrelated._attenuation={[0]=1,[10]=.4,[20]=0}
+    unrelated.DistanceAttenuationMode=E.DistanceAttenuationMode.Custom
+    unrelated.Parent=char
+    local v=M.voice.new(w.env.game:GetService("Players"),w.player)
+    v:setEnabled(true)
+    eq(v:status().adjusted,1)
+    eq(unrelated:GetDistanceAttenuation()[10],.4)
+    voice:SetDistanceAttenuation({[0]=1,[11]=.5,[21]=0})
+    v:close()
+    eq(voice:GetDistanceAttenuation()[11],.5)
+    assert(v.conflicts>=1)
+end)
+test("held M1 edge continues repeating even when polling misses the down state",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions()
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}});w:advance(.3)
+    w.suppressAutoRelease=true -- simulate a real pressed edge with unreliable held polling
+    w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.55)
+    assert((w.nativeBites or 0)>=3,"InputBegan event must retain held intent")
+    local n=w.nativeBites
+    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w:advance(.85)
+    eq(w.nativeBites,n)
+    h:close() -- Native WolfController remains connected after our hub unload
+end)
+test("a held M1 already down before hub input is observed still repeats",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions()
+    w.held=E.UserInputType.MouseButton1
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(1.6)
+    assert((w.nativeBites or 0)>=3,"poll rearm must recover missed InputBegan")
+    w.held=nil;local before=w.nativeBites
+    w:advance(.8);eq(w.nativeBites,before)
+    h:close()
+end)
+test("held M1 replays safe real input when WolfController closures are private",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions()
+    w.env.getconnections=nil
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.15);eq(h.bridge.wolfActions,nil)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.7)
+    assert((w.virtualBiteCalls or 0)>=2,"fallback did not dispatch")
+    assert((w.nativeBites or 0)>=3,"synthetic native input did not receive markers")
+    local before=w.nativeBites
+    w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w:advance(.9);eq(w.nativeBites,before)
+    eq(h.ledger.counts.attack_intent,1)
+    h:close() -- Only owned listeners unload; the game's own handler stays
+end)
+test("held input fallback pauses through actual minigames even with private callbacks",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w:enableNativeGrab()
+    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.3)
+    local start=w.nativeBites or 0
+    local uses=w.virtualBiteCalls or 0
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=510,role="prey",n=4})
+    w:advance(.95)
+    eq(w.nativeBites or 0,start)
+    eq(w.virtualBiteCalls or 0,uses)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("end",{f=510})
+    w:advance(1.2)
+    assert((w.nativeBites or 0)>start,"held input should resume only after end")
+    h:close()
+end)
+test("no virtual backend never invents a repeated bite or damage",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local first=w.nativeBites
+    w:advance(2.1)
+    eq(w.nativeBites,first)
+    eq(w.nativeHitResponses,nil)
+    eq(h.registry.byId.holdBite.applied,false)
+    h:close()
+end)
+test("rate governor accelerates only with matched positive feedback and backs off conservatively",function()
+    local M=modules()
+    local log={};local ledger={event=function(_,name,_,data)table.insert(log,{name=name,data=data})end}
+    local c=M.combat_input.new({}, {},ledger)
+    close(c:factor(),.62)
+    for _,at in ipairs({2,3,4,6,7,8,10,11,12}) do c:confirmed(at) end
+    assert(c:factor()>=.55 and c:factor()<.62)
+    local fast=c:factor()
+    for _,at in ipairs({14,14.5,15}) do c:suspect(at) end
+    assert(c:factor()>fast)
+    assert(c:factor()<=1)
+    for i=1,30 do c:suspect(15+i) end
+    eq(c:factor(),1)
+    c:resetRate();close(c:factor(),.62)
+end)
+test("server-reported zero-damage stock-range contacts trigger a bounded slower client cadence",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions()
+    local _,target,hum=w:enemy(2,Mock.V3.new(0,3,-3))
+    hum.Health=10000;hum.MaxHealth=10000
+    w.nativeBiteTarget=target;w.nativeDamage=0
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.3);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(4.2)
+    assert((w.nativeHitResponses or 0)>3)
+    assert(h.combatInput:factor()>.62,"repeated clean zero-damage contacts should back off")
+    w.held=nil;h:close()
+end)
+test("uniquely matched positive server replies progressively improve safe client cadence",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions()
+    local _,target,hum=w:enemy(2,Mock.V3.new(0,3,-3))
+    hum.MaxHealth=10000;hum.Health=10000
+    w.nativeBiteTarget=target;w.nativeDamage=2
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.3);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(3.1)
+    assert((w.nativeHitResponses or 0)>=4)
+    assert(h.combatInput:factor()<.62,"confirmed server replies should tune the local speed")
+    w.held=nil;h:close()
+end)
+test("local bite FX never becomes the most recent bite's authoritative target",function()
+    local w=Mock.new();w:enableNativeActions()
+    local h=load(w)
+    local first=w:enemy(2,Mock.V3.new(0,3,-3))
+    h.transactions={{nativeAt=w.time,claimDue=w.time+.27,classified=false,generation=h.bridge.generation}}
+    w:remote("FeralBiteLocal").Event:Fire(first.Character)
+    eq(h.transactions[1].nativeTarget,nil)
+    eq(h.ledger.counts.client_bite_fx_only,1)
+    h:close()
+end)
+test("delayed native bite cannot be misattributed when the guide switches targets",function()
+    local w=Mock.new();w:enableNativeActions()
+    local _,first=w:enemy(2,Mock.V3.new(0,3,-3))
+    local _,second=w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={holdBite=false}}});w:advance(.3)
+    assert(h.guide and h.guide.target and h.guide.target.char==first)
+    w:input(nil,E.UserInputType.MouseButton1)
+    local tx=h.transactions[#h.transactions]
+    assert(tx and tx.nativeAt and tx.focusTarget and tx.focusTarget.char==first)
+    h.guide={target={char=second,root=second:FindFirstChild("HumanoidRootPart"),
+        hum=second:FindFirstChildOfClass("Humanoid")},extended={valid=true},baseline={valid=true}}
+    h:stepCombat(h.bridge:snapshot(w.time,false),tx.claimDue+.025)
+    eq(tx.target.char,first)
+    h:close()
+end)
+test("minigame begin during fallback M1 instantly releases the owned synthetic press",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w:enableNativeGrab()
+    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    w.virtualStartsGrab=true
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.9)
+    eq(h.nativeGrabBusy,true)
+    eq(h.bridge.syntheticM1,nil)
+    eq(w.logicalM1Down,false)
+    assert((w.virtualBiteUps or 0)>=(w.virtualBiteDowns or 0))
+    local observed=w.nativeBites or 0
+    w:advance(.8);eq(w.nativeBites or 0,observed)
+    w.held=nil;h:close()
+end)
+test("private native callback can repeat through paired executor mouse APIs",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    local pairDown,pairUp=0,0
+    w.env.mouse1press=function()
+        pairDown+=1
+        w:input(nil,E.UserInputType.MouseButton1)
+    end
+    w.env.mouse1release=function()
+        pairUp+=1
+        w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    end
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.55)
+    assert(pairDown>=2 and pairUp>=1)
+    assert((w.nativeBites or 0)>=3)
+    local count=w.nativeBites
+    w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w:advance(.85);eq(w.nativeBites,count)
+    h:close()
+    -- Each replay first sends an Up to create a fresh Down edge.
+    assert(pairUp>=pairDown and pairDown>=2)
+    eq(h.bridge.syntheticM1,nil)
+end)
+
+test("held fallback resets a logically down mouse before every native press",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton1
+    w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.8)
+    assert((w.virtualBiteDowns or 0)>=2)
+    assert((w.virtualBiteUps or 0)>=(w.virtualBiteDowns or 0)*2)
+    assert((w.nativeBites or 0)>=3,"repeat must be a new Down edge")
+    w.held=nil
+    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    local count=w.nativeBites
+    w:advance(.9)
+    eq(w.nativeBites,count)
+    h:close();eq(h.bridge.syntheticM1,nil)
+end)
+test("native hunter bites repeat during grab without altering automatic perfect presses",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+    local _,other=w:enemy(2,Mock.V3.new(0,3,-3))
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=false}}})
+    w:advance(.4)
+    local remote=w:remote("FeralGrabV2")
+    remote.OnClientEvent:Fire("begin",{f=816,role="hunter",n=2})
+    w:advance(.1)
+    assert(h.grabInput.lease and not h.bridge:nativeGrabBound(),"M1 must be separated")
+    w.held=E.UserInputType.MouseButton1
+    w:input(nil,E.UserInputType.MouseButton1)
+    local count=w.nativeBites or 0
+    remote.OnClientEvent:Fire("strike",{f=816,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2})
+    w:advance(1.25)
+    assert((w.nativeBites or 0)>count,"held M1 should bite via native callback while minigame active")
+    assert(h.grab.presses>=1,"automation must still send grab perfect press")
+    eq(w.nativeManualPresses,nil) -- no synthetic minigame press
+    remote.OnClientEvent:Fire("end",{f=816})
+    w.held=nil;h:close()
+end)
+test("native clamp restrictions still block bites while physically holding prey",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-3))
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=false}}})
+    w:advance(.4)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=818,role="hunter"})
+    w:advance(.1)
+    assert(h.grabInput.lease)
+    local clamp=w.new("ObjectValue");clamp.Name="FeralClamp";clamp.Value=char
+    clamp.Parent=w.player.Character
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local first=w.nativeBites or 0
+    w:advance(1.2)
+    eq(w.nativeBites or 0,first) -- FeralClamp is a real native bite restriction
+    for _,call in ipairs(w.calls) do
+        assert(not (call.name=="WolfActions" and call.args[1]=="BiteHit"))
+    end
+    w.held=nil;h:close()
+end)
+test("prey grabs do not auto-repeat bite and preserve native minigame automation",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    local h=load(w,{settings={states={holdBite=true,minigame=true}}})
+    w:advance(.4)
+    local remote=w:remote("FeralGrabV2")
+    remote.OnClientEvent:Fire("begin",{f=820,role="prey"})
+    w:advance(.1)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local first=w.nativeBites or 0
+    remote.OnClientEvent:Fire("strike",{f=820,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2})
+    w:advance(1.25)
+    eq(w.nativeBites or 0,first)
+    assert(h.grab.presses>=1)
+    w.held=nil;h:close()
+end)
+test("no native callback never creates synthetic M1 during hunter minigame",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,minigame=true}}});w:advance(.2)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=822,role="hunter"})
+    w:advance(.15)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local before=w.virtualBiteCalls or 0
+    w:advance(1.2)
+    eq(w.virtualBiteCalls or 0,before)
+    h:close()
+end)
+test("minigame role never carries over to the next native session",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    assert(g:event("begin",{f=100,role="hunter"},100,1,.32,2.5))
+    eq(g.role,"hunter")
+    assert(g:event("end",{f=100},101,1,.32,2.5))
+    eq(g.role,nil)
+    assert(g:event("begin",{f=101,role="prey"},102,1,.32,2.5))
+    eq(g.role,"prey")
+end)
+
+test("unacknowledged virtual input automatically switches to paired executor edges",function()
+    local w=Mock.new();w:enableNativeActions()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w.env.getconnections=nil;w.virtualBiteAvailable=true;w.virtualDropInput=true
+    local pairedDown,pairedUp=0,0
+    w.env.mouse1press=function()
+        pairedDown+=1
+        if not w.logicalM1Down then w.logicalM1Down=true;w:input(nil,E.UserInputType.MouseButton1) end
+    end
+    w.env.mouse1release=function()
+        pairedUp+=1;w.logicalM1Down=false
+        w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    end
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(5.3)
+    assert((w.virtualBiteDowns or 0)>=2,"virtual backend should be attempted first")
+    assert(pairedDown>=1 and pairedUp>=1,"successful pcall but ignored input should rotate to paired backend")
+    assert((w.nativeBites or 0)>=2)
+    w.held=nil
+    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    h:close()
+end)
+test("compatible newer FERAL place version still supports held bite via native input",function()
+    local w=Mock.new();w:enableNativeActions()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w.env.game.PlaceVersion=2413
+    w.env.getconnections=nil
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.2)
+    eq(h.bridge:combatInputCompatible(),true)
+    eq(h.registry.byId.attackSpeed.applied,false)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.9)
+    assert((w.nativeBites or 0)>=3,"compatible input should not be globally disabled by version")
+    w.held=nil;h:close()
+end)
+test("held input replay remains disabled without a matching FERAL WolfController",function()
+    local w,h=boot({holdBite=true})
+    eq(h.bridge:combatInputCompatible(),false)
+    eq(h.registry.byId.holdBite.applied,false)
+    h:close()
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
