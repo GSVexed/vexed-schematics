@@ -720,6 +720,14 @@ function Controller.new(M,bridge,options)
         r.byId.survivalAFK.observed = (self.ledger.counts.survival_value_advanced or 0) > 0
             and "survival value advanced; cause unverified" or "unknown"
     end
+    function h:correlatedHPDrop(tx)
+        local victim=tx.nativeTarget or tx.target and tx.target.char
+        local before=victim and tx.hpBefore and tx.hpBefore[victim]
+        if not before then return false end
+        local ok,hum=pcall(function()return victim:FindFirstChildOfClass("Humanoid")end)
+        return ok and hum and hum.Parent and hum.MaxHealth==before.maxHP
+            and hum.Health<before.hp-.05 or false
+    end
     function h:stepCombat(s,now)
         for _,tx in ipairs(self.transactions) do
             if not tx.classified and tx.generation == s.generation then
@@ -755,8 +763,8 @@ function Controller.new(M,bridge,options)
                         end
                     end
                     self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
-                elseif tx.nativeAt and tx.sampled
-                    and now >= tx.claimDue+(tx.feedback and .8 or 2.0) then
+                elseif tx.nativeAt and tx.sampled and now>=tx.claimDue+.8
+                    and (tx.feedback or now>=tx.claimDue+2.0 or self:correlatedHPDrop(tx)) then
                     tx.classified = true
                     local target = tx.target
                     local char=tx.nativeTarget or target and target.char
