@@ -16,9 +16,9 @@
 
 **Issue ledger schema for implementation:** ID, priority, feature, state, baseline version, game PlaceVersion, species/body, triggering conditions, observed symptom, relevant native path/source hash, hypothesised root cause, reproduction, proposed smallest fix, module owner, conflict/risk, tests added, actual paired before/after outcome, rollback, residual blockers and verification level.
 
-## B. New full-hub scenario inventory (H001–H060)
+## B. New full-hub scenario inventory (H001–H070)
 
-The sixty scenarios below extend rather than replace the existing Territory S01–S62. In each, the test record must contain both expected and observed outcomes; a scenario remains OPEN if no real gameplay execution happened. Terms like “should” are acceptance targets, not promises.
+The seventy scenarios below extend rather than replace the existing Territory S01–S62. Cases H061–H070 are the P0 combat-reliability extension documented in P0_COMBAT_GHOST_HITS_AND_MISSING_BITES_PREPARATION_2026-11-26.md. In each, the test record must contain both expected and observed outcomes; a scenario remains OPEN if no real gameplay execution happened. Terms like “should” are acceptance targets, not promises.
 
 | ID | Priority | Scenario / deliberate stimulus | Acceptance outcome | Required proof |
 |---|---|---|---|---|
@@ -53,11 +53,11 @@ The sixty scenarios below extend rather than replace the existing Territory S01�
 | H029 | P1 | Vulture talon/dive released early during nearby threat | Flying continues; no frozen gliding pose or anchor manipulation | Ability/session release and motion trace |
 | H030 | P1 | Hippo Crusher active during Shift/X/Z, land and water, Burst denied | Forced-gait scalar restored when ability ends and doesn't bypass native denial | Actual gait/speed, attributes and config restore |
 | H031 | P1 | Long session with speed, mobility, leap and stamina all enabled | No overlapping config writers, instability or release drift | Owner lease records and real values |
-| H032 | P1 | Bite toward moving prey, open terrain | Correct face/contact strategy, no spam, hit evidence separated | Native marker, reply and prey HP |
-| H033 | P1 | Stationary prey/target close but behind or above | Assistance picks physically eligible target; no stuck motion | Facing geometry and actual attack |
-| H034 | P1 | Two animals on same climb/tree | Tree/vertical geometry supports genuine eligible bites | Native hit and target HP evidence |
-| H035 | P1 | Rapid repeated attacks and high ping | No ghost hit labels, false damage or duplicate buffered bites | Correlated native feedback and own inputs |
-| H036 | P1 | Several enemies and one protected/friendly player | Friendly/protection checks correct and target selection stable | Candidate list, affiliation, actual hit |
+| H032 | P0 | Bite toward moving prey, open terrain | Correct face/contact strategy, no spam, hit evidence separated | Native marker, reply and prey HP |
+| H033 | P0 | Stationary prey/target close but behind or above | Assistance picks physically eligible target; no stuck motion | Facing geometry and actual attack |
+| H034 | P0 | Two animals on same climb/tree | Tree/vertical geometry supports genuine eligible bites | Native hit and target HP evidence |
+| H035 | P0 | Rapid repeated attacks and high ping | No ghost hit labels, false damage or duplicate buffered bites | Correlated native feedback and own inputs |
+| H036 | P0 | Several enemies and one protected/friendly player | Friendly/protection checks correct and target selection stable | Candidate list, affiliation, actual hit |
 | H037 | P1 | Minigame 30/60/144 Hz with frame hitches | Earliest legal safe Perfect-window dispatch; no illegal future/backdated time | Own input timestamp, native grade, CPU cost |
 | H038 | P1 | Multiple hunters, simultaneous sessions and native bite | Independent own session result, no opponent result counted, LMB retains intended purpose | Native IDs/result stream and attack marker |
 | H039 | P1 | Mid-session minigame activation, manual override, early end | Graceful handoff, no old strike wake, correct manual keys | Session binding and exact results |
@@ -82,6 +82,23 @@ The sixty scenarios below extend rather than replace the existing Territory S01�
 | H058 | P3 | Territory feeding, drinking, hunting and recovery compete | Single survival arbiter, finite corpse/pond, correct priority and resumed root goal | Resource values, attack/care and return chain |
 | H059 | P3 | Territory multi-hour realistic species/diet/world scene | Live sustained coverage/retention and valid Amber delta, no manual workaround | Multi-run 10/30/120m native outcomes |
 | H060 | P3 | Full combined upgrade release, rollback and hot patch | Bundle source parity, previous stable launch safe, zero known critical regressions | CI, hashes, live canary and rollback |
+
+### P0 combat repair extension — H061–H070
+
+These extend the original sixty and are blockers for claiming combat reliability. See [focused combat root-cause preparation](P0_COMBAT_GHOST_HITS_AND_MISSING_BITES_PREPARATION_2026-11-26.md) for source paths, causal pipeline, hypotheses, instrumentation boundaries and detailed paired-live criteria.
+
+| ID | Priority | Reproduction | Functional acceptance | Evidence |
+|---|---|---|---|---|
+| H061 | P0 | Eligible close-range normal click without Rest | Native attack initiates and outcome tracked | Original input, WolfBiteAt, hit reply, target HP |
+| H062 | P0 | Bite at 0/100/300/700/1000 ms around Rest release | No extra hub-induced lost first bites | Native Rest lock and subsequent marker/reply |
+| H063 | P0 | Bite SFX/local impact without damage | Classified as local-only without claim of hit success | Effect, reply and stable HP separated |
+| H064 | P0 | Marker but no accepted hit/HP decline | Exact native eligibility and denial isolated | Target, occlusion, cooldown and reply |
+| H065 | P0 | Hit reply but no matching target HP decline | Wrong target, growth, lag and replication windows checked | Native target plus delayed same-MaxHP trend |
+| H066 | P0 | Moving/fleeing target and rapid turns | Better native accepted-hit rate, not merely closer cue | Matched baseline/candidate replies |
+| H067 | P0 | Two animals climbing same tree at different heights | Valid attacks register without false guide | Native elevation, actual reply and HP |
+| H068 | P0 | Multi-target and simultaneous other attacker | Correct own-target attribution | Generation, marker, reply and target identity |
+| H069 | P0 | Minigame and manual LMB with missing native callback | Hub never steals normal eligible attack | Native handler ownership and real marker |
+| H070 | P0 | Same hunting scene under manual and Territory attack | Both paths use real damage evidence, not sound | Prey reply, HP, claimed kill and meal |
 
 ## C. Representative species/platform matrix (to expand from observed native profiles)
 
@@ -152,6 +169,8 @@ A mitigation that merely disables a feature can be acceptable as a temporary saf
 | G14 | All official compilation, integrated regression and deterministic parity checks pass |
 | G15 | Repeated native paired tests support the specific benefit claims in release notes |
 | G16 | Stable launcher promoted only after review; prior version remains usable |
+| G17 | Repeated native-game trials demonstrate improvement in accepted eligible bite outcomes; no merely cosmetic ghost-hit suppression counts as success |
+| G18 | First bite after Rest, moving targets, same-tree attacks and native-minigame input collisions pass P0 H061–H070 or have explicitly documented authoritative limitations |
 
 ## G. Initial issue queue, not implementation
 
@@ -165,7 +184,7 @@ A mitigation that merely disables a feature can be acceptable as a temporary saf
 | U006 | P1 | High-value minigame success still unverified under real latency/crowds | Replay first-window scheduler under real native minigame replies |
 | U007 | P1 | Speed/gait and stamina are client input/config paths, not measured accepted motion | Per-mode species traces with actual displacement/stamina |
 | U008 | P1 | Vulture/Eagle cancellation can leave native flight state stuck | Controlled talon/dive end and motion acceptance matrix |
-| U009 | P1 | Bite range/geometry and ghost hits remain attribution-limited | Actual hit feedback matrix with climb/rear/stationary/moving targets |
+| U009 | P0 | **Ghost hits and attacks failing to initiate/register**; bite sound/marker and accepted server damage are different outcomes | Diagnose native input, Rest lock, target geometry, game reply and actual target HP using H061–H070; fix behaviour rather than only labels |
 | U010 | P1 | Water/shoreline, animal climb and depth routes are not complete | Native-capability adapters with conservative unsupported fallback |
 | U011 | P1 | Feeding completion depends on native gain and source availability | Repeated resource-limited live meals/drinks |
 | U012 | P2 | Current UI has hard-coded layouts and status presentation gaps | All-control click/focus/scale audit and truthful status model |
@@ -173,9 +192,12 @@ A mitigation that merely disables a feature can be acceptable as a temporary saf
 | U014 | P3 | Territory workload estimator covers due work only | Model full steady-state capacity and overload policy |
 | U015 | P3 | Territory 0.7.0 has partial all-animal route support | Implement/validate native mode transitions incrementally |
 | U016 | P3 | 44 Territory prep items / 62 scenarios retain live gaps | Run and link each missing acceptance, not rephrase it as done |
+| U017 | P0 | Native input-to-bite path may be blocked by Rest, minigames, bindings or unavailable optional callback | Verify the original native bite path and provide reliable, nonduplicating handoff |
+| U018 | P0 | Bite-target and feedback transactions may be misassociated; client guide may disagree with actual game target | Correlate each real native target, hit reply and replicated HP with generation/timing; correct false-positive hit feedback |
+| U019 | P0 | Tree/vertical, rear, moving-target and species-specific bite acceptance remains inconsistent | Reproduce and close high-risk eligibility/geometry cases using real-game matched hit outcomes |
 
 ## H. Closeout rule
 
-This document is a test plan and gate list. It is deliberately not a stable release, performance result, new feature, completed damage reduction mechanism, or proof that all effects work. The user requested preparation *before* making gameplay changes. Next implementation must preserve this exact distinction and drive U001–U016 plus H001–H060 to evidence-backed outcomes.
+This document is a test plan and gate list. It is deliberately not a stable release, performance result, new feature, completed damage reduction mechanism, or proof that all effects work. The user requested preparation *before* making gameplay changes. Next implementation must preserve this exact distinction and drive U001–U019 plus H001–H070 to evidence-backed outcomes.
 
 **Documentation-only change. No source code, settings or launchers are altered by this preparation.**
