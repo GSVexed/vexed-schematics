@@ -121,7 +121,7 @@ function Features.new(Core, bridge, registry)
                 end
                 local target = bridge.reachTarget
                 local root = char and char:FindFirstChild("HumanoidRootPart")
-                if target and target.char and target.char.Parent and target.root.Parent and root
+                if bridge:currentTargetBody(target) and root and char==bridge.player.Character
                     and bridge:combatEligible(target.char) then
                     local diff = target.root.Position-root.Position
                     local flat = Vector3.new(diff.X,0,diff.Z)
@@ -139,7 +139,8 @@ function Features.new(Core, bridge, registry)
                     local ok,value = pcall(original.dyMult,char)
                     if ok and Core.finite(value) and value > 0 then native = value end
                 end
-                if bridge:isClimbing(char) and bridge.treeTarget and bridge.treeTarget.sameTree then
+                if char==bridge.player.Character and bridge:isClimbing(char)
+                    and bridge:currentTargetBody(bridge.treeTarget) and bridge.treeTarget.sameTree then
                     return math.min(native*2.50,3.5)
                 end
                 return native*1.35

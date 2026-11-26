@@ -1,17 +1,17 @@
 {
-  "version": "16.0.1",
+  "version": "16.0.2",
   "integrated_territory_version": "0.8.0",
   "date": "2026-11-26",
-  "status": "native compatibility candidate; validation pending; live acceptance open",
-  "branch": "renaissance/native-combat-compatibility-2026-11-26",
-  "source_commit": "45c6a24e2d396ac3a5956c225c70c59451838b90",
-  "source_bundle": "roblox-tools/feral-renaissance-v16.0.1.lua",
-  "bundle_sha256": "776cc09a7f3c14e60d40a367aee8c408dbcf8f2787b30817daed498e18672211",
-  "bundle_bytes": 464677,
+  "status": "combat session reliability candidate; validation pending; live acceptance open",
+  "branch": "renaissance/combat-session-reliability-16.0.2",
+  "source_commit": "0bba0831449d8b7743bc9b36facada407168e68e",
+  "source_bundle": "roblox-tools/feral-renaissance-v16.0.2.lua",
+  "bundle_sha256": "06a07fb509bbd217b059c5e282cd4bfaaf7a90595e13873b955953a8cea19f5c",
+  "bundle_bytes": 468128,
   "territory_bundle_sha256": "b699951444285fb75ca26ccf688431050040dc9f061d41a4129f8b9e9926c4da",
   "module_count": 26,
-  "reviewed_module_count": 5,
-  "changed_module_count": 5,
+  "reviewed_module_count": 6,
+  "changed_module_count": 6,
   "retained_features": 22,
   "territory_enabled_by_default": false,
   "stable_promoted": false,
@@ -21,11 +21,11 @@
   "core_regressions": null,
   "territory_regressions": null,
   "baseline_regressions": {
-    "core": 304,
+    "core": 307,
     "territory": 305
   },
   "new_regressions": {
-    "core": 3,
+    "core": 4,
     "territory": 0
   },
   "source_parity": null,
@@ -37,10 +37,10 @@
   },
   "core_results": null,
   "territory_results": null,
-  "ci_evidence": "Pending validation of the exact 16.0.1 package; 16.0.0 results are not reused as candidate results.",
+  "ci_evidence": "Pending validation of the exact 16.0.2 package; prior results are not reused.",
   "live_gameplay_tested": false,
   "full_acceptance_complete": false,
-  "release_report": "docs/NATIVE_COMPATIBILITY_16_0_1.md",
+  "release_report": "docs/COMBAT_SESSION_RELIABILITY_16_0_2.md",
   "acceptance_ledger": "docs/OVERHAUL_16_ACCEPTANCE.md",
   "native_mechanisms": "docs/NATIVE_MECHANISMS_16.md",
   "stable_rollback": {
@@ -50,9 +50,9 @@
     "bundle_sha256": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb"
   },
   "integrated_baseline": {
-    "version": "16.0.0",
-    "source_commit": "6c2e10c268d681d45d312ec5cb8a0de5100243fa",
-    "bundle_sha256": "53e348fb1574d7a7fd334ac316fac645b8801f4ab9706fd6288f7df91c642b29"
+    "version": "16.0.1",
+    "source_commit": "45c6a24e2d396ac3a5956c225c70c59451838b90",
+    "bundle_sha256": "776cc09a7f3c14e60d40a367aee8c408dbcf8f2787b30817daed498e18672211"
   },
   "dependency_heads": {
     "recovery_pr13": "da2145a4903e04e365cbeb4387825658d1f65a35",
@@ -60,7 +60,8 @@
     "combat_pr15": "bcc9c3699b41b6a2bd74a2d91324a493ee48b2c2"
   },
   "limitations": [
-    "Experimental reach is optional and defaults OFF. The native profile and guide are read-only in this state.",
+    "The existing reach profile is unchanged and defaults ON when no choice is saved. Explicit OFF retains the native compatibility path.",
+    "Failed Rest exits relinquish pose ownership and pause recovery until manual Rest or a new animal. A failed local dispatch does not establish the server state; the normal input path is preserved.",
     "Recovery renewal failures now release owned pose state. Neither 2x HP nor 4x condition clearance has been established on the current live game.",
     "Current live game version and paired server-accepted recovery, status clearance, hit rate, minigame grades, flight, motion, stamina, feeding and reward outcomes were not verified.",
     "Territory autonomous native climb, flight/altitude and underwater-depth route adapters remain unsupported; native/manual controls retain priority.",
@@ -70,5 +71,5 @@
     "Fixed private native layouts and the Hippo scalar adapter are restricted to captured build 2412; missing introspection preserves ordinary native input without guaranteeing optional buffered retries.",
     "Same-place lobby/respawn lifecycle is covered in mocks; cross-place teleport reinjection is not provided."
   ],
-  "experimental_reach_enabled_by_default": false
+  "experimental_reach_enabled_by_default": true
 }

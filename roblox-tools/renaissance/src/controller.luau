@@ -8,7 +8,7 @@ end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "16.0.1", tokenIdentity = tokenIdentity,
+    local h = { version = "16.0.2", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -196,6 +196,8 @@ function Controller.new(M,bridge,options)
         self.recovery.observations,self.recovery.nativeEchoObserved = {},false
         self.recovery.conditionChar,self.recovery.conditionSeenUntil,self.recovery.conditionSeen=nil,0,{}
         self.recovery.backoffUntil,self.recovery.nextObserve=0,0
+        self.recovery.releaseFailedChar,self.recovery.releasingChar=nil,nil
+        bridge:clearCombatTargets()
         bridge.biteTiming,bridge.deferNativeDiscovery=nil,false
         self.policy.manualRest,self.policy.manualIntentUntil = false,0
         self.policy.attackUntil,self.policy.actionUntil,self.policy.lastRestRelease=0,0,-math.huge
@@ -212,6 +214,7 @@ function Controller.new(M,bridge,options)
         self.features:releaseFlag()
         self.features.nextReconcile = 0
         self.climbQueue,self.guide,self.transactions,self.lastIntent = nil,nil,{},nil
+        self.snapshot=nil
         self.ledger.previous = nil
         self.ledger.staminaObservation=nil
         self.lastSurvival,self.lastGrabClock,self.lastGrabPending,self.combatStatusAt=nil,nil,nil,nil
@@ -329,15 +332,17 @@ function Controller.new(M,bridge,options)
         end
         if primary or key == Enum.KeyCode.ButtonR2 then
             self.policy:input("attack",now)
-            self.recovery:release("attack input",now)
+            local restReleased=self.recovery:release("attack input",now)
             if primary or key == Enum.KeyCode.ButtonR2 then
                 self.feeding:attack(s,now);self.rescue:cancel()
-                local tx = { intent = now, input=input,lock = self.policy:restLocked(now), generation = s.generation }
+                local tx = { intent = now, input=input,lock = self.policy:restLocked(now),
+                    generation = s.generation,restExitFailed=not restReleased }
                 self.lastIntent = tx
                 table.insert(self.transactions,tx)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
                 self.ledger:event("attack_intent",now,{restLock = tx.lock})
-                self.combatInput:input(s,now,input)
+                if restReleased then self.combatInput:input(s,now,input)
+                else self.combatInput:cancel() end
             end
         elseif key == Enum.KeyCode.E or key == Enum.KeyCode.F or key == Enum.KeyCode.G
             or key==Enum.KeyCode.Z or key==Enum.KeyCode.X
@@ -401,7 +406,7 @@ function Controller.new(M,bridge,options)
                 and not (self.guide.baseline and self.guide.baseline.valid) or false
             tx.hpBefore={}
             for _,target in ipairs(bridge.allCandidates or {}) do
-                if target.root.Parent and (target.root.Position-s.root.Position).Magnitude<=45 then
+                if bridge:currentTargetBody(target) and (target.root.Position-s.root.Position).Magnitude<=45 then
                     tx.hpBefore[target.char]={hp=target.hum.Health,maxHP=target.hum.MaxHealth,hum=target.hum}
                 end
             end
@@ -695,6 +700,7 @@ function Controller.new(M,bridge,options)
                     if not tx.classified then
                         tx.classified = true
                         local status = tx.consumed and "Input handled by native UI or another binding"
+                            or tx.restExitFailed and "Native Rest exit failed; normal input preserved"
                             or tx.lock and "No native bite marker · recent Rest lock possible" or "No native bite marker observed"
                         if not self.combatStatusAt or tx.intent>=self.combatStatusAt then
                             self.combatStatus,self.combatStatusAt=status,tx.intent
