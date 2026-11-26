@@ -1613,9 +1613,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.8.5 presents its actual version in the active controller",function()
+test("Renaissance 15.8.6 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.8.5")
+    eq(h.version,"15.8.6")
     h:close()
 end)
 
@@ -2350,7 +2350,8 @@ test("minigame begin during fallback M1 instantly releases the owned synthetic p
     w:advance(.9)
     eq(h.nativeGrabBusy,true)
     eq(h.bridge.syntheticM1,nil)
-    eq((w.virtualBiteCalls or 0)%2,0)
+    eq(w.logicalM1Down,false)
+    assert((w.virtualBiteUps or 0)>=(w.virtualBiteDowns or 0))
     local observed=w.nativeBites or 0
     w:advance(.8);eq(w.nativeBites or 0,observed)
     w.held=nil;h:close()
@@ -2377,6 +2378,104 @@ test("private native callback can repeat through paired executor mouse APIs",fun
     w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
     w:advance(.85);eq(w.nativeBites,count)
     h:close();eq(pairDown,pairUp)
+end)
+
+test("held fallback resets a logically down mouse before every native press",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton1
+    w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.8)
+    assert((w.virtualBiteDowns or 0)>=2)
+    assert((w.virtualBiteUps or 0)>=(w.virtualBiteDowns or 0)*2)
+    assert((w.nativeBites or 0)>=3,"repeat must be a new Down edge")
+    w.held=nil
+    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    local count=w.nativeBites
+    w:advance(.9)
+    eq(w.nativeBites,count)
+    h:close();eq(h.bridge.syntheticM1,nil)
+end)
+test("native hunter bites repeat during grab without altering automatic perfect presses",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+    local _,other=w:enemy(2,Mock.V3.new(0,3,-3))
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=false}}})
+    w:advance(.4)
+    local remote=w:remote("FeralGrabV2")
+    remote.OnClientEvent:Fire("begin",{f=816,role="hunter",n=2})
+    w:advance(.1)
+    assert(h.grabInput.lease and not h.bridge:nativeGrabBound(),"M1 must be separated")
+    w.held=E.UserInputType.MouseButton1
+    w:input(nil,E.UserInputType.MouseButton1)
+    local count=w.nativeBites or 0
+    remote.OnClientEvent:Fire("strike",{f=816,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2})
+    w:advance(1.25)
+    assert((w.nativeBites or 0)>count,"held M1 should bite via native callback while minigame active")
+    assert(h.grab.presses>=1,"automation must still send grab perfect press")
+    eq(w.nativeManualPresses,nil) -- no synthetic minigame press
+    remote.OnClientEvent:Fire("end",{f=816})
+    w.held=nil;h:close()
+end)
+test("hunter carrying prey may request original native bite without direct hit remotes",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-3))
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=false}}})
+    w:advance(.4)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=818,role="hunter"})
+    w:advance(.1)
+    assert(h.grabInput.lease)
+    local clamp=w.new("ObjectValue");clamp.Name="FeralClamp";clamp.Value=char
+    clamp.Parent=w.player.Character
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local first=w.nativeBites or 0
+    w:advance(1.2)
+    assert((w.nativeBites or 0)>first,"native bite must own eligibility even while holding opponent")
+    for _,call in ipairs(w.calls) do
+        assert(not (call.name=="WolfActions" and call.args[1]=="BiteHit"))
+    end
+    w.held=nil;h:close()
+end)
+test("prey grabs do not auto-repeat bite and preserve native minigame automation",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    local h=load(w,{settings={states={holdBite=true,minigame=true}}})
+    w:advance(.4)
+    local remote=w:remote("FeralGrabV2")
+    remote.OnClientEvent:Fire("begin",{f=820,role="prey"})
+    w:advance(.1)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local first=w.nativeBites or 0
+    remote.OnClientEvent:Fire("strike",{f=820,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2})
+    w:advance(1.25)
+    eq(w.nativeBites or 0,first)
+    assert(h.grab.presses>=1)
+    w.held=nil;h:close()
+end)
+test("no native callback never creates synthetic M1 during hunter minigame",function()
+    local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
+    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,minigame=true}}});w:advance(.2)
+    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=822,role="hunter"})
+    w:advance(.15)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    local before=w.virtualBiteCalls or 0
+    w:advance(1.2)
+    eq(w.virtualBiteCalls or 0,before)
+    h:close()
+end)
+test("minigame role never carries over to the next native session",function()
+    local M=modules();local g=M.grab.new();g.enabled=true
+    assert(g:event("begin",{f=100,role="hunter"},100,1,.32,2.5))
+    eq(g.role,"hunter")
+    assert(g:event("end",{f=100},101,1,.32,2.5))
+    eq(g.role,nil)
+    assert(g:event("begin",{f=101,role="prey"},102,1,.32,2.5))
+    eq(g.role,"prey")
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

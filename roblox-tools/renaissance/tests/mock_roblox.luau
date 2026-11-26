@@ -264,12 +264,21 @@ function Mock.new()
         assert(button==0,"expected primary attack")
         w.virtualBiteCalls=(w.virtualBiteCalls or 0)+1
         if down then
+            w.virtualBiteDowns=(w.virtualBiteDowns or 0)+1
+            -- A Down event while physically/logically Down is not a new
+            -- InputBegan; previous tests incorrectly counted this as a bite.
+            if w.logicalM1Down then return end
+            w.logicalM1Down=true
             w:input(nil,enum.UserInputType.MouseButton1)
             if w.virtualStartsGrab then
                 w.virtualStartsGrab=false
                 w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=715,role="prey"})
             end
-        else uis.InputEnded:Fire({UserInputType=enum.UserInputType.MouseButton1,KeyCode=enum.KeyCode.Unknown}) end
+        else
+            w.virtualBiteUps=(w.virtualBiteUps or 0)+1
+            w.logicalM1Down=false
+            uis.InputEnded:Fire({UserInputType=enum.UserInputType.MouseButton1,KeyCode=enum.KeyCode.Unknown})
+        end
     end
     function gameObject:GetService(name)
         if name=="VirtualInputManager" then
@@ -642,6 +651,7 @@ function Mock.new()
     end
     function w:input(key,kind,processed)
         local input={KeyCode=key or enum.KeyCode.Unknown,UserInputType=kind or enum.UserInputType.Keyboard,Position=V3.new(1200,850,0)}
+        if input.UserInputType==enum.UserInputType.MouseButton1 then self.logicalM1Down=true end
         local order={}
         for name,fn in pairs(table.clone(self.bindings))do
             local info=self.bindingInfo[name] or {inputTypes={},priorityLevel=0}
@@ -661,6 +671,7 @@ function Mock.new()
                 and w.held~=enum.UserInputType.MouseButton1
             or input.KeyCode==enum.KeyCode.ButtonR2 and w.padHeld~=enum.KeyCode.ButtonR2
         ) then
+            if input.UserInputType==enum.UserInputType.MouseButton1 then self.logicalM1Down=false end
             uis.InputEnded:Fire(input)
         end
         return input
