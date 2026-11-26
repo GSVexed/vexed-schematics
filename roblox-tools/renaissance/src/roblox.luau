@@ -479,13 +479,10 @@ function Roblox.new(Core, environment)
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         return ok and virtual~=nil
     end
-    function b:visibleBiteWindow(s,now,grabHunter)
-        local inGrab=grabHunter==true and s.grab==true
-        -- The minigame's hunter can be carrying the opponent; only the
-        -- original WolfController.tryBite may decide if a bite is legal.
+    function b:visibleBiteWindow(s,now)
         if game.PlaceVersion~=2412 or not s.alive or s.char~=self.player.Character
-            or s.chat or s.gameMenu or s.grab and not inGrab or s.rest or s.feeding or s.ability
-            or s.captured or s.holding and not inGrab or not Core.finite(s.serverNow) then return false end
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding or not Core.finite(s.serverNow) then return false end
         local species=self:config("Species")
         if not species or type(species.biteCooldown)~="function" then return false end
         local ok,cd=pcall(species.biteCooldown,self:attribute(s.char,"Species") or species.DEFAULT,

@@ -115,7 +115,7 @@ function CombatInput.new(bridge,policy,ledger)
         if not p and not held and not automatic then
             self.awaiting=nil;return
         end
-        if s.feeding or s.captured or s.holding and not nativeGrabLane or s.ability or s.rest then
+        if s.feeding or s.captured or s.holding or s.ability or s.rest then
             self.pending=nil
             self.status="native action lock; hold retained"
             return
@@ -148,12 +148,6 @@ function CombatInput.new(bridge,policy,ledger)
                 or readiness.reason=="native timing layout unknown")
         if not allowed and privateUnknown and held and not automatic and not inGrab then
             allowed=bridge:visibleBiteWindow(s,now)
-        end
-        if not allowed and nativeGrabLane and readiness.reason=="capture or carry lock"
-            and s.captured~=true then
-            -- A hunter holding prey is not the same as being pinned. Let
-            -- validated native tryBite decide; never inject a hit claim.
-            allowed=bridge:visibleBiteWindow(s,now,true)
         end
         if not allowed then
             self.status=readiness.reason

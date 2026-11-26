@@ -2421,7 +2421,7 @@ test("native hunter bites repeat during grab without altering automatic perfect 
     remote.OnClientEvent:Fire("end",{f=816})
     w.held=nil;h:close()
 end)
-test("hunter carrying prey may request original native bite without direct hit remotes",function()
+test("native clamp restrictions still block bites while physically holding prey",function()
     local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
     local _,char=w:enemy(2,Mock.V3.new(0,3,-3))
@@ -2435,7 +2435,7 @@ test("hunter carrying prey may request original native bite without direct hit r
     w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
     local first=w.nativeBites or 0
     w:advance(1.2)
-    assert((w.nativeBites or 0)>first,"native bite must own eligibility even while holding opponent")
+    eq(w.nativeBites or 0,first) -- FeralClamp is a real native bite restriction
     for _,call in ipairs(w.calls) do
         assert(not (call.name=="WolfActions" and call.args[1]=="BiteHit"))
     end
