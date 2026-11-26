@@ -14,7 +14,7 @@ function Settings.sanitize(raw, specs)
     end
     if raw.range == 300 or raw.range == 600 or raw.range == 900 then result.range = raw.range end
     result.walls = raw.walls == true or (raw.schema ~= 15 and src.walls == true)
-    for _, tab in ipairs({ "Survival", "Combat", "Movement", "Vision", "Territory" }) do
+    for _, tab in ipairs({ "Survival", "Combat", "Movement", "Vision", "Territory", "Hippo", "Test Features" }) do
         if raw.tab == tab then result.tab = tab end
     end
     return result

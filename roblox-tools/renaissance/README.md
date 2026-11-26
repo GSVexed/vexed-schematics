@@ -1,4 +1,22 @@
-# FERAL Project Renaissance 15.7.0
+# FERAL Project Renaissance — 15.8.4 integrated hearing candidate
+
+**15.8.4** integrates an optional **Extended Proximity Hearing** toggle in the existing Vision tab, enabled by default and saved with other preferences. It listens for compatible default Roblox voice AudioEmitters, increases only local attenuation distance points by 25%, and restores prior values at OFF/unload or peer replacement. It has no manual diagnostic step and does not touch voice microphones, mute/permissions, game remotes, combat, minigames, or Territory.
+
+The auditory effect is conditional on Roblox actually exposing voice AudioEmitters and transmitting the audio. Older/private voice systems and server voice distance restrictions cannot be bypassed by a local attenuation change; audible range is not live verified. **Use the new 15.8.4 candidate from its own branch, not the stable launcher.** The 15.8.3 release and stable rollbacks remain intact. The 15.8.0 historical file absent from this Hippo branch is restored from the independently archived PR #15 version (SHA256 ba69a1ef...), not presented as the missing Hippo 15.8.0 build (SHA256 e9c51181...).
+
+## Prior 15.8.3 candidate
+
+The candidate adds held left-click and R2 native bite repetition, a faster client bite cooldown, optional Auto Bite, moving-target lead, safer hit-reply matching, a Burst stamina fix and residual-condition recovery. Hippo assistance includes charge information, movement while charging, matching native gait HUD highlights and optional native smart release.
+
+**251/251 core scenarios and 263/263 Territory scenarios pass.** The complete candidate contains 28 modules. Live damage, server-accepted attack rate, recovery and movement remain unverified. Damage uncapping, ability cooldown bypasses and the proposed Turtle shell protection for Hippo are not established.
+
+See the [held-bite release notes](docs/V15_8_3_HELD_BITES.md), [implementation ledger](docs/V15_8_HIPPO_COMBAT.md), [15.8.1 HUD/Turtle investigation](docs/V15_8_1_HUD_TURTLE.md) and [15.8.2 Test Features](docs/V15_8_2_TEST_FEATURES.md). The versioned candidate bundle is `roblox-tools/feral-renaissance-v15.8.3.lua`. The stable launcher below still resolves to 15.7.0.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/37024d31941f0b20f62280d4c44e1102c847b79a/roblox-tools/feral-renaissance-v15.8.3.lua"))()
+```
+
+## Stable release: 15.7.0
 
 Territory farming is now built into the main hub as its fifth tab. The same window, Right Shift key, scheduler, saved tab selection and unload lifecycle own both the original 21 feature records plus Zoom Unlock and Amber 0.7.0.
 
@@ -44,7 +62,7 @@ The 15.6.2 rollback includes its Territory page and Zoom Unlock. Earlier compani
 - [Architecture](docs/ARCHITECTURE.md), [21-feature audit](docs/FEATURE_AUDIT.md), [historical release notes](docs/RELEASE_NOTES.md).
 - [Native territory/input contracts](../feral-amber/docs/native-contracts.json), [previous live evidence](docs/LIVE_EVIDENCE.md).
 
-There is no diagnostics tab or automatic report upload. Territory has an optional local COPY STATUS button.
+Candidate 15.8.3 adds a **Test Features** page with a local report and a private PC runner sync. Territory retains its optional local COPY STATUS button.
 
 ### Zoom Unlock (15.6.2)
 

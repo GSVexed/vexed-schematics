@@ -1,0 +1,64 @@
+{
+  "version": "0.7.0",
+  "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+  "compiled": 24,
+  "total": 263,
+  "passed": 263,
+  "suites": [
+    {
+      "suite": "agent_suite.luau",
+      "total": 21,
+      "passed": 21
+    },
+    {
+      "suite": "bridge_suite.luau",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "suite": "care_suite.luau",
+      "total": 47,
+      "passed": 47
+    },
+    {
+      "suite": "driver_suite.luau",
+      "total": 10,
+      "passed": 10
+    },
+    {
+      "suite": "efficiency_suite.luau",
+      "total": 22,
+      "passed": 22
+    },
+    {
+      "suite": "gait_suite.luau",
+      "total": 33,
+      "passed": 33
+    },
+    {
+      "suite": "hunt_suite.luau",
+      "total": 18,
+      "passed": 18
+    },
+    {
+      "suite": "lifecycle_suite.luau",
+      "total": 47,
+      "passed": 47
+    },
+    {
+      "suite": "nav_suite.luau",
+      "total": 39,
+      "passed": 39
+    },
+    {
+      "suite": "suite.luau",
+      "total": 22,
+      "passed": 22
+    }
+  ],
+  "bundle_sha256": "18949113ea36458a2db37581cfdfa458f53a28923580ad45afbb3566acd4ad74",
+  "protected_releases": 12,
+  "live_gameplay_tested": false,
+  "renaissance_bundle": "feral-renaissance-v15.8.0.lua",
+  "renaissance_sha256": "e9c51181e1cc34e15dfb885bb5582d91dd78222b9f796ffc230ff0e2c5fe0079"
+}
