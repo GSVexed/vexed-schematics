@@ -4,6 +4,9 @@ This branch reconciles two earlier candidate lines that diverged on 26 November 
 
 ### Held left-click repair
 
+The historical 15.7.1 protected source required by Territory 0.8's migration tests is restored byte-for-byte from the original 16.0.2 branch, rather than relaxing any release integrity check. The Combat tab indicates whether Hold to Repeat Bites is using a validated original callback (including heap recovery) or an unverified mouse-replay fallback.
+
+
 When input-event connections are inaccessible, the hub now checks whether the executor exposes the original `WolfController.tryBite` in its own Lua heap. It scans only on a held attack, incrementally, and requires an exact local-script source, own Player, native doBite/cooldown identities and WolfActions remote before invoking anything. The earlier mouse-replay fallback remains only if no validated native function is available. Real M1 InputObjects are tracked separately from the synthetic press/release lifecycle, preventing a simulated InputEnded from cancelling the human hold. Minigame auto-perfect input retains priority; no BiteHit or fake hit reply is sent by the hub.
 
 Both original 16.0.2 and current 15.8.7 are **candidates**, not proven live releases. Native heap accessibility and actual server-accepted repeated damage cannot be established by automated test doubles. The updated hub is intentionally not promoted to the stable launcher, and no manual diagnostic uploads are required.

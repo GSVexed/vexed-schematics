@@ -664,10 +664,14 @@ function Controller.new(M,bridge,options)
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
         local heldFallback=not native and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
         local hold=r.byId.holdBite
+        local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
+        local sourceLabel=nativeGC and "Original native callback recovered · "
+            or native and "Original native callback · "
+            or heldFallback and "Mouse replay only (unverified) · "
+            or "No validated input backend · "
         r:ack("holdBite",hold.requested and (native or heldFallback),
-            not hold.requested and "OFF" or (native or heldFallback) and "ARMED" or "WAITING",
-            hold.requested and (native and "Native callback · " or heldFallback and "Physical input replay · " or "No input backend · ")
-                ..self.combatInput.status or hold.detail)
+            not hold.requested and "OFF" or native and "ARMED" or heldFallback and "PARTIAL" or "WAITING",
+            hold.requested and sourceLabel..self.combatInput.status or hold.detail)
         r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
             auto.requested and self.combatInput.status or auto.detail)
         local movement=r.byId.hippoMove
