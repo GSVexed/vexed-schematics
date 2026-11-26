@@ -145,7 +145,7 @@ function UI.mount(hub, bridge, scope)
         elseif u.tab == "Combat" then
             row("reach",0)
             row("biteHelper",57)
-            info(124,"BITE GUIDE","OFF for experimental reach preserves normal game geometry. Cobra: teal in stock range; amber is unverified extended range. Grey means blocked or uncertain.",80)
+            info(124,"BITE GUIDE","Bite Reach is on by default; OFF restores stock geometry. Cobra: teal in stock range; amber is unverified extended range. Grey means blocked or uncertain.",80)
             u.combatReadout = info(221,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Vision" then
             row("esp",0); row("tags",57)
