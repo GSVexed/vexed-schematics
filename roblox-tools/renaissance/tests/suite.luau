@@ -2355,5 +2355,28 @@ test("minigame begin during fallback M1 instantly releases the owned synthetic p
     w:advance(.8);eq(w.nativeBites or 0,observed)
     w.held=nil;h:close()
 end)
+test("private native callback can repeat through paired executor mouse APIs",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w.env.getconnections=nil
+    local pairDown,pairUp=0,0
+    w.env.mouse1press=function()
+        pairDown+=1
+        w:input(nil,E.UserInputType.MouseButton1)
+    end
+    w.env.mouse1release=function()
+        pairUp+=1
+        w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    end
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.55)
+    assert(pairDown>=2 and pairUp>=1)
+    assert((w.nativeBites or 0)>=3)
+    local count=w.nativeBites
+    w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w:advance(.85);eq(w.nativeBites,count)
+    h:close();eq(pairDown,pairUp)
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
