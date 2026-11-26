@@ -8,7 +8,7 @@ function Recovery.new(bridge, policy, ledger)
         backoffUntil = 0, releaseAt = -math.huge, signalAt = -math.huge,
         nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {},
         progressWatch = nil, repairChar = nil, repairAttempts = 0,
-        repairWindowUntil = 0, noProgressReported = false }
+        noProgressReported = false }
     function r:clearPose()
         local pose = self.pose
         self.pose = nil
@@ -160,7 +160,7 @@ function Recovery.new(bridge, policy, ledger)
         end
         if improved then
             p.progressAt=now
-            self.repairAttempts,self.repairWindowUntil,self.noProgressReported=0,0,false
+            self.repairAttempts,self.noProgressReported=0,false
         end
     end
     function r:summary()
@@ -190,7 +190,7 @@ function Recovery.new(bridge, policy, ledger)
         self:guardPose(now)
         if s and s.alive then
             if self.repairChar~=s.char then
-                self.repairChar,self.repairAttempts,self.repairWindowUntil,self.noProgressReported=s.char,0,0,false
+                self.repairChar,self.repairAttempts,self.noProgressReported=s.char,0,false
                 self.progressWatch=nil
             end
             self:observe(s,now)
@@ -257,9 +257,6 @@ function Recovery.new(bridge, policy, ledger)
         elseif now >= self.nextRefresh then
             local stalled=self.progressWatch and now-self.progressWatch.progressAt>=12
             if stalled then
-                if now>=self.repairWindowUntil then
-                    self.repairWindowUntil,self.repairAttempts,self.noProgressReported=now+60,0,false
-                end
                 if self.repairAttempts<2 then
                     -- Release once, respect the native stand-up interval,
                     -- and re-arm only in the next eligible recovery window.
