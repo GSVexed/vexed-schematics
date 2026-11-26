@@ -1,24 +1,24 @@
 {
-  "version": "15.6.2",
-  "date": "2026-11-25",
-  "source_commit": "c4cbd5a5c088c85c273f5735afc68ceb46cfc90e",
-  "bundle_sha256": "c1275bd161e5548522d7ab47e9c791eba361d5d383337535d751dfab9afafa98",
+  "version": "15.7.0",
+  "date": "2026-11-26",
+  "source_commit": "3434396b4a9057bdba8c1f146325bd26f697d1ce",
+  "bundle_sha256": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb",
   "game_baseline": 2412,
   "retained_features": 22,
-  "module_count": 24,
-  "integrated_territory_version": "0.6.1",
-  "compiled_files": 29,
+  "module_count": 26,
+  "integrated_territory_version": "0.7.0",
+  "compiled_files": 31,
   "regressions": {
-    "total": 193,
-    "passed": 193,
+    "total": 202,
+    "passed": 202,
     "failed": 0
   },
   "amber_regressions": {
-    "total": 223,
-    "passed": 223,
+    "total": 263,
+    "passed": 263,
     "failed": 0
   },
-  "amber_compiled_files": 21,
+  "amber_compiled_files": 24,
   "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
   "source_parity": true,
   "previous_versioned_hashes_unchanged": true,
@@ -26,21 +26,50 @@
   "live_gameplay_tested": false,
   "potassium_staging_run": null,
   "gameplay_acceptance": "unverified",
-  "previous_renaissance_version": "15.6.1",
-  "previous_renaissance_source": "19c07c3311836be8d5f2bb2aedd8099c2dbc55a1",
-  "rollback_commit": "e32845a8b559522a49703b2ea83f83cf15fbb870",
-  "release_report": "docs/RELEASE_NOTES.md",
+  "previous_renaissance_version": "15.6.2",
+  "previous_renaissance_source": "c4cbd5a5c088c85c273f5735afc68ceb46cfc90e",
+  "rollback_commit": "71051c5b707076f3a78080e745c649ae95ee4ae2",
+  "release_report": "../feral-amber/docs/V0_7_RELEASE.md",
   "limitations": [
-    "Deterministic simulations and service mocks do not establish current live travel, gait acceptance, NPC damage, feeding rate, full-map retention or Amber/hour.",
-    "Captured v2412 client configuration is read at runtime when available; later game changes can invalidate contracts.",
-    "Ground and surface-swimming routes are supported; aerial and underwater routing remain manual.",
-    "Native combat, ability, capture, manual controls, Rest and menus retain priority.",
-    "Existing core features retain their earlier server-acceptance and live-validation limits."
+    "Deterministic simulations and service mocks do not establish live travel, gait acceptance, NPC damage, feeding rate, whole-map retention or Amber/hour.",
+    "Native climb, flight and underwater/depth route adapters remain unimplemented; configured ground/surface-water support is partial and live-unverified.",
+    "Workload pressure estimates cover known currently due jobs only; steady-state whole-map capacity and overload optimisation remain incomplete.",
+    "Finite body/support samples cannot guarantee every fall is impossible; real species terrain/turn envelopes and device performance need calibration.",
+    "Hippo gait scalar adaptation is grounded in captured game version 2412; server-accepted sprint/Burst during the ability remains unverified.",
+    "Native combat, capture, manual controls, Rest, menus and configuration ownership retain priority.",
+    "All 44 preparation items and 62 scenarios remain accounted for, including incomplete requirements."
   ],
   "zoom_unlock": {
     "minimum": 0.5,
     "maximum": 100000,
     "enabled_by_default": true,
     "live_tested": false
-  }
+  },
+  "preparation_ledger": "../feral-amber/docs/PREPARATION_EXECUTION_LEDGER.md",
+  "scenario_map": "../feral-amber/docs/V0_7_SCENARIOS.md",
+  "hippo_ability_gaits": {
+    "game_version": 2412,
+    "mechanism": "reversible Species.scaled input adaptation of native forced-trot calculation",
+    "native_inputs": [
+      "Shift",
+      "X",
+      "Z"
+    ],
+    "land_and_surface_water": true,
+    "live_tested": false
+  },
+  "territory_simulation": {
+    "seconds": 7200,
+    "world_hexes": 2,
+    "prey_down_sequences": 5,
+    "meals": 12,
+    "drinks": 13,
+    "claims": 1,
+    "scents": 37,
+    "manual_interventions": 0,
+    "starvation": false,
+    "observed_travel_studs": 10614.0,
+    "live": false
+  },
+  "preparation_completion": "incomplete: native climb/flight/depth, steady-state capacity, device calibration and repeated live acceptance remain open"
 }
