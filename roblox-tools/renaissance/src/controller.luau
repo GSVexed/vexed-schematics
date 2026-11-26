@@ -600,7 +600,7 @@ function Controller.new(M,bridge,options)
         local heldFallback=not native and game.PlaceVersion==2412 and bridge:hasHeldInputBackend()
         local hold=r.byId.holdBite
         r:ack("holdBite",hold.requested and (native or heldFallback),
-            not hold.requested and "OFF" or native or heldFallback and "ARMED" or "WAITING",
+            not hold.requested and "OFF" or (native or heldFallback) and "ARMED" or "WAITING",
             hold.requested and (native and "Native callback · " or heldFallback and "Physical input replay · " or "No input backend · ")
                 ..self.combatInput.status or hold.detail)
         r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",

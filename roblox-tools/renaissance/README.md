@@ -1,4 +1,10 @@
-# FERAL Project Renaissance — 15.8.4 integrated hearing candidate
+# FERAL Project Renaissance — 15.8.5 adaptive combat candidate
+
+**15.8.5** addresses held bite input lost to private callback discovery, synthetic minigame interference, early fake-hit attribution and aggressive client-only cooldown requests. Hold to Repeat Bites now combines M1/R2 edges with held-state polling, uses an optional bounded real-input replay when the native callback is isolated (no direct hit remotes), and pauses through native minigame windows. Faster Bites begins at 62% of stock local timing, cautiously approaches 55% after repeated uniquely matched positive server replies, and retreats toward stock timing on recurring clean stock-range no-damage windows. Client timing and server acceptance are still different. The old 15.8.4 immutable release and stable launcher are unchanged.
+
+## Previous 15.8.4 candidate
+
+
 
 **15.8.4** integrates an optional **Extended Proximity Hearing** toggle in the existing Vision tab, enabled by default and saved with other preferences. It listens for compatible default Roblox voice AudioEmitters, increases only local attenuation distance points by 25%, and restores prior values at OFF/unload or peer replacement. It has no manual diagnostic step and does not touch voice microphones, mute/permissions, game remotes, combat, minigames, or Territory.
 

@@ -1613,9 +1613,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.8.4 presents its actual version in the active controller",function()
+test("Renaissance 15.8.5 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.8.4")
+    eq(h.version,"15.8.5")
     h:close()
 end)
 
@@ -1821,7 +1821,7 @@ test("client bite cadence follows the actual native calculation and restores exa
     local w=Mock.new();local original=function()return .6 end
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=original});w:enableNativeActions()
     local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.2)
-    close(w.configs.Species.biteCooldown("Wolf",1),.33)
+    close(w.configs.Species.biteCooldown("Wolf",1),.372)
     close(w.configs.Species.biteCooldown("Bear",1),.6)
     eq(h.registry.byId.attackSpeed.applied,true);eq(h.registry.byId.attackSpeed.outcome,"unverified")
     h:set("attackSpeed",false);eq(w.configs.Species.biteCooldown,original)
@@ -1846,10 +1846,10 @@ test("held bite schedules original native attempts and stops immediately on rele
     local w=Mock.new();w:addConfig("Species",{biteCooldown=function()return .6 end});w:enableNativeActions()
     local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.3)
     w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1);w:advance(1.4)
-    assert((w.nativeBites or 0)>=5 and w.nativeBites<=6)
+    assert((w.nativeBites or 0)>=4 and w.nativeBites<=6)
     local cadence=h.tests:bridgeReport().biteCadence
     eq(cadence.markers,w.nativeBites)
-    assert(cadence.activeIntervals>=4 and cadence.measuredBitesPerSecond>2)
+    assert(cadence.activeIntervals>=3 and cadence.measuredBitesPerSecond>1.9)
     local count=w.nativeBites;w.held=nil;w:advance(.8);eq(w.nativeBites,count)
     eq(h.registry.byId.attackSpeed.outcome,"unverified");h:close()
 end)
@@ -1876,7 +1876,7 @@ end)
 test("a bite without a native marker pauses held retries",function()
     local M=modules();local char={};local count,events=0,{}
     local bridge={biteDelay=function()return .27 end,restLock=function()return .7 end,
-        biteReadiness=function()return {ready=true}end,
+        attribute=function()return nil end, biteReadiness=function()return {ready=true}end,
         tryNativeBite=function()count+=1;return true end}
     local policy={restLocked=function()return false end}
     local ledger={event=function(_,name)table.insert(events,name)end}
