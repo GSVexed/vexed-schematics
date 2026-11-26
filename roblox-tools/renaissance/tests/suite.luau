@@ -2377,7 +2377,10 @@ test("private native callback can repeat through paired executor mouse APIs",fun
     local count=w.nativeBites
     w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
     w:advance(.85);eq(w.nativeBites,count)
-    h:close();eq(pairDown,pairUp)
+    h:close()
+    -- Each replay first sends an Up to create a fresh Down edge.
+    assert(pairUp>=pairDown and pairDown>=2)
+    eq(h.bridge.syntheticM1,nil)
 end)
 
 test("held fallback resets a logically down mouse before every native press",function()
