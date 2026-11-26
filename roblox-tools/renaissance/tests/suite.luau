@@ -2532,7 +2532,7 @@ test("a late real hit reply is not discarded as a ghost after the old 1.8 second
     eq(M.controller.matchFeedback(M.core,{tx},{v=victim,dmg=8},13.1),nil)
 end)
 test("unique real server reply to a different nearby victim corrects the guide's wrong prediction",function()
-    local M=modules();local guideVictim={},actualVictim={}
+    local M=modules();local guideVictim,actualVictim={},{}
     local tx={nativeAt=10,claimDue=10.27,focusTarget={char=guideVictim},
         hpBefore={[guideVictim]={hp=100},[actualVictim]={hp=100}}}
     local selected,ambiguous=M.controller.matchFeedback(M.core,{tx},{v=actualVictim,dmg=6},10.4)
@@ -2541,7 +2541,7 @@ test("unique real server reply to a different nearby victim corrects the guide's
     eq(M.controller.matchFeedback(M.core,{tx},{v={},dmg=8},10.4),nil)
 end)
 test("two similar client bite candidates never steal an ambiguous late game reply",function()
-    local M=modules();local predicted={},victim={}
+    local M=modules();local predicted,victim={},{}
     local a={nativeAt=10.00,claimDue=10.27,focusTarget={char=predicted},
         hpBefore={[victim]={hp=100}}}
     local b={nativeAt=10.04,claimDue=10.31,focusTarget={char=predicted},
