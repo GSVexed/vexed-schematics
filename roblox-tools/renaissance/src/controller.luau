@@ -776,7 +776,7 @@ function Controller.new(M,bridge,options)
                     -- temporarily pause *automatic* speculative attempts.
                     -- This is a confidence guard, not proof of server rejection.
                     if tx.extendedOnly and tx.extendedClaimValid and target and target.char
-                        and not tx.positiveReply and not tx.feedback
+                        and not drop and not tx.positiveReply and not tx.feedback
                         and not (self.lastUnmatchedGameHit and now-self.lastUnmatchedGameHit<1.2) then
                         local entry=self.extendedConfidence[target.char]
                         if not entry then
