@@ -942,6 +942,16 @@ function Controller.new(M,bridge,options)
         self.rescue:tick(s,now)
         self.activity=self.policy:activity(s,now)
         bridge.predictionActive=s.attackHeld or self.registry.byId.autoBite.requested
+        -- InputBegan can remain held even when an executor/virtual M1 reset
+        -- momentarily reports IsMouseButtonPressed=false. Recovery must not
+        -- re-enter owned Rest in the middle of that human-held attack.
+        local repeatActive=self.registry.byId.holdBite.requested
+            and (self.combatInput.held~=nil or s.attackHeld==true)
+            and s.alive and not s.chat and not s.gameMenu and not self.policy.manualRest
+        if repeatActive then
+            self.policy.attackUntil=math.max(self.policy.attackUntil,now+1.1)
+            if self.recovery.owned then self.recovery:release("held bite priority",now) end
+        end
         local auto=self.registry.byId.autoBite.requested and not (self.territory and self.territory.agent.enabled)
         local clear=auto and bridge:autoAttackTarget(s,self.guide,self.features.combat)
         local grabActive=self.nativeGrabBusy==true or self.grab.active==true
