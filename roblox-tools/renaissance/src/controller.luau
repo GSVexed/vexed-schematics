@@ -27,7 +27,7 @@ end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.8.5", tokenIdentity = tokenIdentity,
+    local h = { version = "15.8.6", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -48,6 +48,11 @@ function Controller.new(M,bridge,options)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
     bridge.combatGovernor = h.combatInput
+    -- A pending synthetic reset can outlive the current Heartbeat. Never
+    -- press during an asynchronously arriving native grab begin.
+    bridge.combatPulseBlocked = function()
+        return h.closed or h.nativeGrabBusy==true or h.grab.active==true
+    end
     h.rescue = M.rescue.new(bridge,h.ledger)
     h.hippo = M.hippo.new(Core,bridge,h.ledger)
     h.tests = M.test_features.new(Core,bridge,h)
@@ -205,6 +210,7 @@ function Controller.new(M,bridge,options)
         self.grab:reset("animal changed")
         self:cancelGrabWake()
         self.grabInput:release()
+        bridge:releaseSyntheticBite()
         self.feeding:close(now)
         self.combatInput:cancel()
         self.combatInput:resetRate()
@@ -862,9 +868,24 @@ function Controller.new(M,bridge,options)
         bridge.predictionActive=s.attackHeld or self.registry.byId.autoBite.requested
         local auto=self.registry.byId.autoBite.requested and not (self.territory and self.territory.agent.enabled)
         local clear=auto and bridge:autoAttackTarget(s,self.guide,self.features.combat)
+        local grabActive=self.nativeGrabBusy==true or self.grab.active==true
+            or self.grabInput.lease~=nil
+        local lease=self.grabInput.lease
+        -- WolfController.tryBite does not use CAS M1 binding. Its native
+        -- handler may run alongside the perfect-press scheduler only for a
+        -- known hunter minigame with the original M1 minigame action safely
+        -- separated. A prey/captured player and all synthetic M1 fallbacks
+        -- continue to have minigame priority.
+        local nativeMini=grabActive and self.grab.active and self.grab.role=="hunter"
+            and lease~=nil and lease.state and not lease.state.ended
+            and not bridge:nativeGrabBound() and s.mouseHeld==true and not s.captured
+            and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"
+        local strike=self.grab.pending
+        local nearPress=strike and s.serverNow and math.abs(strike.at-s.serverNow)<.095 or false
         self.combatInput:tick(s,now,{
             repeatHeld=self.registry.byId.holdBite.requested,automatic=auto,targetValid=clear,
-            minigameBusy=self.nativeGrabBusy==true or self.grab.active or self.grabInput.lease~=nil,
+            minigameBusy=grabActive,nativeMinigame=nativeMini==true,
+            minigamePressNear=nearPress==true,
             uiBlocked=self.ui:contains(bridge.UserInputService:GetMouseLocation()),
             beforeAttempt=function()
                 self.policy:input("attack",now)

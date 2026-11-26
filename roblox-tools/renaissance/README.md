@@ -1,4 +1,13 @@
-# FERAL Project Renaissance — 15.8.5 adaptive combat candidate
+# FERAL Project Renaissance — 15.8.6 hold-to-bite and minigame compatibility
+
+**15.8.6** fixes two known scheduler barriers: input backends cannot generate another InputBegan by pressing an already-held M1, and previous versions entirely disabled bites during all grab minigames. Repeated M1 now requests a single owned Up → Down → Up edge when no validated native bite callback is available; each edge is asynchronous and can be safely cancelled on respawn, unload, or a new minigame.
+
+During a **hunter** grab minigame, a validated native WolfController bite callback can run in parallel with the native grab timing automation **only when** the original M1 minigame binding is confirmed separated and a physical M1 hold is observed. The minigame's automatic timed presses are unchanged. Prey and captured players, R2 minigame controls, unsafe or unavailable native bindings, and synthetic mouse fallback during grabs remain blocked. FERAL server-side permission and acceptance are not bypassed; no extra Bite or BiteHit requests are fabricated.
+
+The build uses the existing 15.8.5 adaptive speed governor and retains all voice, Hippo, Territory, recovery and settings features. Gameplay acceptance requires independent live validation, not user diagnostics.
+
+## Previous 15.8.5 candidate
+
 
 **15.8.5** addresses held bite input lost to private callback discovery, synthetic minigame interference, early fake-hit attribution and aggressive client-only cooldown requests. Hold to Repeat Bites now combines M1/R2 edges with held-state polling, uses an optional bounded real-input replay when the native callback is isolated (no direct hit remotes), and pauses through native minigame windows. Faster Bites begins at 62% of stock local timing, cautiously approaches 55% after repeated uniquely matched positive server replies, and retreats toward stock timing on recurring clean stock-range no-damage windows. Client timing and server acceptance are still different. The old 15.8.4 immutable release and stable launcher are unchanged.
 

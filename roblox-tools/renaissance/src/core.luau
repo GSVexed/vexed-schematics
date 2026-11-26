@@ -105,7 +105,7 @@ Core.specs = {
     { "reach", "Combat", "Bite Reach", "Always enabled client geometry; server range unknown", permanent = true },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
     { "attackSpeed", "Combat", "Adaptive Faster Bites", "62% to 55% after positive hit replies; backs off on repeated unconfirmed stock-range contacts", default = true },
-    { "holdBite", "Combat", "Hold to Repeat Bites", "Physical M1/R2 edges, missed presses and guarded input replay; minigame takes priority", default = true },
+    { "holdBite", "Combat", "Hold to Repeat Bites", "Re-armed M1 edges; native hunter bites can run beside separate minigame presses", default = true },
     { "autoBite", "Combat", "Auto Bite", "Selected clear target only; native readiness required" },
     { "combat", "Combat", "Combat Core", "Native attempts and feedback; no extra hit claims", permanent = true },
     { "climb", "Movement", "Climb Assist", "Native Q buffer and one guarded retry" },
