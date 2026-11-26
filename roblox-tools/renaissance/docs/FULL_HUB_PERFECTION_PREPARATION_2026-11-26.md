@@ -21,9 +21,9 @@ The target is the highest independently verified, continuously dependable implem
 
 ## 2. Priority and acceptance hierarchy
 
-**P0 — do first / correctness:** full-hub baseline and dependency graph; recovery and negative effects; first-bite/Rest interaction; damage-loss investigation; clean startup, shutdown, manual-input ownership and response to game version changes. Any regression here blocks every release.
+**P0 — do first / correctness:** full-hub baseline and dependency graph; **missing bites / attacks that do not register, genuine ghost hits (local sound/animation but no accepted target damage), native first-bite/Rest interference, real target and game-hit feedback matching**; recovery and negative effects; incoming-damage investigation; clean startup, shutdown, manual-input ownership and response to game version changes. Any regression here blocks every release.
 
-**P1 — major gameplay value:** stamina across modes; normal/native combat feedback and ghost hits; minigame latency; speed/gait/turning, swimming, climb, flight/talon handoff; native feeding and rescue; visuals and threat awareness. Finish end-to-end user-facing scenarios, not isolated helper functions.
+**P1 — major gameplay value:** stamina across modes; further combat accuracy and assistance polish *after the P0 lost-bite/ghost-hit defects are closed*; minigame latency; speed/gait/turning, swimming, climb, flight/talon handoff; native feeding and rescue; visuals and threat awareness. Finish end-to-end user-facing scenarios, not isolated helper functions.
 
 **P2 — sustained polish:** readable UI, default/persistent state correctness, ESP/name/finder clarity, zoom, AFK behaviour, performance and long-session stability.
 
@@ -69,7 +69,7 @@ The exact order is contextual, not a blind global mutex: **condition recovery ca
 | R07 | Auto Escape | Use actual native tug/shake cadence and lock state, respect friendly baby carry, priority of grab minigames and native capture state. | Repeated live carry/pin/escape cases progress without sending wrong action or getting stuck. |
 | R08 | Permanent Bite Reach | Review native geometry, body gap, rear/tree/vertical choice, affiliation/protection exclusions and whether any client-side extension is accepted. | Measured native-hit marker, actual game reply and target HP change separated; stock-range fallback when extended-only attempts fail. |
 | R09 | Bite Range Helper | Keep the small smooth marker only; correct spatial sampling, motion smoothing, occlusion, Cobra range colouring and one selected target. No recurring large text square. | Correct stable cue at 30/60/144 Hz, even under player motion and crowded/tree combat, with no screen-blocking overlay. |
-| R10 | Combat Core | Remove ghost-hit presentation; native attack is never counted as accepted damage without matching evidence. Repair post-Rest first bite, stationary and moving targets, multiple enemies and ability cancellation handoffs. | Source-grounded action timing and live feedback rates. No duplicate bite request, missed input due to hub-owned Rest or false damage acknowledgement. |
+| R10 | Combat Core | **P0 functional repair:** fix attacks that fail to initiate/register and investigate ghost hits (bite sound/animation without accepted damage). Trace user input → native bite gate → WolfBiteAt → actual native target → hit reply → HP effect; repair post-Rest bite, wrong-target attribution, moving/stationary/tree/crowded targets and ability handoffs. | Repeated paired live evidence of *increased accepted bite outcomes*, not just clearer diagnostics. No hub-induced missed input, duplicate bite, falsely confirmed hit or success label for a local impact. |
 | R11 | Climb Assist | Coordinate Q, native climb-eligibility, same-tree bite geometry, species climb profiles and clean transitions across jump, attack and dismount. | Cross-species/tree traversal + combat scenarios; no stranded input or unexpected auto-climb. |
 | R12 | Flight Assistance | Reconcile native launch eligibility, water surface exit, airborne controls and talon/dive cancellation; handle Vulture/Eagle episodes without changing physics movers directly. | Repeated ability cancellation and flying-resume trials with no frozen movement or unintended pose and reliable native-mode cleanup. |
 | R13 | Movement Assistance | Audit injury slow inputs and server correction while leaving status amounts untouched. Restore exact config on state changes. | Observable legal movement improvement where accepted, correct recovery of native values after disable. |
@@ -86,6 +86,14 @@ The exact order is contextual, not a blind global mutex: **condition recovery ca
 **Cross-feature goal not currently established as a working feature: REDUCED INCOMING DAMAGE.** Investigate only the *real incoming-damage calculation/replication path* and legitimate defensive states/abilities first. Current source proves neither a server-accepted damage multiplier nor a universal damage-negation method. Document target selection, controlled equal-damage incoming hits, same-species/growth baseline, own observed HP delta and server corrections. If no accepted client pathway exists, report unavailable; do not substitute a visual HP overwrite or claim success from a lower local number.
 
 **Specific current integration defect:** the 15.7.1 candidate runtime/controller version is 15.7.1 but the current UI file still contains hard-coded “RENAISSANCE / 15.7.0”. Fix by binding displayed version to the active controller in the implementation phase, and add a packaged-bundle UI-version regression. This prep does not change it.
+
+### P0 combat blocker: ghost hits and bites that do not register
+
+The user specifically reports **(A) ghost hits** (bite sound/animation but no actual target damage) and **(B) inability to land/initiate bites even at apparently valid close range**. These are separate major functional failures, not UI polish and not solved by adding a status counter. Combat cannot be marked complete while either remains reproducible.
+
+**Mandatory focused plan:** [P0_COMBAT_GHOST_HITS_AND_MISSING_BITES_PREPARATION_2026-11-26.md](P0_COMBAT_GHOST_HITS_AND_MISSING_BITES_PREPARATION_2026-11-26.md). It documents the observed native pipeline, eight root-cause hypotheses, four repair tracks and ten added tests H061–H070. The explicit technical risks include Rest's native stand-up lock, the optional callback-dependent post-Rest retry, native minigame/input interception, mismatched target geometry, target/transaction attribution, delayed HP replication and possible server rejection of client-only reach edits.
+
+**Pass condition:** real native attack inputs initiate at the expected rate, actual eligible game hit replies and target-health outcomes improve across reproducible moving, close, rear, same-tree and high-latency cases, and local SFX/impacts are never represented as accepted damage. If an attempted hit fails authoritative game validation, identify that boundary honestly rather than cosmetically manufacturing a hit.
 
 ## 5. All 14 core implementation modules — mandatory owner review
 
@@ -149,6 +157,8 @@ Territory remains **OFF unless manually started**. This is still an official par
 **P00 — evidence freeze and reproducible build.** Enumerate exactly all 26 modules, 22 controls, native dependencies, release assets and game-v2412 fingerprints. Pin 15.7.0 rollback and candidate 15.7.1, prevent test drift, acquire baseline actual-play outcomes before any behaviour change. Output: versioned evidence ledger and overlap map; no gameplay patch.
 
 **P01 — central compatibility/lifecycle correctness.** Introduce versioned snapshot contracts, single action/lease table, cancellation generations, deterministic restoration, recovery/manual/ability event order. This is a surgical architecture change with baseline parity tests; do not rewrite all modules in one unreviewable commit.
+
+**P01b — immediate combat reliability repair (P0).** After native input ownership is established, fix missing registered bites and genuine ghost hits before UI, Territory or optional accuracy enhancements. Reconstruct the native input → bite marker → server hit reply → target HP pipeline with actual target identity; run H061–H070. This track proceeds alongside recovery and blocks a full-hub release until reliable live acceptance or a precisely documented server limitation.
 
 **P02 — genuine survival/defence.** Functional fixes to HP recovery, condition clearance, stamina/needs handling and incoming-damage pathway *only when a real native path exists*. Compare server-observed own values, distinguish battle from out-of-combat, preserve first-bite latency and animation. Include required safety fallbacks.
 
@@ -223,7 +233,7 @@ No background task, external telemetry upload or real-game server interaction is
 ## 12. Explicit future-work handoff — execution contract
 
 When implementation is authorised, read in this order:
-1. This master document.
+1. This master document **and the dedicated P0 combat addendum** (P0_COMBAT_GHOST_HITS_AND_MISSING_BITES_PREPARATION_2026-11-26.md).
 2. Renaissance release.json, docs/ARCHITECTURE.md, docs/FEATURE_AUDIT.md and docs/LIVE_EVIDENCE.md.
 3. Territory docs/PREPARATION_EXECUTION_LEDGER.md and docs/V0_7_SCENARIOS.md.
 4. Exact 15.7.1 PR #13 diff and passing CI; confirm whether it is merged before selecting the implementation baseline.
@@ -233,7 +243,7 @@ Then produce a fully enumerated issue ledger mapping every R01–R22 row and T01
 
 ### Non-negotiable next implementation order
 
-First fix lifecycle/version mismatch and recovery/combat interference with native proof. Next correct timing-critical minigame/combat and stamina/movement handling. Then complete feed/survival and each native locomotion mode. Finish all 44 Territory requirements, update the compact UI, profile under real load and ship only after a thorough release gate. Territory stays default OFF; main launcher stays pinned until an intentional promotion.
+First fix lifecycle/version mismatch, **missing bites/ghost hits and recovery-to-first-bite interference**, with actual native and replicated evidence. Next correct timing-critical minigames and stamina/movement handling. Then complete feed/survival and each native locomotion mode. Finish all 44 Territory requirements, update the compact UI, profile under real load and ship only after a thorough release gate. Territory stays default OFF; main launcher stays pinned until an intentional promotion.
 
 ---
 
