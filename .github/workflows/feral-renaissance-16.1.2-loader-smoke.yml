@@ -1,0 +1,41 @@
+name: FERAL 16.1.2 standalone launcher validation
+on:
+  push:
+    branches: ['renaissance/reliability-audit-hold-sustain-16.1.2']
+    paths:
+      - 'roblox-tools/feral-renaissance-v16.1.2-loader.lua'
+      - '.github/workflows/feral-renaissance-16.1.2-loader-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build pinned Luau compiler
+        run: |
+          git clone --quiet https://github.com/luau-lang/luau.git /tmp/feral-luau
+          git -C /tmp/feral-luau checkout --quiet 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/feral-luau config=release -j2 luau-compile
+      - name: Compile launcher and check pinned candidate consistency
+        run: |
+          /tmp/feral-luau/luau-compile --null roblox-tools/feral-renaissance-v16.1.2-loader.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          root=Path('roblox-tools')
+          candidate=root/'feral-renaissance-v16.1.2.lua'
+          manifest=json.loads((root/'renaissance/manifest.json').read_text())
+          record=json.loads((root/'renaissance/candidate.json').read_text())
+          loader=(root/'feral-renaissance-v16.1.2-loader.lua').read_text()
+          assert manifest['version']==record['version']=='16.1.2'
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          assert digest==manifest['bundle_sha256']==record['bundle_sha256']
+          assert record['source_commit'] in loader, 'Missing immutable tested source ref'
+          assert 'reportError("Startup", hub)' in loader
+          assert 'reportError("Download",' in loader
+          print('Verified candidate and loader',digest)
+          PY
