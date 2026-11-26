@@ -2,7 +2,7 @@
 
 **15.8.4** integrates an optional **Extended Proximity Hearing** toggle in the existing Vision tab, enabled by default and saved with other preferences. It listens for compatible default Roblox voice AudioEmitters, increases only local attenuation distance points by 25%, and restores prior values at OFF/unload or peer replacement. It has no manual diagnostic step and does not touch voice microphones, mute/permissions, game remotes, combat, minigames, or Territory.
 
-The auditory effect is conditional on Roblox actually exposing voice AudioEmitters and transmitting the audio. Older/private voice systems and server voice distance restrictions cannot be bypassed by a local attenuation change; audible range is not live verified. **Use the new 15.8.4 candidate from its own branch, not the stable launcher.** The 15.8.3 release and all historical rollbacks remain intact.
+The auditory effect is conditional on Roblox actually exposing voice AudioEmitters and transmitting the audio. Older/private voice systems and server voice distance restrictions cannot be bypassed by a local attenuation change; audible range is not live verified. **Use the new 15.8.4 candidate from its own branch, not the stable launcher.** The 15.8.3 release and stable rollbacks remain intact. The 15.8.0 historical file absent from this Hippo branch is restored from the independently archived PR #15 version (SHA256 ba69a1ef...), not presented as the missing Hippo 15.8.0 build (SHA256 e9c51181...).
 
 ## Prior 15.8.3 candidate
 

@@ -20,7 +20,7 @@ DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
     "feral-renaissance-v15.8.2.lua": "d6a00b02e97f5c1e440eefb78262a2cc211b1f3eff322c67a68a1a82062bf32f",
-    "feral-renaissance-v15.8.0.lua": "e9c51181e1cc34e15dfb885bb5582d91dd78222b9f796ffc230ff0e2c5fe0079",
+    "feral-renaissance-v15.8.0.lua": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30",
     "feral-renaissance-v15.7.0.lua": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb",
     "feral-renaissance-v15.6.2.lua": "c1275bd161e5548522d7ab47e9c791eba361d5d383337535d751dfab9afafa98",
     "feral-renaissance-v15.6.1.lua": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",

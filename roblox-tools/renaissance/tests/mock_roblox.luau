@@ -637,7 +637,16 @@ function Mock.new()
     end
     function w:connections()
         local n=0
-        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputEnded,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do n+=s:Count() end
+        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputEnded,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do
+            -- Amber's input shim uses the same listeners/Connected structure but
+            -- does not expose the test-only Count helper.
+            if type(s.Count)=="function" then n+=s:Count()
+            elseif type(s.listeners)=="table" then
+                for _,connection in ipairs(s.listeners) do
+                    if connection.Connected then n+=1 end
+                end
+            end
+        end
         for _ in pairs(self.renders) do n+=1 end
         for _ in pairs(self.bindings) do n+=1 end
         for _,o in ipairs(self.objects) do for _,s in pairs(o._signals) do n+=s:Count() end end
