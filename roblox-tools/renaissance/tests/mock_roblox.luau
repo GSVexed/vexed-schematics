@@ -253,7 +253,8 @@ function Mock.new()
         game=gameObject,workspace=workspace,Enum=enum,Vector3=V3,Vector2=V2,
         Color3={fromRGB=function(r,g,b)return {_type="Color3",R=r/255,G=g/255,B=b/255}end},
         UDim={new=function(a,b)return {Scale=a,Offset=b}end},
-        UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end},
+        UDim2={fromOffset=function(x,y)return {X=x,Y=y}end,fromScale=function(x,y)return {X=x,Y=y}end,
+            new=function(xs,xo,ys,yo)return {X={Scale=xs,Offset=xo},Y={Scale=ys,Offset=yo}}end},
         Instance={new=new},RaycastParams={new=function()return {}end},OverlapParams={new=function()return {}end},
         typeof=kind,os=mockOS,
         task={spawn=function(fn)fn()end,defer=function(fn)fn()end,delay=function(seconds,fn)
@@ -585,7 +586,7 @@ function Mock.new()
     end
     function w:connections()
         local n=0
-        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputChanged,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do n+=s:Count() end
+        for _,s in ipairs({run.Heartbeat,run.PreAnimation,uis.InputBegan,uis.InputChanged,uis.InputEnded,uis.JumpRequest,player.CharacterAdded,player.CharacterRemoving,player.Idled}) do n+=s:Count() end
         for _ in pairs(self.renders) do n+=1 end
         for _ in pairs(self.bindings) do n+=1 end
         for _,o in ipairs(self.objects) do for _,s in pairs(o._signals) do n+=s:Count() end end

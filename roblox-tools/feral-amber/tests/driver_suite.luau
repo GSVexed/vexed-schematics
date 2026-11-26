@@ -71,5 +71,27 @@ test("a frozen controls table selects keys without leaving a partial callback",f
     local p,n,c=world();table.freeze(c)
     local d=Driver.new(p,n);eq(d.method,"NATIVE_KEYS");eq(d.controls,nil);assert(d.reason)
 end)
+test("native touch or stick direction reaches the manual ownership check",function()
+    local p,n,c,d,z=world();local input={Magnitude=.8};local seen
+    Driver.new(p,n,function(direction)seen=direction;return direction==input end)
+    c.moveFunction(p,input,true);eq(seen,input);eq(c.direction,input);eq(c.relative,true);assert(n.stopped)
+end)
+test("a replacement control module can recover without overwriting an external owner",function()
+    local p,n,c=world();local d=Driver.new(p,n);local oldWrapper=c.moveFunction
+    local replacement=function()return "external"end;c.moveFunction=replacement
+    d:tick();eq(c.moveFunction,replacement);eq(d.method,"NATIVE_KEYS")
+    local nextControls={moveFunction=function(_,dir)return dir end}
+    local mod={ModuleValue={GetControls=function()return nextControls end}}
+    local scripts={FindFirstChild=function()return mod end};p.FindFirstChild=function()return scripts end
+    d.nextProbe=0;d:tick();eq(d.controls,nextControls);eq(d.method,"PLAYER_MODULE")
+    eq(c.moveFunction,replacement);eq(oldWrapper(p,{},false),"native")
+end)
+test("character replacement yields before another native input frame",function()
+    local p,n,c,d,z=world();p.Character={};n.body=p.Character
+    local driver=Driver.new(p,n);p.Character={}
+    c.moveFunction(p,z,true);eq(c.direction,z);eq(n.desiredPoint,nil);assert(n.stopped)
+    driver:close()
+end)
+
 print(string.format("AMBER_DRIVER_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Driver regression failed")

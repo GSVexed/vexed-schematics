@@ -1,4 +1,4 @@
-name: FERAL All-animal Amber Autopilot planner compile and regression gate
+name: FERAL Territory integrated compile and regression gate
 on:
   push:
     branches: [main, 'renaissance/**']
@@ -34,11 +34,18 @@ jobs:
         run: |
           python3 roblox-tools/feral-amber/run_tests.py \
             --luau /tmp/amber-luau/luau \
-            --compiler /tmp/amber-luau/luau-compile
+            --compiler /tmp/amber-luau/luau-compile \
+            --output /tmp/amber-results.json
       - name: Verify retained Renaissance regressions and deterministic source
         run: |
           python3 roblox-tools/renaissance/run_tests.py \
             --luau /tmp/amber-luau/luau \
             --compiler /tmp/amber-luau/luau-compile \
             --output /tmp/amber-renaissance-tests.json
-          git diff --exit-code -- roblox-tools/renaissance roblox-tools/feral-renaissance.lua 'roblox-tools/feral-renaissance-v*.lua'
+          git diff --exit-code -- roblox-tools/renaissance roblox-tools/feral-renaissance.lua 'roblox-tools/feral-renaissance-v*.lua' 'roblox-tools/feral-amber-autopilot-v*.lua'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: territory-integrated-regression-results
+          path: |
+            /tmp/amber-results.json
+            /tmp/amber-renaissance-tests.json

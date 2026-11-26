@@ -173,5 +173,78 @@ test("stalled critical recovery gives the competing critical resource a producti
     eq(Planner.decide(s).kind,"RECOVER");s.recoveryStalled=true;eq(Planner.decide(s).kind,"DRINK")
     s.recoveryStalled=nil;s.thirst=7;eq(Planner.decide(s).kind,"DRINK")
 end)
+test("full scent bars remain in future maintenance workload",function()
+    local s=state();s.refillTime=60
+    local c=Planner.capacity({hex("A",0,0,{owner=2,hold=1,decayPerSecond=.01}),
+        hex("B",20,0,{owner=2,hold=1,decayPerSecond=.01})},s,{})
+    eq(c.knownDeadlines,0);eq(c.maintenance.known,2);assert(c.maintenance.visits>20)
+    eq(c.maintenance.state,"OVERLOADED");eq(c.maintenanceOnly,true)
+end)
+test("bounded recurring workload preserves sustainable observed ownership",function()
+    local s=state();s.refillTime=60
+    local c=Planner.capacity({hex("A",10,0,{owner=2,hold=.95,decayPerSecond=.0005}),
+        hex("B",20,0,{owner=2,hold=.9,decayPerSecond=.0005})},s,{careFraction=.2})
+    eq(c.maintenance.state,"ESTIMATED_SUSTAINABLE");eq(c.maintenanceOnly,false)
+    assert(c.maintenance.estimatedUtilization<c.maintenance.availableFraction)
+end)
+test("unknown native lifetimes never become invented steady capacity",function()
+    local s=state()
+    local c=Planner.capacity({hex("A",10,0,{owner=2,hold=.5,deadlineSeconds=30})},s,{})
+    eq(c.maintenance.state,"UNKNOWN");eq(c.maintenance.known,0);eq(c.unknown,1)
+    eq(c.retainOwned,nil);eq(c.maintenanceOnly,false)
+end)
+test("irreducible overload retains valuable maintenance and defers fresh claims",function()
+    local s=state();s.refillTime=60
+    local all={hex("cheap",1,0,{owner=2,hold=.5,decayPerSecond=.01,pay=1}),
+        hex("valuable",2,0,{owner=2,hold=.5,decayPerSecond=.01,pay=20}),hex("new",3,0,{pay=20})}
+    local c=Planner.capacity(all,s,{})
+    eq(c.retainOwned.valuable,true);eq(c.retainOwned.cheap,nil)
+    local r=Planner.plan(all,s,{maintenanceOnly=c.maintenanceOnly,retainOwned=c.retainOwned})
+    eq(#r,1);eq(r[1].key,"valuable")
+end)
+test("unavailable travel-cost callbacks fall back without breaking capacity",function()
+    local s=state();s.travelCost=function()error("stream changed")end
+    local c=Planner.capacity({hex("A",30,0,{owner=2,hold=.4,decayPerSecond=.001,deadlineSeconds=70})},s,{})
+    assert(c.estimatedSeconds>0 and c.estimatedSeconds<100)
+    assert(c.maintenance.tourSeconds>0)
+end)
+test("most critical normalized need wins instead of fixed thirst precedence",function()
+    local s=state();s.hunger=2;s.thirst=18;eq(Planner.decide(s).kind,"EAT")
+    s.hunger=12;s.thirst=5;eq(Planner.decide(s).kind,"DRINK")
+    s.hunger=3;s.thirst=8;s.hungerReserve=20;s.thirstReserve=4
+    eq(Planner.decide(s).kind,"DRINK")
+    s.hunger=nil;eq(Planner.decide(s).kind,"WAIT")
+end)
+test("changed need maximum cannot fabricate completed nutrition",function()
+    local g={kind="EAT",baseline=20,needMaximum=100}
+    local s={now=10,hunger=40,hungerMax=50,careTarget=35}
+    eq(Care.step(g,s,{}),"READY");eq(g.gain,0)
+    s.hunger=41;s.now=11;eq(Care.step(g,s,{}),"COMPLETE")
+end)
+test("repeated START is idempotent and preserves the current run and objective",function()
+    local s=state();local all={hex("A",100,0)};local b={}
+    function b:snapshot()return table.clone(s)end;function b:stop()end
+    function b:territories()return all end;function b:territory()return all[1]end
+    function b:territorySpot()return all[1].center end;function b:move()return "MOVING"end
+    local a=Agent.new(Planner,b,nil,Care,Ledger);a:setEnabled(true,10);a:tick(10)
+    local goal,run,generation=a.goal,a.metrics.run,a.generation
+    a:setEnabled(true,11);eq(a.goal,goal);eq(a.metrics.run,run);eq(a.generation,generation)
+end)
+
+test("maintenance horizon limits native travel-cost calls to linear work",function()
+    local s=state();local calls=0
+    s.travelCost=function(a,b)calls+=1;return Planner.distance(a,b)/24 end
+    local all={}
+    for i=1,128 do table.insert(all,hex(tostring(i),i*10,0,{owner=2,hold=.5,decayPerSecond=.0001,deadlineSeconds=4000}))end
+    local c=Planner.capacity(all,s,{})
+    eq(c.maintenance.known,128);assert(calls<=128*4+1,tostring(calls))
+end)
+
+test("malformed explicit maxima and out-of-range needs cannot authorize care",function()
+    local s=state();s.hungerMax=0;eq(Planner.decide(s).kind,"WAIT")
+    s.hungerMax=100;s.thirstMax=0/0;eq(Planner.decide(s).kind,"WAIT")
+    local g={kind="EAT",baseline=20};eq(Care.step(g,{now=10,hunger=200,hungerMax=100},{}),"FAILED")
+end)
+
 print(string.format("AMBER_EFFICIENCY_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Efficiency/ownership regressions failed")

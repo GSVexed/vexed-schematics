@@ -1,3 +1,13 @@
+# Renaissance 16.0.0 candidate — consolidated full-hub overhaul
+
+Integrates recovery PR #13, combat PR #15 and all execution requirements from PR #14. All 26 modules reviewed, 23 changed, all 22 core features retained. Targeted fixes cover native recovery/attack timing, target geometry and evidence, minigame scheduling/input, native callback and nested config identity, feeding/carrying/flight/dive/gamepad behavior, Territory recurring capacity and navigation ownership, viewport UI, camera restoration, settings and cleanup.
+
+The expanded local official Luau gates pass **304/304 core and 305/305 Territory** checks, compared with the reproduced integrated baseline of 214/214 and 263/263. See [the full release report](OVERHAUL_16_RELEASE.md), [mechanism evidence](NATIVE_MECHANISMS_16.md) and [complete acceptance crosswalk](OVERHAUL_16_ACCEPTANCE.md). Deterministic bundles and an immutable candidate loader are separate from the unchanged stable launchers.
+
+This is a code/automated-test candidate. No new live-game acceptance is claimed. Native autonomous Territory climb, flight and underwater-depth adapters remain unsupported; universal damage mitigation has no accepted mechanism. Current-server recovery, hit rate, minigame grades, movement, resource/reward outcomes and device performance remain explicit gates. Stable 15.7.0 is not promoted or overwritten.
+
+---
+
 # Renaissance 15.7.0 — Territory prep implementation and Hippo gait repair
 
 Territory 0.7.0 adds priority/time itineraries, actual-position region entry, observed directed travel costs, scent slack, due-work pressure, checked longer navigation, shoulder/drop checks and spatial recovery memory. Survival uses one decision table, validated maxima, temporary recovery ownership and measured care budgets. Feeding fallback, prey contact/shared-target handoff, cache generations and run accounting are hardened.

@@ -107,5 +107,35 @@ test("a late HP decline clears ineffective-attempt accumulation between attacks"
     h:tick(s);s.now=14;h:tick(s);eq(h.missesOnTarget,1)
     p.health=70;p.hum.Health=70;s.now=14.5;h:tick(s);eq(h.missesOnTarget,0);eq(h.target,p)
 end)
+test("prey maximum change resets HP correlation without a false hit",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};p.hum.MaxHealth=100
+    p.maxHealth=100;h:tick(s);eq(h.attacks,1)
+    p.health=45;p.hum.Health=45;p.hum.MaxHealth=50;p.maxHealth=50;s.now=10.2
+    h:tick(s);eq(h.hits,0);eq(h.misses,0);eq(h.pending,nil)
+end)
+test("recycled prey Humanoid cannot count the old object's zero as a kill",function()
+    local a,h,p,s=world();h:tick(s)
+    local replacement={Health=70,MaxHealth=100};p.hum.Health=0
+    p.model.FindFirstChildOfClass=function()return replacement end
+    local fresh={model=p.model,position=p.position,hum=replacement,health=70,velocity={x=0,z=0}}
+    function a:prey()return fresh end
+    s.now=11;h:tick(s);eq(h.kills,0);eq(h.target,fresh);eq(h.corpse,nil)
+end)
+test("hunt generation replacement cancels pending previous-animal results",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};s.char={};s.generation=1;h:tick(s)
+    p.health=60;p.hum.Health=60;s.char={};s.generation=2;s.now=11
+    h:tick(s);eq(h.hits,0);assert(a.stops>0)
+end)
+test("expired prey exclusions are removed from bounded target memory",function()
+    local a,h,p,s=world();local stale={};h.blocked[stale]=9
+    h:tick(s);eq(h.blocked[stale],nil)
+    eq(getmetatable(h.blocked).__mode,"k")
+end)
+test("manual-hunt pause does not attribute intervention damage to its old attempt",function()
+    local a,h,p,s=world();a.valid=true;p.position={x=6,z=0};h:tick(s)
+    h:resume(30);p.health=50;p.hum.Health=50;s.now=41;h:tick(s)
+    eq(h.hits,0);eq(h.misses,0)
+end)
+
 print(string.format("AMBER_HUNT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Hunting regressions failed")

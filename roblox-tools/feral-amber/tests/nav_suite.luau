@@ -303,5 +303,40 @@ test("recovery cells persist across targets but expire instead of choosing the s
     n:reset(v(250,3,0),c,11,"NEXT");eq(n:detour(r,c,s,11),true)
     local nextPoint=n.points[1];assert((first-nextPoint).Magnitude>4)
 end)
+test("stale path worker cannot poison current collision or support caches",function()
+    local n,c,h,r,s=world();scene.deferred=true
+    n.compute=function(self)
+        self.surfaceCache.poison=true;self.lastSafety="OLD_ANIMAL";self.lastObstacle={stale=true}
+        return {v(50,3,0)},"TEST_ROUTE"
+    end
+    n:tick(v(200,3,0),c,h,r,10,{},s);assert(#jobs==1)
+    n:reset(v(300,3,0),c,11,"REPLACED");n.surfaceCache={current=true};n.lastSafety="CURRENT"
+    jobs[1]();eq(n.surfaceCache.poison,nil);eq(n.surfaceCache.current,true);eq(n.lastSafety,"CURRENT")
+    eq(n.lastObstacle,nil);eq(#n.points,0)
+end)
+test("native air climb and depth modes explicitly refuse ground steering",function()
+    for _,mode in ipairs({"flying","climbing","underwater"}) do
+        local n,c,h,r,s=world();s[mode]=true
+        eq(n:tick(v(300,3,0),c,h,r,10,{},s),"BLOCKED")
+        eq(n.desiredPoint,nil);eq(next(n.held),nil);eq(n.lastReason,"UNSUPPORTED_NATIVE_ROUTE_MODE")
+    end
+end)
+test("new root under the same character invalidates the old route generation",function()
+    local n,c,h,r,s=world();n:tick(v(300,3,0),c,h,r,10,{},s)
+    local epoch=n.epoch;local nextRoot=table.clone(r);nextRoot.Position=v(100,3,0)
+    s.generation=2;n:tick(v(300,3,0),c,h,nextRoot,11,{},s)
+    assert(n.epoch>epoch);eq(n.bodyRoot,nextRoot);eq(n.characterGeneration,2)
+    assert(n.desiredPoint and n.desiredPoint.X>100)
+end)
+test("stopping a stale body releases inputs without changing the new animal",function()
+    local n,c,h,r,s=world();n:tick(v(300,3,0),c,h,r,10,{},s)
+    n.gaits.burstOwned=true;s.hudBurst=true
+    local otherRoot=table.clone(r);local otherHum={writes=0,Move=function(self)self.writes+=1 end}
+    local count=#events;n:stop(otherHum,otherRoot,"generation changed")
+    eq(otherHum.writes,0)
+    for i=count+1,#events do assert(not(events[i].key=="X" and events[i].on))end
+    eq(next(n.held),nil)
+end)
+
 print(string.format("AMBER_NAV_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Navigation regression failure")

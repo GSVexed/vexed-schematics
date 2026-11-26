@@ -17,13 +17,16 @@ function Bridge.new(nav)
         UserInput=UserInput,nav=nav,hexes={},hexByKey={},
         cfg=nil,spots=nil,territoryInstance=nil,refreshAt=0,lastString=nil,
         lastBiome=nil,motionReason="Idle",manualUncertain=false,spotCache={},spotTry={},
-        configs={},waterBlocked={},preyBlocked=setmetatable({},{__mode="k"}),foodBlocked=setmetatable({},{__mode="k"}),
+        configs={},configInstances={},configRevision=0,manualButtons={},waterBlocked={},preyBlocked=setmetatable({},{__mode="k"}),foodBlocked=setmetatable({},{__mode="k"}),
         connections={},inputEpoch=0,territorySamples={},operations={surface=0,food=0,prey=0},synthetic={},generation=0,
         coverage={},coverageOrder={},nativeCosts={}}
     local world=Rep:FindFirstChild("FeralWorld")
     local function config(name)
-        if b.configs[name] then return b.configs[name] end
         local module=world and world:FindFirstChild(name)
+        local previous=b.configInstances[name]
+        if b.configs[name] and previous==module then return b.configs[name] end
+        if previous~=module then b.configRevision+=1 end
+        b.configs[name]=nil;b.configInstances[name]=module
         if not module or not module:IsA("ModuleScript") then return nil end
         local ok,value=pcall(require,module)
         if ok and type(value)=="table" then b.configs[name]=value;return value end
@@ -53,13 +56,15 @@ function Bridge.new(nav)
     end
     function b:resetDiscovery(identity)
         local same=self.identity~=nil
-        for _,key in ipairs({"char","root","profile","pack","biome","territory","world"}) do if not self.identity or self.identity[key]~=identity[key] then same=false;break end end
+        for _,key in ipairs({"char","root","profile","pack","biome","territory","world","configRevision"}) do if not self.identity or self.identity[key]~=identity[key] then same=false;break end end
         if same then return end
         self.identity=identity;self.generation+=1
+        local char=player.Character
+        self.nav:stop(char and char:FindFirstChildOfClass("Humanoid"),char and char:FindFirstChild("HumanoidRootPart"),"GENERATION_CHANGED")
         self.spotCache,self.spotTry,self.territorySamples={},{},{}
         self.waterBlocked={};self.preyBlocked=setmetatable({},{__mode="k"});self.foodBlocked=setmetatable({},{__mode="k"})
         for _,name in ipairs({"waterCache","waterScan","waterMissUntil","waterAt","searchPoint","searchVisits","searchUntil",
-            "patrolTarget","patrolVisits","patrolUntil","foodIndex","preyIndex","foodBest","preyBest","lastAttackInput","attackCharacter","foodETA","drinkETA","foodObserved","drinkObserved"}) do self[name]=nil end
+            "patrolTarget","patrolVisits","patrolUntil","foodIndex","preyIndex","foodBest","preyBest","lastAttackInput","attackCharacter","foodETA","drinkETA","foodObserved","drinkObserved","observedDamage","nextBite"}) do self[name]=nil end
         self.nav.recoveryCells={};self.nav.trajectory={};self.nav.surfaceCache={}
         self:releaseInputs();self:recover(nil,false)
         if self.nav.model then self.nav.model:reset(identity) end
@@ -138,9 +143,14 @@ function Bridge.new(nav)
     end
     function b:refresh(now)
         local currentWorld=Rep:FindFirstChild("FeralWorld")
-        if currentWorld~=world then world=currentWorld;self.configs={};self.cfg=nil;self.spots=nil;self.lastString=nil end
+        if currentWorld~=world then world=currentWorld;self.configs={};self.configInstances={};self.configRevision+=1;self.cfg=nil;self.spots=nil;self.lastString=nil;self.hexes={};self.hexByKey={} end
+        if self.configInstances.TerritoryConfig or world and world:FindFirstChild("TerritoryConfig") then
+            local latest=config("TerritoryConfig")
+            if latest~=self.cfg then self.cfg=latest;self.lastString=nil;self.hexes={};self.hexByKey={} end
+        end
+        if self.configInstances.MapSpots or world and world:FindFirstChild("MapSpots") then self.spots=config("MapSpots") end
         local currentTerritory=Rep:FindFirstChild("FeralTerritory")
-        if currentTerritory~=self.territoryInstance then self.territoryInstance=currentTerritory;self.lastString=nil end
+        if currentTerritory~=self.territoryInstance then self.territoryInstance=currentTerritory;self.lastString=nil;self.hexes={};self.hexByKey={} end
         if not self.cfg or not self.territoryInstance then
             world=Rep:FindFirstChild("FeralWorld")
             self.cfg=config("TerritoryConfig")
@@ -149,6 +159,17 @@ function Bridge.new(nav)
             if not self.cfg or not self.territoryInstance then return end
         end
         self.spots=self.spots or config("MapSpots")
+        local previous=self.territoryContract
+        local changed=not previous
+        for _,key in ipairs({"parseHexes","hexCenter","hexAt","hexKey","CLAIM_RADIUS","CLAIM_TIME","REFILL_TIME"}) do
+            if not previous or previous[key]~=self.cfg[key] then changed=true;break end
+        end
+        if changed then
+            self.territoryContract={}
+            for _,key in ipairs({"parseHexes","hexCenter","hexAt","hexKey","CLAIM_RADIUS","CLAIM_TIME","REFILL_TIME"}) do self.territoryContract[key]=self.cfg[key] end
+            self.lastString=nil;self.hexes={};self.hexByKey={};self.spotCache={};self.territorySamples={}
+            self.configRevision+=1
+        end
         local text=attr(self.territoryInstance,"Hexes")
         local biome=attr(Workspace,"FeralBiome") or "WolfValley"
         if type(text)~="string" or #text==0 or type(self.cfg.parseHexes)~="function"
@@ -204,7 +225,7 @@ function Bridge.new(nav)
         if packKey(by) and packKey(by)==packKey(mine) then by=mine end
         local hold,prog=terrAttr(key,"hold"),terrAttr(key,"prog")
         local now=self.observationNow or os.clock();local sample=self.territorySamples[key]
-        if not sample or sample.owner~=owner then
+        if not sample or sample.owner~=owner or not finite(sample.hold) or not finite(hold) or now-sample.at>30 then
             sample={owner=owner,hold=hold,prog=prog,at=now};self.territorySamples[key]=sample
         elseif now>sample.at+.2 and finite(hold) and finite(sample.hold) and hold~=sample.hold then
             local dt=now-sample.at;local rate=(sample.hold-hold)/dt
@@ -214,7 +235,7 @@ function Bridge.new(nav)
         end
         return {key=key,neutral=terrAttr(key,"neutral")==true or self.cfg and self.cfg.ON==false,
             owner=owner,by=by,prog=prog,hold=hold,
-            pay=finite(pay) and pay or nil,deadlineSeconds=sample.decay and finite(hold) and math.max(0,hold-.08)/sample.decay or nil,
+            pay=finite(pay) and pay or nil,decayPerSecond=sample.decay,deadlineSeconds=sample.decay and finite(hold) and math.max(0,hold-.08)/sample.decay or nil,
             fade=terrAttr(key,"fade"),center=h.center,spot=h.spot,region=h.region}
     end
     function b:territories(state)
@@ -351,18 +372,24 @@ function Bridge.new(nav)
         if not self.hexByKey[key] then return end
         self.spotTry[key]=math.min(3,(self.spotTry[key] or 0)+1)
     end
-    function b:manualInput()
+    function b:manualInput(nativeDirection)
+        -- The PlayerModule supplies physical keyboard/gamepad/touch direction
+        -- before the hub replaces it. Preserve it on that very input frame.
+        if nativeDirection and type(nativeDirection.Magnitude)=="number" and nativeDirection.Magnitude>.15 then
+            self.manualUntil=os.clock()+.6
+        end
+        if self.manualStick or next(self.manualButtons) then return true end
         if os.clock()<(self.manualUntil or 0) then return true end
         if UserInput:GetFocusedTextBox() then return true end
         if type(UserInput.IsMouseButtonPressed)=="function" and Enum.UserInputType then
             local ok,down=pcall(UserInput.IsMouseButtonPressed,UserInput,Enum.UserInputType.MouseButton1)
             if ok and down and not (self.pendingInputs and self.pendingInputs.M1) then return true end
         end
-        for _,name in ipairs({"W","A","S","D","Up","Down","Left","Right","Space"}) do
+        for _,name in ipairs({"W","A","S","D","Up","Down","Left","Right","Space","LeftShift","X","Z","E","R","Q"}) do
             local key=Enum.KeyCode[name]
             if key then
                 local ok,down=pcall(UserInput.IsKeyDown,UserInput,key)
-                if ok and down and not self.nav.held[name] then return true end
+                if ok and down and not self.nav.held[name=="LeftShift" and "SHIFT" or name] and not (self.pendingInputs and self.pendingInputs[name]) then return true end
             end
         end
         return false
@@ -539,7 +566,8 @@ function Bridge.new(nav)
             self.bodyProfile=body
         end
         local profileKey=tostring(species)..":body"..self.bodySerial
-        self:resetDiscovery({char=c,root=r,profile=profileKey,pack=attr(player,"FeralPack"),biome=biome,territory=self.territoryInstance,world=world})
+        for _,name in ipairs({"Species","NeedsConfig","Forage","FeedFinder","CombatConfig"}) do config(name) end
+        self:resetDiscovery({char=c,root=r,profile=profileKey,pack=attr(player,"FeralPack"),biome=biome,territory=self.territoryInstance,world=world,configRevision=self.configRevision})
         self.observationNow=now
         if now>=(self.nextPrune or 0) then
             self.nextPrune=now+10
@@ -555,6 +583,11 @@ function Bridge.new(nav)
         local profile=self:profile(c,species)
         self.currentCoverage=self:recordCoverage(profile,species,profileKey,biome,now)
         local hub=self:hub()
+        local grabBusy=hub and hub.grab and hub.grab.active==true or false
+        if hub and type(hub.hasNativeGrab)=="function" then
+            local valid,active=pcall(hub.hasNativeGrab,hub,now)
+            grabBusy=not valid or active==true
+        end
         local feed,feedStarted,feedKnown
         if hub and type(hub.bridge.nativeFeedState)=="function" then
             local ok,mode,started,known=pcall(hub.bridge.nativeFeedState,hub.bridge,now)
@@ -567,6 +600,12 @@ function Bridge.new(nav)
             local good,value=pcall(speciesConfig.biteCooldown,species,attr(c,"Growth") or 1)
             if good and finite(value) and value>=.1 and value<=10 then attackCooldown=value end
         end
+        if hub and type(hub.bridge.serverNow)=="function" then
+            local valid,value=pcall(hub.bridge.serverNow,hub.bridge)
+            if valid and finite(value) then at=value end
+        end
+        local combatKnown=finite(at) and (untilCombat==nil or finite(untilCombat))
+        local combat=combatKnown and (untilCombat or 0)>at
         local offer=attr(c,"FeedCanPos")
         local others,contested=self:otherPlayerPositions()
         local amber=attr(player,"Amber")
@@ -616,20 +655,26 @@ function Bridge.new(nav)
             regionGrid=self.cfg and self.cfg.REGIONS and self.cfg.REGIONS.GRID,
             regionBonus=self.cfg and self.cfg.REGIONS and self.cfg.REGIONS.PAY_MULT,
             gameMenu=attr(player,"FeralMenuOpen")==true,menuOpen=UserInput:GetFocusedTextBox()~=nil,
-            manualInput=self:manualInput(),combat=finite(at) and finite(untilCombat) and untilCombat>at or false,
+            manualInput=self:manualInput(),combat=combat,combatKnown=combatKnown,
             pinned=attr(c,"FeralPinned")==true or attr(c,"FeralDragged")==true or attr(c,"FeralCarried")==true,
             ability=attr(c,"FeralCrushAt")~=nil and attr(c,"FeralCrushAt")~=false or attr(c,"FeralRolling")==true or attr(c,"FeralDowned")==true or attr(c,"FeralVenomDown")==true
                 or attr(c,"FeralTalonLock")~=nil and attr(c,"FeralTalonLock")~=false
                 or attr(c,"FeralDeathRollLocal")==true or attr(c,"FeralDiveBomb")==true
-                or hub and hub.grab and hub.grab.active==true,
+                or grabBusy,
             rescuing=hub and hub.rescue and hub.rescue.pending~=nil,
             resting=attr(c,"WolfRest")==true,
             automaticRest=hub and hub.recovery and hub.recovery.owned==c and not (hub.policy and hub.policy.manualRest),
             flying=fly,swimming=swimming,
             climbing=attr(c,"FeralClimbLocal")==true,underwater=attr(c,"FeralUnderwater")==true}
     end
+    local function currentAction(state)
+        return not b.closed and type(state)=="table" and state.alive~=false
+            and (not state.char or state.char==player.Character)
+            and (not state.generation or state.generation==b.generation)
+            and not state.manualInput and not state.menuOpen and not state.gameMenu
+    end
     function b:move(destination,state,options)
-        if not destination then return "WAIT" end
+        if not destination or not currentAction(state) then return "WAIT" end
         options=options or {}
         local s=table.clone(state)
         for key,value in pairs(options) do s[key]=value end
@@ -662,6 +707,7 @@ function Bridge.new(nav)
         return true
     end
     function b:feed(state,kind)
+        if not currentAction(state) then return false end
         if state.feedCan~=kind or state.nativeFeedMode or state.feedMode==kind or state.feedMode==true
             or state.menuOpen or state.manualInput then return false end
         local hub=self:hub()
@@ -685,6 +731,7 @@ function Bridge.new(nav)
         return false
     end
     function b:cancelFeed(state)
+        if not state or state.char and state.char~=player.Character or state.generation and state.generation~=self.generation then return false end
         local hub=self:hub()
         if hub and type(hub.bridge.stopNativeFeed)=="function" then
             local ok,sent=pcall(hub.bridge.stopNativeFeed,hub.bridge,state.now)
@@ -846,7 +893,7 @@ function Bridge.new(nav)
         prey.velocity=velocity and point(velocity) or {x=0,z=0}
         local look=root.CFrame and root.CFrame.LookVector
         prey.forward=look and {x=look.X,z=look.Z} or nil
-        prey.health=hum.Health
+        prey.health=hum.Health;prey.maxHealth=hum.MaxHealth
         prey.attackRange=math.clamp((state.root.Size.Z+root.Size.Z)*.35,4,12)
         return prey
     end
@@ -907,41 +954,52 @@ function Bridge.new(nav)
     function b:attackGeometry(state,prey)
         local hub=self:hub()
         local cfg=hub and hub.features and hub.features.originalCombat or config("CombatConfig")
-        if not cfg then return nil end
+        if not cfg or not state.root or not state.hum or not prey or not prey.root or not prey.hum then return nil end
         local diff=prey.root.Position-state.root.Position
         local planar=Vector3.new(diff.X,0,diff.Z)
-        local look=state.root.CFrame.LookVector
-        look=Vector3.new(look.X,0,look.Z)
-        if type(cfg.bodyGap)~="function" or not finite(cfg.REACH) or not finite(cfg.SLACK)
-            or not finite(cfg.HIT_SCALE) or not finite(cfg.MAX_DY) or not finite(cfg.CONE) then return nil end
-        if type(cfg.biteLook)=="function" then
-            local ok,v=pcall(cfg.biteLook,state.char,look.Unit)
-            if ok and typeof(v)=="Vector3" then look=Vector3.new(v.X,0,v.Z) end
-        end
         local function mult(name,default)
             if type(cfg[name])~="function" then return default end
             local ok,value=pcall(cfg[name],state.char)
             return ok and finite(value) and value or default
         end
-        local ok,gap=pcall(cfg.bodyGap,prey.root,planar)
-        if not ok or not finite(gap) or look.Magnitude<.01 then return nil end
-        local box=attr(state.root,"FeralBoxFull")
-        if not finite(box) or box<=0 then box=state.root.Size.Z end
-        local reach=(box*.5+state.hum.HipHeight*cfg.REACH+cfg.SLACK)*cfg.HIT_SCALE*mult("reachMult",1)
-        local angle=planar.Magnitude>.01 and look.Unit:Dot(planar.Unit) or 1
-        local height=(state.hum.HipHeight+prey.hum.HipHeight)*cfg.MAX_DY*mult("dyMult",1)
-        local cone=mult("coneFor",cfg.CONE)
+        local geometry
+        if hub and type(hub.bridge.geometry)=="function" then
+            local ok,value=pcall(hub.bridge.geometry,hub.bridge,cfg,state,{char=prey.model,root=prey.root,hum=prey.hum})
+            if not ok or not value then return nil end
+            geometry=value
+        else
+            -- Standalone compatibility uses the same captured stock formula.
+            if type(cfg.bodyGap)~="function" or not finite(cfg.REACH) or not finite(cfg.SLACK)
+                or not finite(cfg.HIT_SCALE) or not finite(cfg.MAX_DY) or not finite(cfg.CONE) then return nil end
+            local look=state.root.CFrame.LookVector;look=Vector3.new(look.X,0,look.Z)
+            if look.Magnitude<.01 then return nil end
+            if type(cfg.biteLook)=="function" then
+                local ok,value=pcall(cfg.biteLook,state.char,look.Unit)
+                if ok and typeof(value)=="Vector3" then look=Vector3.new(value.X,0,value.Z) end
+            end
+            if look.Magnitude<.01 then return nil end
+            local ok,gap=pcall(cfg.bodyGap,prey.root,planar)
+            if not ok or not finite(gap) then return nil end
+            local box=attr(state.root,"FeralBoxFull")
+            if not finite(box) or box<=0 then box=state.root.Size.Z end
+            geometry={gap=gap,reach=(box*.5+state.hum.HipHeight*cfg.REACH+cfg.SLACK)*cfg.HIT_SCALE*mult("reachMult",1),
+                angle=planar.Magnitude>.01 and look.Unit:Dot(planar.Unit) or 1}
+        end
+        local reach,gap,angle=geometry.reach,geometry.gap,geometry.angle
+        local vertical=geometry.vertical or (state.hum.HipHeight+prey.hum.HipHeight)*cfg.MAX_DY*mult("dyMult",1)
+        local cone=geometry.cone or mult("coneFor",cfg.CONE)
+        if not finite(reach) or reach<=0 or not finite(gap) or not finite(angle) or not finite(vertical) or vertical<=0 or not finite(cone) then return nil end
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={state.char};params.IgnoreWater=true
         params.RespectCanCollide=true
-        local obstruction=Workspace:Raycast(state.root.Position,diff,params)
-        local clear=not obstruction or obstruction.Instance and obstruction.Instance:IsDescendantOf(prey.model)
-        local inRange=gap<reach*.92 and math.abs(diff.Y)<height*.95
+        local queried,obstruction=pcall(Workspace.Raycast,Workspace,state.root.Position,diff,params)
+        local clear=queried and (not obstruction or obstruction.Instance and obstruction.Instance:IsDescendantOf(prey.model)) or false
+        local inRange=gap<reach*.92 and math.abs(diff.Y)<vertical*.95
         local facing=angle>math.cos(math.rad(cone))
         return {valid=inRange and facing and clear,inRange=inRange,facing=facing,
-            angle=angle,gap=gap,reach=reach,clear=clear,height=math.abs(diff.Y),heightLimit=height*.95,
+            angle=angle,gap=gap,reach=reach,clear=clear,height=math.abs(diff.Y),heightLimit=vertical*.95,
             reason=not inRange and "Outside native bite geometry" or not facing and "Facing away from prey"
-                or not clear and "Bite corridor obstructed" or "Native attack geometry ready"}
+                or not clear and "Bite corridor obstructed or unavailable" or "Native attack geometry ready"}
     end
     function b:attackEvidence(state)
         if not self.lastAttackInput then return nil end
@@ -955,6 +1013,7 @@ function Bridge.new(nav)
         return record
     end
     function b:bite(state,prey)
+        if not currentAction(state) then return false,"Stale animal or manual input owns action" end
         local p=self:checkPrey(prey,state)
         if not p then return false,"Prey unavailable" end
         local geometry=self:attackGeometry(state,p)
@@ -1044,19 +1103,47 @@ function Bridge.new(nav)
         self.lastInput=sent and "Executor mouse attack requested" or "Attack input unavailable or rejected"
         return sent,self.lastInput
     end
+    local function inputName(input)
+        if input.UserInputType==Enum.UserInputType.MouseButton1 then return "M1" end
+        return tostring(input.KeyCode or ""):match("%.([^%.]+)$") or tostring(input.KeyCode or "")
+    end
     if UserInput.InputBegan then
         table.insert(b.connections,UserInput.InputBegan:Connect(function(input)
-            local name=tostring(input.KeyCode or ""):match("%.([^%.]+)$") or tostring(input.KeyCode or "")
-            if input.UserInputType==Enum.UserInputType.MouseButton1 then name="M1" end
+            local name=inputName(input)
             local mapped=name=="LeftShift" and "SHIFT" or name
-            local relevant={W=true,A=true,S=true,D=true,Space=true,X=true,Z=true,E=true,M1=true}
-            if relevant[name] or mapped=="SHIFT" then
+            local relevant={W=true,A=true,S=true,D=true,Space=true,X=true,Z=true,E=true,R=true,Q=true,M1=true}
+            local gamepad=name:sub(1,6)=="Button" or name:sub(1,4)=="DPad"
+            if relevant[name] or mapped=="SHIFT" or gamepad then
                 local now=os.clock();local at=b.nav.synthetic and b.nav.synthetic[mapped] or b.synthetic[mapped]
-                if not (at and now-at<.25) and not (b.pendingInputs and b.pendingInputs[mapped]) then b.manualUntil=now+.6 end
+                if not (at and now>=at and now-at<.25) and not (b.pendingInputs and b.pendingInputs[mapped]) then
+                    b.manualUntil=now+.6
+                    if gamepad then b.manualButtons[name]=true end
+                    if name=="X" then nav.gaits.burstOwned=false end
+                    if name=="Z" then nav.gaits.trotOwned=false end
+                end
             end
         end))
     end
+    if UserInput.InputEnded then
+        table.insert(b.connections,UserInput.InputEnded:Connect(function(input)b.manualButtons[inputName(input)]=nil end))
+    end
+    if UserInput.InputChanged then
+        table.insert(b.connections,UserInput.InputChanged:Connect(function(input)
+            if inputName(input)=="Thumbstick1" then
+                local pos=input.Position
+                b.manualStick=pos and type(pos.Magnitude)=="number" and pos.Magnitude>.15 or false
+                if b.manualStick then b.manualUntil=os.clock()+.6 end
+            end
+        end))
+    end
+    if UserInput.GamepadDisconnected then
+        table.insert(b.connections,UserInput.GamepadDisconnected:Connect(function()
+            b.manualButtons={};b.manualStick=false;b.manualUntil=os.clock()+.6
+        end))
+    end
     function b:close()
+        if self.closed then return end
+        self.closed=true;self.manualButtons={};self.manualStick=false
         self:recover(nil,false);self:releaseInputs();self:stop("unloaded")
         for _,c in ipairs(self.connections) do c:Disconnect() end
         self.connections={}

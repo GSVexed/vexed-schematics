@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministically package fourteen core and ten integrated Territory modules."""
+"""Deterministically package fourteen core and twelve integrated Territory modules."""
 import argparse
 import hashlib
 import json
@@ -14,11 +14,17 @@ def module_path(name):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "15.7.0"
+VERSION = "16.0.0"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
+    "feral-renaissance-v15.7.0.lua": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb",
+    "feral-renaissance-v15.7.1.lua": "ffa457894279a7a1453e8a89b9e79f54f5e4eaa189926d86d4fb124781d3ba3e",
+    "feral-renaissance-v15.8.0.lua": "ba69a1efae61f2241d370aec2f9d8564cd8b3317e40c5afef114d654061ddb30",
+    "feral-renaissance.lua": "5f439a3992d35d4f2ceab539acf484ed23900894fb7b085dcb7ece0ca2726c27",
+    "feral-amber.lua": "9a142ec27a06f9f8a2ad262e651207e9536b78c56d299977a2ccc149469608ae",
+    "feral-amber-autopilot-v0.7.0.lua": "18949113ea36458a2db37581cfdfa458f53a28923580ad45afbb3566acd4ad74",
     "feral-renaissance-v15.6.2.lua": "c1275bd161e5548522d7ab47e9c791eba361d5d383337535d751dfab9afafa98",
     "feral-renaissance-v15.6.1.lua": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",
     "feral-renaissance-v15.6.0.lua": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
@@ -96,7 +102,13 @@ if previous and type(previous.close) == "function" then
         error("Previous hub shutdown failed: " .. tostring(failure),0)
     end
 end
-candidate:activate()
+local activated, activationError = xpcall(function() candidate:activate() end,function(e) return tostring(e) end)
+if not activated then
+    -- Activation can still fail while mounting a native service/optional page.
+    -- Do not leave a half-active owner, expanded camera or input listeners.
+    candidate:close()
+    error("Renaissance activation failed; owned changes restored. Re-run the pinned stable loader: " .. activationError,0)
+end
 candidate.marker = {
     version = candidate.version,
     close = function() candidate:close() end,
@@ -106,7 +118,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.7.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 16.0.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 

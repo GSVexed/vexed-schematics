@@ -2,7 +2,8 @@
 local Roblox = {}
 function Roblox.new(Core, environment)
     local b = { Core = Core, env = environment, generation = 0, modules = {},
-        remoteConnections = {}, characterScope = nil, treeTarget = nil, tracked = {} }
+        remoteConnections = {}, characterScope = nil, treeTarget = nil, tracked = {},
+        captureVersion = 2412, placeVersion = game.PlaceVersion }
     for _, name in ipairs({ "Players","ReplicatedStorage","RunService","UserInputService",
         "ContextActionService","HttpService","Workspace" }) do b[name] = game:GetService(name) end
     b.player = assert(b.Players.LocalPlayer,"LocalPlayer unavailable")
@@ -71,11 +72,15 @@ function Roblox.new(Core, environment)
     end
     function b:markGrabPress(session,strike,now)
         local native = self:nativeGrabController(now)
-        local state = native and native.state()
-        if state and not state.ended and tostring(state.id) == tostring(session)
+        if not native or type(native.state)~="function" then return false end
+        local readable,state=pcall(native.state)
+        if readable and type(state)=="table" and not state.ended and tostring(state.id) == tostring(session)
             and type(state.strike) == "table" and state.strike.k == strike then
-            state.strike.pressed = true -- an actual submitted input, never a fabricated grade
+            -- Annotation is optional; a native read/write failure after the
+            -- actual dispatch must not make the coordinator retry that input.
+            return pcall(function() state.strike.pressed = true end)
         end
+        return false
     end
     function b:grabTextFocused()
         return self.UserInputService:GetFocusedTextBox() ~= nil
@@ -94,8 +99,12 @@ function Roblox.new(Core, environment)
     end
     function b:bindGrabManual(name,press)
         self.ContextActionService:BindActionAtPriority(name,function(_,state)
-            if state == Enum.UserInputState.Begin then press() end
-            return Enum.ContextActionResult.Sink
+            -- A stale/ended session must immediately return native controls,
+            -- even before the next coordinator heartbeat removes this binding.
+            if state == Enum.UserInputState.Begin and press() == true then
+                return Enum.ContextActionResult.Sink
+            end
+            return Enum.ContextActionResult.Pass
         end,false,3000,Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2)
     end
     function b:nativeGrabController(now)
@@ -152,8 +161,29 @@ function Roblox.new(Core, environment)
             local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
             for _,value in pairs(upvalues(inherited.press)) do
                 if remote and value==remote then
-                    inherited.remote=remote
-                    self.grabController=inherited;return inherited
+                    local handle=inherited
+                    if type(inherited.current)~="function" then
+                        -- Upgrade a pre-16.0 hot-reload handle without changing
+                        -- the previous controller's still-owned callback table.
+                        handle=table.clone(inherited)
+                        handle.current=function()
+                            local currentScripts=self.player:FindFirstChild("PlayerScripts")
+                            return scriptObject.Parent~=nil and currentScripts~=nil
+                                and currentScripts:FindFirstChild("FeralGrabV2UI")==scriptObject
+                                and self.ReplicatedStorage:FindFirstChild("FeralGrabV2")==remote
+                                and remote.Parent~=nil
+                        end
+                        handle.state=function()
+                            if not handle.current() then return nil,true end
+                            return inherited.state()
+                        end
+                        handle.bind=function(on)
+                            if not handle.current() then return false end
+                            return inherited.bind(on)
+                        end
+                    end
+                    handle.remote=remote
+                    self.grabController=handle;return handle
                 end
             end
         end
@@ -177,7 +207,17 @@ function Roblox.new(Core, environment)
                 end
                 if matched then
                     local native = { press = fn,script = scriptObject,remote=remote }
+                    native.current = function()
+                        local currentScripts=self.player:FindFirstChild("PlayerScripts")
+                        return scriptObject.Parent~=nil and currentScripts~=nil
+                            and currentScripts:FindFirstChild("FeralGrabV2UI")==scriptObject
+                            and self.ReplicatedStorage:FindFirstChild("FeralGrabV2")==remote
+                            and remote.Parent~=nil
+                    end
                     native.state = function()
+                        -- A replacement service has ended this handle's ownership,
+                        -- even if the old closure still exposes a readable session.
+                        if not native.current() then return nil,true end
                         local values=upvalues(fn)
                         local readable=false
                         for _,value in pairs(values) do if value==remote then readable=true end end
@@ -192,6 +232,7 @@ function Roblox.new(Core, environment)
                         return nil,readable
                     end
                     native.bind = function(on)
+                        if not native.current() then return false end
                         local cas = self.ContextActionService
                         if not on then
                             local info = cas:GetAllBoundActionInfo().FeralGrabV2Press
@@ -230,13 +271,17 @@ function Roblox.new(Core, environment)
         local scripts=self.player:FindFirstChild("PlayerScripts")
         local wolf=scripts and scripts:FindFirstChild("WolfController")
         local grab=scripts and scripts:FindFirstChild("FeralGrabV2UI")
+        local wolfRemote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        local grabRemote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
         local scan=self.nativeScan
-        if scan and (scan.wolf~=wolf or scan.grab~=grab or scan.complete and now>=scan.refreshAt) then scan=nil end
+        if scan and (scan.wolf~=wolf or scan.grab~=grab or scan.wolfRemote~=wolfRemote
+            or scan.grabRemote~=grabRemote or scan.complete and now>=scan.refreshAt) then scan=nil end
         if not scan then
             local signals={self.UserInputService.InputBegan,self.player:GetAttributeChangedSignal("FeralFeedTap")}
             local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
             if remote and remote:IsA("RemoteEvent") then table.insert(signals,remote.OnClientEvent) end
-            scan={wolf=wolf,grab=grab,functions={},seen={},queue={},cursor=1,signalIndex=1,
+            scan={wolf=wolf,grab=grab,wolfRemote=wolfRemote,grabRemote=grabRemote,
+                functions={},seen={},queue={},cursor=1,signalIndex=1,
                 signals=signals,complete=false,refreshAt=now+30}
             self.nativeScan=scan
         end
@@ -317,8 +362,18 @@ function Roblox.new(Core, environment)
     function b:nativeWolfActions(now)
         local scripts = self.player:FindFirstChild("PlayerScripts")
         local ownScript = scripts and scripts:FindFirstChild("WolfController")
-        if not ownScript then self.wolfActions,self.wolfDiscovery = nil,nil;return nil end
-        if self.wolfActions and self.wolfActions.script ~= ownScript then self.wolfActions,self.wolfDiscovery = nil,nil end
+        local currentRemote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        if not ownScript or not currentRemote or not currentRemote:IsA("RemoteEvent") then
+            self.wolfActions,self.wolfDiscovery,self.biteTiming=nil,nil,nil
+            -- The other consumer may still be traversing this shared queue.
+            -- nativeFunctions invalidates service identities on its next slice.
+            self.nextWolfDiscovery=0;return nil
+        end
+        if self.wolfActions and (self.wolfActions.script~=ownScript
+            or self.wolfActions.remote~=currentRemote or self.wolfActions.placeVersion~=game.PlaceVersion) then
+            self.wolfActions,self.wolfDiscovery,self.biteTiming=nil,nil,nil
+            self.nativeScan,self.nextWolfDiscovery=nil,0
+        end
         local native = self.wolfActions
         if not native then
             -- Preserve validated handles already held by our previous release.
@@ -326,13 +381,15 @@ function Roblox.new(Core, environment)
             local previous=self.env.FERAL_RENAISSANCE_ACTIVE
             local cached=previous and previous.bridge and previous.bridge.wolfActions
             local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
-            if cached and cached.script==ownScript and type(cached.tryBite)=="function" then
+            if game.PlaceVersion==self.captureVersion and cached and cached.script==ownScript
+                and type(cached.tryBite)=="function" then
                 local t=self:upvalues(cached.tryBite)
                 local d=type(t[5])=="function" and self:upvalues(t[5]) or {}
                 local named,name=pcall(debug.info,t[4],"n")
                 if t[1]==self.player and d[1]==self.player and remote and d[8]==remote
                     and type(t[4])=="function" and named and name=="biteCooldown" then
-                    native={script=ownScript,tryBite=cached.tryBite,doBite=t[5],biteCooldown=t[4]}
+                    native={script=ownScript,remote=currentRemote,placeVersion=game.PlaceVersion,
+                        tryBite=cached.tryBite,doBite=t[5],biteCooldown=t[4]}
                     local f=type(cached.toggleFeed)=="function" and self:upvalues(cached.toggleFeed) or {}
                     if f[5]==self.player and f[6]==remote then native.toggleFeed=cached.toggleFeed end
                     self.wolfActions=native
@@ -362,7 +419,7 @@ function Roblox.new(Core, environment)
         if not pool then return native end
         if not self.wolfDiscovery or self.wolfDiscovery.source~=source then
             self.nextWolfDiscovery = now+30
-            native = native or {script=ownScript}
+            native = native or {script=ownScript,remote=currentRemote,placeVersion=game.PlaceVersion}
             self.wolfActions,self.wolfDiscovery = native,{pool=pool,index=1,source=source}
         end
         local scan,started,count = self.wolfDiscovery,self.clock(),0
@@ -392,6 +449,9 @@ function Roblox.new(Core, environment)
         return native
     end
     function b:nativeFeedState(now)
+        -- Named callbacks can still be used after an update; private upvalue
+        -- offsets cannot be assumed to retain their meaning on another build.
+        if game.PlaceVersion~=self.captureVersion then return nil,nil,false end
         local native = self:nativeWolfActions(now)
         if not native or not native.toggleFeed then return nil,nil,false end
         local values = self:upvalues(native.toggleFeed)
@@ -446,7 +506,13 @@ function Roblox.new(Core, environment)
             if at and at>s.serverNow then return result(false,"native bite lock") end
         end
         local native=self.wolfActions
-        if not native or not native.tryBite or not native.doBite or not native.biteCooldown then
+        if native and (native.remote~=self.ReplicatedStorage:FindFirstChild("WolfActions")
+            or native.script.Parent==nil or native.placeVersion~=game.PlaceVersion) then
+            self.wolfActions,self.wolfDiscovery,self.biteTiming=nil,nil,nil
+            self.nativeScan,self.nextWolfDiscovery=nil,0;native=nil
+        end
+        if game.PlaceVersion~=self.captureVersion or not native or not native.tryBite
+            or not native.doBite or not native.biteCooldown then
             -- Primary-input connections may be VM-isolated. The captured
             -- cooldown calculation and own SafeTime bite marker remain useful,
             -- but do not establish the inaccessible private Rest/input state.
@@ -511,7 +577,7 @@ function Roblox.new(Core, environment)
         local swim = self:attribute(char,"FeralSwimLocal") == true
             or hum:GetState() == Enum.HumanoidStateType.Swimming or hum.FloorMaterial == Enum.Material.Water
         local under = self:attribute(char,"FeralUnderwater") == true
-            or (swim and self:attribute(char,"FeralDiving") == true)
+            or self:attribute(char,"FeralDiving") == true
         local params = RaycastParams.new()
         params.FilterType, params.FilterDescendantsInstances = Enum.RaycastFilterType.Include,{self.Workspace.Terrain}
         params.IgnoreWater = false
@@ -564,11 +630,24 @@ function Roblox.new(Core, environment)
         s.climbCan = self:attribute(char,"ClimbCan") == true
         s.climber = self:attribute(char,"PassiveClimber")
         s.flying = self:attribute(char,"FeralFlyLocal") == true
-        s.diveCan = self:attribute(char,"DiveCan") == true
+        s.diveCan = self:attribute(self.player,"FeralDiveCan") == true
+            or self:attribute(char,"DiveCan") == true
+        s.diving = self:attribute(char,"FeralDiving") == true
         s.burst = self:attribute(self.player,"HudBurst") == true or self:attribute(char,"FeralFlyBurst") == true
         -- v2412 WolfController input callback accepts MouseButton1/R2.
         -- MouseButton2 is a camera control, not a continuously held bite.
         s.attackHeld = self.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+        if not s.attackHeld and type(self.UserInputService.GetConnectedGamepads)=="function"
+            and type(self.UserInputService.IsGamepadButtonDown)=="function" then
+            local ok,gamepads=pcall(self.UserInputService.GetConnectedGamepads,self.UserInputService)
+            if ok and type(gamepads)=="table" then
+                for index,pad in ipairs(gamepads) do
+                    if index>8 then break end
+                    local read,held=pcall(self.UserInputService.IsGamepadButtonDown,self.UserInputService,pad,Enum.KeyCode.ButtonR2)
+                    if read and held then s.attackHeld=true;break end
+                end
+            end
+        end
         local velocity = root.AssemblyLinearVelocity
         s.moving = hum.MoveDirection.Magnitude > .13 or Vector3.new(velocity.X,0,velocity.Z).Magnitude >= 2
         local clamp = char:FindFirstChild("FeralClamp")
@@ -588,7 +667,11 @@ function Roblox.new(Core, environment)
             s.swimming,s.underwater,s.surface,s.depth = self:water(char,hum,root)
         else
             s.swimming = self:attribute(char,"FeralSwimLocal") == true
-            s.underwater = self:attribute(char,"FeralUnderwater") == true
+                or hum:GetState() == Enum.HumanoidStateType.Swimming or hum.FloorMaterial == Enum.Material.Water
+            -- FeralDive.startDive owns this flag before the underwater/depth
+            -- observation catches up. Preserve that native transition without
+            -- adding a terrain query to every ordinary snapshot.
+            s.underwater = self:attribute(char,"FeralUnderwater") == true or s.diving
         end
         s.locomotion = s.underwater and "UNDERWATER" or s.flying and "FLIGHT"
             or s.climbing and "CLIMB" or s.swimming and "SWIM" or s.burst and "BURST" or "LAND"
@@ -635,6 +718,7 @@ function Roblox.new(Core, environment)
         if not hum or hum.Health <= 0 then return "target unavailable" end
         if char:FindFirstChildOfClass("ForceField") then return "protected target" end
         local safe,now = self:attribute(char,"FeralSafeUntil"),self:serverNow()
+        if safe~=nil and not Core.finite(safe) then return "protection timing unknown" end
         if Core.finite(safe) and (not now or safe > now) then return "spawn protection" end
         owner = owner or self.Players:GetPlayerFromCharacter(char)
         if self:attribute(owner,"FeralTut") == true or self:attribute(owner,"FeralTutorial") == true then return "tutorial protection" end
@@ -737,9 +821,18 @@ function Roblox.new(Core, environment)
         return cfg and type(cfg.WATER_OK)=="table" and cfg.WATER_OK[self:attribute(s.char,"Species")]==true or false
     end
     function b:geometry(values,s,target)
-        if not values or not s.alive then return nil end
-        if not target.root.Parent or not target.hum.Parent or target.hum.Health <= 0 then return nil end
+        if type(values)~="table" or not s or not s.alive or not s.root or not s.hum
+            or not s.root.Parent or not s.hum.Parent or not target or not target.root or not target.hum then return nil end
+        if s.char and (s.root.Parent~=s.char or s.hum.Parent~=s.char) then return nil end
+        if not target.root.Parent or not target.hum.Parent or target.hum.Health <= 0
+            or target.char and (target.root.Parent~=target.char or target.hum.Parent~=target.char) then return nil end
+        for _,key in ipairs({"REACH","HIT_SCALE","CONE","SLACK","MAX_DY"}) do
+            if not Core.finite(values[key]) then return nil end
+        end
+        if values.REACH<=0 or values.HIT_SCALE<=0 or values.MAX_DY<=0
+            or not Core.finite(s.hum.HipHeight) or not Core.finite(target.hum.HipHeight) then return nil end
         local diff = target.root.Position-s.root.Position
+        if not Core.finite(diff.X) or not Core.finite(diff.Y) or not Core.finite(diff.Z) then return nil end
         local flat = Vector3.new(diff.X,0,diff.Z)
         local fwd = s.root.CFrame.LookVector
         fwd = Vector3.new(fwd.X,0,fwd.Z)
@@ -765,14 +858,54 @@ function Roblox.new(Core, environment)
         local vertical = (s.hum.HipHeight+target.hum.HipHeight)*values.MAX_DY*modifier("dyMult",1)
         return { valid = gap < reach and angle > math.cos(math.rad(cone)) and height < vertical,
             withinBodyRange = gap < reach and height < vertical,
-            gap = gap, reach = reach, angle = angle, distance = diff.Magnitude,score = gap-angle*2 }
+            gap = gap, reach = reach, angle = angle, cone = cone, height = height, vertical = vertical,
+            distance = diff.Magnitude,score = gap-angle*2 }
     end
     function b:occluded(s,target)
+        if not s or not s.root or not target or not target.root or not target.char then return true,false end
         local params = RaycastParams.new()
         params.FilterType,params.FilterDescendantsInstances = Enum.RaycastFilterType.Exclude,{s.char}
         params.IgnoreWater = true
-        local hit = self.Workspace:Raycast(s.root.Position,target.root.Position-s.root.Position,params)
-        return hit ~= nil and not hit.Instance:IsDescendantOf(target.char)
+        local ok,hit=pcall(self.Workspace.Raycast,self.Workspace,s.root.Position,target.root.Position-s.root.Position,params)
+        -- Missing scene evidence must not turn into a false clear-hit cue or
+        -- shut down all other features because one streamed query failed.
+        if not ok then return true,false end
+        return hit ~= nil and (not hit.Instance or not hit.Instance:IsDescendantOf(target.char)),true
+    end
+    function b:imminentBiteTarget(s,stock,all)
+        -- Release automatic Rest *before* contact, when a real eligible target
+        -- is either within normal bite reach or the animal is closing on it.
+        -- This does not claim extra hit range or force an attack.
+        if not s or not s.alive or not stock or not s.root or not s.hum then return nil end
+        local movement=s.hum.MoveDirection
+        local velocity=s.root.AssemblyLinearVelocity
+        local horizontal=Vector3.new(velocity.X,0,velocity.Z)
+        local speed=math.max(18,horizontal.Magnitude)
+        local anticipate=math.clamp(self:restLock(s.char)*speed+3,6,22)
+        local checked=0
+        for _,target in ipairs(all or {}) do
+            if target.distance>32 then break end
+            if target.affiliation~="same" and not target.protected
+                and self:combatEligible(target.char) and target.root and target.root.Parent then
+                checked+=1
+                if checked>10 then break end
+                local geometric=self:geometry(stock,s,target)
+                if geometric then
+                    local diff=target.root.Position-s.root.Position
+                    local horizontalDiff=Vector3.new(diff.X,0,diff.Z)
+                    local closing=movement.Magnitude>.13 and horizontalDiff.Magnitude>.1
+                        and movement.Unit:Dot(horizontalDiff.Unit)>.25
+                    local allowance=closing and anticipate or 3
+                    local vertical=math.abs(diff.Y)
+                    local verticalLimit=geometric.vertical+2
+                    if geometric.gap <= geometric.reach+allowance
+                        and vertical<=verticalLimit and (target.sameTree or not self:occluded(s,target)) then
+                        return target
+                    end
+                end
+            end
+        end
+        return nil
     end
     function b:select(s, baseline, changed, all)
         local previousAssist=self.reachTarget
@@ -787,16 +920,33 @@ function Roblox.new(Core, environment)
             end
         end
         local assisted,assistScore = nil,math.huge
+        local visibility,visibilityKnown={},{}
+        local rays=0
+        local function obstruction(target)
+            if visibility[target]==nil then
+                if rays>=12 then
+                    visibility[target],visibilityKnown[target]=true,false
+                else
+                    rays+=1
+                    local blocked,known=self:occluded(s,target)
+                    visibility[target],visibilityKnown[target]=blocked,known~=false
+                end
+            end
+            return visibility[target]
+        end
         local selectionModel = table.clone(changed)
         selectionModel.biteLook = baseline.biteLook
         for _,target in ipairs(eligible) do
                 local geometry = self:geometry(selectionModel,s,target)
                 if geometry and geometry.withinBodyRange then
                     local stock = self:geometry(baseline,s,target)
+                    -- Stock-native geometry outranks extended-only predictions.
+                    -- Preferring a nearer speculative target over a real
+                    -- stock-eligible one produced poor attack choices.
                     local rank = target.distance+(target.affiliation == "unknown" and .5 or 0)
-                        -(stock and stock.valid and .75 or 0)
+                        +(stock and stock.valid and 0 or 100)
                     if previousAssist and previousAssist.char==target.char then rank-=.65 end
-                    if rank < assistScore and (target.sameTree or not self:occluded(s,target)) then
+                    if rank < assistScore and (target.sameTree or not obstruction(target)) then
                         assisted,assistScore = target,rank
                     end
                 end
@@ -806,12 +956,17 @@ function Roblox.new(Core, environment)
                 local base = self:geometry(baseline,s,target)
                 local extended = self:geometry(changed,s,target)
                 if base or extended then
-                    local rank = (extended and extended.score or math.huge) + (extended and extended.valid and 0 or 1000)
+                    local rank = (extended and extended.score or math.huge)
+                        +(extended and extended.valid and (base and base.valid and 0 or 100) or 1000)
+                    -- A blocked close body must not hide a clear native-eligible
+                    -- target farther away. Retain a blocked cue only as fallback.
+                    if rank < score and obstruction(target) then rank+=10000 end
                     if rank < score then best,score = { target = target, baseline = base, extended = extended },rank end
                 end
         end
         if best then
-            best.obstruction=best.target.protected or self:occluded(s,best.target)
+            best.obstruction=best.target.protected or obstruction(best.target)
+            best.obstructionKnown=visibilityKnown[best.target]~=false
             best.blocked=best.obstruction
         end
         return best
@@ -964,7 +1119,8 @@ function Roblox.new(Core, environment)
             if not char then return end
             for _, key in ipairs({"WolfRest","WolfBiteAt","WolfFeed","FeralPinned","FeralCarried",
                 "FeralDragged","FeralTalonLock","FeralDiveLocal","FeralDeathRollLocal","FeralRolling",
-                "FeralDowned","FeralVenomDown","FeralTumbleAt","FeralCrushAt","FeralCrushBiteAt","FeralClimbLocal","FeralFlyLocal","FeralUnderwater"}) do
+                "FeralDowned","FeralVenomDown","FeralTumbleAt","FeralCrushAt","FeralCrushBiteAt","FeralClimbLocal","FeralFlyLocal",
+                "FeralUnderwater","FeralDiving","FeralSwimLocal"}) do
                 local c = char:GetAttributeChangedSignal(key):Connect(function()
                     if hub.active and not hub.closed and char == self.player.Character then hub:nativeAttribute(key) end
                 end)
