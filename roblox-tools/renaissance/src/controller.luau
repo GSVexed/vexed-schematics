@@ -27,7 +27,7 @@ end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.8.3", tokenIdentity = tokenIdentity,
+    local h = { version = "15.8.4", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
@@ -51,6 +51,7 @@ function Controller.new(M,bridge,options)
     h.hippo = M.hippo.new(Core,bridge,h.ledger)
     h.tests = M.test_features.new(Core,bridge,h)
     h.zoom = M.zoom.new(bridge.player)
+    h.voice = M.voice.new(bridge.Players,bridge.player)
     h.settingsAvailable = bridge:io().available ~= false
     function h:save()
         if self.closed then return false end
@@ -182,6 +183,7 @@ function Controller.new(M,bridge,options)
         if id=="autoBite" and not on then self.combatInput:cancel() end
         if id=="holdBite" and not on then self.combatInput.held=nil end
         if id=="attackSpeed" then bridge.biteTiming=nil;self.combatInput.nextAttempt=0 end
+        if id=="voice" then self.voice:setEnabled(on) end
         self.features.nextReconcile = 0
         local s = bridge:snapshot(now,false)
         self.features:reconcile(s,now,true) -- both true AND false are reconciled
@@ -543,6 +545,10 @@ function Controller.new(M,bridge,options)
         for _,id in ipairs({"combat","colours","finder","menu"}) do
             r:ack(id,true,id == "combat" and "ARMED" or "CLIENT",r.byId[id].detail)
         end
+        local hearing=r.byId.voice
+        local hearingActive=self.voice.enabled and hearing.requested
+        r:ack("voice",hearingActive,not hearing.requested and "OFF" or hearingActive and "ARMED" or "WAITING",
+            self.voice:summary())
         for _,id in ipairs({"esp","tags","biteHelper"}) do
             local f = r.byId[id]
             r:ack(id,f.requested,f.requested and "CLIENT" or "OFF",f.detail)
@@ -855,6 +861,7 @@ function Controller.new(M,bridge,options)
         self.ui:activate()
         self.active = true
         self.zoom:set(self.registry.byId.zoom.requested)
+        self.voice:setEnabled(self.registry.byId.voice.requested)
         if M.amber_runtime then self.territory=M.amber_runtime.start(M,self) end
         self.tests:start()
         self.registry:ack("settings",true,"CLIENT","loaded settings; full reconciliation pending")
@@ -868,6 +875,7 @@ function Controller.new(M,bridge,options)
         for _,cleanup in ipairs({
             function() if self.territory then self.territory.close() end end,
             function() self.zoom:close() end,
+            function() self.voice:close() end,
             function() self:cancelGrabWake() end,
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,

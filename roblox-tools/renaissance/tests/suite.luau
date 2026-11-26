@@ -27,9 +27,10 @@ local function boot(settings)
 end
 local E=Mock.Enum
 
-test("27 features retain the original set, shared combat and Hippo-only controls",function()
+test("28 features retain original controls plus optional local proximity hearing",function()
     local M=modules();local r=M.core.registry()
-    eq(#r.order,27);eq(M.settings.sanitize({},M.core.specs).states.holdBite,true)
+    eq(#r.order,28);eq(M.settings.sanitize({},M.core.specs).states.holdBite,true)
+    eq(M.settings.sanitize({},M.core.specs).states.voice,true)
     r:request("reach",false);eq(r.byId.reach.requested,true)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
@@ -2133,6 +2134,62 @@ test("Test Features one-shot Turtle request is gated and releases once",function
     eq(h.tests.pending,nil)
     eq(h.tests.attempts,1)
     h:close();eq(w:connections(),0)
+end)
+test("voice curve stretching preserves volume and never mutates the original",function()
+    local M=modules()
+    local before={[0]=1,[10]=.8,[20]=0}
+    local after=M.voice.scaleCurve(before,1.25)
+    eq(after[0],1);eq(after[12.5],.8);eq(after[25],0)
+    eq(before[10],.8);eq(before[12.5],nil)
+    eq(M.voice.sameCurve(before,after),false)
+    eq(M.voice.sameCurve(after,{[0]=1,[12.5]=.8,[25]=0}),true)
+    eq(M.voice.scaleCurve({},1.25),nil)
+    eq(M.voice.scaleCurve(before,2),nil)
+    eq(M.voice.scaleCurve({[0]=1,[5]=2},1.25),nil)
+end)
+test("integrated voice defaults ON but respects saved OFF and unloads",function()
+    local w,h=boot()
+    eq(h.registry.byId.voice.requested,true)
+    eq(h.voice.enabled,true)
+    local p,char=w:enemy(2)
+    local input=w.new("AudioDeviceInput");input.Parent=p
+    local emitter=w.new("AudioEmitter");emitter.Name="AudioEmitter"
+    emitter.DistanceAttenuationMode=E.DistanceAttenuationMode.Custom
+    emitter._attenuation={[0]=1,[12]=.6,[30]=0}
+    emitter.Parent=char
+    h.voice:setEnabled(true)
+    local current=emitter:GetDistanceAttenuation()
+    eq(current[15],.6);eq(current[37.5],0)
+    h:set("voice",false)
+    eq(h.voice.enabled,false)
+    local restored=emitter:GetDistanceAttenuation()
+    eq(restored[12],.6);eq(restored[30],0)
+    h:close();eq(w:connections(),0)
+    local w2,h2=boot({voice=false})
+    eq(h2.registry.byId.voice.requested,false)
+    eq(h2.voice.enabled,false)
+    h2:close();eq(w2:connections(),0)
+end)
+test("voice affects only remote default emitters and leaves external edits alone",function()
+    local M,w=modules()
+    local remote,char=w:enemy(2)
+    local input=w.new("AudioDeviceInput");input.Parent=remote
+    local voice=w.new("AudioEmitter");voice.Name="AudioEmitter"
+    voice._attenuation={[0]=1,[10]=.7,[20]=0}
+    voice.DistanceAttenuationMode=E.DistanceAttenuationMode.Custom
+    voice.Parent=char
+    local unrelated=w.new("AudioEmitter");unrelated.Name="RainEmitter"
+    unrelated._attenuation={[0]=1,[10]=.4,[20]=0}
+    unrelated.DistanceAttenuationMode=E.DistanceAttenuationMode.Custom
+    unrelated.Parent=char
+    local v=M.voice.new(w.env.game:GetService("Players"),w.player)
+    v:setEnabled(true)
+    eq(v:status().adjusted,1)
+    eq(unrelated:GetDistanceAttenuation()[10],.4)
+    voice:SetDistanceAttenuation({[0]=1,[11]=.5,[21]=0})
+    v:close()
+    eq(voice:GetDistanceAttenuation()[11],.5)
+    assert(v.conflicts>=1)
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

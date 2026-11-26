@@ -117,6 +117,7 @@ Core.specs = {
     { "esp", "Vision", "Outline ESP", "Hollow outlines for replicated characters" },
     { "colours", "Vision", "Faction / Health Colours", "Health-coloured hollow outlines; pack-coloured names", permanent = true },
     { "tags", "Vision", "Name Tags", "Small labels with independent visibility" },
+    { "voice", "Vision", "Extended Proximity Hearing", "25% farther local voice rolloff when supported", default = true },
     { "finder", "Vision", "Long-Range Player Finder", "Replicated players; up to 24 results", permanent = true },
     { "menu", "Vision", "Right Shift Menu Toggle", "Single menu; focused text keeps keyboard input", permanent = true },
     { "settings", "Vision", "Saved Settings", "Explicit ON and OFF reconciliation", permanent = true },

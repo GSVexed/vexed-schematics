@@ -67,7 +67,7 @@ function UI.mount(hub, bridge, scope)
     local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
         BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
     text(side,"F E R A L",18,22,130,28,20)
-    text(side,"RENAISSANCE  /  15.8.3",18,52,140,18,10,palette.same)
+    text(side,"RENAISSANCE  /  "..hub.version,18,52,140,18,10,palette.same)
     local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
         Size = UDim2.fromOffset(511,470)},frame)
     local title = text(content,u.tab,10,0,470,30,19)
@@ -148,8 +148,8 @@ function UI.mount(hub, bridge, scope)
             end)
             info(300,"CONTROLLED TRIAL","Only while naturally resting as Turtle in FERAL v2412. No shell or reduced damage is claimed.",64)
         elseif u.tab == "Vision" then
-            row("esp",0); row("tags",57)
-            local c = card(123,52)
+            row("esp",0); row("tags",57); row("voice",114)
+            local c = card(171,52)
             text(c,"Tracking range",14,8,270,20,13)
             text(c,"Real players only · up to 24",14,29,320,17,10,palette.sub)
             local range = button(c,tostring(hub.settings.range) .. " STUDS",350,10,124,30)
@@ -160,15 +160,15 @@ function UI.mount(hub, bridge, scope)
                 range.Text = tostring(hub.settings.range) .. " STUDS"
                 hub:save(); hub.nextScan = 0
             end)
-            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,187,490,32)
+            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,231,490,30)
             walls.Activated:Connect(function()
                 if not hub.active then return end
                 hub.settings.walls = not hub.settings.walls
                 walls.Text = "Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF")
                 hub:save()
             end)
-            info(232,"HEALTH / PACK","Outlines: green → yellow → red as HP falls. Real players only; name colour shows pack.",70)
-            u.finderReadout = info(313,"PLAYER FINDER","Waiting for replicated players.",50)
+            info(269,"HEALTH / PACK","Health-coloured outlines; pack-coloured names.",47)
+            u.finderReadout = info(322,"PLAYER FINDER","Waiting for replicated players.",43)
         else
             local order = u.tab == "Survival"
                 and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "hippo", "features", "roblox", "zoom", "test_features", "ui", "controller")
+CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "hippo", "features", "roblox", "zoom", "voice", "test_features", "ui", "controller")
 AMBER_MODULES=("ledger","model","planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
 MODULES=(*CORE_MODULES,*("amber_"+name for name in AMBER_MODULES))
 def module_path(name):
@@ -14,7 +14,7 @@ def module_path(name):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "15.8.3"
+VERSION = "15.8.4"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
@@ -65,7 +65,7 @@ end
 for _, pair in ipairs({
     {"core","scope"},{"core","leases"},{"settings","sanitize"},{"policy","new"},
     {"grab","new"},{"grab_input","new"},{"recovery","new"},{"feeding","new"},{"combat_input","new"},{"rescue","new"},{"features","new"},{"roblox","new"},
-    {"zoom","new"},{"ui","mount"},{"controller","new"},
+    {"zoom","new"},{"voice","new"},{"ui","mount"},{"controller","new"},
     {"hippo","new"},{"test_features","new"},
 }) do
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
@@ -110,7 +110,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.8.3] Ready · Right Shift · recorder in Test Features")
+print("[FERAL Renaissance 15.8.4] Ready · Right Shift · Voice Hearing in Vision")
 return candidate
 '''
 

@@ -100,6 +100,12 @@ function Mock.new()
         self._signals[name]=self._signals[name] or signal()
         return self._signals[name]
     end
+    function methods:GetDistanceAttenuation()
+        return table.clone(self._attenuation or {})
+    end
+    function methods:SetDistanceAttenuation(curve)
+        self._attenuation=table.clone(curve)
+    end
     function methods:GetChildren() return table.clone(self._children) end
     function methods:GetDescendants()
         local all={}
