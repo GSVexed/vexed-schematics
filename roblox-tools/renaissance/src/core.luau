@@ -96,7 +96,7 @@ end
 
 Core.specs = {
     { "stamina", "Survival", "Infinite Stamina", "Client consumption profile; gameplay unverified" },
-    { "recovery", "Survival", "Active Recovery + Fast Effects", "One recovery owner; native effects unverified" },
+    { "recovery", "Survival", "Active Recovery + Fast Effects", "On by default; native effects unverified", default = true },
     { "effects", "Survival", "Fast Negative-Effect Recovery", "Injury, bleed and venom measured separately", linked = "recovery" },
     { "robloxAFK", "Survival", "Roblox Anti-AFK", "Best-effort platform idle input" },
     { "survivalAFK", "Survival", "Survival Bonus AFK", "Bounded safe walks; survival credit observed separately" },
