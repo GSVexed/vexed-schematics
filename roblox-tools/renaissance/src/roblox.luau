@@ -736,9 +736,30 @@ function Roblox.new(Core, environment)
         local axisA,axisB = self:attribute(a,"FeralClimbAxis"),self:attribute(c,"FeralClimbAxis")
         return typeof(axisA) == "Vector3" and typeof(axisB) == "Vector3" and (axisA-axisB).Magnitude < 5
     end
+    function b:currentTargetBody(target)
+        if not target or not target.char or target.char==self.player.Character or not target.char.Parent
+            or not target.root or not target.hum
+            or target.root.Parent~=target.char or target.hum.Parent~=target.char
+            or target.hum.Health<=0 then return false end
+        if target.player and target.player.Character~=target.char then return false end
+        return target.char:FindFirstChild("HumanoidRootPart")==target.root
+            and target.char:FindFirstChildOfClass("Humanoid")==target.hum
+    end
+    function b:clearCombatTargets()
+        self.reachTarget,self.treeTarget=nil,nil
+        self.allCandidates,self.tracked={},{}
+        self.replicatedCount,self.packNPCCount=0,0
+    end
+    function b:retireCombatTarget(target)
+        if self.reachTarget==target then self.reachTarget=nil end
+        if self.treeTarget==target then self.treeTarget=nil end
+    end
     function b:candidates(s, range,visual)
         local all,seen = {},{}
-        if not s.alive then self.tracked = all; return all end
+        if not s.alive then
+            if visual~=false then self:clearCombatTargets() end
+            return all
+        end
         local litter = self:refreshLitter()
         local function add(char,other,npc)
             if not char or char == s.char or not char.Parent or seen[char] then return end
@@ -914,7 +935,7 @@ function Roblox.new(Core, environment)
         local best,score = nil,math.huge
         local eligible={}
         for _, target in ipairs(all) do
-            if target.distance <= 45 and self:combatEligible(target.char) then
+            if target.distance <= 45 and self:currentTargetBody(target) and self:combatEligible(target.char) then
                 table.insert(eligible,target)
                 if target.sameTree and (not self.treeTarget or target.distance < self.treeTarget.distance) then self.treeTarget = target end
             end
@@ -973,7 +994,9 @@ function Roblox.new(Core, environment)
     end
     function b:refreshGuide(s,baseline,changed,guide)
         local target=guide.target
-        if not s.alive or not target or not self:combatEligible(target.char) then
+        if not s.alive or s.char~=self.player.Character or not self:currentTargetBody(target)
+            or not self:combatEligible(target.char) then
+            self:retireCombatTarget(target)
             guide.blocked,guide.invalid=true,true;return
         end
         guide.invalid=false
@@ -1190,12 +1213,16 @@ function Roblox.new(Core, environment)
             {"FeralBiteLocal","biteLocal","BindableEvent"}}) do
             local remote = self.ReplicatedStorage:FindFirstChild(item[1])
             local old = self.remoteConnections[item[1]]
-            if old and old.remote ~= remote then old.connection:Disconnect(); self.remoteConnections[item[1]] = nil; old = nil end
+            if old and (old.remote ~= remote or old.connection.Connected==false) then
+                old.connection:Disconnect(); self.remoteConnections[item[1]] = nil; old = nil
+            end
             if remote and remote:IsA(item[3] or "RemoteEvent") and not old then
-                local kind = item[2]
+                local kind,name = item[2],item[1]
                 local signal = item[3] == "BindableEvent" and remote.Event or remote.OnClientEvent
                 local c = signal:Connect(function(...)
-                    if hub.active and not hub.closed then hub:nativeEvent(kind,...) end
+                    if hub.active and not hub.closed and self.ReplicatedStorage:FindFirstChild(name)==remote then
+                        hub:nativeEvent(kind,...)
+                    end
                 end)
                 self.remoteConnections[item[1]] = { remote = remote,connection = c }
             end
