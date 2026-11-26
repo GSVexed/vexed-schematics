@@ -1,25 +1,32 @@
 -- Built-in Territory engine. Renaissance owns scheduling, UI and shutdown.
-local Runtime={version="0.6.1"}
+local Runtime={version="0.7.0"}
 function Runtime.start(M,hub)
     assert(hub and hub.ui and type(hub.ui.registerPage)=="function","Update Renaissance for its built-in Territory page")
     local env=(type(getgenv)=="function" and getgenv()) or _G
     local prior=env.FERAL_AMBER_ACTIVE
     if prior and prior.version==Runtime.version and prior.ownerHub==hub and not prior.closed then return prior end
-    if prior and type(prior.close)=="function" then pcall(prior.close) end
     local function module(name)return assert(M["amber_"..name] or M[name],"Missing territory module "..name)end
     local Nav,Bridge,Agent=module("nav"),module("bridge"),module("agent")
-    local nav=Nav.new(game:GetService("PathfindingService"),game:GetService("Workspace"),module("gait"))
+    local model=module("model").new()
+    local nav=Nav.new(game:GetService("PathfindingService"),game:GetService("Workspace"),module("gait"),model)
     local bridge=Bridge.new(nav);bridge.ownerHub=hub
-    local agent=Agent.new(module("planner"),bridge,module("hunt"),module("care"))
-    local driver=module("driver").new(bridge.player,nav,function()return bridge:manualInput()end)
+    local agent=Agent.new(module("planner"),bridge,module("hunt"),module("care"),module("ledger"))
+    local attached,driver=pcall(module("driver").new,bridge.player,nav,function()return bridge:manualInput()end)
+    if not attached then pcall(bridge.close,bridge);nav.closed=true;error(driver,0) end
     local h={version=Runtime.version,ownerHub=hub,agent=agent,bridge=bridge,nav=nav,driver=driver,closed=false,nextCounts=0}
-    function h.setEnabled(on) if not h.closed then agent:setEnabled(on==true) end end
+    function h.setEnabled(on) if not h.closed then agent:setEnabled(on==true,os.clock()) end end
     function h.status()
         local now=os.clock();local st=agent:status()
         if now>=h.nextCounts then
             h.counts=bridge:counts(agent.lastState or {now=now});h.nextCounts=now+.8
         end
-        st.hexSummary=h.counts;st.navigation=nav:status();st.gameVersion=game.PlaceVersion
+        st.support={known=agent.lastState and agent.lastState.profile and agent.lastState.profile.known,
+            diet=agent.lastState and agent.lastState.profile and agent.lastState.profile.diet,
+            modes=agent.lastState and agent.lastState.profile and agent.lastState.profile.support}
+        st.support.current=bridge.currentCoverage;st.support.encountered={}
+        for _,key in ipairs(bridge.coverageOrder) do table.insert(st.support.encountered,bridge.coverage[key]) end
+        st.nativeHelperCosts=bridge.nativeCosts
+        st.discoveryOperations=bridge.operations;st.hexSummary=h.counts;st.navigation=nav:status();st.gameVersion=game.PlaceVersion
         st.events={}
         for i=math.max(1,#agent.events-11),#agent.events do table.insert(st.events,agent.events[i]) end
         return st
@@ -36,10 +43,15 @@ function Runtime.start(M,hub)
         if not s or not agent.goal or agent.goal.kind~="TERRITORY" then return end
         agent:fail(s,"Target skipped from Territory controls");agent.nextTick=0
     end
-    h.panel=module("ui").new(h,hub)
+    local mounted,panel=pcall(module("ui").new,h,hub)
+    if not mounted then
+        pcall(driver.close,driver);pcall(bridge.close,bridge);nav.closed=true;error(panel,0)
+    end
+    h.panel=panel
     function h:tick(now)
         if self.closed then return end
         if hub.closed then self.close();return end
+        local started=os.clock();local wasEnabled=agent.enabled
         local ok,why=pcall(function()
             if agent.enabled then driver:tick() end
             for _=1,3 do
@@ -48,6 +60,7 @@ function Runtime.start(M,hub)
                 agent.nextTick=now
             end
         end)
+        if wasEnabled and agent.metrics and agent.metrics.run then agent.metrics:cost("coordinator",math.max(0,os.clock()-started)) end
         if not ok then
             -- A failure in the normal stop path must not escape this boundary
             -- and interrupt the shared hub's remaining work for the frame.
@@ -66,6 +79,11 @@ function Runtime.start(M,hub)
         if h.panel then pcall(h.panel.close,h.panel) end
         if env.FERAL_AMBER_ACTIVE==h then env.FERAL_AMBER_ACTIVE=nil end
         if hub.territory==h then hub.territory=nil end
+    end
+    if prior and type(prior.close)=="function" then
+        local ok,why=pcall(prior.close)
+        if not ok then h.close();error(why,0) end
+        if prior.driver and driver.original==prior.driver.wrapper then driver.original=prior.driver.original end
     end
     env.FERAL_AMBER_ACTIVE=h;hub.territory=h
     return h

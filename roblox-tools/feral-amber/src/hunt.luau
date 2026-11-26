@@ -38,10 +38,11 @@ function Hunt.new(adapter)
             self.closingAt=now;self.sample=nil;self.noDamageAt=nil;self.missesOnTarget=0
             self.lastTargetHealth=prey.health or prey.hum and prey.hum.Health
             self.lastUsefulAt=now;self.blockedSince=nil;self.nextAttack=now
-            self.repositionUntil=nil;self.previousThrottle=nil;self.fullSpeed=nil;self.routeRetries=0
+            self.repositionUntil=nil;self.previousThrottle=nil;self.fullSpeed=nil;self.routeRetries=0;self.smoothVelocity=nil
         end
         local health=prey.health or prey.hum and prey.hum.Health
         if finite(health) and finite(self.lastTargetHealth) and health<self.lastTargetHealth-.01 then
+            if self.adapter.huntOutcome then self.adapter:huntOutcome(self.lastTargetHealth-health) end
             self.lastUsefulAt=now;self.noDamageAt=now;self.closingAt=now
             self.missesOnTarget=0;self.routeRetries=0
         end
@@ -52,7 +53,7 @@ function Hunt.new(adapter)
                 self.hits+=1;self.noDamageAt=now;self.missesOnTarget=0
                 self.lastResult="Observed prey HP decline after input; attribution unverified"
                 self.pending=nil
-            elseif now-p.at>1.1 then
+            elseif now-p.at>(s.attackCooldown and math.clamp(s.attackCooldown*.75+(s.progressLatency or .5)+.5,1.1,3) or 1.1) then
                 self.misses+=1;self.missesOnTarget+=1
                 self.lastResult="No prey HP decline observed"
                 self.lastBlockedReason=self.lastResult;self.lastBlockedAt=now
@@ -73,6 +74,11 @@ function Hunt.new(adapter)
         end
         local speed=math.sqrt(velocity.x^2+velocity.z^2)
         if speed>100 then velocity={x=0,z=0};speed=0 end
+        if self.smoothVelocity then
+            velocity={x=self.smoothVelocity.x*.55+velocity.x*.45,z=self.smoothVelocity.z*.55+velocity.z*.45}
+            speed=math.sqrt(velocity.x^2+velocity.z^2)
+        end
+        self.smoothVelocity=velocity
         self.sample={position={x=prey.position.x,z=prey.position.z},at=now}
         local lead=math.clamp(d/math.max(20,(s.travelSpeed or 35)+speed),.08,.85)
         local geometry=type(self.adapter.attackGeometry)=="function" and self.adapter:attackGeometry(s,prey) or nil

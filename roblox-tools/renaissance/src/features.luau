@@ -233,11 +233,105 @@ function Features.new(Core, bridge, registry)
         end
         return nil, "unknown config feature"
     end
+    -- Captured v2412 WolfMove forces its run boolean off while CrushAt is
+    -- active (186:2394-2402), then uses 16.8 / 42 * scaled(gait) * walkMul.
+    -- SPEED_CAP is not consumed by that branch. Adapt its actual scalar input
+    -- to the requested native tier, preserving the native ability/guard state.
+    function f:hippoInput(s,key)
+        if not s.alive or s.species~="Hippo" or s.chat or s.gameMenu or s.captured or s.rest then return end
+        if key==Enum.KeyCode.X then
+            if self.hippoIntentChar~=s.char then self.hippoBurstIntent=s.burst==true end
+            self.hippoIntentChar=s.char;self.hippoBurstIntent=not self.hippoBurstIntent
+        elseif key==Enum.KeyCode.Z then
+            self.hippoIntentChar=s.char;self.hippoBurstIntent=false
+        end
+    end
+    function f:hippoAttribute(s)
+        if s.species~="Hippo" then self.hippoIntentChar,self.hippoBurstIntent=nil,nil;return end
+        local at=bridge:attribute(s.char,"FeralCrushAt")
+        if at~=nil and at~=false then
+            if self.hippoIntentChar~=s.char or self.hippoBurstIntent==nil then
+                self.hippoIntentChar=s.char;self.hippoBurstIntent=s.burst==true
+            end
+            self.hippoCharge=at
+        else self.hippoCharge=nil;self.hippoBurstIntent=nil end
+    end
+    function f:reconcileHippoGait(s)
+        local cfg=s.alive and s.species=="Hippo" and bridge:config("Species")
+        local hippo=cfg and cfg.List and cfg.List.Hippo
+        if self.hippoScaled and (not hippo or self.hippoScaled.cfg~=cfg or self.hippoScaled.char~=s.char
+            or self.hippoScaled.profile~=hippo) then
+            self.leases:release("hippoGait");self.hippoScaled=nil
+        end
+        if self.hippoGaitConflict and self.hippoGaitConflict.cfg==cfg and self.hippoGaitConflict.char==s.char then return end
+        if not hippo or type(cfg.scaled)~="function" or not numeric(hippo,{"speed","gait"})
+            or game.PlaceVersion~=2412 then return end
+        if self.hippoScaled then
+            if not self.leases:valid("hippoGait") then self.leases:release("hippoGait");self.hippoScaled=nil;self.hippoGaitConflict={cfg=cfg,char=s.char} end
+            return
+        end
+        local original=cfg.scaled
+        local char=s.char
+        local wrapper=function(species,field,growth,...)
+            local result=original(species,field,growth,...)
+            if species~="Hippo" or (field~="gait" and field~="swimSpeed") or bridge.player.Character~=char
+                or not char.Parent or game.PlaceVersion~=2412 or cfg.List.Hippo~=hippo then return result end
+            local charge=bridge:attribute(char,"FeralCrushAt")
+            if charge==nil or charge==false or bridge:attribute(char,"WolfRest")==true
+                or bridge:attribute(char,"FeralCrouch")==true
+                or bridge:attribute(char,"FeralPinned")==true or bridge:attribute(char,"FeralCarried")==true
+                or bridge:attribute(char,"FeralDragged")==true or bridge.UserInputService:GetFocusedTextBox()
+                or bridge:attribute(bridge.player,"FeralMenuOpen")==true then return result end
+            local combat=bridge:config("CombatConfig")
+            if combat and type(combat.hobbled)=="function" then
+                local ok,hobbled=pcall(combat.hobbled,char)
+                if not ok or hobbled then return result end
+            end
+            local shift=false
+            pcall(function()shift=bridge.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)end)
+            local burst=self.hippoIntentChar==char and self.hippoBurstIntent==true
+            local denial=bridge:attribute(bridge.player,"HudBurstNo")
+            if denial==true or Core.finite(denial) and bridge.clock()>=denial and bridge.clock()-denial<1.7
+                or bridge:attribute(char,"StaminaOut")==true then burst=false;self.hippoBurstIntent=false end
+            if not shift and not burst then return result end
+            local needs=bridge:config("NeedsConfig")
+            local boost=needs and needs.BURST
+            local multiplier=1
+            if burst then
+                local key=field=="swimSpeed" and "SWIM_SPEED" or "SPEED"
+                local n=boost and (boost[key] or boost.SPEED)
+                if not boost or boost.ENABLED~=true or not Core.finite(n) or n<1 or n>3 then
+                    if not shift then return result end
+                    burst=false
+                else multiplier=n end
+            end
+            if field=="swimSpeed" then
+                if not Core.finite(hippo.swimSprint) or hippo.swimSprint<=0 then return result end
+                local speed=original(species,"swimSprint",growth,...)
+                return Core.finite(speed) and speed*multiplier or result
+            end
+            local walk=hippo.walkMul
+            if type(hippo.walkMulStage)=="table" and type(cfg.stage)=="function" then
+                local ok,stage=pcall(cfg.stage,growth,species);if ok then walk=hippo.walkMulStage[stage] or walk end
+            end
+            local scale=bridge:attribute(char,"WalkKMul")
+            if scale~=nil and not Core.finite(scale) then return result end
+            walk=(Core.finite(walk) and walk or 1)*(scale or 1)
+            local run=needs and needs.RUN_SPEED
+            local speed=original(species,"speed",growth,...)
+            if not Core.finite(walk) or walk<=0 or not Core.finite(run) or run<=0 or not Core.finite(speed) then return result end
+            self.hippoStatus=burst and "BURST_SPEED_REQUESTED" or "SPRINT_SPEED_REQUESTED"
+            return speed*run*multiplier*(42/16.8)/walk
+        end
+        local ok=self.leases:apply("hippoGait",{entry(cfg,"scaled",wrapper,"function")})
+        if ok then self.hippoScaled={cfg=cfg,char=char,profile=hippo,original=original} end
+    end
     -- Hippo Crusher Bite has a v2412 native SPEED_CAP="trot" profile.
     -- A separate owner avoids touching other species or requiring a new toggle.
     -- Use the fastest native locomotion tier (burst) as the client-side cap.
     -- This does not activate a burst gait; the server may still impose a slow.
     function f:reconcileHippo(s)
+        self:reconcileHippoGait(s)
         local hippo=s.alive and s.species=="Hippo"
         local ability=hippo and bridge:config("AbilityConfig")
         local base=hippo and bridge:config("AbilityConfigBase")

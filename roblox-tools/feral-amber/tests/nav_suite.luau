@@ -41,9 +41,10 @@ local function world()
         if delta.Y<-100 then
             if scene.missing then return nil end
             local wet=scene.water and origin.X>30 and origin.X<150
-            local height=scene.height and scene.height(origin.X) or 0
+            local height=scene.height and scene.height(origin.X,origin.Z) or 0
             return {Position=v(origin.X,height,origin.Z),Material=wet and "Water" or "Grass",Normal={Y=1},Instance=self.Terrain}
         end
+        if scene.blocked and scene.blocked(origin,delta) then return {Instance=self.Terrain,Material="Rock",Position=origin,Normal={Y=0}} end
         if scene.wall then return {Instance=self.Terrain,Material="Rock",Position=origin,Normal={Y=0}} end
     end
     local paths={calls=0}
@@ -265,6 +266,42 @@ test("observed native mode permits automatic Burst without a stamina attribute",
     local n,c,h,r,s=world();s.staminaFraction=nil;s.hudSprint=true
     n:tick(v(350,3,0),c,h,r,10,{},s);r.Position=v(4,3,0)
     n:tick(v(350,3,0),c,h,r,10.3,{},s);eq(n.gait,"BURST");assert(keys.X)
+end)
+test("body shoulder cliff is rejected even when the center is fully supported",function()
+    local n,c,h,r,s=world();n.clearance=4;n.supportHeight=5;n.maxDrop=3
+    scene.height=function(_,z)return z< -1 and -60 or 0 end
+    eq(n:clearSegment(r.Position,v(30,3,0),c,false,true),false)
+end)
+test("precise immediate support scan catches a trench between coarse samples",function()
+    local n,c,h,r,s=world();n.clearance=3;n.supportHeight=5;n.maxDrop=3
+    scene.height=function(x)return x>10.5 and x<11.5 and -60 or 0 end
+    eq(n:clearSegment(r.Position,v(24,3,0),c,false,true),false)
+end)
+test("late same-goal path adopts the forward join instead of an obsolete origin",function()
+    local n,c,h,r,s=world();scene.deferred=true
+    n.compute=function()return {v(20,3,0),v(60,3,0),v(120,3,0)},"PATH_SURFACE"end
+    n:tick(v(200,3,0),c,h,r,10,{},s);r.Position=v(80,3,0)
+    for _,job in ipairs(jobs)do job()end
+    eq(n.index,3);eq(n.points[n.index].X,120)
+end)
+test("full mesh route can go around an obstacle larger than a local horizon",function()
+    local n,c,h,r,s=world()
+    scene.blocked=function(a,d)
+        for i=0,20 do local x,z=a.X+d.X*i/20,a.Z+d.Z*i/20
+            if x>40 and x<130 and math.abs(z)<22 then return true end
+        end
+        return false
+    end
+    scene.path={{Position=v(20,3,0)},{Position=v(20,3,65)},{Position=v(160,3,65)},{Position=v(200,3,0)}}
+    n:tick(v(200,3,0),c,h,r,10,{},s)
+    assert(#n.points>=3);assert(n.desiredPoint);assert(n.operations.paths>=1)
+    for _,p in ipairs(n.points)do assert(not (p.X>40 and p.X<130 and math.abs(p.Z)<22))end
+end)
+test("recovery cells persist across targets but expire instead of choosing the same detour",function()
+    local n,c,h,r,s=world();n.destination=v(200,3,0);n.lastAt=10
+    eq(n:detour(r,c,s,10),true);local first=n.points[1]
+    n:reset(v(250,3,0),c,11,"NEXT");eq(n:detour(r,c,s,11),true)
+    local nextPoint=n.points[1];assert((first-nextPoint).Magnitude>4)
 end)
 print(string.format("AMBER_NAV_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Navigation regression failure")

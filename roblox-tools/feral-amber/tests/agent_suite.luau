@@ -175,5 +175,12 @@ test("actual manual movement still pauses Amber and releases navigation",functio
     eq(a:status().phase,"PAUSED")
     assert(#w.stops>0)
 end)
+test("same animal profile and discovery generation replacements retire incompatible objectives",function()
+    local w,a=world();w.state.profileKey="body1";w.state.generation=1
+    a:setEnabled(true);a:tick(10);local first=a.goal
+    w.state.profileKey="body2";a:tick(11);assert(a.goal~=first)
+    local second=a.goal;w.state.generation=2;a:tick(12);assert(a.goal~=second)
+    eq(a.lastGeneration,2)
+end)
 print(string.format("AMBER_AGENT_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Amber agent tests failed")

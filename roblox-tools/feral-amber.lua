@@ -2,7 +2,7 @@
 if game.PlaceId~=108901361810209 then warn("Join FERAL Animal Survival first.");return end
 local env=(type(getgenv)=="function" and getgenv()) or _G
 local hub=env.FERAL_RENAISSANCE_ACTIVE
-if not hub or hub.closed or not hub.territory or hub.territory.version~="0.6.1" then
+if not hub or hub.closed or not hub.territory or hub.territory.version~="0.7.0" then
     local source=game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/main/roblox-tools/feral-renaissance.lua")
     local fn,why=loadstring(source,"=FERAL_Renaissance");assert(fn,why)
     hub=fn()

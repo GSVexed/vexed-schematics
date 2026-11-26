@@ -7,18 +7,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 CORE_MODULES = ("core", "settings", "policy", "grab", "grab_input", "recovery", "feeding", "combat_input", "rescue", "features", "roblox", "zoom", "ui", "controller")
-AMBER_MODULES=("planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
+AMBER_MODULES=("ledger","model","planner","gait","nav","hunt","care","agent","bridge","driver","ui","runtime")
 MODULES=(*CORE_MODULES,*("amber_"+name for name in AMBER_MODULES))
 def module_path(name):
     if name.startswith("amber_"):
         return ROOT.parent/"feral-amber"/"src"/(name[6:]+".luau")
     return ROOT/"src"/(name+".luau")
 
-VERSION = "15.6.2"
+VERSION = "15.7.0"
 DEST = ROOT.parent / f"feral-renaissance-v{VERSION}.lua"
 
 # Immutable known-good releases. Validate before writing a new bundle or manifest.
 PROTECTED_HASHES = {
+    "feral-renaissance-v15.6.2.lua": "c1275bd161e5548522d7ab47e9c791eba361d5d383337535d751dfab9afafa98",
     "feral-renaissance-v15.6.1.lua": "b70d08957b44b5b48cce5a0ffb63b7dc9be288ed633efa7b7b9d949dfc7e1ef8",
     "feral-renaissance-v15.6.0.lua": "e0b8d0f6005b6c6311c9bfd873ffd490457f385844d1b5179f5ff809be3b0220",
     "feral-renaissance-v15.5.1.lua": "771e130b2a1afae4b70d5334fd40fdf1363fd690682350f6d9c012b65d637b69",
@@ -105,7 +106,7 @@ candidate.marker = {
 }
 env.FERAL_RENAISSANCE_ACTIVE = candidate
 env.FERAL_NOVA_PRIME_ACTIVE = candidate.marker
-print("[FERAL Renaissance 15.6.2] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
+print("[FERAL Renaissance 15.7.0] Ready · Right Shift · client effects and gameplay outcomes tracked separately")
 return candidate
 '''
 

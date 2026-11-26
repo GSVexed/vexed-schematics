@@ -1611,9 +1611,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.6.2 presents its actual version in the active controller",function()
+test("Renaissance 15.7.0 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.6.2")
+    eq(h.version,"15.7.0")
     h:close()
 end)
 
@@ -1663,5 +1663,93 @@ test("zoom partial observer failure unwinds without leaving camera writes",funct
     eq(z.active,false);eq(w.player.CameraMaxZoomDistance,128);eq(called,12);z:close()
 end)
 
+local function hippoWorld()
+    local w=Mock.new();w:spawn("Hippo");w.keys={}
+    function w.uis:IsKeyDown(key)return w.keys[key]==true end
+    local profile={speed=30,gait=36,walkMul=.7,swimSpeed=20,swimSprint=27}
+    local native=function(species,field,growth)
+        if species~="Hippo" then return 12 end
+        return (profile[field] or 0)*(growth or 1)
+    end
+    w:addConfig("Species",{List={Hippo=profile},scaled=native})
+    w.configs.NeedsConfig.BURST={ENABLED=true,SPEED=1.45,SWIM_SPEED=1.3}
+    w:addConfig("AbilityConfig",{CrusherBite={SPEED_CAP="trot"}})
+    local h=load(w);w:step(.1)
+    local function chargeSpeed(growth)
+        -- Reconstructed arithmetic from v2412 WolfMove 3092-3104;
+        -- native run remains false, so its forced-trot branch consumes gait.
+        return 16.8/42*w.configs.Species.scaled("Hippo","gait",growth)*profile.walkMul
+    end
+    return w,h,native,chargeSpeed
+end
+test("Hippo charge sprint repairs the consumed gait calculation rather than only a cap label",function()
+    local w,h,original,speed=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000);w.keys[E.KeyCode.LeftShift]=true
+    close(speed(.8),original("Hippo","speed",.8)*w.configs.NeedsConfig.RUN_SPEED)
+    eq(char:GetAttribute("FeralCrushAt"),w.time+1000);eq(char:GetAttribute("WolfBurst"),nil)
+    h:close();eq(w.configs.Species.scaled,original)
+end)
+test("Hippo charge Burst input chooses the native NeedsConfig burst multiplier",function()
+    local w,h,original,speed=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    close(speed(1),original("Hippo","speed",1)*1.45)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    close(speed(1),16.8/42*original("Hippo","gait",1)*.7)
+    h:close()
+end)
+test("Hippo charge preserves ordinary walk trot other species and ability release",function()
+    local w,h,original,speed=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000)
+    close(speed(1),16.8/42*original("Hippo","gait",1)*.7)
+    close(w.configs.Species.scaled("Wolf","gait",1),12)
+    w.keys[E.KeyCode.LeftShift]=true;char:SetAttribute("FeralCrushAt",nil)
+    close(w.configs.Species.scaled("Hippo","gait",1),original("Hippo","gait",1));h:close()
+end)
+test("Hippo water charge uses native swimSprint and native water Burst multiplier",function()
+    local w,h,original=hippoWorld();w.player.Character:SetAttribute("FeralCrushAt",w.time+1000)
+    w.keys[E.KeyCode.LeftShift]=true
+    close(w.configs.Species.scaled("Hippo","swimSpeed",1),original("Hippo","swimSprint",1))
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    close(w.configs.Species.scaled("Hippo","swimSpeed",1),original("Hippo","swimSprint",1)*1.3)
+    h:close()
+end)
+test("Hippo input respects native Burst denial and native capture restrictions",function()
+    local w,h,original,speed=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    w.player:SetAttribute("HudBurstNo",w.time)
+    close(speed(1),16.8/42*original("Hippo","gait",1)*.7)
+    w.keys[E.KeyCode.LeftShift]=true;char:SetAttribute("FeralPinned",true)
+    close(speed(1),16.8/42*original("Hippo","gait",1)*.7);h:close()
+end)
+test("Hippo calculation wrapper restores on species change and never writes movement fields",function()
+    local w,h,original=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000);w.keys[E.KeyCode.LeftShift]=true
+    w:resetMetrics();w.configs.Species.scaled("Hippo","gait",1)
+    eq(w.metrics.writes["Humanoid:WalkSpeed"],nil);eq(w.metrics.writes["Part:AssemblyLinearVelocity"],nil)
+    w:spawn("Wolf");w:step(.1);eq(w.configs.Species.scaled,original);h:close()
+end)
+test("Hippo charge preserves known Burst intent at the ability-start event",function()
+    local w,h,original,speed=hippoWorld()
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    w.player.Character:SetAttribute("FeralCrushAt",w.time+1000)
+    close(speed(1),original("Hippo","speed",1)*1.45);h:close()
+end)
+test("Hippo external scalar edits retain ownership across repeated reconciliation",function()
+    local w,h=hippoWorld();local external=function()return 99 end
+    w.configs.Species.scaled=external;w:step(.1);w:step(.1);w:step(.1)
+    eq(w.configs.Species.scaled,external);h:close();eq(w.configs.Species.scaled,external)
+end)
+test("Hippo trot selection cancels Burst intent and unrelated crouch restrictions remain native",function()
+    local w,h,original,speed=hippoWorld();local char=w.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.X,UserInputType=E.UserInputType.Keyboard},true)
+    close(speed(1),original("Hippo","speed",1)*1.45)
+    w.uis.InputBegan:Fire({KeyCode=E.KeyCode.Z,UserInputType=E.UserInputType.Keyboard},true)
+    close(speed(1),16.8/42*original("Hippo","gait",1)*.7)
+    w.keys[E.KeyCode.LeftShift]=true;char:SetAttribute("FeralCrouch",true)
+    close(speed(1),16.8/42*original("Hippo","gait",1)*.7);h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

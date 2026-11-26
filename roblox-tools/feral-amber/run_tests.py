@@ -40,7 +40,10 @@ def main():
     prelude="".join("local "+n.upper()+"_SRC="+literal(v)+"\n" for n,v in sources.items())
     prelude+="local BUNDLE_SRC="+literal(DEST.read_text())+"\n"
     prelude+="local MOCK_SRC="+literal((ROOT.parent/"renaissance/tests/mock_roblox.luau").read_text())+"\n"
-    prelude+="local RENAISSANCE_SRC="+literal((ROOT.parent/"feral-renaissance-v15.6.1.lua").read_text())+"\n"
+    prelude+="local RENAISSANCE_SRC="+literal((ROOT.parent/"feral-renaissance-v15.7.0.lua").read_text())+"\n"
+    baseline=(ROOT.parent/"feral-amber-autopilot-v0.6.1.lua").read_text()
+    old_planner=re.search(r'sources\["planner"\] = \[============\[\n(.*?)\]============\]',baseline,re.S).group(1)
+    prelude+="local BASE_PLANNER_SRC="+literal(old_planner)+"\n"
     results=[]
     errors=[]
     with tempfile.TemporaryDirectory(prefix="feral-amber-") as directory:
@@ -58,7 +61,7 @@ def main():
             assert total==passed and failed==0
             results.append(dict(suite=suite.name,total=total,passed=passed))
     if errors: raise RuntimeError("\n".join(errors))
-    summary=dict(version="0.6.1",toolchain="97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+    summary=dict(version="0.7.0",toolchain="97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
         compiled=len(paths),total=sum(r["total"] for r in results),passed=sum(r["passed"] for r in results),
         suites=results,bundle_sha256=hashlib.sha256(DEST.read_bytes()).hexdigest(),
         protected_releases=len(protections),live_gameplay_tested=False)

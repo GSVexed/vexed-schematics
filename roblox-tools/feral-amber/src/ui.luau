@@ -29,10 +29,15 @@ function UI.new(engine,hub)
         local recent=card(307,54)
         local last=text(recent,"",12,5,465,44,11,H.palette.sub);last.TextWrapped=true
         function v:tick(now)
+            if now<(self.nextText or 0) then return end
+            self.nextText=now+.25
             local s=engine.status();local n=s.navigation or {};local c=s.hexSummary or {}
             start.Text=s.enabled and "STOP FARMING" or "START FARMING"
             start.BackgroundColor3=s.enabled and H.palette.on or H.palette.off
-            totals.Text=string.format("%d / %d owned · %d need scent · Amber +%.0f",c.owned or 0,c.eligible or 0,c.fading or 0,s.earned or 0)
+            local amber=s.metrics and s.metrics.amber
+            local balance=amber and string.format("Balance %+.0f · %+.0f/hr",amber.net or 0,amber.netPerWallHour or 0)
+                or string.format("Observed Amber +%.0f",s.earned or 0)
+            totals.Text=string.format("%d / %d owned · %d need scent · %s",c.owned or 0,c.eligible or 0,c.fading or 0,balance)
             needs.Text="Hunger "..amount(s.hunger).." · Thirst "..amount(s.thirst).." · "..tostring(s.species or "Waiting for animal")
             phase.Text=(s.enabled and "RUNNING · " or "OFF · ")..tostring(s.phase)..(s.key and " · "..s.key or "")
             reason.Text=tostring(s.reason or "Ready")
@@ -40,6 +45,9 @@ function UI.new(engine,hub)
             local value=target.action=="SCENT" and target.hold or target.progress
             progress.Text=type(value)=="number" and ("Native territory progress "..amount(value*100).."%")
                 or s.suspended and ("Will resume "..s.suspended) or "Watching native progress and resource changes"
+            if s.capacity and s.capacity.state=="DEADLINE_PRESSURE" then
+                progress.Text=progress.Text.." · Maintenance pressure"
+            end
             gait.Text=tostring(n.requested or "STOP").." requested · "..tostring(n.observed or "UNKNOWN").." observed"
             travel.Text="Travelled "..amount(n.travelled).." studs · Target "..amount(n.distance).." studs"
                 ..(n.failure and (n.stalledFor or 0)>1 and " · "..n.failure or "")

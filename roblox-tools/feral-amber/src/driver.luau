@@ -36,6 +36,7 @@ function Driver.new(player,nav,manual)
         end
         if not controls then self.reason="No supported native moveFunction; using keys";return end
         local previous=controls.moveFunction
+        self.original=previous
         local wrapper=function(p,direction,relative)
             if p==player and not self.closed and nav.desiredPoint and nav.steeringStrategy=="WORLD" then
                 if manual and manual() then
@@ -44,11 +45,11 @@ function Driver.new(player,nav,manual)
                     local wanted=nav:direction()
                     if wanted then
                         nav.driveCalls+=1;nav.lastMode="PLAYER_MODULE"
-                        return previous(p,wanted,false)
+                        return self.original(p,wanted,false)
                     end
                 end
             end
-            return previous(p,direction,relative)
+            return self.original(p,direction,relative)
         end
         local attached,why=pcall(function()controls.moveFunction=wrapper end)
         if not attached then self.reason=tostring(why);return end

@@ -71,13 +71,14 @@ local function world(native)
     t:SetAttribute("Hexes","0,0;1,0");t:SetAttribute("H0_0_owner",2);t:SetAttribute("H0_0_hold",.7)
     w:spawn("Bear");function w.hum:Move(dir)self.MoveDirection=dir end
     if native then w:enableNativeActions();w:enableNativeConnections() end
+    w.nativeListenerBaseline=w:connections()
     w.owner=assert(env.loadstring(RENAISSANCE_SRC,"=RenaissanceIntegrated"))()
     assert(w.owner and w.owner.territory,"Built-in territory failed to load")
     function w:load()return assert(env.loadstring(BUNDLE_SRC,"=AmberPackage"))()end
     return w,w.owner.territory
 end
 test("Renaissance contains Territory by default with one window and scheduler",function()
-    local w,h=world();eq(h.version,"0.6.1");eq(h.agent.enabled,false)
+    local w,h=world();eq(h.version,"0.7.0");eq(h.agent.enabled,false)
     eq(w:count("ScreenGui"),1);eq(w.run.Heartbeat:Count(),1)
     assert(w.owner.ui:selectTab("Territory"));assert(w.owner.ui.frame:FindFirstChild("TerritoryStart",true))
     w.owner:close()
@@ -133,7 +134,7 @@ test("COPY STATUS is available on the native page without other player names",fu
     local w,h=world();local copied;w.env.setclipboard=function(value)copied=value end
     w.owner.ui:selectTab("Territory");w.owner.ui.frame:FindFirstChild("TerritoryCopy",true).Activated:Fire()
     assert(copied);local data=w.env.game:GetService("HttpService"):JSONDecode(copied)
-    eq(data.version,"0.6.1");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
+    eq(data.version,"0.7.0");assert(data.navigation);assert(data.hexSummary);eq(data.players,nil)
     w.owner:close()
 end)
 test("closing the hub invalidates deferred path computations",function()
@@ -349,6 +350,161 @@ test("hunt selection excludes NPCs rejected by the native combat protection poli
     prey:SetAttribute("FeralSafeUntil",w.time+1100)
     local s=h.bridge:snapshot(w.time);eq(h.bridge:prey(s),nil)
     prey:SetAttribute("FeralSafeUntil",nil);eq(h.bridge:prey(s).model,prey);w.owner:close()
+end)
+test("rejected virtual feeding input falls through to paired executor keys",function()
+    local w,h=world();local c=w.player.Character;c:SetAttribute("FeedCan","eat")
+    w.owner.bridge.nativeFeedState=function()return nil,false,false end
+    w.env.game:GetService("VirtualInputManager").SendKeyEvent=function()error("Rejected")end
+    local press,release=0,0
+    w.env.keypress=function(key)eq(key,0x45);press+=1 end
+    w.env.keyrelease=function(key)eq(key,0x45);release+=1 end
+    local s=h.bridge:snapshot(w.time);eq(h.bridge:feed(s,"eat"),true);eq(press,1)
+    w.owner:close();eq(release,1)
+end)
+test("native limits normalize both needs and unavailable data pauses real movement",function()
+    local w,h=world();w.configs.NeedsConfig.HUNGER_MAX=50;w.configs.NeedsConfig.THIRST_MAX=200
+    local c=w.player.Character;c:SetAttribute("Hunger",40);c:SetAttribute("Thirst",160)
+    local s=h.bridge:snapshot(w.time);eq(s.needsKnown,true);eq(s.careTarget,45);eq(s.drinkTarget,200)
+    c:SetAttribute("Hunger",0/0);h.setEnabled(true);w:step(.2)
+    eq(h.agent.phase,"PAUSED");eq(h.nav.desiredPoint,nil);w.owner:close()
+end)
+test("actual object generations invalidate resource and travel history including pack removal",function()
+    local w,h=world();local first=h.bridge:snapshot(w.time);local generation=first.generation
+    h.bridge.waterCache={x=300,z=0};h.bridge.searchPoint={x=250,z=0}
+    h.nav.model:addRoute({{x=0,z=0},{x=200,z=0}},w.time)
+    w.player:SetAttribute("FeralPack",nil);local nextState=h.bridge:snapshot(w.time+.1)
+    assert(nextState.generation>generation);eq(h.bridge.waterCache,nil);eq(h.bridge.searchPoint,nil);eq(#h.nav.model.order,0)
+    generation=nextState.generation;w:spawn("Bear");nextState=h.bridge:snapshot(w.time+.2)
+    assert(nextState.generation>generation);w.owner:close()
+end)
+test("small growth changes retain work while significant body changes invalidate it",function()
+    local w,h=world();local first=h.bridge:snapshot(w.time);local size=w.root.Size
+    w.root.Size=size*1.02;local small=h.bridge:snapshot(w.time+.1);eq(small.profileKey,first.profileKey)
+    w.root.Size=size*1.3;local large=h.bridge:snapshot(w.time+.2);assert(large.profileKey~=first.profileKey)
+    w.owner:close()
+end)
+test("real claim boundary access retains its precise arrival contract",function()
+    local w,h=world();local s=h.bridge:snapshot(w.time);local p=h.bridge:territorySpot("H0_0",s)
+    eq(p.moveRadius,3);assert(p.x>60 and p.x<200)
+    h.setEnabled(true);w:step(.2);eq(h.agent.phase,"TRAVEL");assert(h.nav.desiredPoint)
+    assert(h.bridge.operations.spotChecks<=12);w.owner:close()
+end)
+test("manual Burst input is retained as intervention while owned input is not",function()
+    local w,h=world();h.setEnabled(true);w:step(.2)
+    w.uis.InputBegan:Fire({KeyCode=w.env.Enum.KeyCode.X,UserInputType=w.env.Enum.UserInputType.Keyboard},false)
+    w:step(.2);eq(h.agent.phase,"PAUSED");eq(h.agent.goal.manualInterventionObserved,true)
+    w.owner:close()
+end)
+test("NPC bite dispatch temporarily yields unrelated core reach targeting",function()
+    local w,h=world();local prey={model={},position={x=4,z=0}}
+    h.bridge.checkPrey=function()return prey end;h.bridge.attackGeometry=function()return {valid=true}end
+    local saved={char={}};w.owner.bridge.reachTarget=saved
+    w.owner.bridge.tryNativeBite=function(self)eq(self.reachTarget,nil);return true end
+    eq(h.bridge:bite(h.bridge:snapshot(w.time),prey),true)
+    eq(w.owner.bridge.reachTarget,saved);w.owner:close()
+end)
+test("temporary Territory recovery does not enable the saved hub preference",function()
+    local w,h=world(true);w.owner:set("recovery",false);w.hum.Health=35
+    h.setEnabled(true);w:step(.2);eq(h.agent.goal.kind,"RECOVER");w:step(.2)
+    eq(w.owner.recovery.enabled,true);eq(w.owner.registry.byId.recovery.requested,false)
+    h.setEnabled(false);w:step(.2);eq(w.owner.recovery.enabled,false);eq(w.owner.territoryRecoveryOwner,nil)
+    w.owner:close()
+end)
+test("partial Territory page construction restores the movement callback and listeners",function()
+    local w,h=world();h.close();local before=w:connections()
+    local M=assert(w.env.loadstring(RENAISSANCE_SRC))({inspect=true})
+    local ui=M.amber_ui;M.amber_ui={new=function()error("page failed")end}
+    local ok=pcall(M.amber_runtime.start,M,w.owner);eq(ok,false)
+    eq(w.controls.moveFunction,w.originalMove);eq(w:connections(),before)
+    M.amber_ui=ui;w.owner:close()
+end)
+test("two-hour full bundle simulation completes repeated unassisted hunts meals drinks and maintenance",function()
+    local w,h=world(true);local V=Mock.V3;local c=w.player.Character
+    local prey,hp,pr=w:npc(nil,V.new(35,3,0),false);pr.Size=V.new(2,2,4);hp.HipHeight=1
+    w.nativeBiteTarget=prey;w.nativeDamage=25
+    w:addConfig("Forage",{canEat=function(diet,food)return food=="meat" and diet=="omnivore"end})
+    local food
+    w:addConfig("MapSpots",{WolfValley={{key="Water",pos=w.env.Vector2.new(85,0),drinkR=20}}})
+    w:addConfig("FeedFinder",{food=function()if food and food.Parent and (food:GetAttribute("FoodLeft") or 0)>0 then return food,food.Position end end})
+    local t=w.rs:FindFirstChild("FeralTerritory");local amber=100;local pack=w.player:GetAttribute("FeralPack")
+    t:SetAttribute("H0_0_owner",pack)
+    w.player:SetAttribute("Amber",amber)
+    for _,key in ipairs({"HudTrot","HudSprint","HudBurst"})do w.player:SetAttribute(key,false)end
+    c:SetAttribute("Hunger",25);c:SetAttribute("Thirst",45)
+    local keyCursor=1;local claims,meals,drinks=0,0,0;local wasEating,wasDrinking=false,false
+    h.setEnabled(true)
+    local kills=0
+    for frame=1,36000 do
+        for i=keyCursor,#w.keyEvents do
+            local e=w.keyEvents[i]
+            if e.on and e.key==w.env.Enum.KeyCode.X then w.player:SetAttribute("HudBurst",not w.player:GetAttribute("HudBurst"))end
+            if e.on and e.key==w.env.Enum.KeyCode.Z then w.player:SetAttribute("HudTrot",not w.player:GetAttribute("HudTrot"))end
+        end
+        keyCursor=#w.keyEvents+1
+        w.player:SetAttribute("HudSprint",w.keys[w.env.Enum.KeyCode.LeftShift]==true)
+        w.controls.moveFunction(w.player,V.new(),true)
+        local direction=w.hum.MoveDirection
+        local speed=w.player:GetAttribute("HudBurst") and 44 or w.player:GetAttribute("HudSprint") and 30
+            or w.player:GetAttribute("HudTrot") and 18 or 10
+        if direction.Magnitude>.01 then w.root.Position+=direction*speed*.2;w.root.CFrame={LookVector=direction.Unit}end
+        if food and (food:GetAttribute("FoodLeft") or 0)<=0 then
+            food.Parent=nil;food=nil
+            prey,hp,pr=w:npc(nil,w.root.Position+V.new(35,0,15),false);pr.Size=V.new(2,2,4);hp.HipHeight=1
+            w.nativeBiteTarget=prey
+        end
+        if hp.Health<=0 and not food then
+            kills+=1
+            food=w.new("Part");food.Name="EdibleCorpse";food.Position=pr.Position;food.Parent=w.workspace
+            food:SetAttribute("Diet","meat");food:SetAttribute("FoodLeft",120)
+        end
+        local mode=c:GetAttribute("WolfFeed")
+        local hunger=c:GetAttribute("Hunger");local thirst=c:GetAttribute("Thirst")
+        local eat=food and food.Parent and (food.Position-w.root.Position).Magnitude<7 and (food:GetAttribute("FoodLeft") or 0)>0
+        local drink=math.abs(w.root.Position.X-85)<7 and math.abs(w.root.Position.Z)<7
+        c:SetAttribute("FeedCan",eat and "eat" or drink and "drink" or nil)
+        if mode=="eat" and eat then hunger=math.min(100,hunger+4);food:SetAttribute("FoodLeft",food:GetAttribute("FoodLeft")-4)
+        else hunger=math.max(0,hunger-.012)end
+        if mode=="drink" and drink then thirst=math.min(100,thirst+5)else thirst=math.max(0,thirst-.02)end
+        c:SetAttribute("Hunger",hunger);c:SetAttribute("Thirst",thirst)
+        if wasEating and mode~="eat" then meals+=1 end;if wasDrinking and mode~="drink" then drinks+=1 end
+        wasEating=mode=="eat";wasDrinking=mode=="drink"
+        for i,key in ipairs({"H0_0","H1_0"})do
+            local center=200+(i-1)*300;local owner=t:GetAttribute(key.."_owner")
+            local inHex=(w.root.Position.X<350 and i==1 or w.root.Position.X>=350 and i==2)
+            local eligible=math.abs(w.root.Position.X-center)<=120 and math.abs(w.root.Position.Z)<60 and inHex
+            if eligible then
+                if owner~=pack then
+                    local prog=(t:GetAttribute(key.."_prog") or 0)+.2/20
+                    t:SetAttribute(key.."_by",pack);t:SetAttribute(key.."_prog",prog)
+                    if prog>=1 then t:SetAttribute(key.."_owner",pack);t:SetAttribute(key.."_prog",nil);t:SetAttribute(key.."_hold",1);claims+=1;amber+=15 end
+                else t:SetAttribute(key.."_hold",math.min(1,(t:GetAttribute(key.."_hold") or 0)+.2/60))end
+            elseif owner==pack then t:SetAttribute(key.."_hold",math.max(0,(t:GetAttribute(key.."_hold") or 1)-.2*.001))end
+        end
+        w.player:SetAttribute("Amber",amber);w:step(.2)
+        assert(h.agent.phase~="ERROR",h.agent.lastError)
+        assert(hunger>0 and thirst>0,"Simulated starvation: "..h.agent.phase.." "..h.agent.reason)
+    end
+    assert((w.nativeBites or 0)>0,"no native bites");assert(kills>=2,"repeated kills "..kills);assert(meals>=2,"meal cycles "..meals);assert(drinks>=2,"drink cycles "..drinks)
+    assert(claims>=1,"claims "..claims);assert(h.agent.scented>=2,"scents "..h.agent.scented);eq(h.agent.metrics.assistance,0)
+    local stats=h.status().metrics;assert(math.abs(stats.wall-stats.active-stats.paused-stats.unobserved)<.001)
+    print(string.format("TERRITORY_SIM_SOAK seconds=7200 kills=%d meals=%d drinks=%d claims=%d scents=%d travel=%.1f",kills,meals,drinks,claims,h.agent.scented,h.nav.travelled))
+    w.owner:close();eq(w:connections(),w.nativeListenerBaseline)
+end)
+test("encounter coverage is bounded and never upgrades configuration discovery to live support",function()
+    local w,h=world();local s=h.bridge:snapshot(w.time)
+    eq(h.status().support.current.status,"PARTIAL")
+    eq(h.status().support.current.flight,"unimplemented")
+    for i=1,100 do h.bridge:recordCoverage({known=i%2==0,diet="omnivore"},"Fixture"..i,"body1","FixtureBiome",w.time+i)end
+    eq(#h.bridge.coverageOrder,64);local n=0;for _ in pairs(h.bridge.coverage)do n+=1 end;eq(n,64)
+    h.bridge:recordCoverage({known=false},"Unknown","body1","FixtureBiome",w.time+110)
+    eq(h.bridge.coverage[h.bridge.coverageOrder[64]].status,"UNKNOWN");w.owner:close()
+end)
+test("native helper cost reports distinguish opaque discovery from local candidate slices",function()
+    local w,h=world();w:addConfig("FeedFinder",{food=function()return nil end,waterAround=function()return nil end})
+    local s=h.bridge:snapshot(w.time);h.bridge:food(s);h.bridge:water(s)
+    eq(h.status().nativeHelperCosts["FeedFinder.food"].calls,1)
+    eq(h.status().nativeHelperCosts["FeedFinder.waterAround"].calls,1)
+    assert(h.bridge.operations.surface<=100);w.owner:close()
 end)
 print(string.format("AMBER_LIFECYCLE_RESULT total=%d passed=%d failed=%d",total,passed,total-passed))
 assert(total==passed,"Integrated lifecycle regressions failed")
