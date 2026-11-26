@@ -2371,12 +2371,13 @@ test("private native callback can repeat through paired executor mouse APIs",fun
         w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
     end
     local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
-    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.15);w.held=E.UserInputType.MouseButton1
+    local physicalInput=w:input(nil,E.UserInputType.MouseButton1)
     w:advance(1.55)
     assert(pairDown>=2 and pairUp>=1)
     assert((w.nativeBites or 0)>=3)
     local count=w.nativeBites
-    w.held=nil;w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w.held=nil;w.uis.InputEnded:Fire(physicalInput)
     w:advance(.85);eq(w.nativeBites,count)
     h:close()
     -- Each replay first sends an Up to create a fresh Down edge.
@@ -2392,13 +2393,13 @@ test("held fallback resets a logically down mouse before every native press",fun
     local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
     w:advance(.2)
     w.held=E.UserInputType.MouseButton1
-    w:input(nil,E.UserInputType.MouseButton1)
+    local physicalInput=w:input(nil,E.UserInputType.MouseButton1)
     w:advance(1.8)
     assert((w.virtualBiteDowns or 0)>=2)
     assert((w.virtualBiteUps or 0)>=(w.virtualBiteDowns or 0)*2)
     assert((w.nativeBites or 0)>=3,"repeat must be a new Down edge")
     w.held=nil
-    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w.uis.InputEnded:Fire(physicalInput)
     local count=w.nativeBites
     w:advance(.9)
     eq(w.nativeBites,count)
@@ -2496,13 +2497,14 @@ test("unacknowledged virtual input automatically switches to paired executor edg
         w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
     end
     local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
-    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.15);w.held=E.UserInputType.MouseButton1
+    local physicalInput=w:input(nil,E.UserInputType.MouseButton1)
     w:advance(5.3)
     assert((w.virtualBiteDowns or 0)>=2,"virtual backend should be attempted first")
     assert(pairedDown>=1 and pairedUp>=1,"successful pcall but ignored input should rotate to paired backend")
     assert((w.nativeBites or 0)>=2)
     w.held=nil
-    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w.uis.InputEnded:Fire(physicalInput)
     h:close()
 end)
 test("compatible newer FERAL place version still supports held bite via native input",function()
