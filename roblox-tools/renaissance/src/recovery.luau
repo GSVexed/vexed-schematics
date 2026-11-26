@@ -239,8 +239,15 @@ function Recovery.new(bridge, policy, ledger)
                 self.renewals += 1
                 ledger:event("native_rest_renewed", now, { moving=s.moving, purpose=self.purpose })
             else
-                self.state="native Rest renewal unavailable"
+                -- A failed request is not a continuing active recovery session.
+                -- Relinquish its local ownership and restore the owned pose;
+                -- do not keep an invisible Rest override indefinitely.
                 ledger:event("native_rest_renew_failed",now)
+                self:release("native Rest renewal unavailable",now)
+                self:clearPose()
+                self.backoffUntil=now+3
+                self.observations={}
+                self.previous=nil
             end
         end
     end
