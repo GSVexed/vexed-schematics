@@ -93,7 +93,7 @@ function CombatInput.new(bridge,policy,ledger)
             -- InputEnded always clear it; menus/text clear it immediately.
             if not s.alive or s.chat or s.gameMenu or options.uiBlocked then self.held=nil end
             self.nextAttempt=now+.12
-            self.status=options.minigameBusy or s.grab and "minigame has priority" or "native action has priority"
+            self.status=(options.minigameBusy or s.grab) and "minigame has priority" or "native action has priority"
             return
         end
         local p=self.pending

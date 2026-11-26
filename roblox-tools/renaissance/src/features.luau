@@ -188,7 +188,11 @@ function Features.new(Core, bridge, registry)
                     or not Core.finite(value) or value<=0 or value>30 then return value end
                 -- Keep delayed claims ordered; never slow an already faster
                 -- native profile. The server may enforce its original cadence.
-                return math.min(value,math.max(value*.55,bridge:biteDelay(char)+.05,.08))
+                local adaptive=bridge.combatGovernor and bridge.combatGovernor:factor() or .62
+                -- Never drive contact claims faster than the game's native
+                -- contact delay. Raise the interval after repeated clean
+                -- no-damage contacts, lower it only on confirmed replies.
+                return math.min(value,math.max(value*adaptive,bridge:biteDelay(char)+.055,.08))
             end
             return {entry(species,"biteCooldown",wrapper,"function")}
         elseif id == "recovery" then
