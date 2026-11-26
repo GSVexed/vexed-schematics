@@ -207,4 +207,46 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(input.held.input,original)
         eq(input.pending.input,original)
     end)
+
+
+    test("combat hub hover pauses a held bite but preserves the originating world press",function()
+        local input,s,count=isolatedInput()
+        local source={}
+        input:input(s,10,"M1",source)
+        input:tick(s,10.1,{repeatHeld=true,uiBlocked=true})
+        eq(count(),0)
+        assert(input.held and input.held.input==source,"hover must not erase physical M1 ownership")
+        input:tick(s,10.4,{repeatHeld=true,uiBlocked=false})
+        eq(count(),1)
+    end)
+
+    test("combat queued synthetic processed M1 cannot permanently suspend a physical hold",function()
+        local w,h,physical=fallbackWorld()
+        w:advance(.75)
+        assert((w.virtualBiteCalls or 0)>0,"fallback must have replayed a native input")
+        local before=w.nativeBites or 0
+        -- The real input has already begun. This processed echo is delivered
+        -- after a virtual-input API call has returned, but before its owned
+        -- synthetic grace window expires (a real-world asynchronous ordering).
+        h.bridge.syntheticM1Until=w.time+.12
+        w.uis.InputBegan:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown},true)
+        eq(h.inputSuspended,false)
+        assert(h.combatInput.held and h.combatInput.held.source=="event")
+        w:advance(1.8)
+        assert((w.nativeBites or 0)>=before+2,"held bites must continue after a delayed echo")
+        w.held=nil
+        h:inputEnded(physical)
+        h:close()
+    end)
+
+    test("combat real processed M1 outside replay grace still suspends repeat",function()
+        local w,h,physical=fallbackWorld()
+        h.bridge.syntheticM1Until=0
+        w.uis.InputBegan:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown},true)
+        eq(h.inputSuspended,true)
+        eq(h.combatInput.held,nil)
+        w.held=nil
+        h:inputEnded(physical)
+        h:close()
+    end)
 end

@@ -122,7 +122,12 @@ function CombatInput.new(bridge,policy,ledger)
             -- Preserve the event-held state across a *known* minigame, so
             -- continuing to hold resumes after its native end. OFF and
             -- InputEnded always clear it; menus/text clear it immediately.
-            if not s.alive or s.chat or s.gameMenu or options.uiBlocked then self.held=nil end
+            -- Hovering over an existing hub window pauses attacks, but does
+            -- not revoke an M1 that began in the world. An actual UI press
+            -- cancels ownership in Controller.preInput, and InputEnded clears
+            -- it even while hovering. This prevents one hover from ending a
+            -- continuous real hold until the user clicks again.
+            if not s.alive or s.chat or s.gameMenu then self.held=nil end
             self.nextAttempt=now+.12
             self.status=(options.minigameBusy or s.grab) and "minigame has priority" or "native action has priority"
             return
