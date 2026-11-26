@@ -347,6 +347,7 @@ function Roblox.new(Core, environment)
         self.nativeScan,self.wolfDiscovery,self.grabDiscovery=nil,nil,nil
         self.hippoActions,self.hippoDiscovery=nil,nil
         self.biteTiming=nil
+        self.wolfHeapScan,self.wantHeldNativeDiscovery=nil,nil
     end
     function b:upvalues(fn)
         local many = type(debug.getupvalues) == "function" and debug.getupvalues
@@ -366,6 +367,78 @@ function Roblox.new(Core, environment)
             end
         end
         return values
+    end
+    -- Opt-in fallback for executors where the game's InputBegan connections
+    -- are hidden but the same local WolfController closures are available in
+    -- getgc(). Never search another player's script or call an unvalidated fn.
+    -- Heap enumeration happens only after a physical hold requests a repeat,
+    -- and is bounded over subsequent heartbeats rather than a blocking scan.
+    function b:recoverWolfBiteFromHeap(now)
+        if not self.wantHeldNativeDiscovery or self.deferNativeDiscovery
+            or type(getgc)~="function" or type(debug)~="table"
+            or type(debug.info)~="function" then return nil end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local own=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        if not own or not own:IsA("LocalScript") or not remote
+            or not remote:IsA("RemoteEvent") then return nil end
+        local scan=self.wolfHeapScan
+        if scan and (scan.script~=own or scan.remote~=remote) then
+            self.wolfHeapScan=nil;scan=nil
+        end
+        if not scan then
+            if now<(self.nextWolfHeapScan or 0) then return nil end
+            self.nextWolfHeapScan=now+15
+            local ok,items=pcall(getgc,false)
+            if not ok or type(items)~="table" then
+                ok,items=pcall(getgc)
+            end
+            if not ok or type(items)~="table" then return nil end
+            -- getgc generally returns a sequential array of functions.
+            -- Only ever inspect the first 32k entries to bound cost.
+            scan={script=own,remote=remote,items=items,index=1,
+                limit=math.min(#items,32768)}
+            self.wolfHeapScan=scan
+        end
+        local checked,started=0,self.clock()
+        while scan.index<=scan.limit and checked<192 and self.clock()-started<.0025 do
+            local fn=scan.items[scan.index]
+            scan.index+=1;checked+=1
+            if type(fn)~="function" then continue end
+            local ok,source,name=pcall(debug.info,fn,"sn")
+            if not ok or name~="tryBite" or type(source)~="string"
+                or not source:find("WolfController",1,true) then continue end
+            if type(getfenv)=="function" then
+                local good,env=pcall(getfenv,fn)
+                if good and type(env)=="table" and env.script~=nil and env.script~=own then continue end
+            end
+            local up=self:upvalues(fn)
+            if up[1]~=self.player or type(up[4])~="function"
+                or type(up[5])~="function" or not Core.finite(up[3]) then continue end
+            local cdOK,cdName=pcall(debug.info,up[4],"n")
+            local hitOK,hitName=pcall(debug.info,up[5],"n")
+            if not cdOK or cdName~="biteCooldown"
+                or not hitOK or hitName~="doBite" then continue end
+            local hitUp=self:upvalues(up[5])
+            if hitUp[1]~=self.player or hitUp[8]~=remote
+                or not Core.finite(hitUp[4])
+                or type(hitUp[2])~="boolean" or type(hitUp[3])~="boolean" then continue end
+            local previous=self.wolfActions
+            local native={script=own,tryBite=fn,doBite=up[5],
+                biteCooldown=up[4],discovery="validated own heap closure"}
+            if previous and type(previous.toggleFeed)=="function" then
+                native.toggleFeed=previous.toggleFeed
+            end
+            self.wolfActions=native
+            self.wolfHeapScan=nil
+            self.wolfDiscovery=nil
+            return native
+        end
+        if scan.index>scan.limit then
+            scan.items=nil
+            self.wolfHeapScan=nil
+        end
+        return nil
     end
     function b:nativeWolfActions(now)
         local scripts = self.player:FindFirstChild("PlayerScripts")
@@ -394,7 +467,10 @@ function Roblox.new(Core, environment)
         end
         if native and native.tryBite and native.toggleFeed then return native end
         if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then return native end
-        if self.deferNativeDiscovery or type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return native end
+        if self.deferNativeDiscovery then return native end
+        if type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then
+            return self:recoverWolfBiteFromHeap(now) or native
+        end
         if type(debug.getupvalues) ~= "function" and type(getupvalues) ~= "function"
             and type(debug.getupvalue) ~= "function" and type(getupvalue) ~= "function" then return native end
         local function nameOf(fn)
@@ -412,7 +488,7 @@ function Roblox.new(Core, environment)
             return owned and name or nil
         end
         local pool,source=self:nativeFunctions(now)
-        if not pool then return native end
+        if not pool then return self:recoverWolfBiteFromHeap(now) or native end
         if not self.wolfDiscovery or self.wolfDiscovery.source~=source then
             self.nextWolfDiscovery = now+30
             native = native or {script=ownScript}
@@ -442,6 +518,9 @@ function Roblox.new(Core, environment)
         end
         if source.complete or native.tryBite and native.toggleFeed then self.wolfDiscovery = nil end
         self:releaseNativeScan()
+        if not native.tryBite and source.complete then
+            return self:recoverWolfBiteFromHeap(now) or native
+        end
         return native
     end
     function b:nativeFeedState(now)
@@ -474,7 +553,8 @@ function Roblox.new(Core, environment)
     -- private native callback cannot be reached. Roblox's own input handler
     -- continues to own every hit claim, cooldown, range and permission check.
     function b:combatInputCompatible()
-        if game.PlaceId~=108901361810209 then return false end
+        -- FERAL has had separate place versions/arenas. Validate the actual
+        -- native game objects instead of hard-coding one historical PlaceId.
         local scripts=self.player:FindFirstChild("PlayerScripts")
         local wolf=scripts and scripts:FindFirstChild("WolfController")
         local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
