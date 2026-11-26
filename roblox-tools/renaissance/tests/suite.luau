@@ -2324,5 +2324,20 @@ test("local bite FX never becomes the most recent bite's authoritative target",f
     eq(h.ledger.counts.client_bite_fx_only,1)
     h:close()
 end)
+test("delayed native bite cannot be misattributed when the guide switches targets",function()
+    local w=Mock.new();w:enableNativeActions()
+    local _,first=w:enemy(2,Mock.V3.new(0,3,-3))
+    local _,second=w:enemy(2,Mock.V3.new(0,3,-4))
+    local h=load(w,{settings={states={holdBite=false}}});w:advance(.3)
+    assert(h.guide and h.guide.target and h.guide.target.char==first)
+    w:input(nil,E.UserInputType.MouseButton1)
+    local tx=h.transactions[#h.transactions]
+    assert(tx and tx.nativeAt and tx.focusTarget and tx.focusTarget.char==first)
+    h.guide={target={char=second,root=second:FindFirstChild("HumanoidRootPart"),
+        hum=second:FindFirstChildOfClass("Humanoid")},extended={valid=true},baseline={valid=true}}
+    h:stepCombat(h.bridge:snapshot(w.time,false),tx.claimDue+.025)
+    eq(tx.target.char,first)
+    h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
