@@ -40,7 +40,11 @@ def main():
     prelude="".join("local "+n.upper()+"_SRC="+literal(v)+"\n" for n,v in sources.items())
     prelude+="local BUNDLE_SRC="+literal(DEST.read_text())+"\n"
     prelude+="local MOCK_SRC="+literal((ROOT.parent/"renaissance/tests/mock_roblox.luau").read_text())+"\n"
-    prelude+="local RENAISSANCE_SRC="+literal((ROOT.parent/"feral-renaissance-v15.7.0.lua").read_text())+"\n"
+    integrated=json.loads((ROOT.parent/"renaissance/manifest.json").read_text())
+    combined=ROOT.parent/f'feral-renaissance-v{integrated["version"]}.lua'
+    assert hashlib.sha256(combined.read_bytes()).hexdigest()==integrated["bundle_sha256"],"Integrated candidate hash mismatch"
+    prelude+="local RENAISSANCE_SRC="+literal(combined.read_text())+"\n"
+    prelude+="local STABLE_RENAISSANCE_SRC="+literal((ROOT.parent/"feral-renaissance-v15.7.0.lua").read_text())+"\n"
     baseline=(ROOT.parent/"feral-amber-autopilot-v0.6.1.lua").read_text()
     old_planner=re.search(r'sources\["planner"\] = \[============\[\n(.*?)\]============\]',baseline,re.S).group(1)
     prelude+="local BASE_PLANNER_SRC="+literal(old_planner)+"\n"
@@ -61,7 +65,9 @@ def main():
             assert total==passed and failed==0
             results.append(dict(suite=suite.name,total=total,passed=passed))
     if errors: raise RuntimeError("\n".join(errors))
-    summary=dict(version="0.7.0",toolchain="97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+    assert sum(r["passed"] for r in results)>=263,"Territory regression floor decreased"
+    summary=dict(version="0.8.0",toolchain="97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+        integrated_version=integrated["version"],integrated_sha256=integrated["bundle_sha256"],
         compiled=len(paths),total=sum(r["total"] for r in results),passed=sum(r["passed"] for r in results),
         suites=results,bundle_sha256=hashlib.sha256(DEST.read_bytes()).hexdigest(),
         protected_releases=len(protections),live_gameplay_tested=False)
