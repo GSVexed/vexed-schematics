@@ -1105,8 +1105,14 @@ function Roblox.new(Core, environment)
         if not geometry or not geometry.valid or self:occluded(s,target) then return false end
         -- Stock-valid auto hits take priority. Extended-only contacts can
         -- still be probed, but not spammed during repeated no-reply windows.
-        local base=self.originalAutoCombat and self:geometry(self.originalAutoCombat,s,target)
-            or guide.baseline
+        local base
+        if self.originalAutoCombat then
+            -- An out-of-range animal must not inherit a stale green guide
+            -- from the preceding scan when deciding whether to auto-bite.
+            base=self:geometry(self.originalAutoCombat,s,target)
+        else
+            base=guide.baseline
+        end
         if base and base.valid then return true end
         local entry=self.extendedConfidence and self.extendedConfidence[target.char]
         return not entry or (s.now or 0)>=(entry.waitUntil or 0)
