@@ -1,9 +1,14 @@
 -- A single native Rest owner. Manual Rest is never cancelled or masked.
 local Recovery = {}
+local function finite(n)
+    return type(n)=="number" and n==n and math.abs(n)<1e12
+end
 function Recovery.new(bridge, policy, ledger)
     local r = { state = "OFF", owned = nil, enabled = false, echoes = 0,
         backoffUntil = 0, releaseAt = -math.huge, signalAt = -math.huge,
-        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {} }
+        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {},
+        progressWatch = nil, repairChar = nil, repairAttempts = 0,
+        repairWindowUntil = 0, noProgressReported = false }
     function r:clearPose()
         local pose = self.pose
         self.pose = nil
@@ -38,6 +43,7 @@ function Recovery.new(bridge, policy, ledger)
     function r:release(reason, now)
         local char = self.owned
         self.owned = nil
+        self.progressWatch = nil
         if char then
             self.releaseAt, policy.lastRestRelease = now, now
             bridge:rest(char, false)
@@ -123,6 +129,40 @@ function Recovery.new(bridge, policy, ledger)
             item.rate = item.change/item.seconds
         end
     end
+    function r:watchProgress(s,now)
+        -- These are measured replicated values, not native Rest acknowledgements.
+        -- Keep a baseline until a meaningful cumulative improvement is observed.
+        local p=self.progressWatch
+        if not p or p.char~=s.char then
+            self.progressWatch={char=s.char,progressAt=now,maxHP=s.maxHP,
+                hp=s.hp,injury=s.injury,bleed=s.bleed,venom=s.venom}
+            return
+        end
+        if p.maxHP~=s.maxHP then
+            -- Growth may increase absolute HP without repairing a deficit.
+            p.maxHP,p.hp,p.progressAt=s.maxHP,s.hp,now
+        end
+        local improved=false
+        if s.combat==false and finite(s.hp) and finite(p.hp) then
+            if s.hp>=p.hp+.02 then improved=true;p.hp=s.hp
+            elseif s.hp<p.hp-.2 then p.hp=s.hp;p.progressAt=now end
+        else p.hp=s.hp end
+        for _,key in ipairs({"injury","bleed","venom"}) do
+            local previous,current=p[key],s[key]
+            if finite(previous) and finite(current) then
+                if previous>.1 and current<=previous-.015 then
+                    improved=true;p[key]=current
+                elseif current>previous+.15 then
+                    -- A new or worsening condition starts a fresh observation.
+                    p[key]=current;p.progressAt=now
+                end
+            else p[key]=current end
+        end
+        if improved then
+            p.progressAt=now
+            self.repairAttempts,self.repairWindowUntil,self.noProgressReported=0,0,false
+        end
+    end
     function r:summary()
         local hp = self.observations.hp
         local message = self.owned and "Recovery requested" or self.state
@@ -131,6 +171,10 @@ function Recovery.new(bridge, policy, ledger)
                 or hp and hp.seconds >= 5.9 and " · no HP rise observed; 2× unverified"
                 or " · watching HP; 2× unverified"
         else message ..= " · gameplay unverified" end
+        if (self.repairAttempts or 0)>0 then
+            message ..= " · bounded no-progress repair "..tostring(self.repairAttempts).."/2"
+        end
+        if self.noProgressReported then message ..= " · no improvement confirmed" end
         return message
     end
     function r:effectsSummary()
@@ -144,7 +188,13 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:tick(s, now)
         self:guardPose(now)
-        if s and s.alive then self:observe(s,now) end
+        if s and s.alive then
+            if self.repairChar~=s.char then
+                self.repairChar,self.repairAttempts,self.repairWindowUntil,self.noProgressReported=s.char,0,0,false
+                self.progressWatch=nil
+            end
+            self:observe(s,now)
+        end
         if policy.manualRest then
             if self.enabled and s and s.alive and s.rest and s.hum.MoveDirection.Magnitude>.13
                 and not s.captured and not s.grab and not s.ability and now>policy.manualIntentUntil then
@@ -184,6 +234,7 @@ function Recovery.new(bridge, policy, ledger)
         -- health needlessly exposes the next bite to native Rest timing.
         local deficit = effects or s.hp < s.maxHP-.35
         if not deficit then self:release("armed; no recovery deficit", now); return end
+        if self.owned then self:watchProgress(s,now) end
         if not self.owned then
             -- Stage masking ownership BEFORE requesting native Rest.
             if not self:holdPose(s.char,now) then
@@ -201,9 +252,30 @@ function Recovery.new(bridge, policy, ledger)
                 self.backoffUntil = now+3
                 return
             end
+            self:watchProgress(s,now)
             ledger:event("native_rest_requested", now, { moving = s.moving,purpose = self.purpose,combatHPExcluded = s.combat ~= false })
         elseif now >= self.nextRefresh then
-            -- Bounded renewal while deficit persists. A request is not an acknowledgement.
+            local stalled=self.progressWatch and now-self.progressWatch.progressAt>=12
+            if stalled then
+                if now>=self.repairWindowUntil then
+                    self.repairWindowUntil,self.repairAttempts,self.noProgressReported=now+60,0,false
+                end
+                if self.repairAttempts<2 then
+                    -- Release once, respect the native stand-up interval,
+                    -- and re-arm only in the next eligible recovery window.
+                    self.repairAttempts+=1
+                    local attempt=self.repairAttempts
+                    self:release("no observed recovery; retrying native Rest",now)
+                    self.backoffUntil=now+.85
+                    ledger:event("native_rest_no_progress_repair",now,{attempt=attempt})
+                    return
+                elseif not self.noProgressReported then
+                    self.noProgressReported=true
+                    ledger:event("native_rest_no_progress",now,{restarts=self.repairAttempts})
+                end
+            end
+            -- Keep ownership after exhausting bounded retries; no endless
+            -- toggling or false claims of health/effect improvement.
             self.nextRefresh = now+5
             if bridge:rest(s.char, true) then ledger:event("native_rest_renewed", now) end
         end
@@ -213,6 +285,7 @@ function Recovery.new(bridge, policy, ledger)
         self:release("CLOSED", now)
         self:clearPose()
         self.previous,self.observations,self.lastAutomaticCharacter = nil,{},nil
+        self.progressWatch,self.repairChar,self.repairAttempts = nil,nil,0
     end
     return r
 end
