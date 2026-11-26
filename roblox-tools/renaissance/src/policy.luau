@@ -2,7 +2,8 @@
 local Policy = {}
 function Policy.new()
     local p = { attackUntil = 0, actionUntil = 0, lastRestRelease = -math.huge,
-        manualIntentUntil = 0, manualRest = false, lastPhysical = 0, menuOpen = false }
+        manualIntentUntil = 0, manualRest = false, lastPhysical = 0, menuOpen = false,
+        combatApproachUntil = 0 }
     function p:input(kind, now)
         self.lastPhysical = now
         if kind == "attack" then self.attackUntil = math.max(self.attackUntil, now+1.1) end
@@ -36,6 +37,9 @@ function Policy.new()
             if s.rescuing then return false,"cub rescue input" end
             if s.ability or s.holding then return false, "native action" end
             if s.attackHeld or now < self.attackUntil then return false, "attack has priority" end
+            -- Avoid re-arming native Rest just as an eligible enemy enters
+            -- contact: its native stand-up lock can swallow the first bite.
+            if now < self.combatApproachUntil then return false, "imminent bite; preserving combat readiness" end
             if now < self.actionUntil or s.afkWalking then return false, "action has priority" end
             -- The original live-tested Rest signal worked while the own
             -- animal was moving; surface swimming is ordinary locomotion, not
