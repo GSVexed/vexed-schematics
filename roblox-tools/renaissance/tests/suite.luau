@@ -27,9 +27,11 @@ local function boot(settings)
 end
 local E=Mock.Enum
 
-test("22 features retain the original set and permanent reach",function()
+test("22 features retained; experimental reach is optional and native geometry is the default",function()
     local M=modules();local r=M.core.registry()
-    eq(#r.order,22);r:request("reach",false);eq(r.byId.reach.requested,true)
+    eq(#r.order,22);r:request("reach",false);eq(r.byId.reach.requested,false)
+    eq(M.settings.sanitize(nil,M.core.specs).states.reach,false)
+    r:request("reach",true);eq(r.byId.reach.requested,true)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
 end)
@@ -723,13 +725,13 @@ test("active grabs still preempt condition Rest and preserve ordinary attack tim
     w:advance(.2);eq(h.recovery.owned,nil);eq(h.grab.active,true);h:close()
 end)
 test("client targeting covers an exactly rear target without rotating the character",function()
-    local w,h=boot({biteHelper=true});local look=w.root.CFrame.LookVector
+    local w,h=boot({biteHelper=true,reach=true});local look=w.root.CFrame.LookVector
     local _,char=w:enemy(2,Mock.V3.new(0,3,7));w:advance(.2)
     assert(h.guide);eq(h.guide.target.char,char);eq(h.guide.baseline.valid,false);eq(h.guide.extended.valid,true)
     eq(w.root.CFrame.LookVector,look);eq(h.bridge.reachTarget.char,char);h:close()
 end)
 test("native stock-range target outranks a nearer speculative extended-only target",function()
-    local w,h=boot({biteHelper=true})
+    local w,h=boot({biteHelper=true,reach=true})
     local _,rear=w:enemy(2,Mock.V3.new(0,3,2))
     local _,front=w:enemy(2,Mock.V3.new(0,3,-6))
     w:advance(.2)
@@ -739,14 +741,14 @@ test("native stock-range target outranks a nearer speculative extended-only targ
     h:close()
 end)
 test("expanded client targeting reaches further and higher with exact rollback",function()
-    local w,h=boot({biteHelper=true})
+    local w,h=boot({biteHelper=true,reach=true})
     local _,char=w:enemy(2,Mock.V3.new(0,10,-6));w:advance(.2)
     assert(h.guide);eq(h.guide.target.char,char);eq(h.guide.baseline.valid,false);eq(h.guide.extended.valid,true)
     close(w.configs.CombatConfig.CONE,170);h:close()
     close(w.configs.CombatConfig.CONE,71);eq(w.configs.CombatConfig.coneFor,nil)
 end)
 test("rear assist ignores same-pack and protected targets",function()
-    local w,h=boot({biteHelper=true});local p,friend=w:enemy(1,Mock.V3.new(0,3,5))
+    local w,h=boot({biteHelper=true,reach=true});local p,friend=w:enemy(1,Mock.V3.new(0,3,5))
     local p2,protected=w:enemy(2,Mock.V3.new(0,3,6))
     local shield=w.new("ForceField");shield.Parent=protected
     w:advance(.2);eq(h.bridge.reachTarget,nil);h:close()
@@ -766,13 +768,13 @@ test("actual player ownership wins over NPC attributes and a litter Body referen
     eq(h.ui.records[char].label.Text,"Other");h:close()
 end)
 test("litter membership protects friendly NPCs without changing the player-only renderer",function()
-    local w,h=boot({esp=true,biteHelper=true});local npc=w:npc(1,Mock.V3.new(0,3,-2),true)
+    local w,h=boot({esp=true,biteHelper=true,reach=true});local npc=w:npc(1,Mock.V3.new(0,3,-2),true)
     npc:SetAttribute("FeralPack",nil);w:advance(.3)
     eq(h.bridge:affiliation(nil,npc),"same");eq(w.configs.CombatConfig.bodyGap(npc:FindFirstChild("HumanoidRootPart"),Mock.V3.new(0,0,-2)),math.huge)
     eq(h.bridge.reachTarget,nil);eq(h.ui.records[npc],nil);h:close()
 end)
 test("native client selection skips a protected target and keeps a valid target",function()
-    local w,h=boot({biteHelper=true});local _,safe,_,safeRoot=w:enemy(2,Mock.V3.new(0,3,-2))
+    local w,h=boot({biteHelper=true,reach=true});local _,safe,_,safeRoot=w:enemy(2,Mock.V3.new(0,3,-2))
     safe:SetAttribute("FeralSafeUntil",w.time+1100)
     local _,valid=w:enemy(2,Mock.V3.new(0,3,-5));w:advance(.2)
     eq(w.configs.CombatConfig.bodyGap(safeRoot,Mock.V3.new(0,0,-2)),math.huge)
@@ -905,7 +907,7 @@ end)
 test("prediction is disabled while genuine hit replies and pre-claim HP changes remain observable",function()
     local w=Mock.new();w:enableNativeActions();w.configs.CombatConfig.HIT2={PREDICT=true}
     local _,char,hum=w:enemy(2);w.nativeBiteTarget=char;w.nativeDamage=10
-    local h=load(w,{settings={states={biteHelper=true}}});w:advance(.2);w:input(nil,E.UserInputType.MouseButton1);w:advance(1.25)
+    local h=load(w,{settings={states={biteHelper=true,reach=true}}});w:advance(.2);w:input(nil,E.UserInputType.MouseButton1);w:advance(1.25)
     eq(w.predictedImpacts,nil);eq(w.nativeHitResponses,1);eq(hum.Health,90)
     eq(h.ledger.counts.native_outgoing_hit_reply,1);eq(h.ledger.counts.target_hp_decline_correlated,1)
     eq(h.registry.byId.combat.outcome,"unverified");h:close();eq(w.configs.CombatConfig.HIT2.PREDICT,true)
@@ -1407,7 +1409,7 @@ test("the selected bite guide updates current geometry between target scans",fun
     hum.Health=0;w:step(.016);eq(h.guide.invalid,true);h:close()
 end)
 test("small distance fluctuations do not flip the rear assist target",function()
-    local w,h=boot();local _,a,_,ar=w:enemy(2,Mock.V3.new(0,3,6));local _,b,_,br=w:enemy(2,Mock.V3.new(0,3,6.2));w:advance(.2)
+    local w,h=boot({reach=true});local _,a,_,ar=w:enemy(2,Mock.V3.new(0,3,6));local _,b,_,br=w:enemy(2,Mock.V3.new(0,3,6.2));w:advance(.2)
     eq(h.bridge.reachTarget.char,a);br.Position=Mock.V3.new(0,3,5.8);w:advance(.2);eq(h.bridge.reachTarget.char,a)
     br.Position=Mock.V3.new(0,3,4.8);w:advance(.2);eq(h.bridge.reachTarget.char,b);h:close()
 end)
@@ -1715,9 +1717,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 16.0.0 presents its actual version in the active controller",function()
+test("Renaissance 16.0.1 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"16.0.0")
+    eq(h.version,"16.0.1")
     h:close()
 end)
 
@@ -1898,6 +1900,55 @@ test("condition-only recovery remains eligible with unknown combat time",functio
     eq(policy:allowed("recovery",s,10,"health"),false)
     s.combat=true;eq(policy:allowed("recovery",s,10,"effects"),true)
     s.captured=true;eq(policy:allowed("recovery",s,10,"effects"),false)
+end)
+test("default native combat preserves every attack profile field while retaining the guide",function()
+    local w=Mock.new();local c=w.configs.CombatConfig
+    c.HIT2={PREDICT=true}
+    local before=table.clone(c)
+    local h=load(w,{settings={states={recovery=false,biteHelper=true}}})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.3)
+    eq(h.registry.byId.reach.requested,false)
+    eq(h.features.leases.owners.reach,nil)
+    eq(h.features.combatProfileMode,"native")
+    assert(h.guide and h.guide.target.char==char)
+    eq(h.guide.extended.valid,h.guide.baseline.valid)
+    for k,v in pairs(before) do eq(c[k],v) end
+    for k,v in pairs(c) do eq(before[k],v) end
+    eq(c.HIT2.PREDICT,true)
+    h:close()
+end)
+test("disabling experimental reach immediately restores original attack geometry and a native guide",function()
+    local w=Mock.new();local c=w.configs.CombatConfig
+    c.HIT2={PREDICT=true}
+    local before=table.clone(c)
+    local h=load(w,{settings={states={reach=true,recovery=false,biteHelper=true}}})
+    local _,char=w:enemy(2,Mock.V3.new(0,3,-4));w:advance(.2)
+    assert(h.features.leases:valid("reach"))
+    h:set("reach",false)
+    for k,v in pairs(before) do eq(c[k],v) end
+    for k,v in pairs(c) do eq(before[k],v) end
+    eq(c.HIT2.PREDICT,true)
+    eq(h.features.leases.owners.reach,nil)
+    w:advance(.3)
+    eq(h.features.combatProfileMode,"native")
+    assert(h.guide and h.guide.target.char==char)
+    h:close()
+end)
+test("failed native recovery renewal relinquishes owned pose and cannot appear active",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=50
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.15)
+    assert(h.recovery.owned)
+    local old=h.bridge.rest
+    h.bridge.rest=function(self,char,on)
+        if on then return false end
+        return old(self,char,on)
+    end
+    w:advance(2.1)
+    eq(h.ledger.counts.native_rest_renew_failed,1)
+    eq(h.recovery.owned,nil);eq(h.recovery.pose,nil)
+    eq(w.player.Character:GetAttribute("WolfDbgRestP"),nil)
+    assert(h.recovery:summary():find("renewal unavailable",1,true))
+    h:close()
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
