@@ -470,6 +470,71 @@ function Roblox.new(Core, environment)
         self.biteTiming=nil
         return native and native.tryBite and pcall(native.tryBite) or false
     end
+    -- This fallback is only for a physically held bite when the same client's
+    -- private native callback cannot be reached. Roblox's own input handler
+    -- continues to own every hit claim, cooldown, range and permission check.
+    function b:hasHeldInputBackend()
+        if type(mouse1click)=="function" then return true end
+        local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
+        return ok and virtual~=nil
+    end
+    function b:visibleBiteWindow(s,now)
+        if game.PlaceVersion~=2412 or not s.alive or s.char~=self.player.Character
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding or not Core.finite(s.serverNow) then return false end
+        local species=self:config("Species")
+        if not species or type(species.biteCooldown)~="function" then return false end
+        local ok,cd=pcall(species.biteCooldown,self:attribute(s.char,"Species") or species.DEFAULT,
+            self:attribute(s.char,"Growth") or 1)
+        if not ok or not Core.finite(cd) or cd<.03 or cd>30 then return false end
+        local passive=self:config("PassiveConfig")
+        if passive and passive.biteCdMult~=nil then
+            local valid,m=pcall(passive.biteCdMult,s.char)
+            if not valid or not Core.finite(m) or m<=0 or m>20 then return false end
+            cd*=m
+        end
+        local marker=self:attribute(s.char,"WolfBiteAt")
+        if marker~=nil and (not Core.finite(marker) or marker>s.serverNow+1) then return false end
+        if Core.finite(marker) and s.serverNow-marker<cd-.005 then return false end
+        local input=self.combatGovernor
+        if input and input.lastDispatch>0 and now-input.lastDispatch<cd-.005
+            and not Core.finite(marker) then return false end
+        return true
+    end
+    function b:tryHeldInputBite(s,now)
+        if not s or not s.alive or s.char~=self.player.Character or game.PlaceVersion~=2412
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding then return false end
+        local position=self.UserInputService:GetMouseLocation()
+        if not position then return false end
+        local gui=self.player:FindFirstChildOfClass("PlayerGui")
+        if gui then
+            local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,position.X,position.Y)
+            if ok and type(under)=="table" then
+                for _,object in ipairs(under) do
+                    if object:IsA("GuiButton") or object:IsA("TextBox") then return false end
+                end
+            end
+        end
+        -- Guard both CAS and InputBegan from treating a replayed click as a
+        -- second human press; it may still reach the game's own WolfController.
+        self.syntheticM1Until=now+.18
+        local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
+        if ok and virtual then
+            local pressed=pcall(function()
+                virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)
+            end)
+            local released=pcall(function()
+                virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)
+            end)
+            if pressed and released then return true end
+        end
+        if type(mouse1click)=="function" then
+            local clicked=pcall(mouse1click)
+            if clicked then return true end
+        end
+        return false
+    end
     -- FeralHippoClient.finish uses the native clock and release path. Validate
     -- its captured own-player/remote layout before retaining or calling it.
     function b:hippoHandleValid(native)
@@ -1149,6 +1214,10 @@ function Roblox.new(Core, environment)
             hub.combatInput:cancel();hub.feeding:cancel("manual rest control",now);hub.rescue:cancel()
         end)
         connect(self.UserInputService.InputBegan,function(input,processed) hub:input(input,processed) end)
+        connect(self.UserInputService.InputEnded,function(input) hub:inputEnded(input) end)
+        if self.UserInputService.WindowFocusReleased then
+            connect(self.UserInputService.WindowFocusReleased,function() hub.combatInput:cancel() end)
+        end
         connect(self.UserInputService.InputChanged,function(input)
             local kind = input.UserInputType
             if kind == Enum.UserInputType.MouseMovement or kind == Enum.UserInputType.MouseWheel
