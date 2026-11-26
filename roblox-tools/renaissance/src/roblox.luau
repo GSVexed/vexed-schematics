@@ -533,19 +533,23 @@ function Roblox.new(Core, environment)
         self.syntheticM1Until=now+.18
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then
+            -- Acquire the release lease *before* reentrant native callbacks.
+            -- A grab minigame can start synchronously during the press; its
+            -- begin event must be able to release this same pulse immediately.
+            local pulse={release=function()
+                virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)
+            end}
+            self.syntheticM1=pulse
             self.syntheticPressing=true
             local pressed=pcall(function()
                 virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)
             end)
             self.syntheticPressing=false
             if pressed then
+                if self.syntheticM1~=pulse then return true end
                 -- Keep the press for a small real frame interval so the native
                 -- WolfController sees an InputBegan edge. Release is owned by
                 -- the hub and is also performed on unload.
-                local pulse={release=function()
-                    virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)
-                end}
-                self.syntheticM1=pulse
                 if type(task)=="table" and type(task.delay)=="function" then
                     local scheduled,timer=pcall(task.delay,.07,function()
                         if self.syntheticM1==pulse then self:releaseSyntheticBite() end
@@ -555,6 +559,10 @@ function Roblox.new(Core, environment)
                 else self:releaseSyntheticBite() end
                 return true
             end
+            -- A partial failing virtual press is never followed with a
+            -- second executor click; unwind any partially owned input.
+            self:releaseSyntheticBite()
+            return false
         end
         if type(mouse1click)=="function" then
             local clicked=pcall(mouse1click)
