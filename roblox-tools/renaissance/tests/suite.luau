@@ -1300,7 +1300,8 @@ test("the action coordinator gives minigames, capture and actual attack the prop
     eq(p:activity(s,10),"minigame");s.grab=false;eq(p:activity(s,10),"capture")
     s.captured=false;eq(p:activity(s,10),"attack");s.attackHeld=false;eq(p:activity(s,10),"ability")
     s.ability=false;eq(p:activity(s,10),"feeding");s.feeding=false;s.swimming=true
-    eq(p:allowed("recovery",s,10,"health"),false)
+    eq(p:allowed("recovery",s,10,"health"),true)
+    s.underwater=true;eq(p:allowed("recovery",s,10,"health"),false)
 end)
 test("stamina covers native swim, climb and venom consumption inputs with exact restoration",function()
     local w=Mock.new();local n=w.configs.NeedsConfig;n.SWIM_DRAIN_MULT=1.15;n.WATER_DRAIN_NONSWIM=1.5
@@ -1611,9 +1612,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.7.0 presents its actual version in the active controller",function()
+test("Renaissance 15.7.1 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.7.0")
+    eq(h.version,"15.7.1")
     h:close()
 end)
 
@@ -1757,28 +1758,43 @@ test("recovery defaults on for new settings but permits explicit manual OFF",fun
     eq(M.settings.sanitize(nil,M.core.specs).states.recovery,true)
     eq(M.settings.sanitize({states={recovery=false}},M.core.specs).states.recovery,false)
 end)
-test("stalled native recovery repairs are bounded without endless Rest toggling",function()
+test("an unproductive native Rest request stays continuous instead of being flipped OFF",function()
     local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=40
-    local h=load(w,{settings={states={recovery=true}}});w:advance(53)
-    local count=h.ledger.counts.native_rest_no_progress_repair or 0
-    assert(count>=1 and count<=2,"bounded rest retries expected")
-    eq(h.recovery.repairAttempts,2)
-    assert(h.ledger.counts.native_rest_no_progress~=nil)
-    local falseRequests=0
+    w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(20)
+    eq(h.recovery.owned,w.player.Character)
+    assert((h.ledger.counts.native_rest_renewed or 0)>=8)
+    eq(h.ledger.counts.native_rest_no_progress_repair,nil)
+    local trueRequests,falseRequests=0,0
     for _,c in ipairs(w.calls) do
-        if c.name=="WolfActions" and c.args[1]=="Rest" and c.args[2]==false then falseRequests+=1 end
+        if c.name=="WolfActions" and c.args[1]=="Rest" then
+            if c.args[2]==true then trueRequests+=1 else falseRequests+=1 end
+        end
     end
-    eq(falseRequests,count)
+    assert(trueRequests>=9)
+    eq(falseRequests,0)
+    eq(w.player.Character:GetAttribute("WolfRest"),false)
     h:close()
 end)
-test("observed HP and venom improvement delay ineffective Rest repairs",function()
-    local w=Mock.new();w.hum.Health=40
-    w.player.Character:SetAttribute("FeralVenomAmt",5)
-    local h=load(w,{settings={states={recovery=true}}});w:advance(8)
-    w.hum.Health=41;w.player.Character:SetAttribute("FeralVenomAmt",4)
-    w:advance(7)
-    eq(h.ledger.counts.native_rest_no_progress_repair,nil)
+test("brief missing negative-effect attributes do not cancel active native Rest",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=100
+    local char=w.player.Character;char:SetAttribute("FeralVenomAmt",5)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    eq(h.recovery.owned,char)
+    char:SetAttribute("FeralVenomAmt",nil);w:advance(.6)
+    eq(h.recovery.owned,char)
+    w:advance(.5)
+    eq(h.recovery.owned,nil)
     h:close()
+end)
+test("condition-only recovery remains eligible with unknown combat time",function()
+    local M=modules();local policy=M.policy.new()
+    local s={alive=true,combat=nil,swimming=true}
+    local allowed,reason=policy:allowed("recovery",s,10,"effects")
+    eq(allowed,true);assert(reason:find("HP excluded",1,true))
+    eq(policy:allowed("recovery",s,10,"health"),false)
+    s.combat=true;eq(policy:allowed("recovery",s,10,"effects"),true)
+    s.captured=true;eq(policy:allowed("recovery",s,10,"effects"),false)
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
