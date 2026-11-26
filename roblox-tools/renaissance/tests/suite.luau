@@ -1705,9 +1705,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.7.1 presents its actual version in the active controller",function()
+test("Renaissance 15.8.0 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.7.1")
+    eq(h.version,"15.8.0")
     h:close()
 end)
 
