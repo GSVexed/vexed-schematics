@@ -1,0 +1,56 @@
+name: FERAL voice-hearing isolated trial
+on:
+  push:
+    branches: ['renaissance/voice-hearing-trial-*']
+    paths:
+      - 'roblox-tools/feral-voice-hearing-experiment-v0.1.lua'
+      - '.github/workflows/feral-voice-hearing-trial.yml'
+  pull_request:
+    paths:
+      - 'roblox-tools/feral-voice-hearing-experiment-v0.1.lua'
+      - '.github/workflows/feral-voice-hearing-trial.yml'
+permissions:
+  contents: read
+jobs:
+  voice-math:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned official Luau toolchain
+        run: |
+          git clone --quiet https://github.com/luau-lang/luau.git /tmp/feral-luau
+          git -C /tmp/feral-luau checkout --quiet 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/feral-luau config=release -j2 luau luau-compile
+      - name: Compile hearing trial and test exact curve behavior
+        run: |
+          /tmp/feral-luau/luau-compile --null roblox-tools/feral-voice-hearing-experiment-v0.1.lua
+          cat > /tmp/feral-hearing-tests.luau <<'LUAU'
+          local source = assert(io.open("roblox-tools/feral-voice-hearing-experiment-v0.1.lua","r")):read("*a")
+          local fn = assert(loadstring(source))
+          local api = fn({inspect=true})
+          local original = {[0]=1,[10]=.8,[20]=0}
+          local scaled = assert(api.scaledCurve(original,1.25))
+          assert(scaled[0]==1 and scaled[12.5]==.8 and scaled[25]==0)
+          assert(original[10]==.8 and original[12.5]==nil)
+          assert(api.sameCurve(scaled, {[0]=1,[12.5]=.8,[25]=0}))
+          assert(not api.sameCurve(scaled,original))
+          assert(api.scaledCurve(original,.9)==nil)
+          assert(api.scaledCurve(original,1.6)==nil)
+          assert(api.scaledCurve({[0]=1,[10]=2},1.25)==nil)
+          assert(api.scaledCurve({[0]=1,[10]=.8,[10.0001]=.5},1.00001)==nil)
+          assert(api.cloneCurve({})==nil)
+          print("HEARING_TRIAL_MATH_PASS")
+          LUAU
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/feral-hearing-tests.luau')
+          text=p.read_text()
+          # The stand-alone Luau runner does not expose io; embed the source at build time.
+          source=Path('roblox-tools/feral-voice-hearing-experiment-v0.1.lua').read_text()
+          marker='local source = assert(io.open("roblox-tools/feral-voice-hearing-experiment-v0.1.lua","r")):read("*a")'
+          assert marker in text
+          assert ']====================]' not in source
+          p.write_text(text.replace(marker,'local source = [====================[\\n'+source+']====================]'))
+          PY
+          /tmp/feral-luau/luau /tmp/feral-hearing-tests.luau
