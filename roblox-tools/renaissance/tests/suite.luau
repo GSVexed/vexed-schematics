@@ -2504,5 +2504,26 @@ test("unacknowledged virtual input automatically switches to paired executor edg
     w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
     h:close()
 end)
+test("compatible newer FERAL place version still supports held bite via native input",function()
+    local w=Mock.new();w:enableNativeActions()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w.env.game.PlaceVersion=2413
+    w.env.getconnections=nil
+    w.virtualBiteAvailable=true
+    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
+    w:advance(.2)
+    eq(h.bridge:combatInputCompatible(),true)
+    eq(h.registry.byId.attackSpeed.applied,false)
+    w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(1.9)
+    assert((w.nativeBites or 0)>=3,"compatible input should not be globally disabled by version")
+    w.held=nil;h:close()
+end)
+test("held input replay remains disabled without a matching FERAL WolfController",function()
+    local w,h=boot({holdBite=true})
+    eq(h.bridge:combatInputCompatible(),false)
+    eq(h.registry.byId.holdBite.applied,false)
+    h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

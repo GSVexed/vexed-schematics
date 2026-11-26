@@ -4,7 +4,7 @@
 
 During a **hunter** grab minigame, a validated native WolfController bite callback can run in parallel with the native grab timing automation **only when** the original M1 minigame binding is confirmed separated and a physical M1 hold is observed. The minigame's automatic timed presses are unchanged. Prey and captured players, native FeralClamp/carry restrictions, R2 minigame controls, unsafe or unavailable native bindings, and synthetic mouse fallback during grabs remain blocked. FERAL server-side permission and acceptance are not bypassed; no extra Bite or BiteHit requests are fabricated.
 
-The build uses the existing 15.8.5 adaptive speed governor and retains all voice, Hippo, Territory, recovery and settings features. Gameplay acceptance requires independent live validation, not user diagnostics.
+The held-input fallback is now gated by the actual FERAL WolfController + WolfActions + Species.biteCooldown schema instead of the game.PlaceVersion == 2412 constant, so a compatible game update does not silently disable input. Faster-bite tuning still refuses unknown game versions. The build uses the existing 15.8.5 adaptive speed governor and retains all voice, Hippo, Territory, recovery and settings features. Gameplay acceptance requires independent live validation, not user diagnostics.
 
 ## Previous 15.8.5 candidate
 

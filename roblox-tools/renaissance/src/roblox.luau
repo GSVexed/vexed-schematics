@@ -473,6 +473,16 @@ function Roblox.new(Core, environment)
     -- This fallback is only for a physically held bite when the same client's
     -- private native callback cannot be reached. Roblox's own input handler
     -- continues to own every hit claim, cooldown, range and permission check.
+    function b:combatInputCompatible()
+        if game.PlaceId~=108901361810209 then return false end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local wolf=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        local species=self:config("Species")
+        return wolf~=nil and wolf:IsA("LocalScript")
+            and remote~=nil and remote:IsA("RemoteEvent")
+            and type(species)=="table" and type(species.biteCooldown)=="function"
+    end
     function b:hasHeldInputBackend()
         if type(mouse1press)=="function" and type(mouse1release)=="function" then return true end
         if type(mouse1click)=="function" then return true end
@@ -480,7 +490,7 @@ function Roblox.new(Core, environment)
         return ok and virtual~=nil
     end
     function b:visibleBiteWindow(s,now)
-        if game.PlaceVersion~=2412 or not s.alive or s.char~=self.player.Character
+        if not self:combatInputCompatible() or not s.alive or s.char~=self.player.Character
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding or not Core.finite(s.serverNow) then return false end
         local species=self:config("Species")
@@ -533,7 +543,7 @@ function Roblox.new(Core, environment)
     -- an active native grab session has priority. No Bite/BiteHit remotes.
     function b:tryHeldInputBite(s,now)
         if self.syntheticM1 then return false end
-        if not s or not s.alive or s.char~=self.player.Character or game.PlaceVersion~=2412
+        if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding then return false end
         local position=self.UserInputService:GetMouseLocation()

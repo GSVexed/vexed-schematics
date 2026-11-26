@@ -624,7 +624,7 @@ function Controller.new(M,bridge,options)
         end
         local auto=r.byId.autoBite
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
-        local heldFallback=not native and game.PlaceVersion==2412 and bridge:hasHeldInputBackend()
+        local heldFallback=not native and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
         local hold=r.byId.holdBite
         r:ack("holdBite",hold.requested and (native or heldFallback),
             not hold.requested and "OFF" or (native or heldFallback) and "ARMED" or "WAITING",
