@@ -466,7 +466,9 @@ function Roblox.new(Core, environment)
             end
         end
         if native and native.tryBite and native.toggleFeed then return native end
-        if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then return native end
+        if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then
+            return self:recoverWolfBiteFromHeap(now) or native
+        end
         if self.deferNativeDiscovery then return native end
         if type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then
             return self:recoverWolfBiteFromHeap(now) or native

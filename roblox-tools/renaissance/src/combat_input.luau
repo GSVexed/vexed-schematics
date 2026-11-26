@@ -145,6 +145,14 @@ function CombatInput.new(bridge,policy,ledger)
             return
         end
         if now<self.nextAttempt or p and now<p.at or now<self.unavailableUntil then return end
+        if held and not (bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function")
+            and type(bridge.nativeWolfActions)=="function" then
+            -- The input-event connection path may be unavailable in the
+            -- executor's VM even when the original WolfController closure is
+            -- discoverable via getgc. Request validation only while held.
+            bridge.wantHeldNativeDiscovery=true
+            bridge:nativeWolfActions(now)
+        end
         local readiness=bridge:biteReadiness(s,now,policy)
         local allowed=readiness.ready
         -- If a game's original callback is private, visible cooldown + own
