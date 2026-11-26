@@ -377,22 +377,31 @@ function Controller.new(M,bridge,options)
                 for index=#self.transactions,1,-1 do
                     local tx=self.transactions[index]
                     if tx.generation==bridge.generation and tx.nativeAt
-                        and not tx.classified and not tx.feedback
+                        and not tx.classified
                         and at>=tx.nativeAt and at-tx.nativeAt<1.8 then
-                        table.insert(candidates,tx)
+                        -- Existing replies for the *same target* may be
+                        -- followed by a stronger result (e.g. 0 then damage).
+                        -- Never reassign them to an unrelated later bite.
                         if data.v and (tx.localTarget==data.v or tx.nativeTarget==data.v) then
                             matched=tx;break
                         end
+                        if not tx.feedback then table.insert(candidates,tx) end
                     end
                 end
                 if not matched and #candidates==1 then matched=candidates[1] end
                 if matched then
                     matched.targetMismatch=matched.localTarget~=nil and data.v~=nil
                         and matched.localTarget~=data.v
-                    matched.feedback=data
-                    matched.nativeTarget=data.v
+                    local earlier=matched.feedback
+                    if not earlier or data.safe==true and earlier.safe~=true
+                        or Core.finite(data.dmg) and
+                            (not Core.finite(earlier.dmg) or data.dmg>earlier.dmg) then
+                        matched.feedback=data
+                    end
+                    matched.nativeTarget=data.v or matched.nativeTarget
                     self.ledger:event("native_outgoing_hit_reply",at,
-                        {safe=data.safe==true,damage=data.dmg,targetMismatch=matched.targetMismatch})
+                        {safe=data.safe==true,damage=data.dmg,targetMismatch=matched.targetMismatch,
+                         sameBiteUpdate=earlier~=nil})
                 else
                     -- Preserve the reply as an observation rather than
                     -- assigning server feedback to an unrelated bite.
