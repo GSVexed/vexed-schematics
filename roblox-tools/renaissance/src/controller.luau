@@ -473,6 +473,9 @@ function Controller.new(M,bridge,options)
                 self.nativeGrabSession=session
                 self.nativeGrabBusy=true
                 self.nativeGrabUntil=bridge.clock()+35
+                -- Release any partially held synthetic M1 before the grab
+                -- minigame can interpret that input as an unwanted press.
+                bridge:releaseSyntheticBite()
                 self.combatInput.awaiting=nil
             elseif event=="end" and (self.nativeGrabSession==nil or session==self.nativeGrabSession) then
                 self.nativeGrabBusy,self.nativeGrabSession=false,nil
