@@ -338,6 +338,11 @@ function Controller.new(M,bridge,options)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
             end
             tx.nativeAt,tx.claimDue,tx.classified = now,now+bridge:biteDelay(s.char),false
+            -- Freeze the visual candidate at the actual native bite marker.
+            -- A later scan must not silently replace the bite's target.
+            tx.guideAtMarker=self.guide and self.guide.target
+            tx.guideExtendedOnly=self.guide and self.guide.extended and self.guide.extended.valid
+                and not (self.guide.baseline and self.guide.baseline.valid) or false
             tx.hpBefore={}
             for _,target in ipairs(bridge.allCandidates or {}) do
                 if target.root.Parent and (target.root.Position-s.root.Position).Magnitude<=45 then
@@ -362,15 +367,37 @@ function Controller.new(M,bridge,options)
     function h:nativeEvent(kind,event,data)
         if self.closed or not self.active then return end
         if kind == "feedback" then
-            self.ledger:event("native_hit_feedback",bridge.clock(),{damageAcceptance = "unverified"})
+            local at=bridge.clock()
+            self.ledger:event("native_hit_feedback",at,{damageAcceptance = "unverified"})
             if event=="hit" and type(data)=="table" and data.a==bridge.player.Character then
+                local candidates,matched={},nil
+                -- A recent native marker is necessary, but not sufficient:
+                -- multiple simultaneous bites cannot be paired simply by
+                -- attaching every reply to the last one.
                 for index=#self.transactions,1,-1 do
                     local tx=self.transactions[index]
-                    if tx.nativeAt and not tx.classified and bridge.clock()-tx.nativeAt<1.8 then
-                        tx.feedback=data;tx.nativeTarget=data.v
-                        self.ledger:event("native_outgoing_hit_reply",bridge.clock(),{safe=data.safe==true,damage=data.dmg})
-                        break
+                    if tx.generation==bridge.generation and tx.nativeAt
+                        and not tx.classified and not tx.feedback
+                        and at>=tx.nativeAt and at-tx.nativeAt<1.8 then
+                        table.insert(candidates,tx)
+                        if data.v and (tx.localTarget==data.v or tx.nativeTarget==data.v) then
+                            matched=tx;break
+                        end
                     end
+                end
+                if not matched and #candidates==1 then matched=candidates[1] end
+                if matched then
+                    matched.targetMismatch=matched.localTarget~=nil and data.v~=nil
+                        and matched.localTarget~=data.v
+                    matched.feedback=data
+                    matched.nativeTarget=data.v
+                    self.ledger:event("native_outgoing_hit_reply",at,
+                        {safe=data.safe==true,damage=data.dmg,targetMismatch=matched.targetMismatch})
+                else
+                    -- Preserve the reply as an observation rather than
+                    -- assigning server feedback to an unrelated bite.
+                    self.ledger:event("native_outgoing_hit_reply_unmatched",at,
+                        {reason=#candidates>1 and "ambiguous overlapping attacks" or "no matching native bite"})
                 end
             end
             return
@@ -380,11 +407,15 @@ function Controller.new(M,bridge,options)
             return
         end
         if kind=="biteLocal" then
+            local at=bridge.clock()
             for index=#self.transactions,1,-1 do
                 local tx=self.transactions[index]
-                if tx.nativeAt and not tx.classified and bridge.clock()-tx.nativeAt<1.5 then
-                    tx.nativeTarget=event
-                    self.ledger:event("native_client_bite_candidate",bridge.clock(),{claimObserved=false})
+                if tx.generation==bridge.generation and tx.nativeAt and not tx.classified
+                    and not tx.localTarget and at>=tx.nativeAt and at-tx.nativeAt<1.5 then
+                    -- A local impact is only a *candidate*. It cannot
+                    -- replace a server reply's real target.
+                    tx.localTarget=event
+                    self.ledger:event("native_client_bite_candidate",at,{claimObserved=false})
                     break
                 end
             end
@@ -561,18 +592,17 @@ function Controller.new(M,bridge,options)
                     self.ledger:event("no_native_bite_marker",now,{recentRest = tx.lock == true})
                 elseif tx.nativeAt and not tx.sampled and now >= tx.claimDue then
                     tx.sampled = true
-                    local target = self.guide and self.guide.target
+                    local target = tx.guideAtMarker
                     if target then
                         local before=tx.hpBefore and tx.hpBefore[target.char]
                         tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
-                        tx.extendedOnly = self.guide.extended and self.guide.extended.valid
-                            and not (self.guide.baseline and self.guide.baseline.valid)
+                        tx.extendedOnly = tx.guideExtendedOnly
                     end
                     self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
                 elseif tx.nativeAt and tx.sampled and now >= tx.claimDue+.8 then
                     tx.classified = true
                     local target = tx.target
-                    local char=tx.nativeTarget or target and target.char
+                    local char=tx.nativeTarget or tx.localTarget or target and target.char
                     local ok,hum=pcall(function()return char and char:FindFirstChildOfClass("Humanoid")end)
                     local before=char and tx.hpBefore and tx.hpBefore[char]
                     local drop=ok and hum and hum.Parent and before and hum.MaxHealth==before.maxHP and hum.Health<before.hp-.05
@@ -582,9 +612,12 @@ function Controller.new(M,bridge,options)
                             ..(drop and " · HP decline correlated" or " · HP change unconfirmed"))
                         or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
                         or drop and "Target HP fell after native marker · attribution unverified"
+                        or tx.localTarget and "Local bite impact only · server hit/HP change unconfirmed"
                         or "Native marker observed · no matching HP decline observed"
+                    if tx.targetMismatch then self.combatStatus ..= " · local/server target differed" end
                     self.ledger:event(drop and "target_hp_decline_correlated" or "no_correlated_hp_decline",now,
-                        {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,damageAcceptance = "unverified"})
+                        {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,
+                         targetMismatch=tx.targetMismatch==true,damageAcceptance = "unverified"})
                     tx.hpBefore=nil
                 end
             end
