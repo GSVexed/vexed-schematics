@@ -256,7 +256,23 @@ function Mock.new()
     local services={Players=players,ReplicatedStorage=rs,RunService=run,UserInputService=uis,
         ContextActionService=cas,HttpService=http,Workspace=workspace,VirtualUser=virtual,PathfindingService=paths}
     local gameObject={PlaceId=108901361810209,PlaceVersion=2412}
-    function gameObject:GetService(name) return assert(services[name],"unknown service "..name) end
+    local virtualInput={}
+    function virtualInput:SendMouseButtonEvent(_,_,button,down)
+        if not w.virtualBiteAvailable or w.virtualBiteBlocked then
+            error("virtual mouse unavailable")
+        end
+        assert(button==0,"expected primary attack")
+        w.virtualBiteCalls=(w.virtualBiteCalls or 0)+1
+        if down then w:input(nil,enum.UserInputType.MouseButton1)
+        else uis.InputEnded:Fire({UserInputType=enum.UserInputType.MouseButton1,KeyCode=enum.KeyCode.Unknown}) end
+    end
+    function gameObject:GetService(name)
+        if name=="VirtualInputManager" then
+            assert(w.virtualBiteAvailable,"virtual input unavailable")
+            return virtualInput
+        end
+        return assert(services[name],"unknown service "..name)
+    end
     local stored={}
     local mockOS=table.clone(os);mockOS.clock=function()return w.time end
     local env=setmetatable({
