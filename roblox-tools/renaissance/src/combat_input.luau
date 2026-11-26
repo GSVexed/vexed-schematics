@@ -48,9 +48,12 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:release(kind,now)
         if self.held and (kind==nil or self.held.key==kind or self.held.key=="poll") then
-            self.pending,self.held,self.awaiting=nil,nil,nil
+            -- A single tap made during an owned Rest-exit window must still
+            -- deliver its one buffered native bite after M1/R2 is released.
+            -- Only the continuous repeat intent stops on InputEnded.
+            self.held,self.awaiting=nil,nil
             self.nextAttempt=now or 0
-            self.status="released"
+            self.status=self.pending and "one Rest-exit bite queued" or "released"
         end
     end
     function c:marker(s,now)
