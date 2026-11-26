@@ -1,4 +1,15 @@
-# FERAL Project Renaissance — 15.8.7 ghost-hit reliability candidate
+# FERAL Project Renaissance — 16.1.0 unified candidate
+
+This branch reconciles two earlier candidate lines that diverged on 26 November 2026. The **16.0.2 overhaul** contained the 0.8.0 Territory navigation/planning engine, but its combat input module only buffered one Rest-exit bite and lacked later Hippo, hearing and hold-repeat work. Separately, 15.8.7 developed additional combat, minigame, Hippo, hearing and ghost-hit features while retaining Territory 0.7.0. This 16.1.0 candidate starts with the complete 15.8.7 hub, restores the **Territory 0.8.0 engine and original test suite from 16.0.2**, and improves the held-input dispatch path. The historical 16.0.2 and 15.8.7 source bundles remain available unchanged for rollback.
+
+### Held left-click repair
+
+When input-event connections are inaccessible, the hub now checks whether the executor exposes the original `WolfController.tryBite` in its own Lua heap. It scans only on a held attack, incrementally, and requires an exact local-script source, own Player, native doBite/cooldown identities and WolfActions remote before invoking anything. The earlier mouse-replay fallback remains only if no validated native function is available. Real M1 InputObjects are tracked separately from the synthetic press/release lifecycle, preventing a simulated InputEnded from cancelling the human hold. Minigame auto-perfect input retains priority; no BiteHit or fake hit reply is sent by the hub.
+
+Both original 16.0.2 and current 15.8.7 are **candidates**, not proven live releases. Native heap accessibility and actual server-accepted repeated damage cannot be established by automated test doubles. The updated hub is intentionally not promoted to the stable launcher, and no manual diagnostic uploads are required.
+
+## Prior 15.8.7 branch
+
 
 This revision preserves the held-M1, minigame and adaptive combat changes from 15.8.6. The reach guide now favours unobstructed stock-range targets before uncertain extended-only alternatives; it also aligns aim with the stock target when one exists and limits speculative relative-velocity lead to 2.25 studs over at most 0.20 seconds (formerly 4 studs/0.35 s).
 

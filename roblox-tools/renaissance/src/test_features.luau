@@ -254,7 +254,7 @@ function Tests.new(Core,bridge,hub)
             events={}
             for i=math.max(1,#self.events-39),#self.events do table.insert(events,self.events[i]) end
         end
-        return {schema=SCHEMA,version="15.8.7",placeId=game.PlaceId,placeVersion=game.PlaceVersion,
+        return {schema=SCHEMA,version="16.1.0",placeId=game.PlaceId,placeVersion=game.PlaceVersion,
             savedAt=os.time(),source="own client observations; server damage reduction unverified",
             events=events,samples=self.samples,species=self.species,snapshot=self:snapshot(),
             features=self:featureStates(),ledgerCounts=counts,ledgerRates=rates,

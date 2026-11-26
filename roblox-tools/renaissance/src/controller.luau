@@ -33,7 +33,7 @@ end
 function Controller.new(M,bridge,options)
     local Core = M.core
     local tokenIdentity = {}
-    local h = { version = "15.8.7", tokenIdentity = tokenIdentity,
+    local h = { version = "16.1.0", tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
         active = false, closed = false, ready = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
