@@ -335,7 +335,7 @@ test("eligible nearby enemy releases owned Rest before the actual bite input",fu
     eq(h.lastIntent.lock,false)
     eq(h.combatInput.pending,nil)
     root.Position=Mock.V3.new(0,3,-65)
-    w:advance(.5)
+    w:advance(1.3) -- allow the ordinary post-bite action pause to end
     eq(h.recovery.owned,w.player.Character)
     h:close()
 end)
