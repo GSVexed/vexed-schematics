@@ -92,17 +92,27 @@ if ($clientFiles.Count -ne 1) {
 }
 $clientExe = $clientFiles[0].FullName
 
-$keyWasEnteredHere = [string]::IsNullOrWhiteSpace($env:CONTROL_PLANE_API_KEY)
-if ($keyWasEnteredHere) {
-    Write-Host 'Create a Restricted Platform runtime key with Tunnels Read + Use if you have not already.'
-    Write-Host 'https://platform.openai.com/settings/organization/api-keys'
-    $secureKey = Read-Host 'Paste the Platform runtime API key here (input is hidden)' -AsSecureString
-    $env:CONTROL_PLANE_API_KEY = [System.Net.NetworkCredential]::new('', $secureKey).Password
+Write-Host 'Use a Restricted Platform runtime key with Tunnels Read + Use.'
+Write-Host 'https://platform.openai.com/settings/organization/api-keys'
+$runtimeKey = $null
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+    $secureKey = Read-Host 'Paste ONLY the raw sk-... Platform key (input is hidden)' -AsSecureString
+    $candidate = [System.Net.NetworkCredential]::new('', $secureKey).Password.Trim()
     Remove-Variable secureKey
+
+    if ($candidate -match '^sk-[A-Za-z0-9_-]{12,}$') {
+        $runtimeKey = $candidate
+        break
+    }
+    $candidate = $null
+    Write-Warning 'That value is not a raw Platform runtime key. Do not include Bearer, quotes, JSON, or the key name.'
 }
-if ([string]::IsNullOrWhiteSpace($env:CONTROL_PLANE_API_KEY)) {
-    throw 'The Platform runtime API key is required.'
+if ($null -eq $runtimeKey) {
+    throw 'No correctly formatted Platform runtime key was entered.'
 }
+$env:CONTROL_PLANE_API_KEY = $runtimeKey
+$runtimeKey = $null
+$candidate = $null
 
 # The command parser uses shell quoting, even on Windows. The inner single quotes
 # keep the spaces and backslashes in the installed executable path together.
@@ -124,7 +134,5 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'tunnel-client run stopped with an error.' }
 }
 finally {
-    if ($keyWasEnteredHere) {
-        Remove-Item Env:CONTROL_PLANE_API_KEY -ErrorAction SilentlyContinue
-    }
+    Remove-Item Env:CONTROL_PLANE_API_KEY -ErrorAction SilentlyContinue
 }
