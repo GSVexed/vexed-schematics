@@ -88,7 +88,12 @@ function CombatInput.new(bridge,policy,ledger)
             or self.held.source=="poll" and not physical) then
             self.held=nil
         end
-        if not s.alive or s.chat or s.gameMenu or s.grab or options.minigameBusy
+        local inGrab=s.grab==true or options.minigameBusy==true
+        local nativeGrabLane=inGrab and options.nativeMinigame==true
+            and self.held~=nil and (self.held.key=="M1" or self.held.key=="poll")
+            and options.minigamePressNear~=true
+            and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"
+        if not s.alive or s.chat or s.gameMenu or inGrab and not nativeGrabLane
             or policy.manualRest or options.uiBlocked then
             self.pending,self.awaiting=nil,nil
             -- Preserve the event-held state across a *known* minigame, so
@@ -105,11 +110,12 @@ function CombatInput.new(bridge,policy,ledger)
             self.pending=nil;p=nil
         end
         local held=options.repeatHeld and self.held~=nil
-        local automatic=options.automatic and options.targetValid==true
+        local automatic=not inGrab and options.automatic and options.targetValid==true
+        if inGrab and not nativeGrabLane then automatic=false end
         if not p and not held and not automatic then
             self.awaiting=nil;return
         end
-        if s.feeding or s.captured or s.holding or s.ability or s.rest then
+        if s.feeding or s.captured or s.holding and not nativeGrabLane or s.ability or s.rest then
             self.pending=nil
             self.status="native action lock; hold retained"
             return
@@ -140,8 +146,14 @@ function CombatInput.new(bridge,policy,ledger)
         local privateUnknown=not readiness.known
             and (readiness.reason=="native timing unavailable"
                 or readiness.reason=="native timing layout unknown")
-        if not allowed and privateUnknown and held and not automatic then
+        if not allowed and privateUnknown and held and not automatic and not inGrab then
             allowed=bridge:visibleBiteWindow(s,now)
+        end
+        if not allowed and nativeGrabLane and readiness.reason=="capture or carry lock"
+            and s.captured~=true then
+            -- A hunter holding prey is not the same as being pinned. Let
+            -- validated native tryBite decide; never inject a hit claim.
+            allowed=bridge:visibleBiteWindow(s,now,true)
         end
         if not allowed then
             self.status=readiness.reason
@@ -159,7 +171,7 @@ function CombatInput.new(bridge,policy,ledger)
         local called,backend
         if type(native)=="function" then
             called,backend=bridge:tryNativeBite(now),"NATIVE"
-        elseif held and not automatic then
+        elseif held and not automatic and not inGrab then
             -- Physical hold fallback. Input backend can be absent or blocked.
             called,backend=bridge:tryHeldInputBite(s,now),"INPUT"
         else
@@ -176,6 +188,7 @@ function CombatInput.new(bridge,policy,ledger)
             or "native attack dispatcher unavailable"
         ledger:event(p and "native_bite_buffer_released" or "native_cadence_attempt",now,{
             called=called==true,marker=marked,backend=backend,automatic=automatic==true,
+            minigameNative=nativeGrabLane==true,
             damageAcceptance="unverified"})
     end
     return c

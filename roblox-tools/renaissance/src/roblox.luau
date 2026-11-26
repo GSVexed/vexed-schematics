@@ -479,10 +479,13 @@ function Roblox.new(Core, environment)
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         return ok and virtual~=nil
     end
-    function b:visibleBiteWindow(s,now)
+    function b:visibleBiteWindow(s,now,grabHunter)
+        local inGrab=grabHunter==true and s.grab==true
+        -- The minigame's hunter can be carrying the opponent; only the
+        -- original WolfController.tryBite may decide if a bite is legal.
         if game.PlaceVersion~=2412 or not s.alive or s.char~=self.player.Character
-            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
-            or s.captured or s.holding or not Core.finite(s.serverNow) then return false end
+            or s.chat or s.gameMenu or s.grab and not inGrab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding and not inGrab or not Core.finite(s.serverNow) then return false end
         local species=self:config("Species")
         if not species or type(species.biteCooldown)~="function" then return false end
         local ok,cd=pcall(species.biteCooldown,self:attribute(s.char,"Species") or species.DEFAULT,
@@ -513,8 +516,12 @@ function Roblox.new(Core, environment)
         pcall(pulse.release)
         self.syntheticReleasing=false
     end
+    -- A physical held M1 is already in the Down state. Simply sending
+    -- another Down is ignored by input systems that require a new edge.
+    -- Re-arm one short Up -> Down -> Up pulse, with a single owner, unless
+    -- an active native grab session has priority. No Bite/BiteHit remotes.
     function b:tryHeldInputBite(s,now)
-        if self.syntheticM1 then return false end -- no overlapping press edges
+        if self.syntheticM1 then return false end
         if not s or not s.alive or s.char~=self.player.Character or game.PlaceVersion~=2412
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding then return false end
@@ -529,67 +536,63 @@ function Roblox.new(Core, environment)
                 end
             end
         end
-        -- Guard CAS and InputBegan against identifying a synthetic input as
-        -- another physical hold. The game's native handler still receives it.
-        self.syntheticM1Until=now+.18
+        local down,up,backend
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then
-            -- Acquire the release lease *before* reentrant native callbacks.
-            -- A grab minigame can start synchronously during the press; its
-            -- begin event must be able to release this same pulse immediately.
-            local pulse={release=function()
-                virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)
-            end}
-            self.syntheticM1=pulse
+            backend="VIRTUAL_MOUSE"
+            down=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)end
+            up=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)end
+        elseif type(mouse1press)=="function" and type(mouse1release)=="function" then
+            backend="EXECUTOR_PAIRED"
+            down=mouse1press;up=mouse1release
+        elseif type(mouse1click)=="function" then
+            -- An executor's click primitive may internally create both edges.
+            self.syntheticM1Until=now+.18
             self.syntheticPressing=true
-            local pressed=pcall(function()
-                virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)
-            end)
-            self.syntheticPressing=false
-            if pressed then
-                if self.syntheticM1~=pulse then return true end
-                -- Keep the press for a small real frame interval so the native
-                -- WolfController sees an InputBegan edge. Release is owned by
-                -- the hub and is also performed on unload.
-                if type(task)=="table" and type(task.delay)=="function" then
-                    local scheduled,timer=pcall(task.delay,.07,function()
-                        if self.syntheticM1==pulse then self:releaseSyntheticBite() end
-                    end)
-                    if scheduled then pulse.timer=timer
-                    else self:releaseSyntheticBite() end
-                else self:releaseSyntheticBite() end
-                return true
-            end
-            -- A partial failing virtual press is never followed with a
-            -- second executor click; unwind any partially owned input.
-            self:releaseSyntheticBite()
-            return false
-        end
-        if type(mouse1press)=="function" and type(mouse1release)=="function" then
-            local pulse={release=mouse1release}
-            self.syntheticM1=pulse
-            self.syntheticPressing=true
-            local pressed=pcall(mouse1press)
-            self.syntheticPressing=false
-            if pressed then
-                if self.syntheticM1~=pulse then return true end
-                if type(task)=="table" and type(task.delay)=="function" then
-                    local scheduled,timer=pcall(task.delay,.07,function()
-                        if self.syntheticM1==pulse then self:releaseSyntheticBite() end
-                    end)
-                    if scheduled then pulse.timer=timer
-                    else self:releaseSyntheticBite() end
-                else self:releaseSyntheticBite() end
-                return true
-            end
-            self:releaseSyntheticBite()
-            return false
-        end
-        if type(mouse1click)=="function" then
             local clicked=pcall(mouse1click)
-            if clicked then return true end
+            self.syntheticPressing=false
+            return clicked
+        else
+            return false
         end
-        return false
+        self.syntheticM1Until=now+.3
+        local pulse={release=up,method=backend,didPress=false}
+        self.syntheticM1=pulse
+        local function safeUp()
+            self.syntheticReleasing=true
+            local success=pcall(up)
+            self.syntheticReleasing=false
+            return success
+        end
+        local function stop()
+            if self.syntheticM1==pulse then self:releaseSyntheticBite() end
+        end
+        -- Reset the logical button state while preserving the real human-held
+        -- intent in CombatInput (synthetic InputEnded events are ignored).
+        if not safeUp() then self.syntheticM1=nil;return false end
+        local function beginPress()
+            if self.syntheticM1~=pulse then return end -- a grab began meanwhile
+            if self.combatPulseBlocked and self.combatPulseBlocked() then
+                stop();return
+            end
+            self.syntheticPressing=true
+            local pressed=pcall(down)
+            self.syntheticPressing=false
+            if not pressed then stop();return end
+            pulse.didPress=true
+            if self.syntheticM1~=pulse then return end -- reentrant grab begin
+            if type(task)=="table" and type(task.delay)=="function" then
+                local scheduled,timer=pcall(task.delay,.055,stop)
+                if scheduled then pulse.timer=timer else stop() end
+            else stop() end
+        end
+        if type(task)=="table" and type(task.delay)=="function" then
+            local scheduled,timer=pcall(task.delay,.025,beginPress)
+            if scheduled then pulse.timer=timer;return true end
+        end
+        -- Never leave a held synthetic button if delayed input isn't supported.
+        beginPress()
+        return pulse.didPress
     end
     -- FeralHippoClient.finish uses the native clock and release path. Validate
     -- its captured own-player/remote layout before retaining or calling it.
@@ -833,10 +836,13 @@ function Roblox.new(Core, environment)
         s.burst = self:attribute(self.player,"HudBurst") == true or self:attribute(char,"FeralFlyBurst") == true
         -- v2412 WolfController input callback accepts MouseButton1/R2.
         -- MouseButton2 is a camera control, not a continuously held bite.
-        s.attackHeld = self.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+        local mouseOK,mouseDown=pcall(self.UserInputService.IsMouseButtonPressed,
+            self.UserInputService,Enum.UserInputType.MouseButton1)
+        s.mouseHeld=mouseOK and mouseDown==true
         local padOK,padHeld=pcall(self.UserInputService.IsGamepadButtonDown,self.UserInputService,
             Enum.UserInputType.Gamepad1,Enum.KeyCode.ButtonR2)
-        s.attackHeld=s.attackHeld or padOK and padHeld==true
+        s.r2Held=padOK and padHeld==true
+        s.attackHeld=s.mouseHeld or s.r2Held
         local velocity = root.AssemblyLinearVelocity
         s.moving = hum.MoveDirection.Magnitude > .13 or Vector3.new(velocity.X,0,velocity.Z).Magnitude >= 2
         local clamp = char:FindFirstChild("FeralClamp")
