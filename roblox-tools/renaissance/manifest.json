@@ -1,18 +1,18 @@
 {
-  "version": "15.7.0",
+  "version": "15.7.1",
   "game_baseline": 2412,
   "modules": {
     "core": {
-      "sha256": "c87ad612f5a0db3a2681f34d32c009c2c995ed0ad7a4d3409ca1a98844b0233a",
-      "bytes": 10631
+      "sha256": "a0cb28c778973863d6a873f4a1529004bc24f7d5f4beee9886d28c3e7ba9fb67",
+      "bytes": 10642
     },
     "settings": {
       "sha256": "f6e675ef8128ec7c48431973d0742e59675e8ad906c2fe5e503a36aa63a05b11",
       "bytes": 2664
     },
     "policy": {
-      "sha256": "a2f9aa8b349073c40987a959294da7338b027b10e07746df0ec3bca7007fa17f",
-      "bytes": 4462
+      "sha256": "c7e4955da10b5a9ac1e03c1f541cb6c938ecccfe0a4db6f9621c6e7b1f07fe9e",
+      "bytes": 4972
     },
     "grab": {
       "sha256": "b8fb7a5a3524ae5de1148f7d82c2a8692ab57f6b9989c9681f1f42559653d817",
@@ -23,8 +23,8 @@
       "bytes": 3583
     },
     "recovery": {
-      "sha256": "386952dc5727e8314ac11b153577b79a19da16d4dc7609d968c492386742ea5b",
-      "bytes": 11469
+      "sha256": "3115c2b8ed1e58a5cea224a32233d09237520e580746812eb4d22db076e8ac8d",
+      "bytes": 12611
     },
     "feeding": {
       "sha256": "e1017d927e4834f4a3e5b0cce980059472cd3b4bea0f6b68ec15ccb43e911fa3",
@@ -55,7 +55,7 @@
       "bytes": 17446
     },
     "controller": {
-      "sha256": "163692b8e5389e7d2d64b063932d78cc310b20e9399d63478a6d2dc14746fc20",
+      "sha256": "5ecfdb830b71eb139b905df1ea07487f63d5fb8d39798f0a00e91cb0d8682648",
       "bytes": 44492
     },
     "amber_ledger": {
@@ -107,7 +107,7 @@
       "bytes": 5209
     }
   },
-  "bundle_sha256": "d54b1b1e94849a5e4c41947a2ce659e35f6ddf22591aa75b3e4288a15e5ed8bb",
-  "bundle_bytes": 402662,
+  "bundle_sha256": "ffa457894279a7a1453e8a89b9e79f54f5e4eaa189926d86d4fb124781d3ba3e",
+  "bundle_bytes": 404325,
   "stable_clean_v14_overwritten": false
 }

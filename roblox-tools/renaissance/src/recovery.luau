@@ -3,7 +3,8 @@ local Recovery = {}
 function Recovery.new(bridge, policy, ledger)
     local r = { state = "OFF", owned = nil, enabled = false, echoes = 0,
         backoffUntil = 0, releaseAt = -math.huge, signalAt = -math.huge,
-        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {} }
+        nativeEchoObserved = false, writes = 0, nextRefresh = 0, observations = {},
+        conditionChar = nil, conditionSeenUntil = 0, renewals = 0 }
     function r:clearPose()
         local pose = self.pose
         self.pose = nil
@@ -144,7 +145,13 @@ function Recovery.new(bridge, policy, ledger)
     end
     function r:tick(s, now)
         self:guardPose(now)
-        if s and s.alive then self:observe(s,now) end
+        if s and s.alive then
+            if self.conditionChar~=s.char then
+                self.conditionChar=s.char
+                self.conditionSeenUntil=0
+            end
+            self:observe(s,now)
+        end
         if policy.manualRest then
             if self.enabled and s and s.alive and s.rest and s.hum.MoveDirection.Magnitude>.13
                 and not s.captured and not s.grab and not s.ability and now>policy.manualIntentUntil then
@@ -170,10 +177,14 @@ function Recovery.new(bridge, policy, ledger)
         end
         if self.owned and (not s or self.owned ~= s.char) then self:release("animal changed", now) end
         if not self.enabled then self:release("OFF", now); return end
-        local effects = s and (
+        local activeCondition = s and (
             (type(s.injury) == "number" and s.injury > .1)
             or (type(s.bleed) == "number" and s.bleed > .1)
             or (type(s.venom) == "number" and s.venom > .1))
+        if activeCondition then self.conditionSeenUntil=now+.9 end
+        -- A missing condition attribute is not proof of a cure. Maintain the
+        -- previously active native request briefly across replication gaps.
+        local effects = activeCondition or s and now < self.conditionSeenUntil
         self.purpose = effects and "effects" or "health"
         local allowed, reason = policy:allowed("recovery", s, now,self.purpose)
         if not allowed then self:release(reason, now); return end
@@ -193,7 +204,7 @@ function Recovery.new(bridge, policy, ledger)
             self.lastAutomaticCharacter = s.char
             self.echoes, self.nativeEchoObserved = 0, false
             self.echoWindow = now
-            self.signalAt, self.nextRefresh = now, now+5
+            self.signalAt, self.nextRefresh = now, now+2
             self.state = "REQUESTED"
             if not bridge:rest(s.char, true) then
                 self.owned = nil
@@ -203,9 +214,19 @@ function Recovery.new(bridge, policy, ledger)
             end
             ledger:event("native_rest_requested", now, { moving = s.moving,purpose = self.purpose,combatHPExcluded = s.combat ~= false })
         elseif now >= self.nextRefresh then
-            -- Bounded renewal while deficit persists. A request is not an acknowledgement.
-            self.nextRefresh = now+5
-            if bridge:rest(s.char, true) then ledger:event("native_rest_renewed", now) end
+            -- v1.1 live Bear measurements supported the native Rest request
+            -- while moving. Renew ONLY Rest(true) at a bounded interval so
+            -- native locomotion transitions cannot leave long unsignalled
+            -- gaps. Do not flip it to false just because HP/status changes are
+            -- not yet observed: the prior no-progress retries interrupted it.
+            self.nextRefresh = now+2
+            if bridge:rest(s.char, true) then
+                self.renewals += 1
+                ledger:event("native_rest_renewed", now, { moving=s.moving, purpose=self.purpose })
+            else
+                self.state="native Rest renewal unavailable"
+                ledger:event("native_rest_renew_failed",now)
+            end
         end
     end
     function r:close(now)
@@ -213,6 +234,7 @@ function Recovery.new(bridge, policy, ledger)
         self:release("CLOSED", now)
         self:clearPose()
         self.previous,self.observations,self.lastAutomaticCharacter = nil,{},nil
+        self.conditionChar,self.conditionSeenUntil = nil,0
     end
     return r
 end

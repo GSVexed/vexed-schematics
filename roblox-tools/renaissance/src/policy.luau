@@ -37,10 +37,17 @@ function Policy.new()
             if s.ability or s.holding then return false, "native action" end
             if s.attackHeld or now < self.attackUntil then return false, "attack has priority" end
             if now < self.actionUntil or s.afkWalking then return false, "action has priority" end
-            if s.climbing or s.flying or s.underwater or s.swimming then return false, "movement transition" end
-            -- Native status recovery is separate from the combat HP exclusion.
-            if s.combat == true and purpose == "effects" then
-                return true,"condition recovery; combat HP remains excluded"
+            -- The original live-tested Rest signal worked while the own
+            -- animal was moving; surface swimming is ordinary locomotion, not
+            -- an attack. Protect aerial, climb and submerged transitions.
+            if s.climbing or s.flying or s.underwater then return false, "movement transition" end
+            -- Combat time can be unknown when the server clock is unavailable.
+            -- That must not silently disable the separate condition request.
+            -- HP is still excluded while combat is true or unknown.
+            if purpose == "effects" then
+                return true,s.combat == true and "condition Rest while in combat; no combat HP claim"
+                    or s.combat == nil and "condition Rest; combat state unknown, HP excluded"
+                    or "condition Rest, no combat"
             end
             if s.combat ~= false then return false, s.combat and "combat" or "combat state unknown" end
             return true, "recovery window"

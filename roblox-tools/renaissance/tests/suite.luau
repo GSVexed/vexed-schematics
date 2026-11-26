@@ -1300,7 +1300,8 @@ test("the action coordinator gives minigames, capture and actual attack the prop
     eq(p:activity(s,10),"minigame");s.grab=false;eq(p:activity(s,10),"capture")
     s.captured=false;eq(p:activity(s,10),"attack");s.attackHeld=false;eq(p:activity(s,10),"ability")
     s.ability=false;eq(p:activity(s,10),"feeding");s.feeding=false;s.swimming=true
-    eq(p:allowed("recovery",s,10,"health"),false)
+    eq(p:allowed("recovery",s,10,"health"),true)
+    s.underwater=true;eq(p:allowed("recovery",s,10,"health"),false)
 end)
 test("stamina covers native swim, climb and venom consumption inputs with exact restoration",function()
     local w=Mock.new();local n=w.configs.NeedsConfig;n.SWIM_DRAIN_MULT=1.15;n.WATER_DRAIN_NONSWIM=1.5
@@ -1611,9 +1612,9 @@ test("Hippo maximum cap never invents or toggles WolfBurst movement state",funct
     eq(char:GetAttribute("WolfBurst"),before)
 end)
 
-test("Renaissance 15.7.0 presents its actual version in the active controller",function()
+test("Renaissance 15.7.1 presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"15.7.0")
+    eq(h.version,"15.7.1")
     h:close()
 end)
 
@@ -1750,6 +1751,50 @@ test("Hippo trot selection cancels Burst intent and unrelated crouch restriction
     close(speed(1),16.8/42*original("Hippo","gait",1)*.7)
     w.keys[E.KeyCode.LeftShift]=true;char:SetAttribute("FeralCrouch",true)
     close(speed(1),16.8/42*original("Hippo","gait",1)*.7);h:close()
+end)
+
+test("recovery defaults on for new settings but permits explicit manual OFF",function()
+    local M=modules()
+    eq(M.settings.sanitize(nil,M.core.specs).states.recovery,true)
+    eq(M.settings.sanitize({states={recovery=false}},M.core.specs).states.recovery,false)
+end)
+test("an unproductive native Rest request stays continuous instead of being flipped OFF",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=40
+    w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(20)
+    eq(h.recovery.owned,w.player.Character)
+    assert((h.ledger.counts.native_rest_renewed or 0)>=8)
+    eq(h.ledger.counts.native_rest_no_progress_repair,nil)
+    local trueRequests,falseRequests=0,0
+    for _,c in ipairs(w.calls) do
+        if c.name=="WolfActions" and c.args[1]=="Rest" then
+            if c.args[2]==true then trueRequests+=1 else falseRequests+=1 end
+        end
+    end
+    assert(trueRequests>=9)
+    eq(falseRequests,0)
+    eq(w.player.Character:GetAttribute("WolfRest"),false)
+    h:close()
+end)
+test("brief missing negative-effect attributes do not cancel active native Rest",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=100
+    local char=w.player.Character;char:SetAttribute("FeralVenomAmt",5)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(.1)
+    eq(h.recovery.owned,char)
+    char:SetAttribute("FeralVenomAmt",nil);w:advance(.6)
+    eq(h.recovery.owned,char)
+    w:advance(.5)
+    eq(h.recovery.owned,nil)
+    h:close()
+end)
+test("condition-only recovery remains eligible with unknown combat time",function()
+    local M=modules();local policy=M.policy.new()
+    local s={alive=true,combat=nil,swimming=true}
+    local allowed,reason=policy:allowed("recovery",s,10,"effects")
+    eq(allowed,true);assert(reason:find("HP excluded",1,true))
+    eq(policy:allowed("recovery",s,10,"health"),false)
+    s.combat=true;eq(policy:allowed("recovery",s,10,"effects"),true)
+    s.captured=true;eq(policy:allowed("recovery",s,10,"effects"),false)
 end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
