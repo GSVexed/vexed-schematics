@@ -1751,5 +1751,34 @@ test("Hippo trot selection cancels Burst intent and unrelated crouch restriction
     w.keys[E.KeyCode.LeftShift]=true;char:SetAttribute("FeralCrouch",true)
     close(speed(1),16.8/42*original("Hippo","gait",1)*.7);h:close()
 end)
+
+test("recovery defaults on for new settings but permits explicit manual OFF",function()
+    local M=modules()
+    eq(M.settings.sanitize(nil,M.core.specs).states.recovery,true)
+    eq(M.settings.sanitize({states={recovery=false}},M.core.specs).states.recovery,false)
+end)
+test("stalled native recovery repairs are bounded without endless Rest toggling",function()
+    local w=Mock.new();w.nativeRestEcho=true;w.hum.Health=40
+    local h=load(w,{settings={states={recovery=true}}});w:advance(43)
+    local count=h.ledger.counts.native_rest_no_progress_repair or 0
+    assert(count>=1 and count<=2,"bounded rest retries expected")
+    eq(h.recovery.repairAttempts,2)
+    assert(h.ledger.counts.native_rest_no_progress~=nil)
+    local falseRequests=0
+    for _,c in ipairs(w.calls) do
+        if c.name=="WolfActions" and c.args[1]=="Rest" and c.args[2]==false then falseRequests+=1 end
+    end
+    eq(falseRequests,count)
+    h:close()
+end)
+test("observed HP and venom improvement delay ineffective Rest repairs",function()
+    local w=Mock.new();w.hum.Health=40
+    w.player.Character:SetAttribute("FeralVenomAmt",5)
+    local h=load(w,{settings={states={recovery=true}}});w:advance(8)
+    w.hum.Health=41;w.player.Character:SetAttribute("FeralVenomAmt",4)
+    w:advance(7)
+    eq(h.ledger.counts.native_rest_no_progress_repair,nil)
+    h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
