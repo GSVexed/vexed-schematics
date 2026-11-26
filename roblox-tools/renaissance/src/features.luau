@@ -508,6 +508,7 @@ function Features.new(Core, bridge, registry)
                     -- Native compatibility is deliberately read-only: the guide
                     -- and ordinary attacks share the unmodified game profile.
                     local c=bridge:config("CombatConfig")
+                    local changedProfile=self.combatProfileMode~="native" or self.originalCombat~=c
                     if numeric(c,{"REACH","HIT_SCALE","CONE","SLACK","MAX_DY"})
                         and type(c.bodyGap)=="function" then
                         self.originalCombat,self.combat=c,c
@@ -515,7 +516,7 @@ function Features.new(Core, bridge, registry)
                     else
                         self.originalCombat,self.combat,self.combatProfileMode=nil,nil,nil
                     end
-                    bridge.reachTarget,bridge.treeTarget=nil,nil
+                    if changedProfile then bridge.reachTarget,bridge.treeTarget=nil,nil end
                 end
             end
         end
