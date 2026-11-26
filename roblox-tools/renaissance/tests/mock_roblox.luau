@@ -649,6 +649,15 @@ function Mock.new()
             if item.fn(item.name,enum.UserInputState.Begin,input)==enum.ContextActionResult.Sink then processed=true;break end
         end
         uis.InputBegan:Fire(input,processed==true)
+        -- A single tap produces both edges. Native Roblox also emits
+        -- InputEnded, unlike the old fixture which left M1 "held" forever.
+        if not w.suppressAutoRelease and (
+            input.UserInputType==enum.UserInputType.MouseButton1
+                and w.held~=enum.UserInputType.MouseButton1
+            or input.KeyCode==enum.KeyCode.ButtonR2 and w.padHeld~=enum.KeyCode.ButtonR2
+        ) then
+            uis.InputEnded:Fire(input)
+        end
         return input
     end
     function w:connections()

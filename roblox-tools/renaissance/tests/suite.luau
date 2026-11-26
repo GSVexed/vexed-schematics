@@ -1850,7 +1850,9 @@ test("held bite schedules original native attempts and stops immediately on rele
     local cadence=h.tests:bridgeReport().biteCadence
     eq(cadence.markers,w.nativeBites)
     assert(cadence.activeIntervals>=3 and cadence.measuredBitesPerSecond>1.9)
-    local count=w.nativeBites;w.held=nil;w:advance(.8);eq(w.nativeBites,count)
+    local count=w.nativeBites;w.held=nil
+    w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
+    w:advance(.8);eq(w.nativeBites,count)
     eq(h.registry.byId.attackSpeed.outcome,"unverified");h:close()
 end)
 test("hold-to-repeat stays independent of faster bite cooldown and can be disabled",function()
@@ -1877,7 +1879,7 @@ test("a bite without a native marker pauses held retries",function()
     local M=modules();local char={};local count,events=0,{}
     local bridge={biteDelay=function()return .27 end,restLock=function()return .7 end,
         attribute=function()return nil end, biteReadiness=function()return {ready=true}end,
-        tryNativeBite=function()count+=1;return true end}
+        wolfActions={tryBite=function()end},tryNativeBite=function()count+=1;return true end}
     local policy={restLocked=function()return false end}
     local ledger={event=function(_,name)table.insert(events,name)end}
     local c=M.combat_input.new(bridge,policy,ledger)
@@ -2044,7 +2046,8 @@ test("R2 held assistance observes gamepad input and releases cleanly",function()
     local h=load(w,{settings={states={attackSpeed=true}}});w:advance(.2)
     w.padHeld=E.KeyCode.ButtonR2;w:input(E.KeyCode.ButtonR2,E.UserInputType.Gamepad1);w:advance(1.1)
     assert((w.nativeBites or 0)>=3);local count=w.nativeBites
-    w.padHeld=nil;w:advance(.8);eq(w.nativeBites,count);h:close()
+    w.padHeld=nil;w.uis.InputEnded:Fire({KeyCode=E.KeyCode.ButtonR2,UserInputType=E.UserInputType.Gamepad1})
+    w:advance(.8);eq(w.nativeBites,count);h:close()
 end)
 test("native minigames suppress automatic attack scheduling",function()
     local w=Mock.new();w:enableNativeActions();w:enableNativeGrab();w:enemy(2,Mock.V3.new(0,3,-4))
@@ -2196,6 +2199,7 @@ test("held M1 edge continues repeating even when polling misses the down state",
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
     w:enableNativeActions()
     local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}});w:advance(.3)
+    w.suppressAutoRelease=true -- simulate a real pressed edge with unreliable held polling
     w:input(nil,E.UserInputType.MouseButton1)
     w:advance(1.55)
     assert((w.nativeBites or 0)>=3,"InputBegan event must retain held intent")
