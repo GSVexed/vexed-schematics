@@ -2339,5 +2339,21 @@ test("delayed native bite cannot be misattributed when the guide switches target
     eq(tx.target.char,first)
     h:close()
 end)
+test("minigame begin during fallback M1 instantly releases the owned synthetic press",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+    w:enableNativeActions();w:enableNativeGrab()
+    w.env.getconnections=nil;w.virtualBiteAvailable=true
+    w.virtualStartsGrab=true
+    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
+    w:advance(.15);w.held=E.UserInputType.MouseButton1;w:input(nil,E.UserInputType.MouseButton1)
+    w:advance(.9)
+    eq(h.nativeGrabBusy,true)
+    eq(h.bridge.syntheticM1,nil)
+    eq((w.virtualBiteCalls or 0)%2,0)
+    local observed=w.nativeBites or 0
+    w:advance(.8);eq(w.nativeBites or 0,observed)
+    w.held=nil;h:close()
+end)
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

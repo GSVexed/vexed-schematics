@@ -263,7 +263,12 @@ function Mock.new()
         end
         assert(button==0,"expected primary attack")
         w.virtualBiteCalls=(w.virtualBiteCalls or 0)+1
-        if down then w:input(nil,enum.UserInputType.MouseButton1)
+        if down then
+            w:input(nil,enum.UserInputType.MouseButton1)
+            if w.virtualStartsGrab then
+                w.virtualStartsGrab=false
+                w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=715,role="prey"})
+            end
         else uis.InputEnded:Fire({UserInputType=enum.UserInputType.MouseButton1,KeyCode=enum.KeyCode.Unknown}) end
     end
     function gameObject:GetService(name)
