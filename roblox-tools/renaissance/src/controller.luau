@@ -8,7 +8,7 @@ function Controller.matchFeedback(Core,transactions,data,now)
         local corrected=tx.feedback and not tx.feedback.safe and tx.feedback.v==data.v
             and Core.finite(tx.feedback.dmg) and tx.feedback.dmg==0 and Core.finite(data.dmg) and data.dmg>0
         if tx.nativeAt and not tx.classified and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<1.8 then
-            local target=tx.nativeTarget or tx.target and tx.target.char
+            local target=tx.nativeTarget or tx.focusTarget and tx.focusTarget.char or tx.target and tx.target.char
             local rank=target==data.v and 0 or target==nil and tx.hpBefore and tx.hpBefore[data.v] and 1 or nil
             if rank then
                 local delta=math.abs(now-(tx.claimDue or tx.nativeAt))
@@ -413,8 +413,14 @@ function Controller.new(M,bridge,options)
             -- never treated as server proof.
             local guide=self.guide
             local focus=guide and guide.target
-            local valid=guide and guide.baseline and guide.baseline.valid
+            local fresh=focus and focus.root and focus.root.Parent
                 and now-(self.guideAt or -math.huge)<.28
+            -- Pin the target selected at the actual native bite marker.
+            -- The guide can switch to another animal before delayed contact.
+            tx.focusTarget=fresh and focus or nil
+            tx.focusExtendedOnly=fresh and guide.extended and guide.extended.valid
+                and not (guide.baseline and guide.baseline.valid) or false
+            local valid=fresh and guide and guide.baseline and guide.baseline.valid
             local clear=valid and focus and focus.root and focus.root.Parent
                 and bridge:combatEligible(focus.char) and not bridge:occluded(s,focus)
             tx.rateTarget=clear and focus or nil
@@ -694,12 +700,13 @@ function Controller.new(M,bridge,options)
                         local geo=bridge:geometry(self.features.originalCombat,s,tx.rateTarget)
                         tx.rateAtClaim=geo and geo.valid and not bridge:occluded(s,tx.rateTarget) or false
                     end
-                    local target = self.guide and self.guide.target
-                    if target then
+                    local target=tx.focusTarget or self.guide and self.guide.target
+                    if target and target.root and target.root.Parent then
                         local before=tx.hpBefore and tx.hpBefore[target.char]
                         tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
-                        tx.extendedOnly = self.guide.extended and self.guide.extended.valid
-                            and not (self.guide.baseline and self.guide.baseline.valid)
+                        tx.extendedOnly=tx.focusTarget and tx.focusExtendedOnly or
+                            self.guide and self.guide.extended and self.guide.extended.valid
+                            and not (self.guide.baseline and self.guide.baseline.valid) or false
                     end
                     self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
                 elseif tx.nativeAt and tx.sampled and now >= tx.claimDue+.8 then
