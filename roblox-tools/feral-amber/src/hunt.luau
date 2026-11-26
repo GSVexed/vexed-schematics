@@ -4,7 +4,7 @@ local function finite(n) return type(n)=="number" and n==n and math.abs(n)<1e8 e
 local function distance(a,b) return math.sqrt((a.x-b.x)^2+(a.z-b.z)^2) end
 function Hunt.new(adapter)
     local h={adapter=adapter,target=nil,pending=nil,hits=0,misses=0,attacks=0,
-        lastResult="No attack",nextAttack=0,blocked={},kills=0}
+        lastResult="No attack",nextAttack=0,blocked=setmetatable({},{__mode="k"}),kills=0}
     function h:abandon(now,why)
         if self.target and self.target.model then
             self.blocked[self.target.model]=now+80
@@ -18,8 +18,23 @@ function Hunt.new(adapter)
     end
     function h:tick(s)
         local now=s.now
+        if self.actorSeen and (self.actor~=s.char or self.generation~=s.generation) then
+            self.target,self.pending,self.sample=nil,nil,nil
+            self.nextAttack=0;self.nextSelect=nil;self.lastTargetHealth=nil;self.lastTargetMax=nil
+            self.blocked=setmetatable({},{__mode="k"})
+            self.adapter:stop("Hunt animal generation changed")
+        end
+        self.actorSeen=true;self.actor=s.char;self.generation=s.generation
+        for model,untilAt in pairs(self.blocked) do if now>=untilAt then self.blocked[model]=nil end end
         if self.adapter.attackEvidence then self.inputEvidence=self.adapter:attackEvidence(s) end
         local prey=self.target
+        -- A recycled model/Humanoid cannot contribute a death or HP result to
+        -- the old prey transaction, even if its last Health happened to be zero.
+        if prey and prey.hum and prey.model and type(prey.model.FindFirstChildOfClass)=="function"
+            and prey.model:FindFirstChildOfClass("Humanoid")~=prey.hum then
+            self.target,self.pending=nil,nil;prey=nil
+            self.lastResult="Prey identity changed; resampling native target"
+        end
         if prey and prey.hum and prey.hum.Health<=0 then
             self.kills+=1;self.lastResult="Observed NPC HP reached zero; attribution unverified"
             self.corpse={position=prey.position,at=now,model=prey.model}
@@ -37,11 +52,23 @@ function Hunt.new(adapter)
             self.target=prey;self.started=now;self.bestDistance=distance(s.position,prey.position)
             self.closingAt=now;self.sample=nil;self.noDamageAt=nil;self.missesOnTarget=0
             self.lastTargetHealth=prey.health or prey.hum and prey.hum.Health
+            self.lastTargetMax=prey.maxHealth or prey.hum and prey.hum.MaxHealth
+            self.lastTargetHum=prey.hum
             self.lastUsefulAt=now;self.blockedSince=nil;self.nextAttack=now
             self.repositionUntil=nil;self.previousThrottle=nil;self.fullSpeed=nil;self.routeRetries=0;self.smoothVelocity=nil
         end
+        self.target=prey
         local health=prey.health or prey.hum and prey.hum.Health
-        if finite(health) and finite(self.lastTargetHealth) and health<self.lastTargetHealth-.01 then
+        local maximum=prey.maxHealth or prey.hum and prey.hum.MaxHealth
+        local continuous=self.lastTargetHum==prey.hum
+            and not (finite(maximum) and finite(self.lastTargetMax) and math.abs(maximum-self.lastTargetMax)>.001)
+        if not continuous then
+            self.pending=nil;self.lastTargetHealth=health;self.missesOnTarget=0
+            self.noDamageAt=now;self.lastUsefulAt=now
+            self.lastResult="Prey health identity/maximum changed; outcome window reset"
+        end
+        self.lastTargetHum=prey.hum;self.lastTargetMax=maximum
+        if continuous and finite(health) and finite(self.lastTargetHealth) and health<self.lastTargetHealth-.01 then
             if self.adapter.huntOutcome then self.adapter:huntOutcome(self.lastTargetHealth-health) end
             self.lastUsefulAt=now;self.noDamageAt=now;self.closingAt=now
             self.missesOnTarget=0;self.routeRetries=0
@@ -118,7 +145,7 @@ function Hunt.new(adapter)
             if sent then self.blockedSince=nil;self.noDamageAt=self.noDamageAt or now
             else self.blockedSince=self.blockedSince or now;self.lastBlockedReason=self.lastResult;self.lastBlockedAt=now end
             if sent and finite(health) then
-                self.attacks+=1;self.pending={at=now,health=health}
+                self.attacks+=1;self.pending={at=now,health=health,maxHealth=maximum,hum=prey.hum,model=prey.model}
             end
         end
         if self.blockedSince and now-self.blockedSince>12 then
@@ -165,7 +192,7 @@ function Hunt.new(adapter)
         for _,key in ipairs({"started","closingAt","noDamageAt","lastUsefulAt","blockedSince"}) do
             if self[key] then self[key]+=delay end
         end
-        self.pending=nil;self.sample=nil;self.nextAttack=0
+        self.pending=nil;self.sample=nil;self.nextAttack=0;self.lastTargetHealth=nil
     end
     function h:status()
         return {attacks=self.attacks,hpDeclines=self.hits,misses=self.misses,

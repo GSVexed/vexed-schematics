@@ -29,6 +29,15 @@ function Care.step(g,s,adapter)
     local kind=g.kind=="DRINK" and "drink" or "eat"
     local value=kind=="drink" and s.thirst or s.hunger
     if not finite(value) or not finite(g.baseline) then return "FAILED","Native needs unavailable" end
+    local maximum=kind=="drink" and (s.thirstMax or 100) or (s.hungerMax or 100)
+    if not finite(maximum) or maximum<=0 then return "FAILED","Native need maximum unavailable" end
+    if value<0 or value>maximum*1.05 then return "FAILED","Native need value outside its maximum" end
+    if g.needMaximum and g.needMaximum~=maximum then
+        -- A schema/species maximum change is not nutrition gained. Establish a
+        -- new same-maximum window and keep watching the actual native session.
+        g.baseline=value;m.value=value;m.progressAt=now
+    end
+    g.needMaximum=maximum
     g.gain=value-g.baseline
     if m.value and value>m.value+.02 then m.progressAt=now;m.requests=0 end
     m.value=value
@@ -51,8 +60,6 @@ function Care.step(g,s,adapter)
         m.pending=false;g.feedPending=nil;g.nextAction=now+.2
         if m.requests>=3 then return "RELOCATE","Native feed request was not acknowledged" end
     end
-    local maximum=kind=="drink" and (s.thirstMax or 100) or (s.hungerMax or 100)
-    if not finite(maximum) or maximum<=0 then return "FAILED","Native need maximum unavailable" end
     local target=kind=="drink" and math.min(s.drinkTarget or maximum,maximum)-maximum*.002 or math.min(s.careTarget or maximum*.72,maximum)
     if not finite(target) or target<=0 then return "FAILED","Native care target unavailable" end
     if value>=target and g.gain>math.min(.25,maximum*.002) then
