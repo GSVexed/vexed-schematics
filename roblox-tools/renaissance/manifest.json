@@ -1,10 +1,10 @@
 {
-  "version": "16.0.0",
+  "version": "16.0.1",
   "game_baseline": 2412,
   "modules": {
     "core": {
-      "sha256": "8e138e3a9ecfcec3821b3b6cc18bdbdcd9ada3c264b178f89fa6af91f8e2288c",
-      "bytes": 12223
+      "sha256": "ecab8f654767948021461413e1615c65e8c4e98d14dac1fb1c7893dec24847c5",
+      "bytes": 12249
     },
     "settings": {
       "sha256": "61266183c2f61728679177fc9a72ba4987cb742a31e4490f846ec23b496dc325",
@@ -23,8 +23,8 @@
       "bytes": 3812
     },
     "recovery": {
-      "sha256": "5e82100f08b394a177bac98a5b432e17c08eb8c151c8b3d95ec9a096e08540ed",
-      "bytes": 13317
+      "sha256": "db72954ecc73f52edddfe7541ed2f55682ea5739fe5169d011ab1e212c0aa743",
+      "bytes": 13788
     },
     "feeding": {
       "sha256": "4f03841709f72ce8cd22eec26eeb3a205896c0465aa9fd6720f8e674acb6f27c",
@@ -39,8 +39,8 @@
       "bytes": 3008
     },
     "features": {
-      "sha256": "4f9be7f5bfdde489fad334e71612057dd84f6a6bf2149406cf824932f79497b6",
-      "bytes": 28959
+      "sha256": "7ddf5c8f53a3494247eb864c1bfeda0f4d7b973bdfd64db1fca378c01d5ffe75",
+      "bytes": 30035
     },
     "roblox": {
       "sha256": "3c517069d7aefcf09d5d859465bbb1fb7035034827e8d2a278f30bc739bb5a8d",
@@ -51,12 +51,12 @@
       "bytes": 3565
     },
     "ui": {
-      "sha256": "577ec136e4b983ebb28083ef86bea9dc88e6cf4a17cc7c0b2d325486b6be33c2",
-      "bytes": 21376
+      "sha256": "3752c4dfdd6f465977166519779b2c10c967b84af2d8f3f35841704962dccbb0",
+      "bytes": 21263
     },
     "controller": {
-      "sha256": "beac4a07e7da52a3666d716be02c243f08a5bbc985932dc255c4b2c25eeb507f",
-      "bytes": 56389
+      "sha256": "78339941e5539fe0b53f8c7d81c3afee51947e8f81d89c12a286ed1c6457d57a",
+      "bytes": 56512
     },
     "amber_ledger": {
       "sha256": "d81f49ce6c742e898d2e8dc2c2f93aa7c00d704f0b9498579712492aa760254f",
@@ -107,7 +107,7 @@
       "bytes": 5870
     }
   },
-  "bundle_sha256": "53e348fb1574d7a7fd334ac316fac645b8801f4ab9706fd6288f7df91c642b29",
-  "bundle_bytes": 463094,
+  "bundle_sha256": "776cc09a7f3c14e60d40a367aee8c408dbcf8f2787b30817daed498e18672211",
+  "bundle_bytes": 464677,
   "stable_clean_v14_overwritten": false
 }
