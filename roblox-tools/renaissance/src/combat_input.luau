@@ -210,19 +210,20 @@ function CombatInput.new(bridge,policy,ledger)
                 return
             end
         end
-        -- Clear prior to calling native code: synchronous WolfBiteAt callbacks
-        -- reenter the hub during tryBite and must never issue a second bite.
-        self.pending=nil
-        self.lastDispatch=now
-        local markers=self.markerCount
-        -- Repeating a physical M1 must never synthesize mouse Up/Down
-        -- events: that is the old executor-dependent feedback loop.
+        -- The old fallback used synthetic mouse Up/Down pulses, which could
+        -- corrupt the physical M1 state. No such pulses are scheduled here.
         local native=bridge.wolfActions and bridge.wolfActions.tryBite
         if type(native)~="function" then
             self.nextAttempt=now+.12
             self.status="original native bite callback not available; no mouse replay"
             return
         end
+        -- Only a validated callback counts as a dispatch. Retain a pending
+        -- Rest-exit bite while native discovery is incomplete and do not make
+        -- a phantom lastDispatch timestamp when no callback could be issued.
+        self.pending=nil
+        self.lastDispatch=now
+        local markers=self.markerCount
         -- Adaptive Faster Bites previously adjusted a display factor without
         -- feeding it into dispatch timing. It now controls native request
         -- spacing. The original callback and server still enforce cooldowns.
