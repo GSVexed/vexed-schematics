@@ -1,12 +1,12 @@
 {
-  "version": "16.1.5",
+  "version": "16.1.6",
   "channel": "candidate",
   "integrated_territory_version": "0.8.0",
   "game_baseline": 2412,
   "modules": {
     "core": {
-      "sha256": "f25a457ad75a24de6bbac77a26acea12e9fb3d81f08a98035ff58675844395fe",
-      "bytes": 13119
+      "sha256": "bac9854113741081b7e5f7123081dbf295ddec3c2fcd776d1d4a19c67d20e68c",
+      "bytes": 13114
     },
     "settings": {
       "sha256": "2b6ee15aa075c552456925eff9f71cedffdf9e135cb3b1739871acee938a25fa",
@@ -33,8 +33,8 @@
       "bytes": 6701
     },
     "combat_input": {
-      "sha256": "aeccf5f73492dafec0e5e0fa18b236a0b89fb3f830f5e9977219838cfc4d2161",
-      "bytes": 15112
+      "sha256": "8c5d91cbbf8486061d2f5f48cfe28e752769edeba4e1ee1665c88e6476e2fdfc",
+      "bytes": 14968
     },
     "rescue": {
       "sha256": "f1be4288bfbe47a55c7c74f6895966ce5f199055d7286d10ad0976bc04b5fecb",
@@ -49,8 +49,8 @@
       "bytes": 33520
     },
     "roblox": {
-      "sha256": "34725d419bca8acf2e0876a0b521e2fddf373e3ba1ccb5e08c15130a24bf27ce",
-      "bytes": 97763
+      "sha256": "6d7f43662692d2da44015e37978b918cfa580a46031e697ab3e1e73e87ae5eee",
+      "bytes": 99174
     },
     "zoom": {
       "sha256": "8446b1f187833685e25b5104dde57eb6c60c5f727bc65c032e704628b23707b3",
@@ -65,12 +65,12 @@
       "bytes": 16359
     },
     "ui": {
-      "sha256": "83cae08e58a79c5fc77ec10b77e6986f895d8a5044c6efaa84035c198c61fa92",
-      "bytes": 23555
+      "sha256": "38898acbd8e39edbaa640e88b608b1d5dcdff49f843e170db116b4f384937feb",
+      "bytes": 23585
     },
     "controller": {
-      "sha256": "3d72f348719c409f451654395cdcf154ddaa4c8919a6b38d013c39e3933839b2",
-      "bytes": 77108
+      "sha256": "dfd75419a84ca5657d9822867e6cf3bf1988e0680b76d02ef3b452757a353020",
+      "bytes": 78227
     },
     "amber_ledger": {
       "sha256": "d81f49ce6c742e898d2e8dc2c2f93aa7c00d704f0b9498579712492aa760254f",
@@ -121,8 +121,8 @@
       "bytes": 5870
     }
   },
-  "source_fingerprint": "f93c394c6f77c8101dc2602362624a3ef7909a63a46c8fc9da700139252a5d0c",
-  "bundle_sha256": "5b65b0fc59fd6ba5ea70e2b6c84d1ed92f88993f4627e5ca97910765275dba7d",
-  "bundle_bytes": 567075,
+  "source_fingerprint": "22dda390f60dc2b2e2f85a167a2e9fa43bc2fce53afea70cd6d2bc551c8a82bf",
+  "bundle_sha256": "bb82168a72c1eca888a29df1d4a930a33c63e735c574659528260c61ce50d10f",
+  "bundle_bytes": 569486,
   "stable_clean_v14_overwritten": false
 }
