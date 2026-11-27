@@ -33,13 +33,14 @@
     "renaissance-v16/src/amber_gait.luau",
     "renaissance-v16/src/amber_nav.luau",
     "renaissance-v16/tests/mock_roblox.luau",
-    "feral-renaissance-v16.4.1-exp1.lua"
+    "feral-renaissance-v16.4.1-exp1.lua",
+    "feral-renaissance-v16.4.1-exp1-loader.lua"
   ],
   "module_parity": true,
-  "bundle_sha256": "4e54f333cb5870e94f2ce4e0110238baa2548f02972f85cc625d63fcae2c1e3e",
+  "bundle_sha256": "b5ca78b29a8cfc37bfada425561398cda72fa679e83397433c6fdb049d5fba67",
   "regressions": {
-    "total": 229,
-    "passed": 229,
+    "total": 235,
+    "passed": 235,
     "failed": 0
   },
   "runtime_exit_code": 0,
@@ -489,6 +490,18 @@
     "PASS new minigame ownership cancels an already queued synthetic pulse",
     "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
     "PASS repeated desktop enable disable and unload leaves only native hooks",
-    "RENAISSANCE_TEST_RESULT total=229 passed=229 failed=0"
+    "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS pinned loader starts the complete candidate with desktop hold enabled",
+    "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS pinned loader reconstructs every verified chunk after a truncated full fetch",
+    "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS missing source chunk leaves the active hub and its hooks intact",
+    "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS same-length wrong-version source is rejected before replacing the current hub",
+    "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS available SHA256 backend rejects a digest mismatch without unloading",
+    "[FERAL Renaissance 16.4.1-exp1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS failed network fetch preserves the old release without partial activation",
+    "RENAISSANCE_TEST_RESULT total=235 passed=235 failed=0"
   ]
 }
