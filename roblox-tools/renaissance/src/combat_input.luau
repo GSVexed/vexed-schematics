@@ -151,7 +151,11 @@ function CombatInput.new(bridge,policy,ledger)
             self.pending=nil;p=nil
         end
         local held=options.repeatHeld and self.held~=nil
+        -- Explicitly held Alt is a human attack request. It takes priority
+        -- over Auto Bite target selection so the private-callback fallback is
+        -- still usable when both toggles happen to be ON.
         local automatic=not inGrab and options.automatic and options.targetValid==true
+            and not (self.held and self.held.key=="ALT")
         if inGrab and not nativeGrabLane then automatic=false end
         if not p and not held and not automatic then
             self.awaiting=nil;return

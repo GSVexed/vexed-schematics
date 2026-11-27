@@ -504,4 +504,25 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         r.OnClientEvent:Fire("end",{f=962})
         w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(key);h:close()
     end)
+
+    test("physical ALT fallback stays primary when Auto Bite is requested too",function()
+        local M=modules()
+        local count=0
+        local bridge={}
+        function bridge:restLock() return .7 end
+        function bridge:attribute() return nil end
+        function bridge:biteDelay() return .27 end
+        function bridge:biteReadiness() return {ready=false,known=false,reason="native timing unavailable"} end
+        function bridge:visibleBiteWindow() return true end
+        function bridge:nativeBiteCooldown() return .5 end
+        function bridge:tryHeldInputBite() count+=1;return true end
+        local input=M.combat_input.new(bridge,M.policy.new(),M.core.ledger(20))
+        local s={alive=true,char={},generation=1,altBiteHeld=true,altBiteKnown=true,
+            attackHeld=false,mouseHeld=false,r2Held=false}
+        input:input(s,10,"ALT",{})
+        input:tick(s,10.1,{repeatHeld=true,automatic=true,targetValid=true,speedEnabled=true})
+        eq(count,1)
+        eq(input.held.key,"ALT")
+        assert(input.awaiting and input.awaiting.backend=="INPUT")
+    end)
 end
