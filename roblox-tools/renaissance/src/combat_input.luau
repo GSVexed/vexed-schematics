@@ -82,10 +82,11 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:input(s,now,kind,inputObject)
         if not s.alive then return end
-        -- The generated M1 pulses and ordinary manual clicks never replace
-        -- the independent Alt hold. The game's M1 handler still runs normally.
-        if kind=="M1" and self.held and self.held.key=="ALT" then return end
-        self.held={char=s.char,generation=s.generation,key=kind or "mouse",source="event",input=inputObject}
+        -- The first genuine M1 click belongs entirely to the game. Only
+        -- after one uninterrupted hold crosses the tap/hold threshold does
+        -- the hub take over repeating. New taps always start a fresh timer.
+        self.held={char=s.char,generation=s.generation,key=kind or "mouse",
+            source="event",input=inputObject,startedAt=now,handoff=false}
         self.nextAttempt=math.max(self.nextAttempt,now+.025)
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
         local at=math.max(now+.025,policy.lastRestRelease+bridge:restLock(s.char)+.035)
@@ -102,29 +103,30 @@ function CombatInput.new(bridge,policy,ledger)
             return
         end
         local physical=s.attackHeld==true
-        local alt=s.altBiteHeld==true
         if not options.repeatHeld then
             if self.held then self:release(nil,now) end
-        elseif alt and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation
-            or self.held.key~="ALT") then
-            -- Recover missing ALT InputBegan without relying on generated M1.
-            self.held={char=s.char,generation=s.generation,key="ALT",source="altPoll"}
-            self.nextAttempt=math.max(self.nextAttempt,now+.025)
-        elseif self.held and self.held.key=="ALT"
-            and s.altBiteKnown~=false and not alt then
-            -- ALT release stops repeat even if InputEnded was lost.
-            self:release("ALT",now)
         elseif physical and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
-            -- Restore a missed InputBegan (e.g. hub enabled after M1 went down).
-            self.held={char=s.char,generation=s.generation,key="poll",source="poll"}
+            -- Hub enabled after M1 was already pressed: wait a fresh hold
+            -- threshold before dispatching repeats.
+            self.held={char=s.char,generation=s.generation,key="poll",source="poll",
+                startedAt=now,handoff=false}
             self.nextAttempt=math.max(self.nextAttempt,now+.025)
         elseif self.held and (self.held.char~=s.char or self.held.generation~=s.generation
             or self.held.source=="poll" and not physical) then
             self:release(nil,now)
         end
+        if self.held and not self.held.handoff and
+            (self.held.key=="M1" or self.held.key=="poll") then
+            local age=now-(self.held.startedAt or now)
+            if age>=.28 then
+                self.held.handoff=true
+                self.nextAttempt=math.max(self.nextAttempt,now+.015)
+                ledger:event("physical_m1_hold_handoff",now,{age=age})
+            end
+        end
         local inGrab=s.grab==true or options.minigameBusy==true
         local nativeGrabLane=inGrab and options.nativeMinigame==true
-            and self.held~=nil and (self.held.key=="M1" or self.held.key=="poll" or self.held.key=="ALT")
+            and self.held~=nil and (self.held.key=="M1" or self.held.key=="poll")
             and options.minigamePressNear~=true
             and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"
         if not s.alive or s.chat or s.gameMenu or inGrab and not nativeGrabLane
@@ -150,15 +152,18 @@ function CombatInput.new(bridge,policy,ledger)
             or bridge:attribute(s.char,"WolfBiteAt")~=p.marker) then
             self.pending=nil;p=nil
         end
-        local held=options.repeatHeld and self.held~=nil
-        -- Explicitly held Alt is a human attack request. It takes priority
-        -- over Auto Bite target selection so the private-callback fallback is
-        -- still usable when both toggles happen to be ON.
+        local held=options.repeatHeld and self.held~=nil and self.held.handoff==true
+        -- Holding M1 explicitly takes priority over Auto Bite target
+        -- selection. Ordinary clicks before the handoff remain game-owned.
         local automatic=not inGrab and options.automatic and options.targetValid==true
-            and not (self.held and self.held.key=="ALT")
+            and not held
         if inGrab and not nativeGrabLane then automatic=false end
         if not p and not held and not automatic then
-            self.awaiting=nil;return
+            -- A quick manual tap is never repeated by this controller.
+            -- No callback/simulated mouse edge is dispatched until handoff.
+            self.awaiting=nil
+            self.status=self.held and "manual M1 tap; waiting for sustained hold" or "idle"
+            return
         end
         if s.feeding or s.captured or s.holding or s.ability or s.rest then
             self.pending=nil
@@ -204,13 +209,14 @@ function CombatInput.new(bridge,policy,ledger)
             and (readiness.reason=="native timing unavailable"
                 or readiness.reason=="native timing layout unknown")
         if not allowed and privateUnknown and held and not automatic then
-            -- Keep the verified original function in charge when available.
-            -- When private, Alt can use ordinary game input only in a visible
-            -- stock-cooldown window and never during minigames.
+            -- Validated native callbacks retain their own cooldown. A private
+            -- callback can only be substituted by actual game input after
+            -- the physical M1 has passed the hold threshold, outside grabs,
+            -- with visible stock-rate timing confirmed.
             local original=bridge.wolfActions and bridge.wolfActions.tryBite
             if type(original)=="function" and (not inGrab or nativeGrabLane) then
                 allowed=true
-            elseif self.held and self.held.key=="ALT" and not inGrab then
+            elseif not inGrab then
                 allowed=type(bridge.visibleBiteWindow)=="function" and bridge:visibleBiteWindow(s,now) or false
             end
         end
@@ -231,17 +237,10 @@ function CombatInput.new(bridge,policy,ledger)
         end
         local native=bridge.wolfActions and bridge.wolfActions.tryBite
         local fallback=type(native)~="function" and held and not automatic and not inGrab
-            and self.held and self.held.key=="ALT"
-        -- Never reset a genuinely physically held M1. Native callback is
-        -- safe with either trigger; only Alt owns synthetic input replay.
-        if fallback and (s.mouseHeld or s.r2Held) then
-            self.status="release left mouse while using Alt repeat fallback"
-            self.nextAttempt=now+.12
-            return
-        end
+            and self.held and (self.held.key=="M1" or self.held.key=="poll")
         if type(native)~="function" and not fallback then
             self.nextAttempt=now+.12
-            self.status="original native bite callback unavailable; hold Left Alt for input fallback"
+            self.status="original bite callback unavailable; awaiting M1 hold handoff"
             return
         end
         -- A validated original callback or a bounded Alt input request is
@@ -250,8 +249,8 @@ function CombatInput.new(bridge,policy,ledger)
         self.pending=nil
         self.lastDispatch=now
         local markers=self.markerCount
-        -- 16.1.4 adaptive factor applies to both native and Alt-input
-        -- requests, without bypassing the unchanged game's cooldown.
+        -- Adaptive Faster Bites applies to native or M1-handoff inputs.
+        -- It never overrides the unchanged original game/server cooldown.
         local cooldown=type(bridge.nativeBiteCooldown)=="function"
             and bridge:nativeBiteCooldown(s) or nil
         local factor=options.speedEnabled and self:factor() or 1
@@ -273,7 +272,7 @@ function CombatInput.new(bridge,policy,ledger)
         end
         if not called then self.nextAttempt=math.max(self.nextAttempt,now+.3) end
         self.status=marked and "native marker; awaiting server-confirmed impact"
-            or called and (backend=="INPUT" and "Alt input requested; awaiting actual game bite marker"
+            or called and (backend=="INPUT" and "held-M1 input handoff; awaiting native marker"
                 or "original native callback requested; awaiting marker")
             or "original native attack dispatcher unavailable"
         ledger:event(p and "native_bite_buffer_released" or "native_cadence_attempt",now,{
