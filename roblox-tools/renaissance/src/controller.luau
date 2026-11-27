@@ -73,7 +73,17 @@ function Controller.new(M,bridge,options)
     -- press during an asynchronously arriving native grab begin.
     -- Legacy executor mouse replay is disabled. No generated M1 edge may
     -- compete with the physical mouse while the player holds to attack.
-    bridge.combatPulseBlocked = function() return true end
+    bridge.combatPulseBlocked = function()
+        if bridge.holdBinding~="M3" then return true end
+        local held=h.combatInput.held
+        return h.closed or not h.active or h.inputSuspended or h.windowFocused==false
+            or not h.registry.byId.holdBite.requested
+            or not held or held.key~="M3" or held.upSince~=nil
+            or h.physicalM1Input~=nil or h:hasNativeGrab(bridge.clock())
+            or h.grabInput.lease~=nil
+            or bridge.UserInputService:GetFocusedTextBox()~=nil
+            or h.ui:contains(bridge.UserInputService:GetMouseLocation())
+    end
     h.rescue = M.rescue.new(bridge,h.ledger)
     h.hippo = M.hippo.new(Core,bridge,h.ledger)
     h.tests = M.test_features.new(Core,bridge,h)
@@ -89,6 +99,7 @@ function Controller.new(M,bridge,options)
     function h:focusChanged(focused)
         if self.closed then return end
         self.windowFocused=focused==true
+        self.middlePollArmed=false;self.middlePollDown=nil
         -- Focus return does not resurrect a hold whose release was missed.
         -- A fresh gameplay input must establish ownership again.
         self.inputSuspended=true
@@ -473,23 +484,32 @@ function Controller.new(M,bridge,options)
             if key ~= Enum.KeyCode.Space then self.rescue:cancel() end
         end
     end
+    function h:startMiddle(s,now,input)
+        if self.closed or not self.active or self.windowFocused==false
+            or not s.alive or s.chat or s.gameMenu
+            or not self.registry.byId.holdBite.requested
+            or bridge.UserInputService:GetFocusedTextBox()
+            or self.ui:contains(bridge.UserInputService:GetMouseLocation())
+            or not bridge:mouseGameplayPoint() then return false end
+        if self.combatInput.held and self.combatInput.held.key=="M3"
+            and self.combatInput.held.generation==s.generation then return true end
+        self:physicalInput("other")
+        self.inputSuspended=false
+        self.policy:input("attack",now)
+        self.feeding:attack(s,now);self.rescue:cancel()
+        self:stopWalk("middle mouse attack input")
+        self.recovery:release("middle mouse attack input",now)
+        self.combatInput:input(s,now,"M3",input)
+        return true
+    end
     function h:input(input,processed)
         local kind,key = input.UserInputType,input.KeyCode
         if bridge.holdBinding=="M3" and kind==Enum.UserInputType.MouseButton3 then
-            if self.closed or not self.active or processed or self.windowFocused==false
-                or bridge.UserInputService:GetFocusedTextBox()
-                or self.ui:contains(bridge.UserInputService:GetMouseLocation())
-                or not self.registry.byId.holdBite.requested then return end
+            -- Camera processing alone is not a gameplay veto. UI/menu/text checks
+            -- in startMiddle still reject consumed control clicks.
+            self.middlePollDown=true;self.middlePollArmed=false
             local now=bridge.clock()
-            local s=bridge:snapshot(now,false)
-            if not s.alive or s.chat or s.gameMenu then return end
-            self:physicalInput("other")
-            self.inputSuspended=false
-            self.policy:input("attack",now)
-            self.feeding:attack(s,now);self.rescue:cancel()
-            self:stopWalk("middle mouse attack input")
-            self.recovery:release("middle mouse attack input",now)
-            self.combatInput:input(s,now,"M3",input)
+            self:startMiddle(bridge:snapshot(now,false),now,input)
             return
         end
         -- Once this real physical M1 has been held long enough for the
@@ -563,6 +583,7 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         local kind,key=input.UserInputType,input.KeyCode
         if kind==Enum.UserInputType.MouseButton3 and bridge.holdBinding=="M3" then
+            self.middlePollArmed=false
             self.combatInput:release("M3",bridge.clock())
             return
         elseif kind==Enum.UserInputType.MouseButton1 then
@@ -889,14 +910,16 @@ function Controller.new(M,bridge,options)
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
         local hold=r.byId.holdBite
         local m1Native=bridge.holdBinding=="M1" and not native and bridge:nativeWolfInputAction(s.now or bridge.clock()) or nil
+        local m3Fallback=bridge.holdBinding=="M3" and not native and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
         local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
         local sourceLabel=nativeGC and "Original native callback recovered · "
             or native and "Original native callback · "
             or m1Native and "Original WolfController M1 input callback · "
+            or m3Fallback and "Middle mouse: ordinary click fallback (unverified) · "
             or (bridge.holdBinding=="M3" and "Middle mouse: original native callback inaccessible · "
                 or "Original attack handler inaccessible; no synthetic clicks · ")
-        r:ack("holdBite",hold.requested and (native or m1Native~=nil),
-            not hold.requested and "OFF" or native and "ARMED" or m1Native and "PARTIAL" or "WAITING",
+        r:ack("holdBite",hold.requested and (native or m1Native~=nil or m3Fallback),
+            not hold.requested and "OFF" or native and "ARMED" or (m1Native or m3Fallback) and "PARTIAL" or "WAITING",
             hold.requested and sourceLabel..self.combatInput.status or hold.detail)
         r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
             auto.requested and self.combatInput.status or auto.detail)
@@ -1170,6 +1193,17 @@ function Controller.new(M,bridge,options)
             self.inputSuspended=true
             self.physicalM1Input=nil
             self.combatInput:cancel()
+        end
+        if bridge.holdBinding=="M3" and s.middleHeldKnown then
+            if not s.middleHeld then self.middlePollArmed=true
+            elseif self.middlePollArmed and not self.middlePollDown then
+                self.middlePollArmed=false
+                self:startMiddle(s,now,nil)
+            end
+            self.middlePollDown=s.middleHeld
+        end
+        if bridge.holdBinding=="M3" then
+            s.physicalM1Held=self.physicalM1Input~=nil or (s.mouseHeld and not bridge.syntheticM1)
         end
         if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held,s.middleHeld=false,false,false,false
         elseif bridge.holdBinding=="M3" and self.combatInput.held and self.combatInput.held.key=="M3" then s.attackHeld=true end

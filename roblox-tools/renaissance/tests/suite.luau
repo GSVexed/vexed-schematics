@@ -12,6 +12,9 @@ local function eq(a,b)
 end
 local function close(a,b) assert(math.abs(a-b)<1e-8,"numbers differ") end
 local function load(w,options)
+    options=table.clone(options or {})
+    -- Existing M1-specific tests exercise the explicit legacy compatibility mode.
+    if options.holdBinding==nil then options.holdBinding="M1" end
     return assert(w.env.loadstring(BUNDLE))(options)
 end
 local function modules()
@@ -2957,6 +2960,64 @@ test("runtime reports identify the exact source build and preserve unknown comba
     local snapshot=h.tests:snapshot();eq(snapshot.combat,nil);eq(snapshot.combatKnown,false)
     h.snapshot.combat=false;snapshot=h.tests:snapshot()
     eq(snapshot.combat,false);eq(snapshot.combatKnown,true)
+    h:close()
+end)
+
+-- Production default M3 cases deliberately bypass the legacy helper.
+test("M3 accepts a camera-processed world press and stops on release",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions()
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    assert(h.combatInput.held and h.combatInput.held.key=="M3")
+    w:advance(1.8);assert((w.nativeBites or 0)>=2)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    local count=w.nativeBites
+    w:advance(.9);eq(w.nativeBites,count);eq(h.combatInput.held,nil)
+    h:close()
+end)
+test("M3 recovers missing began edge by polling but not after focus loss",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions()
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton3
+    w:advance(.5);assert(h.combatInput.held and h.combatInput.held.key=="M3")
+    h:focusChanged(false);h:focusChanged(true);w:advance(.5)
+    eq(h.combatInput.held,nil)
+    w.held=nil;w:advance(.25)
+    w.held=E.UserInputType.MouseButton3;w:advance(.25)
+    assert(h.combatInput.held)
+    h:close()
+end)
+test("M3 default does not repeat a physical M1 hold",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions()
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton1
+    local press=w:input(nil,E.UserInputType.MouseButton1)
+    local count=w.nativeBites or 0;w:advance(1.3)
+    eq(w.nativeBites or 0,count);eq(h.combatInput.held,nil)
+    w.held=nil;w.uis.InputEnded:Fire(press);h:close()
+end)
+test("M3 fallback uses ordinary clicks when native discovery is inaccessible",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions()
+    w.env.getconnections=nil;w.env.getgc=function()return {}end
+    w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(2.2)
+    assert((w.virtualBiteDowns or 0)>=1,"ordinary fallback not dispatched")
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    local count=w.virtualBiteDowns
+    w:advance(.9);eq(w.virtualBiteDowns,count);eq(h.combatInput.held,nil)
     h:close()
 end)
 

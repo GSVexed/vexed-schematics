@@ -182,6 +182,7 @@ function CombatInput.new(bridge,policy,ledger)
             self.status=(options.minigameBusy or s.grab) and "minigame has priority" or "native action has priority"
             return
         end
+        if middleMode and bridge.syntheticM1 then return end
         local p=self.pending
         if p and (p.char~=s.char or p.generation~=s.generation or now>p.untilAt
             or bridge:attribute(s.char,"WolfBiteAt")~=p.marker) then
@@ -252,8 +253,8 @@ function CombatInput.new(bridge,policy,ledger)
             local original=bridge.wolfActions and bridge.wolfActions.tryBite
             if type(original)=="function" and (not inGrab or nativeGrabLane) then
                 allowed=true
-            elseif not inGrab and self.held and self.held.key=="M1"
-                and self.held.input then
+            elseif not inGrab and self.held and ((self.held.key=="M1" and self.held.input)
+                or middleMode and self.held.key=="M3") then
                 allowed=type(bridge.visibleBiteWindow)=="function"
                     and bridge:visibleBiteWindow(s,now) or false
             end
@@ -282,9 +283,14 @@ function CombatInput.new(bridge,policy,ledger)
             and self.held and self.held.key=="M1" and self.held.source=="event"
             and self.held.input and type(bridge.nativeWolfInputAction)=="function"
             and bridge:nativeWolfInputAction(now) or nil
-        if type(native)~="function" and not nativeInput then
+        local fallback=type(native)~="function" and not nativeInput and middleMode
+            and held and not automatic and not inGrab and self.held.key=="M3"
+            and not (s.mouseHeld or s.r2Held or s.physicalM1Held)
+            and type(bridge.tryHeldInputBite)=="function"
+            and type(bridge.visibleBiteWindow)=="function" and bridge:visibleBiteWindow(s,now)
+        if type(native)~="function" and not nativeInput and not fallback then
             self.nextAttempt=now+.12
-            self.status=held and (middleMode and "middle mouse: original native callback unavailable" or "original game handler unavailable; no synthetic mouse replay")
+            self.status=held and (middleMode and "M3 held: waiting for a usable native attack or ordinary click window" or "original game handler unavailable; no synthetic mouse replay")
                 or "waiting for native attack handler"
             return
         end
@@ -307,8 +313,13 @@ function CombatInput.new(bridge,policy,ledger)
         local called,backend
         if type(native)=="function" then
             called,backend=bridge:tryNativeBite(now),"NATIVE"
-        else
+        elseif nativeInput then
             called,backend=bridge:tryNativeInputBite(now,self.held.input),"NATIVE_INPUT"
+        else
+            backend="INPUT"
+            self.awaiting={char=s.char,generation=s.generation,at=now,backend=backend}
+            called=bridge:tryHeldInputBite(s,now)
+            if not called then self.awaiting=nil end
         end
         local marked=self.markerCount>markers
         if called and not marked then
@@ -319,7 +330,8 @@ function CombatInput.new(bridge,policy,ledger)
             self.nextAttempt=math.max(self.nextAttempt,now+.3)
         end
         self.status=marked and "native marker; awaiting server-confirmed impact"
-            or called and (backend=="NATIVE_INPUT" and "own original input handler called; awaiting native marker"
+            or called and (backend=="INPUT" and "M3 ordinary click requested; awaiting native marker"
+                or backend=="NATIVE_INPUT" and "own original input handler called; awaiting native marker"
                 or "original native bite callback called; awaiting marker")
             or "validated native attack handler unavailable"
         ledger:event(p and "native_bite_buffer_released" or "native_cadence_attempt",now,{

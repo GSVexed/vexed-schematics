@@ -830,9 +830,11 @@ function Roblox.new(Core, environment)
         if pulse.timer and type(task)=="table" and type(task.cancel)=="function" then
             pcall(task.cancel,pulse.timer)
         end
-        self.syntheticReleasing=true
-        pcall(pulse.release)
-        self.syntheticReleasing=false
+        if not pulse.independent or pulse.didPress then
+            self.syntheticReleasing=true
+            pcall(pulse.release)
+            self.syntheticReleasing=false
+        end
     end
     -- If an executor fails to run the scheduled synthetic release, do not
     -- permanently block subsequent held-M1 takeover bites.
@@ -847,8 +849,25 @@ function Roblox.new(Core, environment)
     -- another Down is ignored by input systems that require a new edge.
     -- Re-arm one short Up -> Down -> Up pulse, with a single owner, unless
     -- an active native grab session has priority. No Bite/BiteHit remotes.
+    function b:mouseGameplayPoint()
+        local point=self.UserInputService:GetMouseLocation()
+        local gui=self.player:FindFirstChildOfClass("PlayerGui")
+        if not point then return false end
+        if gui then
+            local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,point.X,point.Y)
+            if ok and type(under)=="table" then
+                for _,object in ipairs(under) do
+                    if object:IsA("GuiButton") or object:IsA("TextBox") then return false end
+                end
+            end
+        end
+        return true
+    end
     function b:tryHeldInputBite(s,now)
         if self.syntheticM1 then return false end
+        local independent=self.holdBinding=="M3"
+        if independent and (not s or s.mouseHeld or s.r2Held or s.physicalM1Held) then return false end
+        if independent and self.combatPulseBlocked and self.combatPulseBlocked() then return false end
         if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding then return false end
@@ -896,7 +915,7 @@ function Roblox.new(Core, environment)
             return clicked
         end
         self.syntheticM1Until=now+.3
-        local pulse={release=up,method=backend,didPress=false,startedAt=now}
+        local pulse={release=up,method=backend,didPress=false,startedAt=now,independent=independent}
         self.syntheticM1=pulse
         local function safeUp()
             self.syntheticReleasing=true
@@ -909,7 +928,7 @@ function Roblox.new(Core, environment)
         end
         -- Reset the logical button state while preserving the real human-held
         -- intent in CombatInput (synthetic InputEnded events are ignored).
-        if not safeUp() then
+        if not independent and not safeUp() then
             self.syntheticM1=nil
             self.heldInputIndex=(index%#modes)+1
             self.heldInputMisses=0
@@ -924,9 +943,11 @@ function Roblox.new(Core, environment)
             local readable,current=pcall(self.snapshot,self,self.clock(),false)
             if not readable or not current.alive or current.char~=s.char or current.generation~=s.generation
                 or current.chat or current.gameMenu or current.rest or current.feeding
-                or current.ability or current.captured or current.holding then
+                or current.ability or current.captured or current.holding
+                or independent and (current.mouseHeld or current.r2Held or current.grab) then
                 stop();return
             end
+            if independent then pulse.didPress=true end
             self.syntheticPressing=true
             local pressed=pcall(down)
             self.syntheticPressing=false

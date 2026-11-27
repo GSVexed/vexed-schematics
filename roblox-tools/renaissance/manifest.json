@@ -1,12 +1,12 @@
 {
-  "version": "16.2.1",
+  "version": "16.2.2",
   "channel": "candidate",
   "integrated_territory_version": "0.8.0",
   "game_baseline": 2412,
   "modules": {
     "core": {
-      "sha256": "8df223e263f06f67ada27bbbbbc2cbd344084bf474d0a2cfdb39c7fa91835832",
-      "bytes": 13106
+      "sha256": "b49abe5c8a9c84026e7f5d2f179b9d669d6f60fc85daee5d119edb7c144fd8b1",
+      "bytes": 13124
     },
     "settings": {
       "sha256": "2b6ee15aa075c552456925eff9f71cedffdf9e135cb3b1739871acee938a25fa",
@@ -33,8 +33,8 @@
       "bytes": 6701
     },
     "combat_input": {
-      "sha256": "475bb11b7de137e110804ed8d46e62d78582b2cc68d1cd6dc8a07207ab93abf9",
-      "bytes": 17602
+      "sha256": "25326d75f917231a6e2e4b792b897df2c09f5d21a0c2fdba13a228a904f5eb90",
+      "bytes": 18464
     },
     "rescue": {
       "sha256": "f1be4288bfbe47a55c7c74f6895966ce5f199055d7286d10ad0976bc04b5fecb",
@@ -49,8 +49,8 @@
       "bytes": 33520
     },
     "roblox": {
-      "sha256": "1902f605cd08ac7c8f4bca3bf467d035db7486b30293bb103256f27b7c464770",
-      "bytes": 104697
+      "sha256": "e209deff4263b198d137fc5c9feb3774445d404da643ad8a96dc8dacb3c2a987",
+      "bytes": 105796
     },
     "zoom": {
       "sha256": "8446b1f187833685e25b5104dde57eb6c60c5f727bc65c032e704628b23707b3",
@@ -69,8 +69,8 @@
       "bytes": 23573
     },
     "controller": {
-      "sha256": "561015d99f6ca111c77de0b8381e37737d38af4844b7b127ced89377d9f099bf",
-      "bytes": 80084
+      "sha256": "1594970969a611416491caa157d7344f5b8e66f2934c7b162ce4d9f94fc43f73",
+      "bytes": 81917
     },
     "amber_ledger": {
       "sha256": "d81f49ce6c742e898d2e8dc2c2f93aa7c00d704f0b9498579712492aa760254f",
@@ -121,8 +121,8 @@
       "bytes": 5870
     }
   },
-  "source_fingerprint": "0822cfb341d025ebd19ac62f5b55a71a01f6a14ba38310279be15d67e0e6c704",
-  "bundle_sha256": "f122d8a83a914c6910c845e8d4b92bee9cc6868a199caebc2732ed593067e5ee",
-  "bundle_bytes": 579480,
+  "source_fingerprint": "d5b765fd41e921644aac97da7e56288d05f4f6247a21dd55555b48b4eac0b910",
+  "bundle_sha256": "099448600bbb102830f5650aaac1a28bed288a4e427d83a6fb8a7f0967fca2c2",
+  "bundle_bytes": 583292,
   "stable_clean_v14_overwritten": false
 }
