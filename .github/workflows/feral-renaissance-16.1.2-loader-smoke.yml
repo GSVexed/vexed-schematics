@@ -35,6 +35,10 @@ jobs:
           digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
           assert digest==manifest['bundle_sha256']==record['bundle_sha256']
           assert record['source_commit'] in loader, 'Missing immutable tested source ref'
+          chunks=[(root/'renaissance/chunks/v16.1.2'/f'part-{i:02d}.txt').read_bytes() for i in range(1,7)]
+          assert [len(p) for p in chunks]==[96005,95996,95963,95987,95983,80574], 'Chunk size mismatch'
+          assert b''.join(chunks)==candidate.read_bytes(), 'Chunk reconstruction changed the original code'
+          assert '0605986d3934f101f040cf4d52f1f7c56a92a1f6' in loader, 'Chunk source must be immutably pinned'
           assert 'reportError("Startup", hub)' in loader
           assert 'reportError("Download",' in loader
           print('Verified candidate and loader',digest)

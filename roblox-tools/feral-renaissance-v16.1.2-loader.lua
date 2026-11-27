@@ -58,6 +58,33 @@ for _, url in ipairs(urls) do
     end
     issue = ok and "Download returned unexpected content" or tostring(result)
 end
+-- Recover from executors that cap/truncate a large single HttpGet.
+-- These are exact newline-preserving slices of the tested candidate, pinned
+-- to an immutable commit; no other executable content is substituted.
+if not source then
+    local chunkRoot = "https://raw.githubusercontent.com/GSVexed/vexed-schematics/0605986d3934f101f040cf4d52f1f7c56a92a1f6/roblox-tools/renaissance/chunks/v16.1.2/"
+    local byteCounts = {96005,95996,95963,95987,95983,80574}
+    local parts = {}
+    local complete = true
+    for index, expectedBytes in ipairs(byteCounts) do
+        local uri = chunkRoot .. string.format("part-%02d.txt", index)
+        local ok, value = pcall(function() return game:HttpGet(uri) end)
+        if not ok or type(value) ~= "string" or #value ~= expectedBytes then
+            issue = "Full bundle unavailable; chunk " .. tostring(index) .. " failed or was truncated: " .. tostring(value):sub(1, 120)
+            complete = false
+            break
+        end
+        parts[index] = value
+    end
+    if complete then
+        local rebuilt = table.concat(parts)
+        if #rebuilt == 560508 and rebuilt:sub(1, #prefix) == prefix then
+            source = rebuilt
+        else
+            issue = "Chunk reconstruction did not match the expected bundle structure"
+        end
+    end
+end
 if not source then
     reportError("Download", issue or "No trusted source could be downloaded")
     return
