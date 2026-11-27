@@ -393,6 +393,7 @@ function Roblox.new(Core, environment)
         self.hippoActions,self.hippoDiscovery=nil,nil
         self.biteTiming=nil
         self.wolfHeapScan,self.wantHeldNativeDiscovery=nil,nil
+        self.wolfInputAction,self.nextWolfInputLookup=nil,nil
     end
     function b:upvalues(fn)
         local many = type(debug.getupvalues) == "function" and debug.getupvalues
@@ -474,6 +475,7 @@ function Roblox.new(Core, environment)
     end
     function b:resetWolfDiscovery()
         self.wolfActions,self.wolfDiscovery,self.biteTiming=nil,nil,nil
+        self.wolfInputAction,self.nextWolfInputLookup=nil,nil
         self.wolfHeapScan=nil
         -- The callback queue is shared with the minigame owner. Missing or
         -- replaced WolfController must not erase the other consumer's work;
@@ -509,7 +511,8 @@ function Roblox.new(Core, environment)
             -- getgc generally returns a sequential array of functions.
             -- Only ever inspect the first 32k entries to bound cost.
             scan={script=own,remote=remote,items=items,index=1,
-                limit=math.min(#items,32768)}
+                limit=math.min(#items,32768),inputCandidate=nil,
+                inputCount=0,inputSeen={}}
             self.wolfHeapScan=scan
         end
         if scan.lastStep==now then return nil end
@@ -519,6 +522,19 @@ function Roblox.new(Core, environment)
             local fn=scan.items[scan.index]
             scan.index+=1;checked+=1
             if type(fn)~="function" then continue end
+            -- A VM may hide the private tryBite layout while exposing the
+            -- original onInput function in the own script's heap. Store
+            -- only uniquely owned candidates; do not call unknown closure
+            -- or replay the physical mouse input.
+            if self:wolfFunctionName(fn,own)=="onInput" and not scan.inputSeen[fn]
+                and type(getfenv)=="function" then
+                local valid,env=pcall(getfenv,fn)
+                if valid and type(env)=="table" and env.script==own then
+                    scan.inputSeen[fn]=true
+                    scan.inputCount+=1
+                    scan.inputCandidate=scan.inputCount==1 and fn or nil
+                end
+            end
             local native=self:validateWolfBite(fn,own,remote)
             if not native then continue end
             native.discovery="validated own heap closure"
@@ -534,7 +550,13 @@ function Roblox.new(Core, environment)
             return native
         end
         if scan.index>scan.limit then
-            scan.items=nil
+            if scan.inputCount==1 and scan.inputCandidate then
+                self.wolfInputAction={
+                    fn=scan.inputCandidate,script=own,remote=remote,
+                    placeVersion=game.PlaceVersion,
+                    discovery="unique own heap onInput"}
+            end
+            scan.items,scan.inputSeen=nil,nil
             self.wolfHeapScan=nil
         end
         return nil
@@ -611,6 +633,83 @@ function Roblox.new(Core, environment)
             return self:recoverWolfBiteFromHeap(now) or native
         end
         return native
+    end
+
+    -- Second native attack path for a real uninterrupted mouse hold.
+    -- Invoke WolfController's already-installed own InputBegan callback
+    -- with the genuine original InputObject; never simulate M1 Up/Down.
+    -- The captured v2412 onInput calls its original tryBite function.
+    -- Prefer exact onInput name, or one uniquely script-owned anonymous
+    -- callback; fail closed if ownership or identity is ambiguous.
+    function b:nativeWolfInputAction(now)
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local own=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        if not own or not own:IsA("LocalScript") or not remote
+            or not remote:IsA("RemoteEvent") then
+            self.wolfInputAction=nil
+            return nil
+        end
+        local cached=self.wolfInputAction
+        if cached and cached.script==own and cached.remote==remote
+            and cached.placeVersion==game.PlaceVersion then return cached end
+        self.wolfInputAction=nil
+        if self.deferNativeDiscovery or now<(self.nextWolfInputLookup or 0) then return nil end
+        self.nextWolfInputLookup=now+.8
+        -- An executor wrapper can obscure debug.info source/name while
+        -- getfenv still identifies the actual owning WolfController script.
+        -- Accept exactly one uniquely owner-matched unnamed root, never a
+        -- wrapper without script identity.
+        if type(getconnections)~="function" then return nil end
+        local debugAvailable=type(debug)=="table" and type(debug.info)=="function"
+        if not debugAvailable and type(getfenv)~="function" then return nil end
+        local ok,connections=pcall(getconnections,self.UserInputService.InputBegan)
+        if not ok or type(connections)~="table" then return nil end
+        local named,unnamed={},{}
+        local count=0
+        for _,connection in ipairs(connections) do
+            count+=1
+            if count>128 then break end
+            local valid,fn=pcall(function()return connection.Function end)
+            if not valid or type(fn)~="function" then continue end
+            local source,name
+            if debugAvailable then
+                local info
+                info,source,name=pcall(debug.info,fn,"sn")
+                if not info then source,name=nil,nil end
+            end
+            local sourceOwned=type(source)=="string" and
+                (source=="WolfController" or source:match("[%.%/]WolfController$")~=nil)
+            local ownerConfirmed=false
+            if type(getfenv)=="function" then
+                local envOK,env=pcall(getfenv,fn)
+                if envOK and type(env)=="table" and env.script~=nil then
+                    if env.script~=own then continue end
+                    ownerConfirmed=true
+                end
+            end
+            if not sourceOwned and not ownerConfirmed then continue end
+            if name=="onInput" then
+                table.insert(named,fn)
+            elseif (name==nil or name=="") and ownerConfirmed then
+                table.insert(unnamed,fn)
+            end
+        end
+        local fn,origin
+        if #named==1 then fn,origin=named[1],"named own onInput"
+        elseif #named==0 and #unnamed==1 then fn,origin=unnamed[1],"one script-owned input listener" end
+        if not fn then return nil end
+        local action={fn=fn,script=own,remote=remote,
+            placeVersion=game.PlaceVersion,discovery=origin}
+        self.wolfInputAction=action
+        return action
+    end
+    function b:tryNativeInputBite(now,inputObject)
+        if not inputObject or inputObject.UserInputType~=Enum.UserInputType.MouseButton1 then return false end
+        local native=self:nativeWolfInputAction(now)
+        if not native or type(native.fn)~="function" then return false end
+        self.biteTiming=nil
+        return pcall(native.fn,inputObject,false)
     end
     function b:nativeFeedState(now)
         -- Named callbacks can still be used after an update; private upvalue

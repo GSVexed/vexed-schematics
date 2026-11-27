@@ -117,6 +117,9 @@ function CombatInput.new(bridge,policy,ledger)
             or self.held.source=="poll" and not physical) then
             self:release(nil,now)
         end
+        -- The real InputBegan object, not a potentially unreliable native
+        -- mouse-down poll, owns this hold until its actual InputEnded.
+        -- Focus loss, UI, ability/Rest and hub unload still revoke it.
         if self.held and not self.held.handoff and
             (self.held.key=="M1" or self.held.key=="poll") then
             local age=now-(self.held.startedAt or now)
@@ -184,7 +187,7 @@ function CombatInput.new(bridge,policy,ledger)
             if waiting.backend=="INPUT" and type(bridge.noteHeldInputTimeout)=="function" then
                 bridge:noteHeldInputTimeout()
             end
-            self.fallbackMisses+=waiting.backend=="INPUT" and 1 or 0
+            self.fallbackMisses+=(waiting.backend=="NATIVE_INPUT" or waiting.backend=="INPUT") and 1 or 0
             if self.fallbackMisses>=3 then
                 self.unavailableUntil=now+2.5
                 self.fallbackMisses=0
@@ -211,15 +214,17 @@ function CombatInput.new(bridge,policy,ledger)
             and (readiness.reason=="native timing unavailable"
                 or readiness.reason=="native timing layout unknown")
         if not allowed and privateUnknown and held and not automatic then
-            -- Validated native callbacks retain their own cooldown. A private
-            -- callback can only be substituted by actual game input after
-            -- the physical M1 has passed the hold threshold, outside grabs,
-            -- with visible stock-rate timing confirmed.
+            -- The native tryBite owns its cooldown. Its private timing
+            -- upvalue offsets cannot be inferred after an update. The
+            -- original onInput fallback remains gated by the visible stock
+            -- bite cooldown and a genuine original M1 InputObject.
             local original=bridge.wolfActions and bridge.wolfActions.tryBite
             if type(original)=="function" and (not inGrab or nativeGrabLane) then
                 allowed=true
-            elseif not inGrab then
-                allowed=type(bridge.visibleBiteWindow)=="function" and bridge:visibleBiteWindow(s,now) or false
+            elseif not inGrab and self.held and self.held.key=="M1"
+                and self.held.input then
+                allowed=type(bridge.visibleBiteWindow)=="function"
+                    and bridge:visibleBiteWindow(s,now) or false
             end
         end
         if not allowed then
@@ -237,22 +242,28 @@ function CombatInput.new(bridge,policy,ledger)
                 return
             end
         end
+        -- One attack engine, two original-game entrypoints:
+        -- validated tryBite, or WolfController's own already-installed
+        -- InputBegan callback with the original held M1 InputObject.
+        -- No simulated mouse Up/Down/Up is ever dispatched here.
         local native=bridge.wolfActions and bridge.wolfActions.tryBite
-        local fallback=type(native)~="function" and held and not automatic and not inGrab
-            and self.held and (self.held.key=="M1" or self.held.key=="poll")
-        if type(native)~="function" and not fallback then
+        local nativeInput=not native and held and not automatic and not inGrab
+            and self.held and self.held.key=="M1" and self.held.source=="event"
+            and self.held.input and type(bridge.nativeWolfInputAction)=="function"
+            and bridge:nativeWolfInputAction(now) or nil
+        if type(native)~="function" and not nativeInput then
             self.nextAttempt=now+.12
-            self.status="original bite callback unavailable; awaiting M1 hold handoff"
+            self.status=held and "original game handler unavailable; no synthetic mouse replay"
+                or "waiting for native attack handler"
             return
         end
-        -- A validated original callback or a bounded Alt input request is
-        -- required before recording an actual dispatch. Preserve pending
-        -- Rest-exit intent until one of those paths can be attempted.
+        -- The only dispatch sources are validated original game functions.
+        -- Preserve Rest-exit intent until an actual native dispatcher exists.
         self.pending=nil
         self.lastDispatch=now
         local markers=self.markerCount
-        -- Adaptive Faster Bites applies to native or M1-handoff inputs.
-        -- It never overrides the unchanged original game/server cooldown.
+        -- Keep the existing working Adaptive Faster Bites factor unchanged.
+        -- It controls native-request timing, not game/server cooldown.
         local cooldown=type(bridge.nativeBiteCooldown)=="function"
             and bridge:nativeBiteCooldown(s) or nil
         local factor=options.speedEnabled and self:factor() or 1
@@ -266,17 +277,20 @@ function CombatInput.new(bridge,policy,ledger)
         if type(native)=="function" then
             called,backend=bridge:tryNativeBite(now),"NATIVE"
         else
-            called,backend=bridge:tryHeldInputBite(s,now),"INPUT"
+            called,backend=bridge:tryNativeInputBite(now,self.held.input),"NATIVE_INPUT"
         end
         local marked=self.markerCount>markers
         if called and not marked then
             self.awaiting={char=s.char,generation=s.generation,at=now,backend=backend}
         end
-        if not called then self.nextAttempt=math.max(self.nextAttempt,now+.3) end
+        if not called then
+            self.lastDispatch=0
+            self.nextAttempt=math.max(self.nextAttempt,now+.3)
+        end
         self.status=marked and "native marker; awaiting server-confirmed impact"
-            or called and (backend=="INPUT" and "held-M1 input handoff; awaiting native marker"
-                or "original native callback requested; awaiting marker")
-            or "original native attack dispatcher unavailable"
+            or called and (backend=="NATIVE_INPUT" and "own original input handler called; awaiting native marker"
+                or "original native bite callback called; awaiting marker")
+            or "validated native attack handler unavailable"
         ledger:event(p and "native_bite_buffer_released" or "native_cadence_attempt",now,{
             called=called==true,marker=marked,backend=backend,automatic=automatic==true,
             minigameNative=nativeGrabLane==true,

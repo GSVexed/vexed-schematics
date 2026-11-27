@@ -70,13 +70,9 @@ function Controller.new(M,bridge,options)
     bridge.extendedConfidence=h.extendedConfidence
     -- A pending synthetic reset can outlive the current Heartbeat. Never
     -- press during an asynchronously arriving native grab begin.
-    bridge.combatPulseBlocked = function()
-        local held=h.combatInput.held
-        return h.closed or h.inputSuspended==true or not h.registry.byId.holdBite.requested
-            or h:hasNativeGrab(bridge.clock())
-            or held==nil or (held.key~="M1" and held.key~="poll")
-            or not held.handoff or h.physicalM1Input==nil and held.source~="poll"
-    end
+    -- Legacy executor mouse replay is disabled. No generated M1 edge may
+    -- compete with the physical mouse while the player holds to attack.
+    bridge.combatPulseBlocked = function() return true end
     h.rescue = M.rescue.new(bridge,h.ledger)
     h.hippo = M.hippo.new(Core,bridge,h.ledger)
     h.tests = M.test_features.new(Core,bridge,h)
@@ -864,14 +860,14 @@ function Controller.new(M,bridge,options)
         local auto=r.byId.autoBite
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
         local hold=r.byId.holdBite
-        local m1Fallback=not native and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
+        local m1Native=not native and bridge:nativeWolfInputAction(s.now or bridge.clock())
         local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
         local sourceLabel=nativeGC and "Original native callback recovered · "
             or native and "Original native callback · "
-            or m1Fallback and "M1 hold -> bounded native input handoff (unverified) · "
-            or "No validated bite input backend · "
-        r:ack("holdBite",hold.requested and (native or m1Fallback),
-            not hold.requested and "OFF" or native and "ARMED" or m1Fallback and "PARTIAL" or "WAITING",
+            or m1Native and "Original WolfController M1 input callback · "
+            or "Original attack handler inaccessible; no synthetic clicks · "
+        r:ack("holdBite",hold.requested and (native or m1Native~=nil),
+            not hold.requested and "OFF" or native and "ARMED" or m1Native and "PARTIAL" or "WAITING",
             hold.requested and sourceLabel..self.combatInput.status or hold.detail)
         r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
             auto.requested and self.combatInput.status or auto.detail)

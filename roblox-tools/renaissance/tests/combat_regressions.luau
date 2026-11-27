@@ -230,7 +230,8 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(h.inputSuspended,false)
         assert(h.combatInput.held and h.combatInput.held.source=="event")
         w:advance(1.8)
-        assert((w.nativeBites or 0)>before,"echo must not interrupt a genuine sustained hold")
+        eq(w.nativeBites or 0,before)
+        eq(w.virtualBiteCalls,nil)
         w.held=nil;w.logicalM1Down=false
         h:inputEnded(physical)
         h:close()
@@ -325,10 +326,19 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         h:close()
     end)
 
-    test("M1 sustained real hold allows initial game click then invokes replay only after handoff",function()
+
+    test("M1 sustained hold invokes own original input handler without synthetic mouse edges",function()
         local w=Mock.new()
         w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
-        w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w:enableNativeActions()
+        local nativeValues=w.env.debug.getupvalues
+        -- Simulate an executor exposing the real InputBegan listener while
+        -- hiding the private nested tryBite closure's validation upvalues.
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return nativeValues(fn)
+        end
         w.virtualBiteAvailable=true
         local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
         w:advance(.15)
@@ -339,13 +349,15 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(w.nativeBites,1)
         eq(w.virtualBiteCalls,nil)
         assert(h.combatInput.held and not h.combatInput.held.handoff)
-        w:advance(3.0)
+        w:advance(3)
         assert(h.combatInput.held and h.combatInput.held.handoff)
-        assert((w.virtualBiteDowns or 0)>=2)
-        assert((w.nativeBites or 0)>=3)
+        assert((w.nativeBites or 0)>=3,"original WolfController input handler must repeat")
+        assert(h.bridge.wolfInputAction and h.bridge.wolfInputAction.discovery=="named own onInput")
+        assert(not (h.bridge.wolfActions and h.bridge.wolfActions.tryBite),
+            "native inner closure should remain inaccessible in this test")
+        eq(w.virtualBiteCalls,nil)
         local before=w.nativeBites
-        w.held=nil;w.logicalM1Down=false
-        w.uis.InputEnded:Fire(original)
+        w.held=nil;w.logicalM1Down=false;w.uis.InputEnded:Fire(original)
         w:advance(.85)
         eq(w.nativeBites,before)
         eq(h.combatInput.held,nil)
@@ -385,26 +397,31 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         h:close()
     end)
 
-    test("M1 handoff pauses for prey minigames then resumes if still physically held",function()
+
+    test("native M1 input-handler handoff pauses for prey minigame and resumes without mouse replay",function()
         local w=Mock.new()
         w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
         w:enableNativeActions();w:enableNativeGrab()
-        w.env.getconnections=nil;w.env.getgc=function()return {} end
+        local originalValues=w.env.debug.getupvalues
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return originalValues(fn)
+        end
         w.virtualBiteAvailable=true
         local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true,recovery=false,autoBite=false}}})
-        w:advance(.15)
-        w.held=E.UserInputType.MouseButton1
+        w:advance(.15);w.held=E.UserInputType.MouseButton1
         local original=w:input(nil,E.UserInputType.MouseButton1)
-        w:advance(1.15)
+        w:advance(1.4)
         local before=w.nativeBites or 0
-        local presses=w.virtualBiteDowns or 0
         w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=979,role="prey",n=3})
         w:advance(.9)
         eq(w.nativeBites or 0,before)
-        eq(w.virtualBiteDowns or 0,presses)
+        eq(w.virtualBiteCalls,nil)
         w:remote("FeralGrabV2").OnClientEvent:Fire("end",{f=979})
-        w:advance(1.5)
-        assert((w.virtualBiteDowns or 0)>presses)
+        w:advance(1.6)
+        assert((w.nativeBites or 0)>before,"same original hold resumes after minigame")
+        eq(w.virtualBiteCalls,nil)
         w.held=nil;w.logicalM1Down=false;w.uis.InputEnded:Fire(original)
         h:close()
     end)
@@ -461,6 +478,157 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(h.ledger.counts.attack_intent,intentCount)
         w.held=nil;w.logicalM1Down=false
         w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("native game M1 input callback rejects ambiguous same-owned listeners",function()
+        local w=Mock.new();w:enableNativeActions()
+        local values=w.env.debug.getupvalues
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return values(fn)
+        end
+        local fake=function()end
+        w:registerNative(fake,"WolfController","onInput",function()return {}end)
+        w.uis.InputBegan:Connect(fake)
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.2)
+        eq(h.bridge:nativeWolfInputAction(w.time),nil)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        local count=w.nativeBites
+        w:advance(1.4)
+        eq(w.nativeBites,count)
+        eq(w.virtualBiteCalls,nil)
+        w.held=nil;w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("native M1 input callback ignores a foreign script listener",function()
+        local w=Mock.new();w:enableNativeActions()
+        local foreignCalls=0
+        local fake=function()foreignCalls+=1 end
+        w:registerNative(fake,"OtherController","onInput",function()return {}end)
+        w.uis.InputBegan:Connect(fake)
+        local h=load(w)
+        local binding=h.bridge:nativeWolfInputAction(w.time)
+        assert(binding and binding.discovery=="named own onInput")
+        local before=foreignCalls
+        assert(not h.bridge:tryNativeInputBite(w.time,nil))
+        eq(foreignCalls,before)
+        h:close()
+    end)
+
+    test("private original input handler retains Faster Bites cadence factor ON and OFF",function()
+        local M=modules()
+        local calls=0
+        local bridge={wolfActions={}}
+        function bridge:restLock()return .7 end
+        function bridge:attribute()return nil end
+        function bridge:biteDelay()return .25 end
+        function bridge:nativeBiteCooldown()return 1 end
+        function bridge:biteReadiness()return {ready=false,known=false,reason="native timing unavailable"}end
+        function bridge:visibleBiteWindow()return true end
+        function bridge:nativeWolfInputAction()return {fn=function()end}end
+        function bridge:tryNativeInputBite()calls+=1;return true end
+        local c=M.combat_input.new(bridge,M.policy.new(),M.core.ledger(20))
+        local input={UserInputType=E.UserInputType.MouseButton1}
+        local s={alive=true,char={},generation=1,attackHeld=true,mouseHeld=true}
+        c:input(s,10,"M1",input)
+        c:tick(s,10.31,{repeatHeld=true,speedEnabled=true})
+        c:tick(s,10.33,{repeatHeld=true,speedEnabled=true})
+        eq(calls,1)
+        assert(math.abs(c.nextAttempt-10.95)<.001,"fast factor .62 must schedule native input")
+        c:marker(s,10.34)
+        local now=c.nextAttempt+.02
+        c:tick(s,now,{repeatHeld=true,speedEnabled=false})
+        eq(calls,2)
+        assert(math.abs(c.nextAttempt-now-1)<.001,"OFF must restore native request spacing")
+        c:release("M1",now+.01)
+        c:tick(s,now+1.4,{repeatHeld=true})
+        eq(calls,2)
+    end)
+
+    test("private native handler failure never falls back to synthetic mouse replay",function()
+        local w=Mock.new();w:enableNativeActions();w.virtualBiteAvailable=true
+        w.env.getconnections=nil
+        w.env.getgc=function()return {}end
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15);w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        local originalBites=w.nativeBites
+        w:advance(2.3)
+        eq(w.nativeBites,originalBites)
+        eq(w.virtualBiteCalls,nil)
+        eq(h.registry.byId.holdBite.applied,false)
+        w.held=nil;w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("native hold finds uniquely owned WolfController onInput in heap if signal callbacks are hidden",function()
+        local w=Mock.new();w:enableNativeActions();w.virtualBiteAvailable=true
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        local originalValues=w.env.debug.getupvalues
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return originalValues(fn)
+        end
+        -- The executor hides getconnections but exposes uniquely script-owned
+        -- functions through getgc, getfenv and debug.info.
+        w.env.getconnections=nil
+        local originalEnv=w.env.getfenv
+        w.env.getfenv=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.script=="WolfController" then
+                return {script=w.player:FindFirstChild("PlayerScripts"):FindFirstChild("WolfController")}
+            end
+            return originalEnv and originalEnv(fn) or {}
+        end
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.2);w.held=E.UserInputType.MouseButton1
+        local first=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(2.3)
+        assert(h.bridge.wolfInputAction
+            and h.bridge.wolfInputAction.discovery=="unique own heap onInput")
+        assert((w.nativeBites or 0)>=2)
+        eq(w.virtualBiteCalls,nil)
+        w.held=nil;w.uis.InputEnded:Fire(first)
+        h:close()
+    end)
+
+
+    test("opaque executor-wrapped input callback fails closed instead of invoking unverified code",function()
+        local w=Mock.new();w:enableNativeActions();w.virtualBiteAvailable=true
+        local priorInfo=w.env.debug.info
+        local priorValues=w.env.debug.getupvalues
+        w.env.debug.info=function(fn,mode)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="onInput" then
+                if mode=="sn" then return "[executor wrapper]",nil end
+                if mode=="s" then return "[executor wrapper]" end
+                if mode=="n" then return nil end
+            end
+            return priorInfo(fn,mode)
+        end
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return priorValues(fn)
+        end
+        -- Neither readable own source nor getfenv ownership is available.
+        w.env.getfenv=nil
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        local before=w.nativeBites or 0
+        w:advance(2.1)
+        eq(h.bridge.wolfInputAction,nil)
+        eq(w.nativeBites or 0,before)
+        eq(w.virtualBiteCalls,nil)
+        w.held=nil;w.uis.InputEnded:Fire(original)
         h:close()
     end)
 end
