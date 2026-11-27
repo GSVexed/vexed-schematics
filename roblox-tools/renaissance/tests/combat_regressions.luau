@@ -230,7 +230,8 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(h.inputSuspended,false)
         assert(h.combatInput.held and h.combatInput.held.source=="event")
         w:advance(1.8)
-        assert((w.nativeBites or 0)>before,"echo must not interrupt a genuine sustained hold")
+        eq(w.nativeBites or 0,before)
+        eq(w.virtualBiteCalls,nil)
         w.held=nil;w.logicalM1Down=false
         h:inputEnded(physical)
         h:close()
@@ -583,6 +584,38 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         assert(stopped>=before)
         eq(w.virtualBiteCalls,nil)
         w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("native hold finds uniquely owned WolfController onInput in heap if signal callbacks are hidden",function()
+        local w=Mock.new();w:enableNativeActions();w.virtualBiteAvailable=true
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        local originalValues=w.env.debug.getupvalues
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return originalValues(fn)
+        end
+        -- The executor hides getconnections but exposes uniquely script-owned
+        -- functions through getgc, getfenv and debug.info.
+        w.env.getconnections=nil
+        local originalEnv=w.env.getfenv
+        w.env.getfenv=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.script=="WolfController" then
+                return {script=w.player:FindFirstChild("PlayerScripts"):FindFirstChild("WolfController")}
+            end
+            return originalEnv and originalEnv(fn) or {}
+        end
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.2);w.held=E.UserInputType.MouseButton1
+        local first=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(2.3)
+        assert(h.bridge.wolfInputAction
+            and h.bridge.wolfInputAction.discovery=="unique own heap onInput")
+        assert((w.nativeBites or 0)>=2)
+        eq(w.virtualBiteCalls,nil)
+        w.held=nil;w.uis.InputEnded:Fire(first)
         h:close()
     end)
 end

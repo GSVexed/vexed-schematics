@@ -511,7 +511,8 @@ function Roblox.new(Core, environment)
             -- getgc generally returns a sequential array of functions.
             -- Only ever inspect the first 32k entries to bound cost.
             scan={script=own,remote=remote,items=items,index=1,
-                limit=math.min(#items,32768)}
+                limit=math.min(#items,32768),inputCandidate=nil,
+                inputCount=0,inputSeen={}}
             self.wolfHeapScan=scan
         end
         if scan.lastStep==now then return nil end
@@ -521,6 +522,19 @@ function Roblox.new(Core, environment)
             local fn=scan.items[scan.index]
             scan.index+=1;checked+=1
             if type(fn)~="function" then continue end
+            -- A VM may hide the private tryBite layout while exposing the
+            -- original onInput function in the own script's heap. Store
+            -- only uniquely owned candidates; do not call unknown closure
+            -- or replay the physical mouse input.
+            if self:wolfFunctionName(fn,own)=="onInput" and not scan.inputSeen[fn]
+                and type(getfenv)=="function" then
+                local valid,env=pcall(getfenv,fn)
+                if valid and type(env)=="table" and env.script==own then
+                    scan.inputSeen[fn]=true
+                    scan.inputCount+=1
+                    scan.inputCandidate=scan.inputCount==1 and fn or nil
+                end
+            end
             local native=self:validateWolfBite(fn,own,remote)
             if not native then continue end
             native.discovery="validated own heap closure"
@@ -536,7 +550,13 @@ function Roblox.new(Core, environment)
             return native
         end
         if scan.index>scan.limit then
-            scan.items=nil
+            if scan.inputCount==1 and scan.inputCandidate then
+                self.wolfInputAction={
+                    fn=scan.inputCandidate,script=own,remote=remote,
+                    placeVersion=game.PlaceVersion,
+                    discovery="unique own heap onInput"}
+            end
+            scan.items,scan.inputSeen=nil,nil
             self.wolfHeapScan=nil
         end
         return nil
