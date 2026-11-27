@@ -45,7 +45,7 @@ function Controller.new(M,bridge,options)
     local h = { version = M.release and M.release.version or "unbundled",
         sourceFingerprint = M.release and M.release.sourceFingerprint, tokenIdentity = tokenIdentity,
         token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
-        active = false, closed = false, ready = false, scope = Core.scope(),
+        active = false, closed = false, ready = false, inputSuspended = false, scope = Core.scope(),
         registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
         nextScan = 0, nextSlow = 0, nextBind = 0, nextSample = 0, nextEscape = 0,
         nextWalk = bridge.clock()+90, nextIdle = bridge.clock()+75,

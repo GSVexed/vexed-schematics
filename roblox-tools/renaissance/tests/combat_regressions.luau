@@ -331,4 +331,48 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(h.combatInput.held,nil)
         w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(trigger);h:close()
     end)
+
+
+    test("ALT hold uses the validated native bite callback when available, never synthetic mouse",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+        w:advance(.3)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local trigger=w:input(E.KeyCode.LeftAlt)
+        w:advance(1.4)
+        assert((w.nativeBites or 0)>=3,"ALT should repeat through the validated native callback")
+        eq(w.virtualBiteCalls,nil)
+        local count=w.nativeBites
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(trigger)
+        w:advance(.7)
+        eq(w.nativeBites,count)
+        h:close()
+    end)
+
+    test("ALT hold with native hunter minigame coexists with perfect presses",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w:enableNativeGrab()
+        local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=false,recovery=false}}})
+        w:advance(.4)
+        local remote=w:remote("FeralGrabV2")
+        remote.OnClientEvent:Fire("begin",{f=962,role="hunter",n=2})
+        w:advance(.1)
+        assert(h.grabInput.lease and not h.bridge:nativeGrabBound())
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local trigger=w:input(E.KeyCode.LeftAlt)
+        local before=w.nativeBites or 0
+        remote.OnClientEvent:Fire("strike",{f=962,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2})
+        w:advance(1.3)
+        assert((w.nativeBites or 0)>before,"ALT should repeat with the original native callback")
+        assert(h.grab.presses>=1,"minigame perfect automation must retain its own input")
+        eq(w.nativeManualPresses,nil)
+        remote.OnClientEvent:Fire("end",{f=962})
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(trigger)
+        h:close()
+    end)
 end
