@@ -1,0 +1,1615 @@
+            info(285,"NATIVE HOLD BITE","Tap and manual spam normally. Hold the same left mouse button for 0.28s to repeat using original WolfController callbacks. No synthetic mouse clicks. Faster Bites scheduling stays ON; WAITING means game handler inaccessible.",85)
+            u.combatReadout = info(365,"NATIVE COMBAT","Waiting for an animal.",100)
+        elseif u.tab == "Hippo" then
+            info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)
+            row("hippoMove",74);row("hippoRelease",131)
+            u.hippoReadout=info(193,"CHARGE","Waiting for Hippo.",106)
+            info(309,"POWER LIMIT","Damage beyond full charge and shorter ability cooldowns remain unverified.",55)
+        elseif u.tab == "Test Features" then
+            subtitle.Text="Own-character observations for every animal."
+            info(0,"DAMAGE & ABILITY EVIDENCE","Records HP loss, Rest, effects, Hippo replies and hub feature states. The client shell formula is not proof of protection.",60)
+            u.testsReadout=info(68,"LIVE RECORDER","Waiting for your animal.",96)
+            local save=button(cards,"SAVE REPORT",0,174,238,34)
+            save.Activated:Connect(function()
+                if hub.active then hub.tests:save();u.nextText=0 end
+            end)
+            local copy=button(cards,"COPY REPORT",252,174,238,34)
+            copy.Activated:Connect(function()
+                if hub.active then hub.tests:copy();u.nextText=0 end
+            end)
+            u.testsToggle=button(cards,"RECORDING: ON",0,216,490,34)
+            u.testsToggle.Activated:Connect(function()
+                if hub.active then hub.tests:setEnabled(not hub.tests.enabled);u.nextText=0 end
+            end)
+            local cross=button(cards,"ONE-SHOT TURTLE / CRUSHER REQUEST",0,258,490,34)
+            cross.Activated:Connect(function()
+                if hub.active then hub.tests:crossSpecies();u.nextText=0 end
+            end)
+            info(300,"CONTROLLED TRIAL","Only while naturally resting as Turtle in FERAL v2412. No shell or reduced damage is claimed.",64)
+        elseif u.tab == "Vision" then
+            row("esp",0); row("tags",57); row("voice",114)
+            local c = card(171,52)
+            text(c,"Tracking range",14,8,270,20,13)
+            text(c,"Real players only · up to 24",14,29,320,17,10,palette.sub)
+            local range = button(c,tostring(hub.settings.range) .. " STUDS",350,10,124,30)
+            range.Activated:Connect(function()
+                if not hub.active then return end
+                local old = hub.settings.range
+                hub.settings.range = old == 300 and 600 or old == 600 and 900 or 300
+                range.Text = tostring(hub.settings.range) .. " STUDS"
+                hub:save(); hub.nextScan = 0
+            end)
+            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,231,490,30)
+            walls.Activated:Connect(function()
+                if not hub.active then return end
+                hub.settings.walls = not hub.settings.walls
+                walls.Text = "Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF")
+                hub:save()
+            end)
+            info(269,"HEALTH / PACK","Health-coloured outlines; pack-coloured names.",47)
+            u.finderReadout = info(317,"PLAYER FINDER","Waiting for replicated players.",48)
+        else
+            local order = u.tab == "Survival"
+                and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
+                or {"climb","flight","mobility","speed","leap","zoom"}
+            for i,id in ipairs(order) do row(id,(i-1)*57) end
+        end
+        for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end
+        u.nextText = 0
+    end
+    for i,name in ipairs({"Survival","Combat","Movement","Vision","Territory","Hippo","Test Features"}) do
+        local btn = button(side,string.upper(name),12,106+(i-1)*39,141,32)
+        tabs[name] = btn
+        btn.Activated:Connect(function()
+            if not hub.active then return end
+            u:selectTab(name)
+        end)
+    end
+    function u:selectTab(name)
+        if not tabs[name] then return false end
+        self.tab,hub.settings.tab=name,name
+        draw();if hub.active then hub:save() end
+        return true
+    end
+    function u:registerPage(name,definition)
+        assert(tabs[name] and type(definition.mount)=="function","Unsupported hub page")
+        self.pages[name]=definition
+        if self.tab==name then draw() end
+        local registration={closed=false}
+        function registration:close()
+            if self.closed then return end
+            self.closed=true
+            if u.pages[name]==definition then
+                u.pages[name]=nil
+                if u.tab==name and not hub.closed then draw() end
+            end
+        end
+        return registration
+    end
+    function u:toggle()
+        self.visible = not self.visible
+        self.drag=nil
+        frame.Visible = self.visible
+        launcher.Visible = not self.visible
+        hub.policy.menuOpen = self.visible
+        self.nextText=0
+        if self.visible then hub:stopWalk("menu opened") end
+    end
+    function u:contains(point)
+        if not gui.Enabled then return false end
+        local surface=self.visible and frame or launcher
+        if not surface.Visible then return false end
+        local p,s = surface.AbsolutePosition,surface.AbsoluteSize
+        return point.X >= p.X and point.X <= p.X+s.X and point.Y >= p.Y and point.Y <= p.Y+s.Y
+    end
+    function u:fit()
+        local camera=bridge.Workspace.CurrentCamera
+        local amount,centre=UI.fit(camera and camera.ViewportSize,self.windowCentre)
+        if not amount then return end
+        self.windowCentre=centre
+        assign(scale,"Scale",amount)
+        if self.windowX~=centre.X or self.windowY~=centre.Y then
+            self.windowX,self.windowY=centre.X,centre.Y
+            frame.Position=UDim2.fromOffset(centre.X,centre.Y)
+        end
+    end
+    function u:beginDrag(point,input)
+        if not hub.active or not self.visible or not self:contains(point) then return false end
+        if point.Y>frame.AbsolutePosition.Y+76*scale.Scale then return false end
+        self.drag={origin=point,centre=self.windowCentre or frame.AbsolutePosition+frame.AbsoluteSize*.5,input=input}
+        return true
+    end
+    function u:moveDrag(point)
+        if not self.drag or not self.visible then return end
+        self.windowCentre=self.drag.centre+point-self.drag.origin
+        self:fit()
+    end
+    local inputService=bridge.UserInputService
+    local function pointOf(input)
+        if input.UserInputType==Enum.UserInputType.Touch and input.Position then
+            return Vector2.new(input.Position.X,input.Position.Y)
+        end
+        return inputService:GetMouseLocation()
+    end
+    local function listen(signal,callback)
+        local connection=signal:Connect(callback)
+        scope:add(function()connection:Disconnect()end)
+    end
+    listen(inputService.InputBegan,function(input)
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+            u:beginDrag(pointOf(input),input)
+        end
+    end)
+    listen(inputService.InputChanged,function(input)
+        if u.drag and (input==u.drag.input or input.UserInputType==Enum.UserInputType.MouseMovement) then
+            u:moveDrag(pointOf(input))
+        end
+    end)
+    listen(inputService.InputEnded,function(input)
+        if u.drag and (input==u.drag.input or input.UserInputType==Enum.UserInputType.MouseButton1) then u.drag=nil end
+    end)
+    hide.Activated:Connect(function() if hub.active then u:toggle() end end)
+    launcher.Activated:Connect(function() if hub.active then u:toggle() end end)
+    unload.Activated:Connect(function() if hub.active then hub:close() end end)
+    local dot = round(make("Frame",{Name = "BiteRangeMarker",BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(15,15),AnchorPoint = Vector2.new(.5,.5),Visible = false},gui),50)
+    local dotStroke = make("UIStroke",{Thickness = 1.5,Transparency = .05,Color = palette.same},dot)
+    u.dot,u.dotStroke=dot,dotStroke
+    function u:syncTracked(tracked)
+        local keep = {}
+        for _, target in ipairs(tracked) do
+            if not target.player or bridge.Players:GetPlayerFromCharacter(target.char) ~= target.player then continue end
+            local char = target.char
+            keep[char] = true
+            local record = self.records[char]
+            if not record then
+                local highlight = Instance.new("Highlight")
+                highlight.Name,highlight.Adornee = "Outline",char
+                highlight.FillTransparency,highlight.OutlineTransparency = 1,0
+                highlight.Enabled,highlight.Parent = false,folder
+                local label = text(gui,"",0,0,180,18,11)
+                label.TextXAlignment, label.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
+                record = { highlight = highlight,label = label }
+                self.records[char] = record
+            end
+            record.target = target
+            record.head=char:FindFirstChild("Head")
+        end
+        for char,record in pairs(self.records) do
+            if not keep[char] then
+                record.highlight:Destroy(); record.label:Destroy()
+                self.records[char] = nil
+            end
+        end
+    end
+    function u:render(dt,now)
+        local camera = bridge.Workspace.CurrentCamera
+        if not camera then
+            for _,record in pairs(self.records) do
+                assign(record.highlight,"Enabled",false);assign(record.label,"Visible",false)
+            end
+            assign(dot,"Visible",false)
+            self.lastPoint,self.lastTarget=nil,nil
+            return
+        end
+        if now >= self.nextFit then
+            self.nextFit = now+.5
+            self:fit()
+        end
+        local registry = hub.registry.byId
+        for char,record in pairs(self.records) do
+            local target = record.target
+            local valid = target.player and target.player.Parent~=nil and target.player.Character==char
+                and char.Parent ~= nil and target.root and target.root.Parent ~= nil
+                and target.hum and target.hum.Parent ~= nil and target.hum.Health > 0
+            valid=valid==true
+            local colour = palette[target.affiliation] or palette.unknown
+            assign(record.highlight,"FillTransparency",1)
+            if valid and registry.esp.requested then
+                local hp,maxHP=target.hum.Health,target.hum.MaxHealth
+                if record.hp~=hp or record.maxHP~=maxHP then
+                    record.hp,record.maxHP=hp,maxHP
+                    record.healthColour=UI.healthColour(hp,maxHP)
+                end
+                assign(record.highlight,"OutlineColor",record.healthColour)
+                assign(record.highlight,"DepthMode",hub.settings.walls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded)
+            end
+            assign(record.highlight,"Enabled",valid and registry.esp.requested)
+            local projected,onScreen
+            if valid and registry.tags.requested then
+                local head=record.head
+                local pos=head and head.Parent and head:IsA("BasePart") and head.Position+Vector3.new(0,head.Size.Y*.65,0)
+                    or target.root.Position+Vector3.new(0,target.root.Size.Y*.6+1,0)
+                projected,onScreen=camera:WorldToViewportPoint(pos)
+            end
+            local show=valid and registry.tags.requested and onScreen==true and projected.Z>0
+            assign(record.label,"Visible",show)
+            if show then
+                local x,y = math.clamp(projected.X,90,math.max(90,camera.ViewportSize.X-90)),math.max(20,projected.Y-6)
+                if not record.x or math.abs(x-record.x)>=.25 or math.abs(y-record.y)>=.25 then
+                    record.x,record.y=x,y;record.label.Position=UDim2.fromOffset(x,y)
+                end
+                assign(record.label,"Text",target.name)
+                assign(record.label,"TextColor3",colour)
+            end
+        end
+        local guide = hub.guide
+        local dotVisible=false
+        if registry.biteHelper.requested and guide and not guide.invalid and guide.target.root.Parent then
+            local point,onScreen = camera:WorldToViewportPoint(guide.target.root.Position)
+            if onScreen and point.Z > 0 then
+                local desired = Vector2.new(point.X,point.Y)
+                if self.lastTarget~=guide.target.char then self.lastPoint=nil;self.lastTarget=guide.target.char end
+                self.lastPoint = self.lastPoint and self.lastPoint:Lerp(desired,1-math.exp(-22*math.min(dt,.1))) or desired
+                if self.dotX~=self.lastPoint.X or self.dotY~=self.lastPoint.Y then
+                    self.dotX,self.dotY=self.lastPoint.X,self.lastPoint.Y
+                    dot.Position=UDim2.fromOffset(self.dotX,self.dotY)
+                end
+                dotVisible = true
+                local readiness=hub.biteReadiness
+                local stale=now-(hub.guideAt or -math.huge)>.35
+                local locked=not readiness or not readiness.ready
+                local species=hub.snapshot and hub.snapshot.species
+                assign(dotStroke,"Color",palette[UI.markerTone(species,not (guide.blocked or locked or stale),
+                    guide.baseline and guide.baseline.valid)])
+            else self.lastPoint,self.lastTarget=nil,nil end
+        else self.lastPoint,self.lastTarget = nil,nil end
+        assign(dot,"Visible",dotVisible)
+        if not self.visible then return end
+        if now < self.nextText then return end
+        self.nextText = now+.25
+        if self.pageView and self.pageView.tick then self.pageView:tick(now) end
+        for id,rowValue in pairs(self.rows) do
+            local feature = registry[id]
+            assign(rowValue.toggle,"Text",not feature.requested and "OFF"
+                or feature.applied and (feature.state == "PARTIAL" and "PARTIAL"
+                    or feature.state == "ARMED" and "ARMED" or "ON") or "WAIT")
+            assign(rowValue.toggle,"BackgroundColor3",feature.requested and feature.applied
+                and (feature.state == "PARTIAL" and palette.unknown or palette.on) or palette.off)
+            assign(rowValue.status,"Text",feature.requested and feature.reason ~= "" and feature.reason or feature.detail)
+        end
+        assign(footer,"Text",hub.rescue.pending and hub.rescue.status
+            or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu")
+        if self.combatReadout then
+            assign(self.combatReadout,"Text",(hub.biteReadiness and hub.biteReadiness.reason or "Native timing unmeasured")
+                .."\n"..(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.combatInput.status)
+        end
+        if self.finderReadout then
+            assign(self.finderReadout,"Text",string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range))
+        end
+        if self.hippoReadout then assign(self.hippoReadout,"Text",hub.hippo:summary()) end
+        if self.testsReadout then assign(self.testsReadout,"Text",hub.tests:summary().."\n"..hub.tests.notice) end
+        if self.testsToggle then assign(self.testsToggle,"Text",hub.tests.enabled and "RECORDING: ON" or "RECORDING: PAUSED") end
+    end
+    function u:activate()
+        gui.Enabled = true
+        hub.policy.menuOpen = self.visible
+    end
+    draw()
+    return u
+end
+return UI
+]============]
+sources["controller"] = [============[
+local Controller = {}
+-- Replies have no recovered transaction identifier. Prefer a matching native
+-- target and timing, and retain ambiguity instead of assigning the newest bite.
+function Controller.matchFeedback(Core,transactions,data,now)
+    if type(data)~="table" or data.v==nil then return nil,false end
+    local best,bestRank,matches,abilityOverlap=nil,math.huge,0,false
+    for _,tx in ipairs(transactions) do
+        local corrected=tx.feedback and not tx.feedback.safe and tx.feedback.v==data.v
+            and Core.finite(tx.feedback.dmg) and tx.feedback.dmg==0 and Core.finite(data.dmg) and data.dmg>0
+        if tx.nativeAt and not tx.closed and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
+            local target=tx.focusTarget and tx.focusTarget.char or tx.target and tx.target.char
+            local seenVictim=tx.hpBefore and tx.hpBefore[data.v]~=nil
+            -- Real FeralHit replies may involve a different nearby victim
+            -- than the client's projected target. Prefer exact matches but
+            -- allow a unique weaker nearby-victim match.
+            local rank=tx.nativeTarget==data.v and 0
+                or tx.localTarget==data.v and 1
+                or target==data.v and 2
+                or seenVictim and 3 or nil
+            if rank then
+                if tx.abilityAmbiguous then
+                    abilityOverlap=true
+                elseif rank<bestRank then
+                    best,bestRank,matches=tx,rank,1
+                elseif rank==bestRank then
+                    matches+=1
+                end
+            end
+        end
+    end
+    -- Neither timing proximity nor a shared target is a transaction ID.
+    -- Do not train cadence or label damage when multiple equal candidates fit.
+    local ambiguous=abilityOverlap or best~=nil and matches>1
+    return not ambiguous and best or nil,ambiguous
+end
+local function nativeState(native)
+    if not native or type(native.state)~="function" then return nil,false end
+    local ok,state,known=pcall(native.state)
+    if ok then return state,known end
+    return nil,false
+end
+function Controller.new(M,bridge,options)
+    local Core = M.core
+    local tokenIdentity = {}
+    local h = { version = M.release and M.release.version or "unbundled",
+        sourceFingerprint = M.release and M.release.sourceFingerprint, tokenIdentity = tokenIdentity,
+        token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
+        active = false, closed = false, ready = false, inputSuspended=false, scope = Core.scope(),
+        registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
+        nextScan = 0, nextSlow = 0, nextBind = 0, nextSample = 0, nextEscape = 0,
+        nextWalk = bridge.clock()+90, nextIdle = bridge.clock()+75,
+        transactions = {}, earlyInputs = setmetatable({},{__mode = "k"}),
+        notice = "Ready · Right Shift opens menu", bridge = bridge, options = options or {} }
+    h.policy.lastPhysical = bridge.clock()
+    h.settings,h.settingsOrigin = M.settings.load(bridge:io(),Core.specs)
+    if h.options.settings then h.settings = M.settings.sanitize(h.options.settings,Core.specs) end
+    for _,feature in ipairs(h.registry.order) do
+        if not feature.permanent and not feature.linked then h.registry:request(feature.id,h.settings.states[feature.id]) end
+    end
+    h.features = M.features.new(Core,bridge,h.registry)
+    h.grab = M.grab.new()
+    h.grabInput = M.grab_input.new(bridge,h.token)
+    h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
+    h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
+    bridge.holdBinding=h.options.holdBinding=="M1" and "M1" or "M3"
+    h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
+    bridge.combatGovernor = h.combatInput
+    -- Weak keyed: a disappeared animal is never retained by combat trust.
+    -- Only Auto Bite pauses unconfirmed extended contacts; manual reach stays.
+    h.extendedConfidence=setmetatable({},{__mode="k"})
+    bridge.extendedConfidence=h.extendedConfidence
+    -- A pending synthetic reset can outlive the current Heartbeat. Never
+    -- press during an asynchronously arriving native grab begin.
+    -- Only an independently held middle button can own an ordinary-input pulse.
+    -- Never compete with a physically held M1 or a native minigame.
+    bridge.combatPointBlocked = function(point) return h.ui and h.ui:contains(point) or false end
+    bridge.combatPulseBlocked = function()
+        if bridge.holdBinding~="M3" then return true end
+        local held=h.combatInput.held
+        return h.closed or not h.active or h.inputSuspended or h.windowFocused==false
+            or not h.registry.byId.holdBite.requested
+            or not held or held.key~="M3" or held.upSince~=nil
+            or h.physicalM1Input~=nil or h:hasNativeGrab(bridge.clock())
+            or h.grabInput.lease~=nil
+            or bridge.UserInputService:GetFocusedTextBox()~=nil
+            or h.ui:contains(bridge.UserInputService:GetMouseLocation())
+    end
+    h.rescue = M.rescue.new(bridge,h.ledger)
+    h.hippo = M.hippo.new(Core,bridge,h.ledger)
+    h.tests = M.test_features.new(Core,bridge,h)
+    h.zoom = M.zoom.new(bridge.player)
+    h.voice = M.voice.new(bridge.Players,bridge.player)
+    h.settingsAvailable = bridge:io().available ~= false
+    function h:hasNativeGrab(now)
+        if self.grab.active then return true end
+        local observed=self.nativeGrabSession
+        return observed~=nil and observed.char==bridge.player.Character
+            and observed.generation==bridge.generation and now-observed.at<=8
+    end
+    function h:focusChanged(focused)
+        if self.closed then return end
+        self.windowFocused=focused==true
+        self.middlePollArmed=false;self.middlePollDown=nil
+        -- Focus return does not resurrect a hold whose release was missed.
+        -- A fresh gameplay input must establish ownership again.
+        self.inputSuspended=true
+        self.physicalM1Input=nil
+        self.combatInput:cancel()
+        self:stopWalk("window focus changed")
+    end
+    function h:observeCombatAbility(s,now)
+        if not s.alive then return end
+        -- FeralHit does not identify which ordinary bite or ability caused
+        -- damage. Keep the real reply, but suspend ordinary-bite attribution
+        -- across this bounded overlap rather than training cadence on it.
+        self.abilityEvidenceUntil=now+2.6
+        for _,tx in ipairs(self.transactions) do
+            if tx.generation==s.generation and tx.nativeAt and not tx.closed
+                and not tx.feedback and not tx.abilityAmbiguous
+                and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
+                tx.abilityAmbiguous,tx.rateEligible,tx.dirty=true,false,true
+            end
+        end
+    end
+    function h:save()
+        if self.closed then return false end
+        for id in pairs(self.settings.states) do self.settings.states[id] = self.registry.byId[id].requested end
+        local ok,why = M.settings.save(bridge:io(),self.settings,Core.specs)
+        self.settingsAvailable = ok
+        self.registry:ack("settings",ok,ok and "CLIENT" or "UNAVAILABLE",why)
+        if not ok then self.notice = "Settings stay in memory · saving unavailable" end
+        return ok
+    end
+    function h:stopWalk(reason)
+        local walk = self.walk
+        self.walk = nil
+        if walk then
+            pcall(bridge.walk,bridge,walk.snapshot,nil)
+            self.ledger:event("afk_walk_stopped",bridge.clock(),{reason = reason})
+        end
+    end
+    function h:clearFlight()
+        self:releaseFlightRepair()
+        self.flightEpisode,self.flightStatus=nil,nil
+        self:releaseSurface()
+        if self.drop then
+            bridge:restoreAttribute(self.drop.char,"FeralFlyDrop",true,self.drop.before)
+            self.drop = nil
+        end
+    end
+    function h:releaseSurface()
+        self.features.leases:release("surface")
+        self.surfaceUntil = nil
+        local request=self.surfaceRequest;self.surfaceRequest=nil
+        if request then
+            bridge:restoreAttribute(request.char,"FeralFlyRequest",request.value,request.before)
+        end
+    end
+    function h:releaseFlightRepair()
+        local r=self.flightRepair;self.flightRepair=nil
+        if r then
+            bridge:restoreAttribute(r.char,"FeralFlyDrop",true,nil)
+            bridge:restoreAttribute(r.char,"FeralFlyRelaunch",r.at,nil)
+        end
+    end
+    function h:noteFlightCancel(input,s,now)
+        if not self.registry.byId.flight.requested or self:hasNativeGrab(now)
+            or s.talonLock==nil then return false end
+        local config=bridge:config("FlightConfig")
+        local compatible,eligible=pcall(function() return config.canFly(s.char) end)
+        if not compatible or eligible~=true then return false end
+        -- The captured Talon controller owns Space/ButtonB for any eligible
+        -- animal using this binding. Dive has a different native cancel path.
+        local info=bridge.ContextActionService:GetAllBoundActionInfo().FeralTalonLetGo
+        for _,key in ipairs(info and info.inputTypes or {}) do
+            if key==input.KeyCode then
+                local q=self.flightEpisode
+                if not q or q.char~=s.char or q.lock~=s.talonLock then
+                    q={char=s.char,generation=s.generation,lock=s.talonLock,at=now}
+                    self.flightEpisode=q
+                end
+                q.cancelAt=now
+                q.airborne=q.airborne or s.flying or s.hum.FloorMaterial==Enum.Material.Air
+                return true
+            end
+        end
+        return false
+    end
+    function h:stepFlightHandoff(s,now)
+        if self.flightRepair then
+            local r=self.flightRepair
+            if not s.alive or r.char~=s.char or r.generation~=s.generation or s.grab or s.captured or s.ability or s.chat or s.gameMenu
+                or now-r.at>1.5 then self:releaseFlightRepair()
+            elseif (s.root.Position-r.position).Magnitude>1.5 and s.root.AssemblyLinearVelocity.Magnitude>2 then
+                self.flightStatus="Movement observed after native restart; cause unverified"
+                self.ledger:event("post_attack_flight_motion_observed",now)
+                self:releaseFlightRepair()
+            end
+        end
+        if not self.registry.byId.flight.requested or not s.alive then self.flightEpisode=nil;return end
+        local config=bridge:config("FlightConfig")
+        if not config or type(config.canFly)~="function" then self.flightEpisode=nil;return end
+        local compatible,eligible=pcall(config.canFly,s.char)
+        if not compatible or eligible~=true then
+            self.flightEpisode=nil;return
+        end
+        local q=self.flightEpisode
+        local lock,kind=s.talonLock,"talon"
+        if lock==nil then lock,kind=s.diveLock,"dive" end
+        if lock~=nil then
+            if not q or q.char~=s.char or q.lock~=lock or q.kind~=nil and q.kind~=kind then
+                q={char=s.char,generation=s.generation,lock=lock,kind=kind,at=now};self.flightEpisode=q
+            end
+            q.airborne=q.airborne or s.flying or s.hum.FloorMaterial==Enum.Material.Air
+            -- Replay only an actual native let-go intent, once for this session.
+            -- Server/native cleanup owns anchoring and capture restrictions.
+            if kind=="talon" and q.cancelAt and not q.releaseRetried and now-q.cancelAt>=1 and now-q.cancelAt<3
+                and not s.grab and not s.captured and not s.chat and not s.gameMenu then
+                q.releaseRetried=true
+                local sent=bridge:fire("FeralLunge","release")
+                self.flightStatus="Native attack release retried; response unconfirmed"
+                self.ledger:event("native_talon_release_retried",now,{sent=sent})
+            end
+            return
+        end
+        if not q or q.char~=s.char or q.generation~=s.generation then self.flightEpisode=nil;return end
+        if not q.airborne then self.flightEpisode=nil;return end
+        q.ended=q.ended or now
+        if now-q.ended>4 then self.flightEpisode=nil;return end
+        if s.grab or s.captured or s.ability or s.chat or s.gameMenu or s.underwater or s.swimming
+            or s.climbing or s.attackHeld or s.root.Anchored or s.hum.FloorMaterial~=Enum.Material.Air
+            or s.hum.MoveDirection.Magnitude<=.13 or s.root.AssemblyLinearVelocity.Magnitude>=.6 then q.stillAt=nil;return end
+        local vel=s.root:FindFirstChild("FeralFlyVel")
+        local rot=s.root:FindFirstChild("FeralFlyRot")
+        if not s.flying or not vel or not vel:IsA("LinearVelocity") or not rot or not rot:IsA("AlignOrientation") then return end
+        q.stillAt=q.stillAt or now
+        if now-q.stillAt<.75 or q.restarted or self.timingCritical then return end
+        if bridge:attribute(s.char,"FeralFlyDrop")~=nil or bridge:attribute(s.char,"FeralFlyRelaunch")~=nil then return end
+        -- v2412 FeralFlight consumes these normal drop/relaunch intents. Never
+        -- edit native movers, anchors, velocities, capture flags or positions.
+        q.restarted=true
+        self.flightRepair={char=s.char,generation=s.generation,at=now,position=s.root.Position}
+        local a=bridge:setAttribute(s.char,"FeralFlyRelaunch",now)
+        local b=a and bridge:setAttribute(s.char,"FeralFlyDrop",true)
+        if not b then self:releaseFlightRepair() end
+        self.flightStatus=b and "Native flight restart requested; movement unconfirmed" or "Native restart unavailable"
+        self.ledger:event("post_attack_native_flight_restart",now,{sent=b==true})
+    end
+    function h:set(id,on)
+        if self.closed or not self.active then return false end
+        local feature = assert(self.registry.byId[id],"unknown feature")
+        if feature.permanent or feature.linked then return false end
+        self.registry:request(id,on)
+        self.tests:record("feature_changed",{feature=id,requested=on==true})
+        local now = bridge.clock()
+        if id == "recovery" and not on then self.recovery.enabled = false; self.recovery:release("OFF",now) end
+        if id == "minigame" then
+            self.grab.enabled = on == true
+            if not on then self.grab:reset("OFF"); self.grabInput:release();self:cancelGrabWake() end
+        end
+        if id == "survivalAFK" and not on then self:stopWalk("disabled") end
+        if id == "flight" and not on then self:clearFlight() end
+        if id == "robloxAFK" then self.idleUnavailable = nil end
+        if id == "climb" and not on then self.climbQueue = nil end
+        if id=="autoBite" and not on then self.combatInput:pause("auto bite disabled",now) end
+        if id=="holdBite" and not on then
+            self.middlePollArmed=false
+            self.physicalM1Input=nil
+            self.combatInput:cancel()
+        end
+        if id=="attackSpeed" then bridge.biteTiming=nil;self.combatInput.nextAttempt=0;self.combatInput:resetRate() end
+        if id=="voice" then self.voice:setEnabled(on) end
+        self.features.nextReconcile = 0
+        local s = bridge:snapshot(now,false)
+        self.features:reconcile(s,now,true) -- both true AND false are reconciled
+        if id=="reach" then
+            self.guide,self.guideAt=nil,nil
+            self.nextScan=0
+            self.policy.combatApproachUntil=0
+        end
+        self:ackLocal(s)
+        self:save()
+        return self.registry.byId[id].applied == (on == true)
+    end
+    function h:characterChanged(generation)
+        local now = bridge.clock()
+        bridge:paintHippoGait(nil)
+        self.recovery:release("animal changed",now)
+        self.recovery:clearPose()
+        self.recovery.lastAutomaticCharacter,self.recovery.previous = nil,nil
+        self.recovery.observations,self.recovery.nativeEchoObserved = {},false
+        self.recovery.conditionChar,self.recovery.conditionSeenUntil,self.recovery.conditionSeen=nil,0,{}
+        self.recovery.backoffUntil,self.recovery.nextObserve=0,0
+        self.recovery.releaseFailedChar,self.recovery.releasingChar=nil,nil
+        bridge:clearCombatTargets()
+        bridge.biteTiming,bridge.deferNativeDiscovery=nil,false
+        self.policy.manualRest,self.policy.manualIntentUntil = false,0
+        self.nativeGrabBusy,self.nativeGrabSession,self.nativeGrabUntil=false,nil,nil
+        self.abilityEvidenceUntil=nil
+        self.policy.attackUntil,self.policy.actionUntil,self.policy.lastRestRelease=0,0,-math.huge
+        self.policy.combatApproachUntil=0
+        self.grab:reset("animal changed")
+        self.nativeGrabSession=nil
+        self:cancelGrabWake()
+        self.grabInput:release()
+        bridge:releaseSyntheticBite()
+        self.feeding:close(now)
+        self.combatInput:cancel()
+        self.middlePollArmed=false;self.middlePollDown=nil
+        self.physicalM1Input=nil;self.physicalM1MissingSince=nil
+        self.combatInput:resetRate()
+        self.extendedConfidence=setmetatable({},{__mode="k"})
+        bridge.extendedConfidence=self.extendedConfidence
+        self.hippo:reset()
+        self.rescue:cancel("animal changed")
+        self:stopWalk("animal changed")
+        self:clearFlight()
+        self.features:releaseFlag()
+        self.features.nextReconcile = 0
+        self.climbQueue,self.guide,self.transactions,self.lastIntent = nil,nil,{},nil
+        self.snapshot=nil
+        self.ledger.previous = nil
+        self.ledger.staminaObservation=nil
+        self.lastSurvival,self.lastGrabClock,self.lastGrabPending,self.combatStatusAt=nil,nil,nil,nil
+        self.combatStatus,self.biteReadiness=nil,nil
+        self.nextScan,self.nextSlow,self.nextSample,self.nextGrabPoll=0,0,0,0
+        self.anchor,self.anchorChar = nil,nil
+        self.ledger:event("character_generation",now,{generation = generation})
+        self.tests:characterChanged(bridge.character)
+        self.nextWalk = now+90
+        self.nextFlight,self.nextEscape,self.rescue.nextAt=0,0,0
+    end
+    function h:physicalInput(kind)
+        local now = bridge.clock()
+        if kind == "mouse" and now < (self.syntheticUntil or 0) then return end
+        self.policy.lastPhysical = now
+        self:stopWalk("manual input")
+        self.nextWalk = now+90
+        self.anchor,self.anchorChar = nil,nil
+    end
+    function h:isRestControl(input)
+        local point = input.Position
+        if not point then return false end
+        local pg = bridge.player:FindFirstChildOfClass("PlayerGui")
+        local ok,objects = pcall(function() return pg:GetGuiObjectsAtPosition(point.X,point.Y) end)
+        if not ok then return false end
+        for _,object in ipairs(objects) do
+            if not object:IsDescendantOf(self.ui.gui) then
+                local node = object
+                for _ = 1,4 do
+                    if not node then break end
+                    local body = node.Name
+                    if node:IsA("TextButton") or node:IsA("TextLabel") then body = node.Text end
+                    body=string.upper(body):match("^%s*(.-)%s*$")
+                    if node.Name=="FeralRestTap" or node.Name=="WolfRest" or node.Name=="RestButton"
+                        or body=="REST" or body=="REST [R]" or body=="REST (R)" or body=="STAND UP" then return true end
+                    node = node.Parent
+                end
+            end
+        end
+        return false
+    end
+    function h:isFeedControl(input)
+        local point=input.Position
+        local pg=bridge.player:FindFirstChildOfClass("PlayerGui")
+        if not point or not pg then return false end
+        local ok,objects=pcall(pg.GetGuiObjectsAtPosition,pg,point.X,point.Y)
+        if not ok then return false end
+        for _,object in ipairs(objects) do
+            if not object:IsDescendantOf(self.ui.gui) then
+                local node=object
+                for _=1,4 do
+                    if not node then break end
+                    local text=(node:IsA("TextLabel") or node:IsA("TextButton")) and node.Text or ""
+                    text=string.upper(text):match("^%s*(.-)%s*$")
+                    if text=="EAT" or text=="DRINK" or node.Name=="FeralFeedTap" then return true end
+                    node=node.Parent
+                end
+            end
+        end
+        return false
+    end
+    function h:carryInput(input)
+        if not self.active or self.closed or bridge:grabTextFocused() then return false end
+        local now=bridge.clock()
+        local s=bridge:snapshot(now,true);s.grab=self:hasNativeGrab(now)
+        local handled=self.rescue:input(s,now)
+        if handled then
+            self.earlyInputs[input]=now
+            self:physicalInput("other")
+            self.policy:input("action",now)
+            self.recovery:release("cub rescue input",now)
+            self.combatInput:cancel()
+            self:stopWalk("cub rescue input")
+        end
+        return handled
+    end
+    function h:preInput(input)
+        if self.closed or not self.active or bridge.UserInputService:GetFocusedTextBox() then return end
+        local now,key,kind = bridge.clock(),input.KeyCode,input.UserInputType
+        -- Once this real physical M1 has been held long enough for the
+        -- hub to own repeat, no *second* InputBegan can originate from that
+        -- same uninterrupted hardware press. Ignore any later replay echo
+        -- even when the executor delivers it after the short grace window.
+        -- It still reaches FERAL's original InputBegan listener normally.
+        if bridge.holdBinding=="M1" and kind==Enum.UserInputType.MouseButton1
+            and self.physicalM1Input~=nil and input~=self.physicalM1Input
+            and self.combatInput.held and self.combatInput.held.handoff
+            and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+            return
+        end
+        -- Virtual/executor mouse events may be delivered after the sending API
+        -- returns. The short owned replay window is authoritative here; a
+        -- synthetic Up can make IsMouseButtonPressed false before its echo.
+        if kind==Enum.UserInputType.MouseButton1 and (bridge.syntheticPressing
+            or bridge.syntheticM1~=nil or now<(bridge.syntheticM1Until or 0)) then return end
+        local previous = self.earlyInputs[input]
+        if previous and now-previous < .1 then return end
+        self.earlyInputs[input] = now
+        local click = kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.MouseButton2
+        local primary = kind == Enum.UserInputType.MouseButton1
+        local point = bridge.UserInputService:GetMouseLocation()
+        if (click or key==Enum.KeyCode.ButtonR2) and self.ui:contains(point) then
+            if primary or key==Enum.KeyCode.ButtonR2 then
+                self.inputSuspended=true
+                self.physicalM1Input=nil
+                self.combatInput:cancel()
+            end
+            return
+        end
+        local s = bridge:snapshot(now,false)
+        if s.gameMenu or self.windowFocused==false then return end
+        if primary or key==Enum.KeyCode.ButtonR2 then
+            self.inputSuspended=false
+            if primary then self.physicalM1Input=input;self.physicalM1MissingSince=nil end
+        end
+        self.features:hippoInput(s,key)
+        if key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonY
+            or ((primary or kind == Enum.UserInputType.Touch) and self:isRestControl(input)) then
+            self.policy:input("rest",now)
+            self.recovery:manual(now)
+            self.combatInput:cancel();self.feeding:cancel("manual rest control",now);self.rescue:cancel()
+            return
+        end
+        if self.grab.active and (key == Enum.KeyCode.Space or key == Enum.KeyCode.ButtonA or key == Enum.KeyCode.ButtonR2) then
+            self.grab:manual()
+            self:cancelGrabWake()
+            return
+        end
+        local flightCancel=(key==Enum.KeyCode.Space or key==Enum.KeyCode.ButtonB) and self:noteFlightCancel(input,s,now)
+        if flightCancel then
+            self.policy:input("action",now);self.recovery:release("manual native flight release",now)
+            self.combatInput:pause("native flight release",now);return
+        end
+        -- WolfController binds E/ButtonB to native feeding. Preserve flight's
+        -- active ButtonB cancellation, which has priority over feeding.
+        if key == Enum.KeyCode.E or key==Enum.KeyCode.ButtonB and not (s.ability or s.flying)
+            or (primary or kind == Enum.UserInputType.Touch) and self:isFeedControl(input) then
+            self.feeding:input(s,now)
+            self.policy:input("action",now)
+            self.recovery:release("manual feeding input",now)
+            self.combatInput:pause("manual feeding input",now);self.rescue:cancel()
+            return
+        end
+        if primary or key == Enum.KeyCode.ButtonR2 then
+            self.combatInput:manualAttack(now)
+            self.policy:input("attack",now)
+            local restReleased=self.recovery:release("attack input",now)
+            if primary or key == Enum.KeyCode.ButtonR2 then
+                self.feeding:attack(s,now);self.rescue:cancel()
+                local tx = { intent = now, input=input,lock = self.policy:restLocked(now),
+                    generation = s.generation,restExitFailed=not restReleased }
+                self.lastIntent = tx
+                table.insert(self.transactions,tx)
+                if #self.transactions > 32 then table.remove(self.transactions,1) end
+                self.ledger:event("attack_intent",now,{restLock = tx.lock})
+                if restReleased then self.combatInput:input(s,now,primary and "M1" or "R2",input)
+                else self.combatInput:pause("native Rest exit pending",now) end
+            end
+        elseif key == Enum.KeyCode.E or key == Enum.KeyCode.F or key == Enum.KeyCode.G
+            or key==Enum.KeyCode.Z or key==Enum.KeyCode.X
+            or key == Enum.KeyCode.Q or key == Enum.KeyCode.Space then
+            self.policy:input("action",now)
+            self.recovery:release("manual native action",now)
+            -- Preserve a physically held primary attack across temporary
+            -- ability/movement actions. Native readiness still gates a bite.
+            self.combatInput.pending=nil
+            if key ~= Enum.KeyCode.Space then self.rescue:cancel() end
+        end
+    end
+    function h:startMiddle(s,now,input)
+        -- A real middle press does not activate a primary-click GUI control.
+        -- Only actual menu/text/focus/lifecycle ownership gates the hold.
+        -- Querying every native HUD button here used to discard the entire
+        -- physical press before the route could even be selected.
+        local reason
+        if self.closed or not self.active then reason="hub inactive"
+        elseif self.windowFocused==false then reason="window unfocused"
+        elseif not s.alive then reason="no active animal"
+        elseif s.chat or s.gameMenu or bridge.UserInputService:GetFocusedTextBox() then reason="menu or text entry"
+        elseif not self.registry.byId.holdBite.requested then reason="hold feature disabled"
+        elseif self.ui:contains(bridge.UserInputService:GetMouseLocation()) then reason="hub UI" end
+        if reason then
+            self.combatInput.middleAdmission=reason
+            self.ledger:event("m3_press_rejected",now,{reason=reason})
+            return false
+        end
+        self.combatInput.middleAdmission="physical hold accepted"
+        if self.combatInput.held and self.combatInput.held.key=="M3"
+            and self.combatInput.held.generation==s.generation then return true end
+        self:physicalInput("other")
+        self.inputSuspended=false
+        self.policy:input("attack",now)
+        self.feeding:attack(s,now);self.rescue:cancel()
+        self:stopWalk("middle mouse attack input")
+        self.recovery:release("middle mouse attack input",now)
+        self.combatInput:input(s,now,"M3",input)
+        return true
+    end
+    function h:input(input,processed)
+        local kind,key = input.UserInputType,input.KeyCode
+        if bridge.holdBinding=="M3" and kind==Enum.UserInputType.MouseButton3 then
+            -- Camera processing alone is not a gameplay veto. UI/menu/text checks
+            -- in startMiddle still reject consumed control clicks.
+            self.middlePollDown=true;self.middlePollArmed=false
+            local now=bridge.clock()
+            self:startMiddle(bridge:snapshot(now,false),now,input)
+            return
+        end
+        -- Once this real physical M1 has been held long enough for the
+        -- hub to own repeat, no *second* InputBegan can originate from that
+        -- same uninterrupted hardware press. Ignore any later replay echo
+        -- even when the executor delivers it after the short grace window.
+        -- It still reaches FERAL's original InputBegan listener normally.
+        if bridge.holdBinding=="M1" and kind==Enum.UserInputType.MouseButton1
+            and self.physicalM1Input~=nil and input~=self.physicalM1Input
+            and self.combatInput.held and self.combatInput.held.handoff
+            and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+            return
+        end
+        -- A replayed InputBegan may arrive asynchronously, including with
+        -- processed=true. Never let that echo permanently suspend the real M1.
+        if kind==Enum.UserInputType.MouseButton1 and (bridge.syntheticPressing
+            or bridge.syntheticM1~=nil or bridge.clock()<(bridge.syntheticM1Until or 0)) then return end
+        if kind == Enum.UserInputType.MouseButton2 and bridge.clock() < (self.syntheticUntil or 0) then return end
+        self:physicalInput("other")
+        if processed then
+            -- Once a world-originated real M1 has entered handoff, later
+            -- processed mouse echoes must not cancel that real InputObject.
+            -- The original processed physical click is still cancelled,
+            -- and a focused UI/text field always takes priority.
+            if bridge.holdBinding=="M1" and kind==Enum.UserInputType.MouseButton1
+                and self.physicalM1Input~=nil and input~=self.physicalM1Input
+                and self.combatInput.held and self.combatInput.held.handoff
+                and not bridge.UserInputService:GetFocusedTextBox()
+                and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then return end
+            -- Native movement/ability bindings consume their own keyboard
+            -- events too. Preserve those observations (e.g. X/Z gait intent),
+            -- while consumed attack inputs never establish held ownership.
+            if kind~=Enum.UserInputType.MouseButton1 and key~=Enum.KeyCode.ButtonR2
+                and not bridge.UserInputService:GetFocusedTextBox() then
+                self:preInput(input)
+            end
+            -- A later native/UI binding can consume the original event after
+            -- our priority observer. Never turn its consumed click into a
+            -- delayed attack through the optional Rest-exit buffer.
+            local pending,held=self.combatInput.pending,self.combatInput.held
+            if kind==Enum.UserInputType.MouseButton1 or key==Enum.KeyCode.ButtonR2
+                or pending and pending.input==input or held and held.input==input then
+                if bridge.holdBinding=="M3" and held and held.key=="M3"
+                    and not bridge.UserInputService:GetFocusedTextBox()
+                    and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+                    if pending and pending.input==input then self.combatInput.pending=nil end
+                    self.physicalM1Input=nil
+                else
+                    self.combatInput:cancel()
+                    self.physicalM1Input=nil
+                    self.inputSuspended=true
+                end
+            end
+            if self.lastIntent and self.lastIntent.input==input and not self.lastIntent.nativeAt then
+                self.lastIntent.consumed=true
+            end
+            return
+        end
+        if bridge.UserInputService:GetFocusedTextBox() then return end
+        self:preInput(input)
+        if key == Enum.KeyCode.Q and self.registry.byId.climb.requested then
+            local s = bridge:snapshot(bridge.clock(),false)
+            local allowed = self.policy:allowed("climb",s,s.now)
+            if allowed and not s.climbing and type(s.climber) == "number" and s.climber >= 1 then
+                self.climbQueue = { generation = s.generation, expires = s.now+2.25,
+                    earliest = s.now+.1, attempts = 0 }
+            end
+        end
+    end
+    function h:inputEnded(input)
+        if self.closed or not self.active then return end
+        local kind,key=input.UserInputType,input.KeyCode
+        if kind==Enum.UserInputType.MouseButton3 and bridge.holdBinding=="M3" then
+            self.middlePollArmed=false
+            self.combatInput:release("M3",bridge.clock())
+            return
+        elseif kind==Enum.UserInputType.MouseButton1 then
+            -- Owned synchronous releases may reuse the engine's mouse object.
+            -- Suppress those before consulting optional InputObject identity.
+            if bridge.syntheticReleasing then return end
+            -- A matching real InputObject can end during a synthetic Down
+            -- callback. Do not discard that genuine release solely because
+            -- syntheticPressing is set; generated Up has syntheticReleasing.
+            if input==self.physicalM1Input then
+                self.physicalM1Input=nil
+                self.combatInput:release("M1",bridge.clock())
+                return
+            end
+            if bridge.syntheticPressing then return end
+            if bridge.syntheticM1~=nil
+                or bridge.clock()<(bridge.syntheticM1Until or 0) then
+                return
+            end
+            -- Fallback for late physical releases and hub sessions that
+            -- started after M1 was already held: the existing poll source
+            -- also clears on the next native IsMouseButtonPressed=false.
+            self.physicalM1Input=nil
+            self.combatInput:release("M1",bridge.clock())
+        elseif key==Enum.KeyCode.ButtonR2 then
+            self.combatInput:release("R2",bridge.clock())
+        end
+    end
+    function h:nativeAttribute(key)
+        if self.closed or not self.active then return end
+        local now = bridge.clock()
+        local s = bridge:snapshot(now,false)
+        if s.ability or key=="FeralCrushBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
+            self:observeCombatAbility(s,now)
+        end
+        if key=="FeralCrushAt" then self.features:hippoAttribute(s) end
+        if key=="FeralCrushAt" or key=="FeralCrushBiteAt" then self.hippo:observe(s,now) end
+        if key=="FeralCrushBiteAt" and s.species=="Hippo" and Core.finite(bridge:attribute(s.char,key)) then
+            self.policy:input("attack",now)
+            self.recovery:release("native Crusher release",now)
+            self:stopWalk("native Crusher release")
+            self.ledger:event("hippo_native_bite_marker",now,{damageAcceptance="unverified"})
+        end
+        if key == "WolfRest" then self.recovery:echo(s,now)
+        elseif key == "WolfBiteAt" and Core.finite(bridge:attribute(s.char,key)) then
+            bridge.biteTiming=nil
+            if not s.alive then return end
+            self.combatInput:marker(s,now)
+            self.tests:observeBite(s,now)
+            self.policy.attackUntil = math.max(self.policy.attackUntil,now+1.1)
+            self.recovery:release("native bite marker",now)
+            local tx = self.lastIntent
+            if not tx or tx.nativeAt or now-tx.intent > 1.3 then
+                tx = { intent = now,generation = s.generation }
+                table.insert(self.transactions,tx)
+                if #self.transactions > 32 then table.remove(self.transactions,1) end
+            end
+            tx.nativeAt,tx.claimDue,tx.classified = now,now+bridge:biteDelay(s.char),false
+            tx.abilityAmbiguous=s.ability==true or now<(self.abilityEvidenceUntil or 0)
+            -- Only confirmed *stock*-range contacts can train attack cadence.
+            -- Extended-only reach, predictive FX, and a bare bite sound are
+            -- never treated as server proof.
+            local guide=self.guide
+            local focus=guide and guide.target
+            local fresh=focus and focus.root and focus.root.Parent
+                and now-(self.guideAt or -math.huge)<.28
+            -- Pin the target selected at the actual native bite marker.
+            -- The guide can switch to another animal before delayed contact.
+            tx.focusTarget=fresh and focus or nil
+            tx.focusExtendedOnly=fresh and guide.extended and guide.extended.valid
+                and not (guide.baseline and guide.baseline.valid) or false
+            local valid=fresh and guide and guide.baseline and guide.baseline.valid
+            -- Reuse the already checked guide, avoiding extra expensive or
+            -- throwable world queries within a native attribute callback.
+            local clear=valid and focus and focus.root and focus.root.Parent
+                and guide.blocked~=true and guide.obstruction~=true
+            tx.rateTarget=clear and focus or nil
+            tx.rateEligible=tx.rateTarget~=nil and self.registry.byId.attackSpeed.requested
+                and (self.combatInput.held~=nil or self.registry.byId.autoBite.requested) and not tx.abilityAmbiguous
+            tx.observeUntil=tx.claimDue+2.0
+            tx.hpBefore={}
+            for _,target in ipairs(bridge.allCandidates or {}) do
+                if bridge:currentTargetBody(target) and (target.root.Position-s.root.Position).Magnitude<=45 then
+                    tx.hpBefore[target.char]={hp=target.hum.Health,maxHP=target.hum.MaxHealth,hum=target.hum}
+                end
+            end
+            self.ledger:event("native_bite_marker",now,{requestObserved = false,claimObserved = false})
+        else
+            -- Native actions can begin between heartbeats. Release competing
+            -- automation on the actual state change, preserving manual input.
+            s.grab,s.rescuing = self:hasNativeGrab(now),self.rescue.pending~=nil
+            s.feeding = s.feeding or self.feeding.busy
+            local allowed,why=self.policy:allowed("recovery",s,now,self.recovery.purpose)
+            if self.recovery.owned and not allowed then self.recovery:release(why,now) end
+            if s.captured or s.grab or s.ability or s.flying or s.climbing or s.feeding then
+                self:stopWalk("native action began")
+                if s.captured or s.ability or s.flying then self.climbQueue=nil end
+            end
+            if key=="FeralTalonLock" or key=="FeralDiveLocal" then self:stepFlightHandoff(s,now) end
+        end
+    end
+    function h:nativeEvent(kind,event,data,...)
+        if self.closed or not self.active then return end
+        if kind == "hippo" then self.tests:hippoReply(event,data,...);return end
+        if kind == "feedback" then
+            self.tests:feedback(event,data)
+            self.ledger:event("native_hit_feedback",bridge.clock(),{damageAcceptance = "unverified"})
+            if event=="hit" and type(data)=="table" and data.a==bridge.player.Character then
+                local now=bridge.clock()
+                self.hippo:feedback(data,now)
+                local tx,ambiguous=Controller.matchFeedback(Core,self.transactions,data,now)
+                if tx then
+                    tx.feedback=data;tx.nativeTarget=data.v;tx.dirty=true
+                    tx.targetMismatch=tx.localTarget~=nil and tx.localTarget~=data.v
+                    if Core.finite(data.dmg) and data.dmg>0 and data.safe~=true then
+                        tx.positiveReply=true
+                        local confidence=self.extendedConfidence[data.v]
+                        if confidence then
+                            confidence.misses=0
+                            confidence.waitUntil=0
+                        end
+                    end
+                    if tx.rateEligible and tx.rateTarget and tx.rateTarget.char==data.v
+                        and data.safe~=true and Core.finite(data.dmg) and data.dmg>0
+                        and not tx.fastConfirmed then
+                        tx.fastConfirmed=true
+                        self.combatInput:confirmed(now)
+                    end
+                end
+                self.ledger:event("native_outgoing_hit_reply",now,{safe=data.safe==true,damage=data.dmg,
+                    matched=tx~=nil,ambiguous=ambiguous==true})
+                if not tx and Core.finite(data.dmg) and data.dmg>0 and data.safe~=true then
+                    -- A genuine reply must not be displayed as a ghost
+                    -- merely because its client bite ID was ambiguous.
+                    self.lastUnmatchedGameHit=now
+                    self.combatStatus="Game reports a hit · local bite association uncertain"
+                end
+                if not tx then
+                    self.ledger:event("native_outgoing_hit_reply_unmatched",now,
+                        {reason=ambiguous and "ambiguous overlapping attacks" or "no matching native bite"})
+                end
+            end
+            return
+        end
+        if kind=="actions" then
+            if event=="FeedStop" then self.feeding:stopped(data,bridge.clock()) end
+            return
+        end
+        if kind=="biteLocal" then
+            local at=bridge.clock()
+            self.ledger:event("client_bite_fx_only",at,{claimObserved=false})
+            local candidates,due={},{}
+            for index=#self.transactions,1,-1 do
+                local tx=self.transactions[index]
+                if tx.generation==bridge.generation and tx.nativeAt and not tx.classified
+                    and not tx.localTarget and at>=tx.nativeAt and at-tx.nativeAt<1.5 then
+                    table.insert(candidates,tx)
+                    if at>=(tx.claimDue or tx.nativeAt)-.03 then table.insert(due,tx) end
+                end
+            end
+            -- Never attach an old delayed impact to a new bite whose claim
+            -- has not occurred. Ambiguous overlaps remain local observations.
+            local tx=#candidates==1 and candidates[1] or #due==1 and due[1] or nil
+            if tx then
+                tx.localTarget,tx.localImpactAt,tx.dirty=event,at,true
+                self.ledger:event("native_client_bite_candidate",at,{claimObserved=false})
+            else self.ledger:event("native_client_bite_candidate_unmatched",at,{claimObserved=false}) end
+            return
+        end
+        -- Observe the game's action ownership even with automation OFF.
+        -- This never schedules presses or leases its controls while disabled.
+        if kind=="grab" and type(data)=="table" then
+            local session=data.f or (event=="begin" and data.id)
+            local observed=self.nativeGrabSession
+            local at=bridge.clock()
+            if M.grab.validId(session) then
+                if event=="begin" then
+                    self.nativeGrabSession={id=session,char=bridge.player.Character,generation=bridge.generation,at=at}
+                    self.recovery:release("native minigame",at);self:stopWalk("native minigame")
+                elseif observed and tostring(observed.id)==tostring(session)
+                    and observed.generation==bridge.generation then
+                    if event=="end" then self.nativeGrabSession=nil
+                    elseif event=="strike" or event=="res" or event=="bite" or event=="n" then observed.at=at end
+                end
+            end
+        end
+        local now = bridge:serverNow()
+        if kind=="grab" and event=="begin" then
+            bridge:releaseSyntheticBite()
+            self.combatInput.awaiting=nil
+        end
+        self.nativeGrabBusy=self:hasNativeGrab(bridge.clock())
+        if not now then return end
+        local c = bridge:config("GrabV2Config")
+        local handled = self.grab:event(event,data,now,bridge.generation,c and c.PERFECT or .32,c and c.PASSES or 2.5,
+            {character=bridge.player.Character,bitePause=c and c.BITE_PAUSE or .6})
+        if handled then
+            self.recovery:release("native minigame",bridge.clock())
+            self:stopWalk("native minigame")
+            self.ledger:event("native_grab_" .. tostring(event),bridge.clock(),
+                {tier = event == "res" and data.mine == true and data.tier or nil})
+            if event == "begin" then
+                bridge.nextGrabDiscovery = 0
+                if not bridge.grabController then bridge.nativeScan=nil end
+            end
+            bridge.deferNativeDiscovery=self.grab.enabled and self.grab.pending~=nil
+            if event=="begin" or event=="strike" then self.grabInput.nextBindingCheck=0 end
+            self.grabInput:update(self.grab,bridge.clock())
+            if event=="strike" then self:pumpGrab(bridge:grabSnapshot(bridge.clock()),false) end
+            self:updateGrabWake()
+        end
+    end
+    function h:cancelGrabWake()
+        local wake=self.grabWake;self.grabWake=nil
+        if wake then bridge:cancelDelay(wake.handle) end
+    end
+    function h:updateGrabWake()
+        local p=self.grab.pending
+        local wake=self.grabWake
+        if wake and wake.pending==p and wake.at==p.at then return end
+        self:cancelGrabWake()
+        if not self.active or self.closed or not self.grab.enabled or not p or (p.wakes or 0)>=4 then return end
+        local now=bridge:serverNow()
+        if not now then return end
+        p.localEnds=p.localEnds or bridge.clock()+math.max(0,p.ends-now)
+        if p.at<=now then return end
+        wake={pending=p,at=p.at};self.grabWake=wake
+        wake.handle=bridge:delay(math.max(.001,p.at-now),function()
+            if self.grabWake~=wake then return end
+            self.grabWake=nil
+            if self.active and not self.closed and self.grab.enabled and self.grab.pending==p then
+                self:pumpGrab(bridge:grabSnapshot(bridge.clock()),true)
+                self:updateGrabWake()
+            end
+        end)
+        if wake.handle then p.wakes=(p.wakes or 0)+1 else self.grabWake=nil end
+    end
+    function h:pumpGrab(s,sync)
+        if self.closed or not self.active or not self.grab.enabled or not self.grab.active then return end
+        local now,clock=s.now,s.serverNow
+        if not clock or not s.alive then return end
+        local native=bridge.grabController
+        if sync and native then
+            local state,known=nativeState(native)
+            local cfg=bridge:config("GrabV2Config")
+            if state or known==true then
+                self.grab:syncNative(state,clock,s.generation,cfg and cfg.PERFECT or .32,cfg and cfg.PASSES or 2.5,now)
+            end
+        end
+        local p=self.grab.pending
+        if not p then
+            -- Session timeout must also run between strikes; otherwise a lost
+            -- end packet with no private UI handle can block recovery forever.
+            self.grab:tick(clock,s.generation,false,function()return false end)
+            return
+        end
+        if self.lastGrabClock==clock and self.lastGrabPending==p then return end
+        self.lastGrabClock,self.lastGrabPending=clock,p
+        s.grab=true
+        self.grab:tick(clock,s.generation,self.policy:allowed("grab",s,now),function(session,strike)
+            -- Native-issued IDs and the actual current server clock only.
+            -- Recheck after inspection; never backdate or anticipate a press.
+            local at=bridge:serverNow()
+            if not at then return false end
+            if at<p.t0 or at>=p.ends-.002
+                or math.abs(M.grab.triangle(at,p.t0,p.speed,p.from)-p.target)>p.half*.98 then
+                return false,"clock_moved",at
+            end
+            local sent=bridge:fire("FeralGrabV2","press",session,strike,at)
+            -- An optional native-UI annotation cannot turn an already issued
+            -- press into a failed dispatch and allow a duplicate submission.
+            if sent then pcall(bridge.markGrabPress,bridge,session,strike,now) end
+            return sent
+        end)
+    end
+    function h:requestFlight()
+        local now = bridge.clock()
+        if not self.active or self.closed or not self.registry.byId.flight.requested or now < (self.nextFlight or 0) then return false end
+        local s = bridge:snapshot(now,true)
+        s.grab,s.rescuing = self:hasNativeGrab(now),self.rescue.pending~=nil
+        local c = bridge:config("FlightConfig")
+        local ok,canFly = pcall(function() return c.canFly(s.char) end)
+        if not ok or canFly ~= true or s.flying or not s.surface or s.underwater
+            or not self.policy:allowed("flight",s,now) then return false end
+        if type(c.WATER) ~= "table" or type(c.WATER.NO_TAKEOFF) ~= "boolean" then return false end
+        self.recovery:release("surface takeoff input",now)
+        local applied = self.features.leases:apply("surface",{
+            {target = c.WATER,key = "NO_TAKEOFF",value = false,kind = "boolean"} })
+        if not applied then return false end
+        self.surfaceRequest={char=s.char,value=now,before=bridge:attribute(s.char,"FeralFlyRequest")}
+        if not bridge:setAttribute(s.char,"FeralFlyRequest",now) then self:clearFlight(); return false end
+        self.surfaceUntil,self.nextFlight = now+1.15,now+.75
+        self.ledger:event("surface_takeoff_requested",now)
+        return true
+    end
+    function h:idle()
+        local now = bridge.clock()
+        if self.closed or not self.active or not self.registry.byId.robloxAFK.requested
+            or bridge.UserInputService:GetFocusedTextBox() then return end
+        self.syntheticUntil,self.nextIdle = now+.25,now+75
+        local ok = bridge:pulseIdle()
+        self.idleUnavailable = not ok
+        self.registry:ack("robloxAFK",ok,ok and "ARMED" or "UNAVAILABLE",
+            ok and "idle input sent; retention unverified" or "virtual input unavailable")
+        self.ledger:event("idle_input_attempt",now,{callSucceeded = ok})
+    end
+    function h:ackLocal(s)
+        local r = self.registry
+        local zoom=r.byId.zoom
+        local zoomApplied=self.zoom:set(self.active and zoom.requested)
+        r:ack("zoom",zoomApplied,not zoom.requested and "OFF" or zoomApplied and "CLIENT" or "UNAVAILABLE",self.zoom.reason)
+        for _,id in ipairs({"combat","colours","finder","menu"}) do
+            r:ack(id,true,id == "combat" and "ARMED" or "CLIENT",r.byId[id].detail)
+        end
+        local hearing=r.byId.voice
+        local hearingActive=self.voice.enabled and hearing.requested
+        r:ack("voice",hearingActive,not hearing.requested and "OFF" or hearingActive and "ARMED" or "WAITING",
+            self.voice:summary())
+        for _,id in ipairs({"esp","tags","biteHelper"}) do
+            local f = r.byId[id]
+            r:ack(id,f.requested,f.requested and "CLIENT" or "OFF",f.detail)
+        end
+        local auto=r.byId.autoBite
+        local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
+        local hold=r.byId.holdBite
+        local m1Native=bridge.holdBinding=="M1" and not native and bridge:nativeWolfInputAction(s.now or bridge.clock()) or nil
+        local middle=bridge.holdBinding=="M3"
+        local locked=self.combatInput.middleRoute
+        local route=locked or self.combatInput.middleCandidate
+        local ordinaryReady=middle and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
+        local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
+        local sourceLabel=nativeGC and "Original native callback recovered · "
+            or native and "Original native callback · "
+            or m1Native and "Original WolfController M1 input callback · "
+            or "Original attack handler inaccessible · "
+        local routeReady=native or m1Native~=nil
+        if middle then
+            sourceLabel=locked and ("M3 locked: "..(locked=="NATIVE" and "native callback" or "ordinary input").." · ")
+                or route and ("M3 verifying: "..route.." · ") or "M3 awaiting first verified bite · "
+            routeReady=route=="NATIVE" and native or route=="INPUT" and ordinaryReady
+                or route==nil and (native or ordinaryReady)
+        end
+        r:ack("holdBite",hold.requested and routeReady,
+            not hold.requested and "OFF" or middle and locked and routeReady and "ARMED"
+                or not middle and native and "ARMED" or routeReady and "PARTIAL" or "WAITING",
+            hold.requested and sourceLabel..self.combatInput.status or hold.detail)
+        r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
+            auto.requested and self.combatInput.status or auto.detail)
+        local movement=r.byId.hippoMove
+        local hippo=s.alive and s.species=="Hippo"
+        local moved=hippo and self.features.leases:valid("hippoGait")
+        r:ack("hippoMove",movement.requested and moved,not movement.requested and "OFF" or moved and "CLIENT" or "WAITING",
+            not hippo and "waiting for Hippo" or moved and "charge movement inputs applied; displacement unverified" or self.features.hippoStatus)
+        local release=r.byId.hippoRelease
+        local releaseReady=hippo and self.hippo.native~=nil
+        r:ack("hippoRelease",release.requested and releaseReady,not release.requested and "OFF" or releaseReady and "ARMED" or "WAITING",
+            self.hippo.releaseStatus)
+        for _,id in ipairs({"robloxAFK","survivalAFK","minigame","escape","flight"}) do
+            local f = r.byId[id]
+            if not f.requested then r:ack(id,false,"OFF",f.detail)
+            elseif id == "minigame" then
+                local remote = bridge:hasRemote("FeralGrabV2")
+                local state = remote and (self.grab.active and not self.grabInput.lease and "PARTIAL" or "ARMED") or "WAITING"
+                r:ack(id,remote,state,
+                    self.grab.active and (self.grab.status .. " · " .. self.grabInput.status) or self.grab.status)
+            elseif id == "escape" then
+                r:ack(id,bridge:hasRemote("FeralLunge"),"ARMED",self.escapeStatus or "watching native capture")
+            elseif id == "flight" then
+                local c = bridge:config("FlightConfig")
+                local ok,eligible = pcall(function() return s.alive and c.canFly(s.char) end)
+                r:ack(id,ok and eligible == true,ok and eligible and "ARMED" or "WAITING",
+                    ok and eligible and (self.flightStatus or (s.underwater and "underwater; takeoff blocked" or "surface assistance armed"))
+                        or "waiting for flight-eligible animal")
+            elseif id == "survivalAFK" then
+                r:ack(id,true,"ARMED",self.walk and "safe walk active; credit unverified" or self.walkStatus or "waiting for safe idle window")
+            else r:ack(id,not self.idleUnavailable,self.idleUnavailable and "UNAVAILABLE" or "ARMED",
+                self.idleUnavailable and "virtual input unavailable" or "best-effort idle input; retention unverified") end
+        end
+        local speed=r.byId.attackSpeed
+        if speed.requested and speed.applied then
+            speed.reason=string.format("Adaptive %.2fx repeat request pacing · native/server limits still apply",
+                1/self.combatInput:factor())
+        end
+        if self.settingsAvailable then r:ack("settings",true,"CLIENT","saved intent reconciled; " .. self.settingsOrigin) end
+        local recovery = r.byId.recovery
+        if recovery.requested then
+            recovery.reason = self.recovery:summary()
+            recovery.observed = self.recovery.nativeEchoObserved and "owned native pose echo observed locally" or "unknown"
+            r.byId.effects.reason = self.recovery:effectsSummary()
+            r.byId.effects.observed = self.recovery.observations
+        end
+        r.byId.minigame.observed = {
+            perfect = self.grab.grades.perfect,good = self.grab.grades.good,miss = self.grab.grades.miss,
+            source = "matching native res replies only",
+        }
+        if r.byId.minigame.requested and self.grab.active then
+            r.byId.minigame.reason=string.format("P %d · G %d · M %d · %d presses · native grades only",
+                self.grab.grades.perfect,self.grab.grades.good,self.grab.grades.miss,self.grab.presses)
+        end
+        if r.byId.stamina.requested and r.byId.stamina.applied then
+            local item=self.ledger.staminaObservation
+            r.byId.stamina.reason=(s.locomotion or "Animal").." client profile"
+                ..(item and item.seconds>=1 and string.format(" · observed %+.2f/s",item.rate) or " · watching stamina")
+            r.byId.stamina.observed=item or "unmeasured"
+        end
+        r.byId.flight.observed = s.flying and "native local flight flag" or "unknown"
+        r.byId.climb.observed = s.climbing and "native local climb flag" or "unknown"
+        r.byId.survivalAFK.observed = (self.ledger.counts.survival_value_advanced or 0) > 0
+            and "survival value advanced; cause unverified" or "unknown"
+    end
+    function h:correlatedHPDrop(tx)
+        local victim=tx.nativeTarget or tx.target and tx.target.char
+        local before=victim and tx.hpBefore and tx.hpBefore[victim]
+        if not before then return false end
+        local ok,hum=pcall(function()return victim:FindFirstChildOfClass("Humanoid")end)
+        return ok and hum and hum.Parent and hum.MaxHealth==before.maxHP
+            and hum.Health<before.hp-.05 or false
+    end
+    function h:stepCombat(s,now)
+        for _,tx in ipairs(self.transactions) do
+            if tx.generation == s.generation and not tx.closed then
+                if not tx.nativeAt and now-tx.intent > .45 and not self.combatInput.pending then
+                    if not tx.classified then
+                        tx.classified = true
+                        local status = tx.consumed and "Input handled by native UI or another binding"
+                            or tx.restExitFailed and "Native Rest exit failed; normal input preserved"
+                            or tx.lock and "No native bite marker · recent Rest lock possible" or "No native bite marker observed"
+                        if not self.combatStatusAt or tx.intent>=self.combatStatusAt then
+                            self.combatStatus,self.combatStatusAt=status,tx.intent
+                        end
+                        self.ledger:event("no_native_bite_marker",now,{recentRest = tx.lock == true,consumed=tx.consumed==true})
+                    end
+                elseif tx.nativeAt and now>=tx.claimDue then
+                    if not tx.sampled then
+                        tx.sampled = true
+                        local target = tx.focusTarget
+                        if tx.rateEligible and tx.rateTarget and self.features.originalCombat
+                            and bridge:currentTargetBody(tx.rateTarget) then
+                            local geometryOK,geo=pcall(bridge.geometry,bridge,self.features.originalCombat,s,tx.rateTarget)
+                            local rayOK,blocked=pcall(bridge.occluded,bridge,s,tx.rateTarget)
+                            tx.rateAtClaim=geometryOK and geo and geo.valid and rayOK and blocked==false or false
+                        end
+                        if target and bridge:currentTargetBody(target) then
+                            local before=tx.hpBefore and tx.hpBefore[target.char]
+                            tx.target,tx.hp,tx.maxHP = target,before and before.hp,before and before.maxHP
+                            tx.extendedOnly = tx.focusExtendedOnly==true
+                            if tx.extendedOnly then
+                                local ok,geo=pcall(bridge.geometry,bridge,self.features.combat,s,target)
+                                local clear,blocked=pcall(bridge.occluded,bridge,s,target)
+                                tx.extendedClaimValid=ok and geo and geo.valid and clear and blocked==false or false
+                            end
+                        end
+                        self.ledger:event("client_candidate_sample",now,{found = target ~= nil,claimObserved = false})
+                    end
+                    if now>=(tx.nextHPRead or 0) or tx.dirty then
+                        tx.nextHPRead=now+.1
+                        local char=tx.nativeTarget or tx.localTarget or tx.target and tx.target.char
+                        if tx.observedChar~=char then
+                            tx.observedChar,tx.hpDrop,tx.hpInvalid=char,false,false
+                        end
+                        local ok,hum=pcall(function()return char and char:FindFirstChildOfClass("Humanoid")end)
+                        local before=char and tx.hpBefore and tx.hpBefore[char]
+                        if ok and hum and hum.Parent and before then
+                            if (before.hum and hum~=before.hum or hum.MaxHealth~=before.maxHP) and not tx.hpInvalid then
+                                tx.hpInvalid,tx.dirty=true,true
+                            end
+                            if not tx.hpInvalid and Core.finite(hum.Health) and Core.finite(before.hp)
+                                and hum.Health<before.hp-.05 and not tx.hpDrop then
+                                tx.hpDrop,tx.dirty=true,true
+                            end
+                        end
+                    end
+                    if now>=tx.claimDue+.8 and (not tx.classified or tx.dirty) then
+                        local first=not tx.classified
+                        tx.classified,tx.dirty = true,false
+                        local drop=tx.hpDrop and not tx.hpInvalid
+                        local damage=tx.feedback and tx.feedback.dmg
+                        tx.status = tx.abilityAmbiguous and "Native ability overlaps · ordinary bite impact unassigned"
+                            or tx.feedback and tx.feedback.safe==true and "Game reply: target protected"
+                            or Core.finite(damage) and damage>0 and (string.format("Game reply reports %.1f damage",damage)
+                                ..(drop and " · HP decline correlated" or " · HP change unconfirmed"))
+                            or drop and tx.feedback and "Native hit reply + target HP decline · attribution unverified"
+                            or drop and "Target HP fell after native marker · attribution unverified"
+                            or tx.localTarget and "Local bite impact only · server hit/HP change unconfirmed"
+                            or "Native marker observed · no matching HP decline observed"
+                        if tx.targetMismatch then tx.status ..= " · local/server target differed" end
+                        if not self.combatStatusAt or tx.nativeAt>=self.combatStatusAt then
+                            self.combatStatus,self.combatStatusAt=tx.status,tx.nativeAt
+                        end
+                        if first or drop and not tx.dropReported then
+                            self.ledger:event(drop and "target_hp_decline_correlated" or "no_correlated_hp_decline",now,
+                                {extendedOnly = tx.extendedOnly == true,nativeReply=tx.feedback~=nil,late=not first,
+                                 targetMismatch=tx.targetMismatch==true,damageAcceptance = "unverified"})
+                            if drop then tx.dropReported=true end
+                        end
+                    end
+                    if now>=(tx.observeUntil or tx.claimDue+2) then
+                        local drop=tx.hpDrop and not tx.hpInvalid
+                        local target=tx.target
+                        -- Wait for the entire evidence window before adapting
+                        -- optional auto-attempts. Silence is not server rejection.
+                        if not tx.abilityAmbiguous and tx.extendedOnly and tx.extendedClaimValid and target and target.char
+                            and not drop and not tx.positiveReply and not tx.feedback
+                            and not (self.lastUnmatchedGameHit and now-self.lastUnmatchedGameHit<1.2) then
+                            local entry=self.extendedConfidence[target.char]
+                            if not entry then entry={misses=0,waitUntil=0};self.extendedConfidence[target.char]=entry end
+                            entry.misses+=1
+                            if entry.misses>=2 then entry.waitUntil=now+math.min(4,1.5+entry.misses*.5) end
+                            self.ledger:event("extended_contact_unconfirmed",now,
+                                {count=entry.misses,autoWait=entry.waitUntil>now})
+                        end
+                        if not tx.abilityAmbiguous and tx.rateEligible and tx.rateAtClaim and not tx.fastConfirmed and not drop
+                            and not (tx.feedback and tx.feedback.safe==true)
+                            and (not tx.feedback or tx.rateTarget and tx.feedback.v==tx.rateTarget.char) then
+                            self.combatInput:suspect(now)
+                        end
+                        tx.closed=true;tx.hpBefore=nil
+                    end
+                end
+            end
+        end
+    end
+    function h:stepClimb(s,now)
+        local q = self.climbQueue
+        if not q then return end
+        if not self.registry.byId.climb.requested or q.generation ~= s.generation or now > q.expires then self.climbQueue = nil; return end
+        if s.climbing then
+            self.ledger:event("native_climb_mounted",now,{afterRequest = q.attempts > 0})
+            self.climbQueue = nil; return
+        end
+        if not self.policy:allowed("climb",s,now) then self.climbQueue = nil; return end
+        if now < q.earliest or not s.climbCan then return end
+        if q.attempts >= 2 then self.climbQueue = nil; return end
+        self.recovery:release("buffered climb",now)
+        if bridge:setAttribute(bridge.player,"FeralClimbTap",now) then
+            q.attempts += 1; q.earliest = now+.7
+            self.ledger:event("native_climb_tap",now,{attempt = q.attempts})
+        else self.climbQueue = nil end
+    end
+    function h:stepAFK(s,now)
+        if self.registry.byId.robloxAFK.requested and now >= self.nextIdle and now-self.policy.lastPhysical >= 65 then self:idle() end
+        if not self.registry.byId.survivalAFK.requested then self:stopWalk("disabled"); return end
+        if self.walk then
+            s.nearbyDanger = bridge:nearbyDanger(s)
+            local allowed,why = self.policy:allowed("afk",s,now)
+            if not allowed or now >= self.walk.untilAt or self.walk.snapshot.char ~= s.char then self:stopWalk(why or "walk timeout"); return end
+            if (s.root.Position-self.walk.goal).Magnitude < 1.3 then
+                self.ledger:event("afk_displacement_observed",now)
+                self:stopWalk("goal reached")
+            elseif not bridge:routeSafe(s,self.walk.goal) then
+                self:stopWalk("ground route changed")
+            end
+            return
+        end
+        if now < self.nextWalk then return end
+        self.nextWalk = now+90
+        s.nearbyDanger = bridge:nearbyDanger(s)
+        local allowed,why = self.policy:allowed("afk",s,now)
+        self.walkStatus = why
+        if not allowed then return end
+        local goal = bridge:safeStep(s,self.anchorChar == s.char and self.anchor or nil)
+        if not goal then self.walkStatus = "no safe ground step"; return end
+        self.recovery:release("safe idle walk",now)
+        if bridge:walk(s,goal) then
+            if self.anchorChar ~= s.char then self.anchor,self.anchorChar = s.root.Position,s.char end
+            self.walk = { snapshot = s,goal = goal,untilAt = now+8 }
+            self.ledger:event("afk_walk_requested",now)
+        end
+    end
+    function h:stepFlight(s,now)
+        if self.surfaceUntil and (now >= self.surfaceUntil or s.underwater or s.flying
+            or s.captured or s.grab or s.chat or s.gameMenu or s.attackHeld) then
+            self:releaseSurface()
+        end
+        if self.drop then
+            if not s.flying then self.ledger:event("underwater_flight_exit_observed",now) end
+            if not s.flying or self.drop.char ~= s.char or now >= self.drop.untilAt then self:clearFlight() end
+        elseif self.registry.byId.flight.requested and s.flying and s.underwater and not s.grab and not s.ability and not s.captured then
+            local before = bridge:attribute(s.char,"FeralFlyDrop")
+            if bridge:setAttribute(s.char,"FeralFlyDrop",true) then
+                self.drop = {char = s.char,before = before,untilAt = now+2}
+                self.ledger:event("native_underwater_flight_exit_requested",now)
+            end
+        end
+    end
+    function h:stepEscape(s,now)
+        if not self.registry.byId.escape.requested or now < self.nextEscape then return end
+        self.nextEscape = now+.12
+        local allowed = self.policy:allowed("escape",s,now)
+        if not allowed then return end
+        local action,why,interval = bridge:escapeAction(s)
+        self.escapeStatus = why
+        if action then
+            self.nextEscape = now+interval
+            local sent = bridge:fire("FeralLunge",action)
+            self.ledger:event("native_escape_requested",now,{action = action,sent = sent})
+        end
+    end
+    function h:tick(dt)
+        if not self.active or self.closed then return end
+        local now = bridge.clock()
+        -- Recover an executor pulse whose scheduled Up callback never ran.
+        if type(bridge.clearStaleSyntheticBite)=="function"
+            and bridge:clearStaleSyntheticBite(now) then
+            self.ledger:event("stale_mouse_repeat_pulse_released",now)
+        end
+        if Core.finite(dt) and dt>0 then
+            self.frameInterval=(self.frameInterval or dt)*.85+math.min(dt,.25)*.15
+        end
+        local slow = now >= self.nextSlow
+        local critical=self.registry.byId.minigame.requested and self.grab.active and self.grab.pending~=nil
+        self.timingCritical,bridge.deferNativeDiscovery=critical,critical
+        local s = bridge:snapshot(now,not critical and slow and self.registry.byId.flight.requested)
+        if s.ability then self:observeCombatAbility(s,now) end
+        if s.chat or s.gameMenu then
+            self.inputSuspended=true
+            self.physicalM1Input=nil
+            self.combatInput:cancel()
+        end
+        if bridge.holdBinding=="M3" and s.middleHeldKnown then
+            if not s.middleHeld then self.middlePollArmed=true
+            elseif self.middlePollArmed and not self.middlePollDown then
+                self.middlePollArmed=false
+                self:startMiddle(s,now,nil)
+            end
+            self.middlePollDown=s.middleHeld
+        end
+        if bridge.holdBinding=="M3" then
+            -- A late synthetic echo or a missed native M1 release can leave
+            -- physicalM1Input latched forever. Only clear it after independent
+            -- known-up readings outside every synthetic pulse/grace interval.
+            if self.physicalM1Input and s.mouseHeldKnown and not s.mouseHeld
+                and not bridge.syntheticM1 and now>=(bridge.syntheticM1Until or 0) then
+                self.physicalM1MissingSince=self.physicalM1MissingSince or now
+                local ok,state=pcall(function()return self.physicalM1Input.UserInputState end)
+                if (ok and (state==Enum.UserInputState.End or state==Enum.UserInputState.Cancel))
+                    or now-self.physicalM1MissingSince>=.45 then
+                    self.physicalM1Input=nil;self.physicalM1MissingSince=nil
+                    self.ledger:event("stale_manual_mouse_owner_cleared",now)
+                end
+            else
+                self.physicalM1MissingSince=nil
+            end
+            s.physicalM1Held=self.physicalM1Input~=nil or (s.mouseHeld and not bridge.syntheticM1)
+        end
+        if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held,s.middleHeld=false,false,false,false
+        elseif bridge.holdBinding=="M3" and self.combatInput.held and self.combatInput.held.key=="M3" then s.attackHeld=true end
+        self.snapshot = s
+        self.grab.enabled = self.registry.byId.minigame.requested
+        local clock = s.serverNow
+        if clock then
+            self.grabClockLostAt=nil
+            local cfg = self.grab.enabled and bridge:config("GrabV2Config")
+            local native = self.grab.enabled and self.grabInput:controller(now)
+            local nativeState,nativeKnown
+            if native and (self.grab.active or now >= (self.nextGrabPoll or 0)) then
+                local ok,state,known=pcall(native.state)
+                if ok then nativeState,nativeKnown=state,known end
+                self.nextGrabPoll=now+.25
+            end
+            if native and s.alive and (nativeState or nativeKnown==true) then
+                self.grab:syncNative(nativeState,clock,s.generation,cfg and cfg.PERFECT or .32,
+                    cfg and cfg.PASSES or 2.5,now)
+            end
+            critical=critical or self.grab.enabled and self.grab.active and self.grab.pending~=nil
+            self.timingCritical,bridge.deferNativeDiscovery=critical,critical
+            if not s.alive and self.grab.active then self.grab:reset("animal unavailable") end
+            s.grab,s.afkWalking = self:hasNativeGrab(now),self.walk ~= nil
+            self.grabInput:update(self.grab,now,native,nativeState)
+            self:pumpGrab(s,false)
+            s.grab=self:hasNativeGrab(now)
+            if not self.grab.active and self.grabInput.lease then self.grabInput:release() end
+            self:updateGrabWake()
+        else
+            self.grabClockLostAt=self.grabClockLostAt or now
+            local p=self.grab.pending
+            if not s.alive or now-self.grabClockLostAt>8 then
+                self.grab:reset(not s.alive and "animal unavailable" or "server clock unavailable; session paused")
+                self.grabInput:release()
+            elseif p and p.localEnds and now>p.localEnds+.1 then
+                self.grab.pending=nil;self.grab.status="strike expired while server clock unavailable"
+            end
+            self:cancelGrabWake()
+            s.grab,s.afkWalking = self:hasNativeGrab(now),self.walk ~= nil
+        end
+        -- Both observed and newly adopted native strikes get their first legal
+        -- dispatch before any Territory discovery, routing or driver work.
+        if self.territory then self.territory:tick(now) end
+        if not critical and now >= self.nextBind then self.nextBind = now+1; bridge:bindNative(self) end
+        local care=self.territory and self.territory.agent.enabled and self.territory.agent.goal
+        self.feeding:tick(s,now,care and (care.kind=="EAT" or care.kind=="DRINK"))
+        self:stepFlightHandoff(s,now)
+        self.rescue:tick(s,now)
+        self.activity=self.policy:activity(s,now)
+        bridge.predictionActive=s.attackHeld or self.combatInput.held~=nil or self.registry.byId.autoBite.requested
+        -- InputBegan can remain held even when an executor/virtual M1 reset
+        -- momentarily reports IsMouseButtonPressed=false. Recovery must not
+        -- re-enter owned Rest in the middle of that human-held attack.
+        local repeatActive=self.registry.byId.holdBite.requested
+            and (self.combatInput.held~=nil or bridge.holdBinding=="M1" and s.attackHeld==true)
+            and s.alive and not s.chat and not s.gameMenu and not self.inputSuspended and not self.policy.manualRest
+        if repeatActive then
+            self.policy.attackUntil=math.max(self.policy.attackUntil,now+1.1)
+            if self.recovery.owned and not self.recovery:release("held bite priority",now) then
+                self.combatInput:pause("native Rest exit pending",now)
+            end
+        end
+        local auto=self.registry.byId.autoBite.requested and not (self.territory and self.territory.agent.enabled)
+        local clear=auto and bridge:autoAttackTarget(s,self.guide,self.features.combat)
+        self.nativeGrabBusy=self:hasNativeGrab(now)
+        local grabActive=self.nativeGrabBusy==true
+            or self.grabInput.lease~=nil
+        local lease=self.grabInput.lease
+        -- WolfController.tryBite does not use CAS M1 binding. Its native
+        -- handler may run alongside the perfect-press scheduler only for a
+        -- known hunter minigame with the original M1 minigame action safely
+        -- separated. A prey/captured player and all synthetic M1 fallbacks
+        -- continue to have minigame priority.
+        local nativeMini=grabActive and self.grab.active and self.grab.role=="hunter"
+            and lease~=nil and lease.state and not lease.state.ended
+            and not bridge:nativeGrabBound()
