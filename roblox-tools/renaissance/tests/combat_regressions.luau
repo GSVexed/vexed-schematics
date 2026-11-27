@@ -598,7 +598,8 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         h:close()
     end)
 
-    test("native M1 fallback accepts uniquely script-owned vendor-wrapped input callback",function()
+
+    test("opaque executor-wrapped input callback fails closed instead of invoking unverified code",function()
         local w=Mock.new();w:enableNativeActions();w.virtualBiteAvailable=true
         local priorInfo=w.env.debug.info
         local priorValues=w.env.debug.getupvalues
@@ -616,25 +617,18 @@ return function(test,eq,load,Mock,modules,boot,close,E)
             if rec and rec.name=="tryBite" then return {} end
             return priorValues(fn)
         end
-        w.env.getfenv=function(fn)
-            local rec=w.nativeRecords[fn]
-            if rec and rec.script=="WolfController" then
-                return {script=w.player:FindFirstChild("PlayerScripts"):FindFirstChild("WolfController")}
-            end
-            return {}
-        end
+        -- Neither readable own source nor getfenv ownership is available.
+        w.env.getfenv=nil
         local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
         w:advance(.15)
-        local original=w.uis.InputBegan
         w.held=E.UserInputType.MouseButton1
-        local press=w:input(nil,E.UserInputType.MouseButton1)
-        w:advance(2.2)
-        assert(h.bridge.wolfInputAction,
-            "wrapped own input callback must remain reachable")
-        assert((w.nativeBites or 0)>=2,
-            "own game callback should invoke original bites without mouse replay")
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        local before=w.nativeBites or 0
+        w:advance(2.1)
+        eq(h.bridge.wolfInputAction,nil)
+        eq(w.nativeBites or 0,before)
         eq(w.virtualBiteCalls,nil)
-        w.held=nil;w.uis.InputEnded:Fire(press)
+        w.held=nil;w.uis.InputEnded:Fire(original)
         h:close()
     end)
 end
