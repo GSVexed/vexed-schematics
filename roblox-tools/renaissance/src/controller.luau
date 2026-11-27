@@ -62,6 +62,7 @@ function Controller.new(M,bridge,options)
     h.grabInput = M.grab_input.new(bridge,h.token)
     h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
+    bridge.holdBinding=h.options.holdBinding=="M1" and "M1" or "M3"
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
     bridge.combatGovernor = h.combatInput
     -- Weak keyed: a disappeared animal is never retained by combat trust.
@@ -388,7 +389,7 @@ function Controller.new(M,bridge,options)
         -- same uninterrupted hardware press. Ignore any later replay echo
         -- even when the executor delivers it after the short grace window.
         -- It still reaches FERAL's original InputBegan listener normally.
-        if kind==Enum.UserInputType.MouseButton1
+        if bridge.holdBinding=="M1" and kind==Enum.UserInputType.MouseButton1
             and self.physicalM1Input~=nil and input~=self.physicalM1Input
             and self.combatInput.held and self.combatInput.held.handoff
             and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
@@ -474,12 +475,29 @@ function Controller.new(M,bridge,options)
     end
     function h:input(input,processed)
         local kind,key = input.UserInputType,input.KeyCode
+        if bridge.holdBinding=="M3" and kind==Enum.UserInputType.MouseButton3 then
+            if self.closed or not self.active or processed or self.windowFocused==false
+                or bridge.UserInputService:GetFocusedTextBox()
+                or self.ui:contains(bridge.UserInputService:GetMouseLocation())
+                or not self.registry.byId.holdBite.requested then return end
+            local now=bridge.clock()
+            local s=bridge:snapshot(now,false)
+            if not s.alive or s.chat or s.gameMenu then return end
+            self:physicalInput("other")
+            self.inputSuspended=false
+            self.policy:input("attack",now)
+            self.feeding:attack(s,now);self.rescue:cancel()
+            self:stopWalk("middle mouse attack input")
+            self.recovery:release("middle mouse attack input",now)
+            self.combatInput:input(s,now,"M3",input)
+            return
+        end
         -- Once this real physical M1 has been held long enough for the
         -- hub to own repeat, no *second* InputBegan can originate from that
         -- same uninterrupted hardware press. Ignore any later replay echo
         -- even when the executor delivers it after the short grace window.
         -- It still reaches FERAL's original InputBegan listener normally.
-        if kind==Enum.UserInputType.MouseButton1
+        if bridge.holdBinding=="M1" and kind==Enum.UserInputType.MouseButton1
             and self.physicalM1Input~=nil and input~=self.physicalM1Input
             and self.combatInput.held and self.combatInput.held.handoff
             and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
@@ -496,7 +514,7 @@ function Controller.new(M,bridge,options)
             -- processed mouse echoes must not cancel that real InputObject.
             -- The original processed physical click is still cancelled,
             -- and a focused UI/text field always takes priority.
-            if kind==Enum.UserInputType.MouseButton1
+            if bridge.holdBinding=="M1" and kind==Enum.UserInputType.MouseButton1
                 and self.physicalM1Input~=nil and input~=self.physicalM1Input
                 and self.combatInput.held and self.combatInput.held.handoff
                 and not bridge.UserInputService:GetFocusedTextBox()
@@ -514,9 +532,16 @@ function Controller.new(M,bridge,options)
             local pending,held=self.combatInput.pending,self.combatInput.held
             if kind==Enum.UserInputType.MouseButton1 or key==Enum.KeyCode.ButtonR2
                 or pending and pending.input==input or held and held.input==input then
-                self.combatInput:cancel()
-                self.physicalM1Input=nil
-                self.inputSuspended=true
+                if bridge.holdBinding=="M3" and held and held.key=="M3"
+                    and not bridge.UserInputService:GetFocusedTextBox()
+                    and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+                    if pending and pending.input==input then self.combatInput.pending=nil end
+                    self.physicalM1Input=nil
+                else
+                    self.combatInput:cancel()
+                    self.physicalM1Input=nil
+                    self.inputSuspended=true
+                end
             end
             if self.lastIntent and self.lastIntent.input==input and not self.lastIntent.nativeAt then
                 self.lastIntent.consumed=true
@@ -537,7 +562,10 @@ function Controller.new(M,bridge,options)
     function h:inputEnded(input)
         if self.closed or not self.active then return end
         local kind,key=input.UserInputType,input.KeyCode
-        if kind==Enum.UserInputType.MouseButton1 then
+        if kind==Enum.UserInputType.MouseButton3 and bridge.holdBinding=="M3" then
+            self.combatInput:release("M3",bridge.clock())
+            return
+        elseif kind==Enum.UserInputType.MouseButton1 then
             -- Owned synchronous releases may reuse the engine's mouse object.
             -- Suppress those before consulting optional InputObject identity.
             if bridge.syntheticReleasing then return end
@@ -860,12 +888,13 @@ function Controller.new(M,bridge,options)
         local auto=r.byId.autoBite
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
         local hold=r.byId.holdBite
-        local m1Native=not native and bridge:nativeWolfInputAction(s.now or bridge.clock())
+        local m1Native=bridge.holdBinding=="M1" and not native and bridge:nativeWolfInputAction(s.now or bridge.clock()) or nil
         local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
         local sourceLabel=nativeGC and "Original native callback recovered · "
             or native and "Original native callback · "
             or m1Native and "Original WolfController M1 input callback · "
-            or "Original attack handler inaccessible; no synthetic clicks · "
+            or (bridge.holdBinding=="M3" and "Middle mouse: original native callback inaccessible · "
+                or "Original attack handler inaccessible; no synthetic clicks · ")
         r:ack("holdBite",hold.requested and (native or m1Native~=nil),
             not hold.requested and "OFF" or native and "ARMED" or m1Native and "PARTIAL" or "WAITING",
             hold.requested and sourceLabel..self.combatInput.status or hold.detail)
@@ -1142,7 +1171,8 @@ function Controller.new(M,bridge,options)
             self.physicalM1Input=nil
             self.combatInput:cancel()
         end
-        if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held=false,false,false end
+        if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held,s.middleHeld=false,false,false,false
+        elseif bridge.holdBinding=="M3" and self.combatInput.held and self.combatInput.held.key=="M3" then s.attackHeld=true end
         self.snapshot = s
         self.grab.enabled = self.registry.byId.minigame.requested
         local clock = s.serverNow
@@ -1195,7 +1225,7 @@ function Controller.new(M,bridge,options)
         -- momentarily reports IsMouseButtonPressed=false. Recovery must not
         -- re-enter owned Rest in the middle of that human-held attack.
         local repeatActive=self.registry.byId.holdBite.requested
-            and (self.combatInput.held~=nil or s.attackHeld==true)
+            and (self.combatInput.held~=nil or bridge.holdBinding=="M1" and s.attackHeld==true)
             and s.alive and not s.chat and not s.gameMenu and not self.inputSuspended and not self.policy.manualRest
         if repeatActive then
             self.policy.attackUntil=math.max(self.policy.attackUntil,now+1.1)
@@ -1217,7 +1247,7 @@ function Controller.new(M,bridge,options)
         local nativeMini=grabActive and self.grab.active and self.grab.role=="hunter"
             and lease~=nil and lease.state and not lease.state.ended
             and not bridge:nativeGrabBound()
-            and (s.mouseHeld==true or self.combatInput.held~=nil
+            and (bridge.holdBinding=="M1" and s.mouseHeld==true or self.combatInput.held~=nil
                 and self.combatInput.held.handoff==true)
             and not s.captured
             and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"

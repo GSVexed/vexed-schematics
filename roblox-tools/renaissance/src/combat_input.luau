@@ -4,6 +4,7 @@
 -- the private callback is unavailable; never for passive/automatic attacks.
 local CombatInput = {}
 function CombatInput.new(bridge,policy,ledger)
+    local middleMode=bridge.holdBinding=="M3"
     local c = {
         pending=nil, held=nil, awaiting=nil, nextAttempt=0, markerCount=0,
         status="native input", fallbackMisses=0, unavailableUntil=0,
@@ -82,12 +83,25 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:input(s,now,kind,inputObject)
         if not s.alive then return end
-        -- The first genuine M1 click belongs entirely to the game. Only
-        -- after one uninterrupted hold crosses the tap/hold threshold does
-        -- the hub take over repeating. New taps always start a fresh timer.
-        self.held={char=s.char,generation=s.generation,key=kind or "mouse",
-            source="event",input=inputObject,startedAt=now,handoff=kind=="R2"}
-        self.nextAttempt=math.max(self.nextAttempt,now+.025)
+        if middleMode then
+            if kind=="M3" then
+                if self.held and self.held.key=="M3" and self.held.char==s.char
+                    and self.held.generation==s.generation then return end
+                self.held={char=s.char,generation=s.generation,key="M3",
+                    source="event",input=inputObject,startedAt=now,handoff=true}
+                self.nextAttempt=math.max(self.nextAttempt,now+.025)
+                self.status="middle mouse held"
+                ledger:event("physical_m3_hold_started",now)
+                return
+            end
+        else
+            -- The first genuine M1 click belongs entirely to the game. Only
+            -- after one uninterrupted hold crosses the tap/hold threshold does
+            -- the hub take over repeating. New taps always start a fresh timer.
+            self.held={char=s.char,generation=s.generation,key=kind or "mouse",
+                source="event",input=inputObject,startedAt=now,handoff=kind=="R2"}
+            self.nextAttempt=math.max(self.nextAttempt,now+.025)
+        end
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
         local at=math.max(now+.025,policy.lastRestRelease+bridge:restLock(s.char)+.035)
         self.pending={char=s.char,generation=s.generation,at=at,untilAt=math.max(now+1.6,at+.35),
@@ -102,36 +116,52 @@ function CombatInput.new(bridge,policy,ledger)
             self.status="input suspended; waiting for a fresh press"
             return
         end
-        local physical=s.attackHeld==true
-        if not options.repeatHeld then
-            if self.held then self:release(nil,now) end
-        elseif physical and not bridge.syntheticM1
-            and now>=(bridge.syntheticM1Until or 0)
-            and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
-            -- Hub enabled after M1 was already pressed: wait a fresh hold
-            -- threshold before dispatching repeats.
-            self.held={char=s.char,generation=s.generation,key="poll",source="poll",
-                startedAt=now,handoff=false}
-            self.nextAttempt=math.max(self.nextAttempt,now+.025)
-        elseif self.held and (self.held.char~=s.char or self.held.generation~=s.generation
-            or self.held.source=="poll" and not physical) then
-            self:release(nil,now)
-        end
-        -- The real InputBegan object, not a potentially unreliable native
-        -- mouse-down poll, owns this hold until its actual InputEnded.
-        -- Focus loss, UI, ability/Rest and hub unload still revoke it.
-        if self.held and not self.held.handoff and
-            (self.held.key=="M1" or self.held.key=="poll") then
-            local age=now-(self.held.startedAt or now)
-            if age>=.28 then
-                self.held.handoff=true
-                self.nextAttempt=math.max(self.nextAttempt,now+.015)
-                ledger:event("physical_m1_hold_handoff",now,{age=age})
+        if middleMode then
+            -- Fresh world InputBegan owns M3. Polling only revokes stale ownership.
+            if self.held then
+                if s.middleHeldKnown and s.middleHeld then
+                    self.held.seenDown=true;self.held.upSince=nil
+                elseif s.middleHeldKnown and self.held.seenDown then
+                    self.held.upSince=self.held.upSince or now
+                end
+                if not options.repeatHeld or self.held.char~=s.char
+                    or self.held.generation~=s.generation
+                    or self.held.upSince and now-self.held.upSince>.12 then
+                    self:release("M3",now)
+                end
+            end
+        else
+            local physical=s.attackHeld==true
+            if not options.repeatHeld then
+                if self.held then self:release(nil,now) end
+            elseif physical and not bridge.syntheticM1
+                and now>=(bridge.syntheticM1Until or 0)
+                and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
+                -- Hub enabled after M1 was already pressed: wait a fresh hold
+                -- threshold before dispatching repeats.
+                self.held={char=s.char,generation=s.generation,key="poll",source="poll",
+                    startedAt=now,handoff=false}
+                self.nextAttempt=math.max(self.nextAttempt,now+.025)
+            elseif self.held and (self.held.char~=s.char or self.held.generation~=s.generation
+                or self.held.source=="poll" and not physical) then
+                self:release(nil,now)
+            end
+            -- The real InputBegan object, not a potentially unreliable native
+            -- mouse-down poll, owns this hold until its actual InputEnded.
+            -- Focus loss, UI, ability/Rest and hub unload still revoke it.
+            if self.held and not self.held.handoff and
+                (self.held.key=="M1" or self.held.key=="poll") then
+                local age=now-(self.held.startedAt or now)
+                if age>=.28 then
+                    self.held.handoff=true
+                    self.nextAttempt=math.max(self.nextAttempt,now+.015)
+                    ledger:event("physical_m1_hold_handoff",now,{age=age})
+                end
             end
         end
         local inGrab=s.grab==true or options.minigameBusy==true
         local nativeGrabLane=inGrab and options.nativeMinigame==true
-            and self.held~=nil and (self.held.key=="M1" or self.held.key=="poll")
+            and self.held~=nil and (self.held.key=="M3" or self.held.key=="M1" or self.held.key=="poll")
             and options.minigamePressNear~=true
             and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"
         if not s.alive or s.chat or s.gameMenu or inGrab and not nativeGrabLane
@@ -158,16 +188,17 @@ function CombatInput.new(bridge,policy,ledger)
             self.pending=nil;p=nil
         end
         local held=options.repeatHeld and self.held~=nil and self.held.handoff==true
+            and (not middleMode or inGrab or not (s.mouseHeld or s.r2Held))
         -- Holding M1 explicitly takes priority over Auto Bite target
         -- selection. Ordinary clicks before the handoff remain game-owned.
         local automatic=not inGrab and options.automatic and options.targetValid==true
-            and self.held==nil
+            and self.held==nil and (not middleMode or not (s.mouseHeld or s.r2Held))
         if inGrab and not nativeGrabLane then automatic=false end
         if not p and not held and not automatic then
             -- A quick manual tap is never repeated by this controller.
             -- No callback/simulated mouse edge is dispatched until handoff.
             self.awaiting=nil
-            self.status=self.held and "manual M1 tap; waiting for sustained hold" or "idle"
+            self.status=self.held and (middleMode and "manual attack has priority" or "manual M1 tap; waiting for sustained hold") or "idle"
             return
         end
         if s.feeding or s.captured or s.holding or s.ability or s.rest then
@@ -253,7 +284,7 @@ function CombatInput.new(bridge,policy,ledger)
             and bridge:nativeWolfInputAction(now) or nil
         if type(native)~="function" and not nativeInput then
             self.nextAttempt=now+.12
-            self.status=held and "original game handler unavailable; no synthetic mouse replay"
+            self.status=held and (middleMode and "middle mouse: original native callback unavailable" or "original game handler unavailable; no synthetic mouse replay")
                 or "waiting for native attack handler"
             return
         end

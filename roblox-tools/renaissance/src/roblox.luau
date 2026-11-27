@@ -1224,6 +1224,12 @@ function Roblox.new(Core, environment)
         local mouseOK,mouseDown=pcall(self.UserInputService.IsMouseButtonPressed,
             self.UserInputService,Enum.UserInputType.MouseButton1)
         s.mouseHeld=mouseOK and mouseDown==true
+        if self.holdBinding=="M3" then
+            local middleOK,middleDown=pcall(self.UserInputService.IsMouseButtonPressed,
+                self.UserInputService,Enum.UserInputType.MouseButton3)
+            s.middleHeldKnown=middleOK and type(middleDown)=="boolean"
+            s.middleHeld=middleOK and middleDown==true
+        end
         s.r2Held=false
         local padsOK,pads=pcall(self.UserInputService.GetConnectedGamepads,self.UserInputService)
         if not padsOK or type(pads)~="table" then pads={Enum.UserInputType.Gamepad1} end
