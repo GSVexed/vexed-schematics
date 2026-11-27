@@ -1294,6 +1294,35 @@ function Roblox.new(Core, environment)
         local value=profile and profile.REST_UP_LOCK
         return Core.finite(value) and math.clamp(value,.05,1.5) or .7
     end
+    -- Ordinary user-requested clicks use the public stock cooldown and
+    -- observed action locks; the actual native game input handler retains
+    -- authority over acceptance. Do not require private callback discovery
+    -- to have completed merely to send an ordinary button edge.
+    function b:desktopInputReadiness(s,now,policy)
+        local function result(ready,reason)return {ready=ready,reason=reason,known=true}end
+        if not s.alive or s.char~=self.player.Character then return result(false,"waiting for animal") end
+        if s.chat or s.gameMenu then return result(false,"menu or text input") end
+        if s.captured or s.holding then return result(false,"capture or carry lock") end
+        if s.grab then return result(false,"minigame has priority") end
+        if s.feeding then return result(false,"feeding") end
+        if s.rest or policy.manualRest or policy:restLocked(now,self:restLock(s.char)) then
+            return result(false,"Rest or stand-up lock")
+        end
+        if s.ability or self:attribute(s.char,"FeralKingsAt") or self:attribute(s.char,"FeralCrushAt") then
+            return result(false,"native ability lock")
+        end
+        for _,key in ipairs({"FeralNoBiteUntil","FeralVenomRecoilUntil"}) do
+            local at=self:attribute(s.char,key)
+            if at~=nil and (not Core.finite(at) or not Core.finite(s.serverNow)) then
+                return result(false,"native timing unknown")
+            end
+            if at and at>s.serverNow then return result(false,"native bite lock") end
+        end
+        if not self:visibleBiteWindow(s,now) then
+            return result(false,"ordinary input cooldown or timing unavailable")
+        end
+        return result(true,"ordinary input stock checks clear")
+    end
     function b:biteReadiness(s,now,policy)
         local function result(ready,reason,known)return {ready=ready,reason=reason,known=known~=false}end
         if not s.alive then return result(false,"waiting for animal") end

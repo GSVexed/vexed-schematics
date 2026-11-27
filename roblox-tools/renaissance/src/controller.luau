@@ -425,9 +425,20 @@ function Controller.new(M,bridge,options)
         end
         return handled
     end
+    function h:desktopPrimaryEcho(now)
+        if not self.leftHoldBridge then return false end
+        return bridge.desktopOwnsPrimary({char=bridge.player.Character,generation=bridge.generation,
+            alive=true},now)
+    end
     function h:preInput(input)
         if self.closed or not self.active or bridge.UserInputService:GetFocusedTextBox() then return end
         local now,key,kind = bridge.clock(),input.KeyCode,input.UserInputType
+        -- Do not reclassify the same desktop-owned physical press in hub
+        -- bookkeeping. This observer does not sink the game's own input.
+        if kind==Enum.UserInputType.MouseButton1 and self:desktopPrimaryEcho(now) then
+            self.leftHoldPrimaryEchoes=(self.leftHoldPrimaryEchoes or 0)+1
+            return
+        end
         -- Once this real physical M1 has been held long enough for the
         -- hub to own repeat, no *second* InputBegan can originate from that
         -- same uninterrupted hardware press. Ignore any later replay echo
@@ -550,6 +561,9 @@ function Controller.new(M,bridge,options)
             rawPrimaryDuringHold=self.leftHoldRawSamples or 0,
             logicalResets=bridge.desktopLogicalResets or 0,
             dispatched=bridge.desktopDispatches or 0,
+            primaryEchoes=self.leftHoldPrimaryEchoes or 0,
+            lastHoldStatus=self.leftHoldLastStatus,
+            lastHoldBlock=self.leftHoldLastBlock,
             reason=self.leftHoldReason}
     end
     function h:desktopHoldTick(s,now,critical)
@@ -560,19 +574,6 @@ function Controller.new(M,bridge,options)
         if critical or self:hasNativeGrab(now) or self.grabInput.lease then
             if self.leftHoldArmed~=false or self.leftHoldLastAt then self:disarmDesktopHold(now) end
             self.leftHoldReason="minigame priority";return
-        end
-        local eligible=self.active and not self.closed and self.windowFocused~=false
-            and s.alive and not s.chat and not s.gameMenu
-            and not s.captured and not self.policy.manualRest
-            and self.registry.byId.holdBite.requested
-        if eligible then
-            local ok,allowed=pcall(bridge.mouseGameplayPoint,bridge,nil,true)
-            eligible=ok and allowed==true
-        end
-        local ready=self:desktopReady(eligible==true,now,false)
-        if not ready then
-            eligible=false
-            self.leftHoldReason="local readiness file unavailable"
         end
         if now>=(self.nextLeftIntent or 0) and self.leftHoldIo.available then
             self.nextLeftIntent=now+.04
@@ -589,7 +590,34 @@ function Controller.new(M,bridge,options)
         end
         local connected=self.leftHoldLastAt~=nil and now-self.leftHoldLastAt<=.30
         local held=self.combatInput.held
+        local continuing=held and held.source=="desktop" and held.char==s.char
+            and held.generation==s.generation and connected and self.leftHoldIntent
+            and not self.leftHoldAwaitFresh and self.leftHoldArmed==true
+        local eligible=self.active and not self.closed and self.windowFocused~=false
+            and s.alive and not s.chat and not s.gameMenu and not s.captured
+            and self.registry.byId.holdBite.requested
+        local blocked
+        -- The desktop helper's heartbeat owns the lifetime of a captured
+        -- physical press. Temporary HUD obstructions cannot revoke that
+        -- lease. Actual click dispatch still checks all UI and action locks.
+        if eligible and not continuing then
+            if self.policy.manualRest then
+                eligible=false;blocked="manual Rest"
+            else
+                local ok,allowed,_,why=pcall(bridge.mouseGameplayPoint,bridge,nil,true)
+                eligible=ok and allowed==true
+                if not eligible then blocked=ok and why or "GUI query unavailable" end
+            end
+        end
+        local ready=self:desktopReady(eligible==true,now,false)
+        if not ready then
+            eligible=false
+            self.leftHoldReason="local readiness file unavailable"
+        end
         if not eligible or not connected or not self.leftHoldIntent or self.leftHoldAwaitFresh then
+            if held and held.source=="desktop" and not eligible then
+                self.leftHoldLastBlock=blocked or "gameplay input unavailable"
+            end
             if held and held.source=="desktop" then self.combatInput:release("M3",now) end
             if not connected or not eligible then self.leftHoldAwaitFresh=true end
             if ready then
@@ -668,6 +696,7 @@ function Controller.new(M,bridge,options)
             and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
             return
         end
+        if kind==Enum.UserInputType.MouseButton1 and self:desktopPrimaryEcho(bridge.clock()) then return end
         -- A replayed InputBegan may arrive asynchronously, including with
         -- processed=true. Never let that echo permanently suspend the real M1.
         if kind==Enum.UserInputType.MouseButton1 and (bridge.syntheticPressing
@@ -1473,6 +1502,10 @@ function Controller.new(M,bridge,options)
                 return released
             end,
         })
+        if self.leftHoldBridge and self.combatInput.held and self.combatInput.held.source=="desktop" then
+            self.leftHoldLastStatus=self.combatInput.status
+            if bridge.heldInputBlockReason then self.leftHoldLastBlock=bridge.heldInputBlockReason end
+        end
         if not critical then self.features:reconcile(s,now) end
         if not critical and now >= self.nextScan then
             self.nextScan = now+((s.combat==true or s.attackHeld or self.combatInput.held~=nil) and .12

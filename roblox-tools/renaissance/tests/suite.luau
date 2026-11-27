@@ -3459,5 +3459,72 @@ test("desktop hold stale signals do not own ordinary primary input",function()
     h:close()
 end)
 
+test("desktop hold survives temporary native HUD obstruction and continues when clear",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({leftHoldBridge=true,settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local io=h.bridge:io()
+    local path="FERAL_LEFT_HOLD_INTENT_V1.json"
+    local seq=0
+    local function signal(held)
+        seq+=1;io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=h.token,sequence=seq,held=held})
+        w:advance(.12)
+    end
+    w:advance(.25);signal(false)
+    for _=1,24 do signal(true) end
+    assert((w.nativeBites or 0)>=2)
+    local original=h.combatInput.held
+    assert(original and original.source=="desktop")
+    local button=w.new("TextButton")
+    button.Name="OrdinaryNativeHUD";button.Text="Menu"
+    button.Parent=w.player:FindFirstChildOfClass("PlayerGui")
+    w.guiHitsAt=function()return {button}end
+    for _=1,3 do signal(true) end
+    local before=w.virtualBiteDowns or 0
+    for _=1,15 do signal(true) end
+    eq(h.combatInput.held,original)
+    eq(io.read("FERAL_LEFT_HOLD_READY_V1.json").armed,true)
+    eq(w.virtualBiteDowns or 0,before)
+    w.guiHitsAt=nil
+    for _=1,24 do signal(true) end
+    assert((w.virtualBiteDowns or 0)>before)
+    eq(h.combatInput.held,original)
+    signal(false);w:advance(.4)
+    eq(h.combatInput.held,nil)
+    assert(type(h:desktopHoldReport().lastHoldStatus)=="string")
+    h:close()
+end)
+test("desktop ordinary input is independent of private discovery and respects explicit action locks",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({leftHoldBridge=true,settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local io=h.bridge:io()
+    local path="FERAL_LEFT_HOLD_INTENT_V1.json"
+    local seq=0
+    local function signal(held)
+        seq+=1;io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=h.token,sequence=seq,held=held})
+        w:advance(.12)
+    end
+    w:advance(.25);signal(false)
+    h.bridge.biteReadiness=function()return {ready=false,reason="native timing deferred",known=false}end
+    w.player.Character:SetAttribute("FeralNoBiteUntil",w.time+1001)
+    for _=1,20 do signal(true) end
+    eq(w.virtualBiteDowns or 0,0)
+    assert(h.combatInput.held~=nil)
+    w.player.Character:SetAttribute("FeralNoBiteUntil",nil)
+    for _=1,30 do signal(true) end
+    assert((w.nativeBites or 0)>=3)
+    local original=h.combatInput.held
+    w:input(nil,E.UserInputType.MouseButton1,true)
+    eq(h.combatInput.held,original)
+    for _=1,10 do signal(true) end
+    eq(h.combatInput.held,original)
+    signal(false);w:advance(.4)
+    eq(h.combatInput.held,nil)
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

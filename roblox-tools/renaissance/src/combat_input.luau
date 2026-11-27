@@ -347,7 +347,11 @@ function CombatInput.new(bridge,policy,ledger)
                 return
             end
         end
-        local readiness=bridge:biteReadiness(s,now,policy)
+        local desktopOrdinary=middleHeld and route=="INPUT" and not inGrab
+            and self.held.source=="desktop"
+            and type(bridge.desktopInputReadiness)=="function"
+        local readiness=desktopOrdinary and bridge:desktopInputReadiness(s,now,policy)
+            or bridge:biteReadiness(s,now,policy)
         local allowed=readiness.ready
         -- If a game's original callback is private, visible cooldown + own
         -- BiteAt marker still offer a bounded path for held user input.
