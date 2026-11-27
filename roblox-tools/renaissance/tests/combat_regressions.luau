@@ -220,20 +220,18 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(count(),1)
     end)
 
-    test("combat queued synthetic processed M1 cannot permanently suspend a physical hold",function()
+    test("processed stale synthetic M1 echo cannot suspend a real held mouse",function()
         local w,h,physical=fallbackWorld()
         w:advance(.75)
-        assert((w.virtualBiteCalls or 0)>0,"fallback must have replayed a native input")
+        eq(w.virtualBiteCalls,nil)
         local before=w.nativeBites or 0
-        -- The real input has already begun. This processed echo is delivered
-        -- after a virtual-input API call has returned, but before its owned
-        -- synthetic grace window expires (a real-world asynchronous ordering).
         h.bridge.syntheticM1Until=w.time+.12
         w.uis.InputBegan:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown},true)
         eq(h.inputSuspended,false)
         assert(h.combatInput.held and h.combatInput.held.source=="event")
         w:advance(1.8)
-        assert((w.nativeBites or 0)>=before+2,"held bites must continue after a delayed echo")
+        eq(w.virtualBiteCalls,nil)
+        eq(w.nativeBites or 0,before)
         w.held=nil
         h:inputEnded(physical)
         h:close()
