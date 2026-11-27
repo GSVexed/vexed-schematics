@@ -564,4 +564,25 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         w.held=nil;w.uis.InputEnded:Fire(original)
         h:close()
     end)
+
+    test("native held-M1 engine recovers a lost hardware InputEnded without synthetic edges",function()
+        local w=Mock.new();w:enableNativeActions()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.2);w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(1.5)
+        assert(h.combatInput.held and h.combatInput.held.handoff)
+        local before=w.nativeBites
+        w.held=nil -- intentionally miss UserInputService.InputEnded
+        w:advance(.42)
+        eq(h.combatInput.held,nil)
+        local stopped=w.nativeBites
+        w:advance(.8)
+        eq(w.nativeBites,stopped)
+        assert(stopped>=before)
+        eq(w.virtualBiteCalls,nil)
+        w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
 end

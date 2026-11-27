@@ -52,6 +52,7 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:cancel()
         self.pending,self.held,self.awaiting=nil,nil,nil
+        self.mouseMissingSince=nil
         stopDiscovery()
         if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
         self.nextAttempt=0
@@ -62,6 +63,7 @@ function CombatInput.new(bridge,policy,ledger)
             -- deliver its one buffered native bite after M1/R2 is released.
             -- Only the continuous repeat intent stops on InputEnded.
             self.held,self.awaiting=nil,nil
+            self.mouseMissingSince=nil
             stopDiscovery()
             if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
             self.nextAttempt=now or 0
@@ -87,6 +89,7 @@ function CombatInput.new(bridge,policy,ledger)
         -- the hub take over repeating. New taps always start a fresh timer.
         self.held={char=s.char,generation=s.generation,key=kind or "mouse",
             source="event",input=inputObject,startedAt=now,handoff=kind=="R2"}
+        self.mouseMissingSince=nil
         self.nextAttempt=math.max(self.nextAttempt,now+.025)
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
         local at=math.max(now+.025,policy.lastRestRelease+bridge:restLock(s.char)+.035)
@@ -116,6 +119,17 @@ function CombatInput.new(bridge,policy,ledger)
         elseif self.held and (self.held.char~=s.char or self.held.generation~=s.generation
             or self.held.source=="poll" and not physical) then
             self:release(nil,now)
+        end
+        -- There is no longer a synthetic M1 backend, so the native
+        -- IsMouseButtonPressed report can safely recover an InputEnded
+        -- lost by the executor. Give transient polling gaps .15 seconds;
+        -- an actual InputEnded still cancels immediately.
+        if self.held and self.held.key=="M1" and s.mouseHeld~=nil
+            and not s.mouseHeld then
+            self.mouseMissingSince=self.mouseMissingSince or now
+            if now-self.mouseMissingSince>=.15 then self:release("M1",now) end
+        else
+            self.mouseMissingSince=nil
         end
         if self.held and not self.held.handoff and
             (self.held.key=="M1" or self.held.key=="poll") then
