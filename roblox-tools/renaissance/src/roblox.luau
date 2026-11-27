@@ -687,16 +687,42 @@ function Roblox.new(Core, environment)
     -- A pcall succeeding on VirtualInputManager does not mean FERAL received
     -- a native bite. After two unmarked pulses try a different available
     -- real-input backend automatically, without user diagnostics.
+    -- The first backend that produces a real native WolfBiteAt marker is
+    -- preferred over unverified alternatives. Native cooldowns can create
+    -- missing markers even though a backend is still functioning.
     function b:noteHeldInputTimeout()
         self.heldInputMisses=(self.heldInputMisses or 0)+1
         local count=self.heldInputModes or 1
-        if self.heldInputMisses>=2 and count>1 then
-            self.heldInputIndex=((self.heldInputIndex or 1)%count)+1
+        if count<=1 then return end
+        local verified=self.heldInputVerifiedIndex
+        local current=self.heldInputIndex or 1
+        if verified and verified<=count then
+            if current==verified then
+                if self.heldInputMisses>=5 then
+                    self.heldInputIndex=(verified%count)+1
+                    self.heldInputProbeLeft=2
+                    self.heldInputMisses=0
+                end
+            else
+                self.heldInputProbeLeft=(self.heldInputProbeLeft or 2)-1
+                if self.heldInputProbeLeft<=0 then
+                    self.heldInputIndex=verified
+                    self.heldInputProbeLeft=nil
+                    self.heldInputMisses=0
+                end
+            end
+        elseif self.heldInputMisses>=2 then
+            self.heldInputIndex=(current%count)+1
             self.heldInputMisses=0
         end
     end
     function b:noteHeldInputMarker()
         self.heldInputMisses=0
+        local index=self.heldInputIndex or 1
+        if index>=1 and index<=(self.heldInputModes or 1) then
+            self.heldInputVerifiedIndex=index
+        end
+        self.heldInputProbeLeft=nil
     end
     function b:releaseSyntheticBite()
         local pulse=self.syntheticM1
@@ -708,6 +734,15 @@ function Roblox.new(Core, environment)
         self.syntheticReleasing=true
         pcall(pulse.release)
         self.syntheticReleasing=false
+    end
+    -- If an executor fails to run the scheduled synthetic release, do not
+    -- permanently block subsequent held-M1 takeover bites.
+    function b:clearStaleSyntheticBite(now)
+        local pulse=self.syntheticM1
+        if not pulse or not Core.finite(pulse.startedAt)
+            or now-pulse.startedAt<.5 then return false end
+        self:releaseSyntheticBite()
+        return true
     end
     -- A physical held M1 is already in the Down state. Simply sending
     -- another Down is ignored by input systems that require a new edge.
@@ -744,6 +779,9 @@ function Roblox.new(Core, environment)
         end
         if #modes==0 then return false end
         self.heldInputModes=#modes
+        if self.heldInputVerifiedIndex and self.heldInputVerifiedIndex>#modes then
+            self.heldInputVerifiedIndex,self.heldInputProbeLeft=nil,nil
+        end
         local index=self.heldInputIndex or 1
         if index>#modes then index=1 end
         self.heldInputIndex=index
@@ -759,7 +797,7 @@ function Roblox.new(Core, environment)
             return clicked
         end
         self.syntheticM1Until=now+.3
-        local pulse={release=up,method=backend,didPress=false}
+        local pulse={release=up,method=backend,didPress=false,startedAt=now}
         self.syntheticM1=pulse
         local function safeUp()
             self.syntheticReleasing=true
@@ -1097,11 +1135,6 @@ function Roblox.new(Core, environment)
             if padOK and padHeld==true then s.r2Held=true;break end
         end
         s.attackHeld=s.mouseHeld or s.r2Held
-        -- ALT is a separate real held key; synthetic M1 ups cannot release it.
-        local altKnown,altDown=pcall(self.UserInputService.IsKeyDown,
-            self.UserInputService,Enum.KeyCode.LeftAlt)
-        s.altBiteKnown=altKnown
-        s.altBiteHeld=altKnown and altDown==true
         local velocity = root.AssemblyLinearVelocity
         s.moving = hum.MoveDirection.Magnitude > .13 or Vector3.new(velocity.X,0,velocity.Z).Magnitude >= 2
         local clamp = char:FindFirstChild("FeralClamp")
@@ -1692,7 +1725,7 @@ function Roblox.new(Core, environment)
             return Enum.ContextActionResult.Pass
         end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.ButtonY,Enum.KeyCode.Z,Enum.KeyCode.X,
             Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
-            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.LeftAlt,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
+            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
             Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
         scope:add(function() self.ContextActionService:UnbindAction(actionName) end)
         connect(self.UserInputService.JumpRequest,function() hub:requestFlight() end)

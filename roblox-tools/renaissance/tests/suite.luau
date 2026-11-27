@@ -1885,10 +1885,10 @@ test("a bite without a native marker pauses held retries",function()
     local ledger={event=function(_,name)table.insert(events,name)end}
     local c=M.combat_input.new(bridge,policy,ledger)
     local s={alive=true,char=char,generation=1,attackHeld=true}
-    c:input(s,0)
+    c:input(s,0,"R2")
     for _,now in ipairs({0,.1,.2,.3,.36,.5,.62,.83,.94}) do c:tick(s,now,{repeatHeld=true}) end
     eq(count,2);eq(events[2],"native_bite_marker_timeout")
-    c:release("mouse",.95);eq(c.held,nil)
+    c:release("R2",.95);eq(c.held,nil)
 end)
 test("Auto Bite requires current clear contact and stops for a newly friendly target",function()
     local w=Mock.new();w:enableNativeActions()
@@ -2222,52 +2222,6 @@ test("a held M1 already down before hub input is observed still repeats",functio
     w:advance(.8);eq(w.nativeBites,before)
     h:close()
 end)
-test("private WolfController never creates repeated or synthetic M1 attacks",function()
-    local w=Mock.new()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions()
-    w.env.getconnections=nil;w.env.getgc=function()return {} end
-    w.virtualBiteAvailable=true
-    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
-    w:advance(.15);eq(h.bridge.wolfActions,nil)
-    w.held=E.UserInputType.MouseButton1
-    local original=w:input(nil,E.UserInputType.MouseButton1)
-    local initial=w.nativeBites
-    w:advance(1.7)
-    eq(w.nativeBites,initial)
-    eq(w.virtualBiteCalls,nil)
-    assert(h.combatInput.held~=nil,"physical mouse hold should survive discovery")
-    -- The private callback is now PARTIAL because Alt-input fallback is
-    -- offered. M1 remains native-only and must not synthesize any clicks.
-    eq(h.registry.byId.holdBite.applied,true)
-    assert(h.registry.byId.holdBite.reason:find("Left Alt",1,true))
-    w.held=nil;w.uis.InputEnded:Fire(original)
-    w:advance(.9);eq(w.nativeBites,initial)
-    eq(h.ledger.counts.attack_intent,1)
-    h:close()
-end)
-test("private native callback leaves prey minigames free from simulated mouse input",function()
-    local w=Mock.new()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w:enableNativeGrab()
-    w.env.getconnections=nil;w.env.getgc=function()return {} end
-    w.virtualBiteAvailable=true
-    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
-    w:advance(.15);w.held=E.UserInputType.MouseButton1
-    local original=w:input(nil,E.UserInputType.MouseButton1)
-    w:advance(.3)
-    local before=w.nativeBites or 0
-    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=510,role="prey",n=4})
-    w:advance(.95)
-    eq(w.nativeBites or 0,before)
-    eq(w.virtualBiteCalls,nil)
-    w:remote("FeralGrabV2").OnClientEvent:Fire("end",{f=510})
-    w:advance(1.2)
-    eq(w.nativeBites or 0,before)
-    eq(w.virtualBiteCalls,nil)
-    w.held=nil;w.uis.InputEnded:Fire(original)
-    h:close()
-end)
 test("no virtual backend never invents a repeated bite or damage",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
@@ -2349,67 +2303,6 @@ test("delayed native bite cannot be misattributed when the guide switches target
     eq(tx.target.char,first)
     h:close()
 end)
-test("prey minigame begins without an owned synthetic M1 pulse",function()
-    local w=Mock.new()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w:enableNativeGrab()
-    w.env.getconnections=nil;w.env.getgc=function()return {} end
-    w.virtualBiteAvailable=true
-    w.virtualStartsGrab=true
-    local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true}}})
-    w:advance(.15)
-    w.held=E.UserInputType.MouseButton1
-    local original=w:input(nil,E.UserInputType.MouseButton1)
-    w:advance(.9)
-    eq(h.bridge.syntheticM1,nil)
-    eq(w.virtualBiteDowns or 0,0)
-    local before=w.nativeBites or 0
-    w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=513,role="prey",n=4})
-    w:advance(.8)
-    eq(w.nativeBites or 0,before)
-    eq(h.bridge.syntheticM1,nil)
-    w.held=nil;w.uis.InputEnded:Fire(original)
-    h:close()
-end)
-test("private native callback must not send paired executor mouse pulses",function()
-    local w=Mock.new()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
-    local pairDown,pairUp=0,0
-    w.env.mouse1press=function()pairDown+=1;w:input(nil,E.UserInputType.MouseButton1)end
-    w.env.mouse1release=function()
-        pairUp+=1
-        w.uis.InputEnded:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown})
-    end
-    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
-    w:advance(.15);w.held=E.UserInputType.MouseButton1
-    local input=w:input(nil,E.UserInputType.MouseButton1)
-    w:advance(1.55)
-    eq(pairDown,0);eq(pairUp,0)
-    eq(w.nativeBites,1)
-    w.held=nil;w.uis.InputEnded:Fire(input)
-    w:advance(.85)
-    eq(w.nativeBites,1)
-    h:close();eq(h.bridge.syntheticM1,nil)
-end)
-test("native-only hold leaves the physical mouse state untouched",function()
-    local w=Mock.new()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
-    w.virtualBiteAvailable=true
-    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
-    w:advance(.2);w.held=E.UserInputType.MouseButton1
-    local input=w:input(nil,E.UserInputType.MouseButton1)
-    w:advance(1.8)
-    eq(w.virtualBiteDowns or 0,0)
-    eq(w.virtualBiteUps or 0,0)
-    eq(w.nativeBites,1)
-    assert(h.combatInput.held~=nil)
-    w.held=nil;w.uis.InputEnded:Fire(input)
-    w:advance(.9)
-    eq(w.nativeBites,1)
-    h:close();eq(h.bridge.syntheticM1,nil)
-end)
 test("native hunter bites repeat during grab without altering automatic perfect presses",function()
     local w=Mock.new();w:enableNativeActions();w:enableNativeGrab()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
@@ -2488,42 +2381,6 @@ test("minigame role never carries over to the next native session",function()
     eq(g.role,"prey")
 end)
 
-test("native-only hold never rotates between unverified simulated mouse backends",function()
-    local w=Mock.new()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
-    w.virtualBiteAvailable=true
-    local pairedDown,pairedUp=0,0
-    w.env.mouse1press=function()pairedDown+=1 end
-    w.env.mouse1release=function()pairedUp+=1 end
-    local h=load(w,{settings={states={holdBite=true,attackSpeed=false}}})
-    w:advance(.15);w.held=E.UserInputType.MouseButton1
-    local input=w:input(nil,E.UserInputType.MouseButton1)
-    w:advance(5.3)
-    eq(w.virtualBiteDowns or 0,0)
-    eq(pairedDown,0);eq(pairedUp,0)
-    eq(w.nativeBites,1)
-    w.held=nil;w.uis.InputEnded:Fire(input)
-    h:close()
-end)
-test("newer FERAL version does not bypass private native callback checks through synthetic M1",function()
-    local w=Mock.new();w:enableNativeActions()
-    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
-    w.env.game.PlaceVersion=2413
-    w.env.getconnections=nil;w.env.getgc=function()return {} end
-    w.virtualBiteAvailable=true
-    local h=load(w,{settings={states={holdBite=true,attackSpeed=true}}})
-    w:advance(.2)
-    eq(h.bridge:combatInputCompatible(),true)
-    eq(h.registry.byId.attackSpeed.applied,false)
-    w.held=E.UserInputType.MouseButton1
-    local input=w:input(nil,E.UserInputType.MouseButton1)
-    w:advance(1.9)
-    eq(w.nativeBites,1)
-    eq(w.virtualBiteCalls,nil)
-    w.held=nil;w.uis.InputEnded:Fire(input)
-    h:close()
-end)
 test("held input replay remains disabled without a matching FERAL WolfController",function()
     local w,h=boot({holdBite=true})
     eq(h.bridge:combatInputCompatible(),false)
