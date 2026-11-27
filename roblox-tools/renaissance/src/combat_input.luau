@@ -119,7 +119,8 @@ function CombatInput.new(bridge,policy,ledger)
             candidate=self.middleCandidate,verifiedAt=self.middleVerifiedAt,
             attributableMarkers=self.middleRouteMarkers,nativeAttempts=self.middleNativeAttempts,
             inputAttempts=self.middleInputAttempts,adapter=bridge.heldInputLockedBackend,
-            held=self.held~=nil,status=self.status,
+            held=self.held~=nil,status=self.status,admission=self.middleAdmission,
+            inputBlockReason=bridge.heldInputBlockReason,
             serverDamageVerified=false}
     end
     function c:release(kind,now)
@@ -292,6 +293,12 @@ function CombatInput.new(bridge,policy,ledger)
             self.awaiting=nil;waiting=nil
         end
         if waiting then
+            if middleMode and waiting.backend=="INPUT" and bridge.heldInputBlockReason then
+                self.awaiting=nil
+                self.nextAttempt=math.max(self.nextAttempt,now+.12)
+                self.status="M3 held; "..bridge.heldInputBlockReason
+                return
+            end
             if now-waiting.at<math.max(.18,bridge:biteDelay(s.char)+.10) then return end
             self.awaiting=nil
             self.nextAttempt=math.max(self.nextAttempt,now+.18)
@@ -448,6 +455,7 @@ function CombatInput.new(bridge,policy,ledger)
             or called and (backend=="INPUT" and "M3 ordinary-input route; awaiting native marker"
                 or backend=="NATIVE_INPUT" and "own original input handler called; awaiting native marker"
                 or "original native bite callback called; awaiting marker")
+            or (backend=="INPUT" and bridge.heldInputBlockReason and ("M3 held; "..bridge.heldInputBlockReason))
             or "validated native attack handler unavailable"
         ledger:event(p and "native_bite_buffer_released" or "native_cadence_attempt",now,{
             called=called==true,marker=marked,backend=backend,automatic=automatic==true,

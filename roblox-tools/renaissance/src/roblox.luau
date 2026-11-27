@@ -853,58 +853,61 @@ function Roblox.new(Core, environment)
     -- A food/water offer is not feeding. M3 may start on its prompt,
     -- but a generated primary input must never activate that GUI control.
     function b:feedOfferControl(object)
-        local offer=self:attribute(self.player.Character,"FeedCan")
-        if offer~="eat" and offer~="drink" then return false end
-        local name=string.upper(offer)
         local node=object
         for _=1,4 do
             if not node then break end
             if node.Name=="FeralFeedTap" then return true end
             if node:IsA("TextButton") or node:IsA("TextLabel") then
-                local label=string.upper(node.Text):match("^%s*(.-)%s*$")
-                if label==name or label==name.." [E]" or label==name.." (E)"
-                    or label=="[E] "..name or label=="(E) "..name then return true end
+                local label=string.upper(tostring(node.Text or "")):match("^%s*(.-)%s*$")
+                for _,name in ipairs({"EAT","DRINK"}) do
+                    if label==name or label==name.." [E]" or label==name.." (E)"
+                        or label=="[E] "..name or label=="(E) "..name then return true end
+                end
             end
             node=node.Parent
         end
         return false
     end
+    -- This check is for actual generated clicks only, never M3 acquisition.
+    -- Unknown GUI state remains blocked rather than clicking blindly.
     function b:mouseGameplayPoint(point,allowOffer)
         point=point or self.UserInputService:GetMouseLocation()
         local gui=self.player:FindFirstChildOfClass("PlayerGui")
-        if not point then return false,false end
-        if self.combatPointBlocked and self.combatPointBlocked(point) then return false,false end
-        if not gui then return true,false end
+        if not point then return false,false,"mouse position unavailable" end
+        if self.combatPointBlocked and self.combatPointBlocked(point) then return false,false,"hub UI" end
+        if not gui then return true,false,"clear" end
         local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,point.X,point.Y)
-        if not ok or type(under)~="table" then return false,false end
-        local offer=false
+        if not ok or type(under)~="table" then return false,false,"GUI query unavailable" end
+        local offer,button=false,false
         for _,object in ipairs(under) do
-            -- Descendants of a button are not an independent clear surface.
             local node=object
             for _=1,4 do
                 if not node then break end
-                if node:IsA("TextBox") then return false,false end
+                if node:IsA("TextBox") then return false,false,"text field" end
                 if node:IsA("GuiButton") then
-                    if not self:feedOfferControl(node) and not self:feedOfferControl(object) then
-                        return false,false
+                    local readable,interactable=pcall(function()return node.Interactable end)
+                    if not readable or interactable~=false then
+                        if self:feedOfferControl(node) or self:feedOfferControl(object) then offer=true
+                        else button=true end
                     end
-                    offer=true
-                    break
                 end
                 node=node.Parent
             end
         end
-        return not offer or allowOffer==true,offer
+        if button then return false,offer,"HUD button" end
+        if offer then return allowOffer==true,true,"Eat/Drink offer" end
+        return true,false,"clear"
     end
     function b:clearOfferClickPoint(point)
-        local clear,offer=self:mouseGameplayPoint(point,false)
+        local clear,offer,reason=self:mouseGameplayPoint(point,false)
         if clear then return point end
-        if not offer then return nil end
-        -- Only the coordinate-addressable adapter can avoid an offered
-        -- Eat/Drink button without sending a physical click at that button.
+        -- Only relocate a coordinate-addressable click around a confirmed HUD
+        -- obstruction. Do not relocate across real hub/text/menu boundaries
+        -- or when the hit-test API cannot establish a clear position.
+        if reason~="HUD button" and reason~="Eat/Drink offer" then return nil,reason end
         local camera=self.Workspace.CurrentCamera
         local size=camera and camera.ViewportSize
-        if not size then return nil end
+        if not size then return nil,"viewport unavailable" end
         for _,distance in ipairs({12,24,48,72,96,128}) do
             for _,offset in ipairs({{0,-distance},{0,distance},{-distance,0},{distance,0}}) do
                 local x,y=point.X+offset[1],point.Y+offset[2]
@@ -914,10 +917,15 @@ function Roblox.new(Core, environment)
                 end
             end
         end
-        return nil
+        return nil,"no verified clear click position"
+    end
+    function b:blockedHeldInput(reason)
+        self.heldInputBlockReason=reason
+        return false
     end
     function b:tryHeldInputBite(s,now)
-        if self.syntheticM1 then return false end
+        self.heldInputBlockReason=nil
+        if self.syntheticM1 then return self:blockedHeldInput("previous click releasing") end
         local independent=self.holdBinding=="M3"
         if independent and (not s or s.mouseHeld or s.r2Held or s.physicalM1Held) then return false end
         if independent and self.combatPulseBlocked and self.combatPulseBlocked() then return false end
@@ -925,10 +933,13 @@ function Roblox.new(Core, environment)
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding then return false end
         local position=self.UserInputService:GetMouseLocation()
-        if not position then return false end
-        local clear,offer=self:mouseGameplayPoint(position,false)
-        if not clear and (not independent or not offer) then return false end
-        local virtualPoint=clear and position or self:clearOfferClickPoint(position)
+        if not position then return self:blockedHeldInput("mouse position unavailable") end
+        local clear,offer,pointReason=self:mouseGameplayPoint(position,false)
+        if not clear and (not independent or pointReason~="HUD button" and pointReason~="Eat/Drink offer") then
+            return self:blockedHeldInput(pointReason)
+        end
+        local virtualPoint,virtualReason=position,nil
+        if not clear then virtualPoint,virtualReason=self:clearOfferClickPoint(position) end
         local modes={}
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then table.insert(modes,{
@@ -959,11 +970,11 @@ function Roblox.new(Core, environment)
         local mode=modes[index]
         local down,up,backend=mode.down,mode.up,mode.name
         if backend=="VIRTUAL_MOUSE" then
-            if not virtualPoint then return false end
+            if not virtualPoint then return self:blockedHeldInput(virtualReason or "no verified clear click position") end
         elseif not clear then
-            -- Keep the same verified adapter and the held M3 state. Do
-            -- not switch to another input method or click a feeding control.
-            return false
+            -- A physical-coordinate adapter cannot relocate an ordinary
+            -- click safely. Retain the chosen route instead of clicking UI.
+            return self:blockedHeldInput(pointReason)
         end
         self.heldInputBackend=backend
         if mode.click then
@@ -1014,9 +1025,16 @@ function Roblox.new(Core, environment)
                 if backend=="VIRTUAL_MOUSE" then
                     local origin=self.UserInputService:GetMouseLocation()
                     if not origin then stop();return end
-                    virtualPoint=self:clearOfferClickPoint(origin)
-                    if not virtualPoint or not self:mouseGameplayPoint(virtualPoint,false) then stop();return end
-                elseif not self:mouseGameplayPoint(nil,false) then stop();return end
+                    local candidate,reason=self:clearOfferClickPoint(origin)
+                    if not candidate or not self:mouseGameplayPoint(candidate,false) then
+                        self.heldInputBlockReason=reason or "click point changed"
+                        stop();return
+                    end
+                    virtualPoint=candidate
+                elseif not self:mouseGameplayPoint(nil,false) then
+                    self.heldInputBlockReason="cursor over an interactive control"
+                    stop();return
+                end
                 pulse.didPress=true
             end
             self.syntheticPressing=true

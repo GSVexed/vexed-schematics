@@ -3190,7 +3190,7 @@ test("M3 locked coordinate adapter avoids a feed prompt and retains continuous h
     w.held=nil;w.uis.InputEnded:Fire(press)
     h:close()
 end)
-test("M3 still rejects unrelated buttons or text fields over a food offer",function()
+test("M3 native hold is independent of unrelated HUD buttons over an offer",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions()
@@ -3200,8 +3200,70 @@ test("M3 still rejects unrelated buttons or text fields over a food offer",funct
     local other=w.new("TextButton");other.Name="Other";other.Text="MENU"
     w.guiHits={feed,other};w.held=E.UserInputType.MouseButton3
     local press=w:input(nil,E.UserInputType.MouseButton3,true)
-    w:advance(1)
-    eq(h.combatInput.held,nil);eq(w.nativeBites or 0,0)
+    w:advance(1.8)
+    assert(h.combatInput.held and (w.nativeBites or 0)>=2)
+    eq(w.virtualBiteDowns or 0,0)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    h:close()
+end)
+
+test("M3 native hold starts even when HUD hit testing throws",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions()
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    w.guiHitsAt=function()error("GUI query inaccessible")end
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(2)
+    assert(h.combatInput.held and (w.nativeBites or 0)>=2)
+    eq(h.combatInput.middleRoute,"NATIVE")
+    eq(h.combatInput:middleReport().admission,"physical hold accepted")
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    local count=w.nativeBites;w:advance(.9);eq(w.nativeBites,count)
+    h:close()
+end)
+test("M3 ordinary route retains hold on unknown GUI state and resumes after query recovers",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {}end
+    w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    w.guiHitsAt=function()error("GUI query inaccessible")end
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(2)
+    assert(h.combatInput.held)
+    eq(w.virtualBiteDowns or 0,0)
+    eq(h.combatInput:middleReport().inputBlockReason,"GUI query unavailable")
+    w.guiHitsAt=nil
+    w:advance(3)
+    eq(h.combatInput.middleRoute,"INPUT")
+    assert((w.nativeBites or 0)>=2)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    local count=w.nativeBites;w:advance(.9);eq(w.nativeBites,count)
+    h:close()
+end)
+test("M3 ordinary route pauses on an entirely obstructed HUD and resumes without another hold",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {}end
+    w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    local button=w.new("TextButton");button.Name="Other";button.Text="MENU"
+    w.guiHitsAt=function()return {button}end
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(2)
+    assert(h.combatInput.held)
+    eq(w.virtualBiteDowns or 0,0);eq(w.virtualGuiClicks or 0,0)
+    w.guiHitsAt=nil
+    w:advance(3)
+    assert((w.nativeBites or 0)>=2)
+    eq(h.combatInput.middleRoute,"INPUT")
     w.held=nil;w.uis.InputEnded:Fire(press)
     h:close()
 end)

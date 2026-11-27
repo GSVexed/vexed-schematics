@@ -489,12 +489,23 @@ function Controller.new(M,bridge,options)
         end
     end
     function h:startMiddle(s,now,input)
-        if self.closed or not self.active or self.windowFocused==false
-            or not s.alive or s.chat or s.gameMenu
-            or not self.registry.byId.holdBite.requested
-            or bridge.UserInputService:GetFocusedTextBox()
-            or self.ui:contains(bridge.UserInputService:GetMouseLocation())
-            or not bridge:mouseGameplayPoint(nil,true) then return false end
+        -- A real middle press does not activate a primary-click GUI control.
+        -- Only actual menu/text/focus/lifecycle ownership gates the hold.
+        -- Querying every native HUD button here used to discard the entire
+        -- physical press before the route could even be selected.
+        local reason
+        if self.closed or not self.active then reason="hub inactive"
+        elseif self.windowFocused==false then reason="window unfocused"
+        elseif not s.alive then reason="no active animal"
+        elseif s.chat or s.gameMenu or bridge.UserInputService:GetFocusedTextBox() then reason="menu or text entry"
+        elseif not self.registry.byId.holdBite.requested then reason="hold feature disabled"
+        elseif self.ui:contains(bridge.UserInputService:GetMouseLocation()) then reason="hub UI" end
+        if reason then
+            self.combatInput.middleAdmission=reason
+            self.ledger:event("m3_press_rejected",now,{reason=reason})
+            return false
+        end
+        self.combatInput.middleAdmission="physical hold accepted"
         if self.combatInput.held and self.combatInput.held.key=="M3"
             and self.combatInput.held.generation==s.generation then return true end
         self:physicalInput("other")
