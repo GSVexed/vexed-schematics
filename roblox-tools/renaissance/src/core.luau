@@ -119,7 +119,7 @@ Core.specs = {
     { "reach", "Combat", "Bite Reach", "Existing expanded reach; OFF restores normal game geometry", default = true },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
     { "attackSpeed", "Combat", "Adaptive Faster Bites", "Native repeat request pacing starts at 62% of the original cooldown, adapts to damage feedback, and respects game limits", default = true },
-    { "holdBite", "Combat", "Hold to Repeat Bites", "Tap left-click for normal attacks; hold the SAME left mouse button for 0.28 seconds to hand over repeat bites. Release immediately stops.", default = true },
+    { "holdBite", "Combat", "Hold to Repeat Bites", "Click M1 normally; hold 0.28s to repeat through original WolfController callbacks, with no simulated mouse edges.", default = true },
     { "autoBite", "Combat", "Auto Bite", "Prefers clear stock hits; paces repeated unconfirmed extended contacts" },
     { "combat", "Combat", "Combat Core", "Native attempts and feedback; no extra hit claims", permanent = true },
     { "climb", "Movement", "Climb Assist", "Native Q buffer and one guarded retry" },
