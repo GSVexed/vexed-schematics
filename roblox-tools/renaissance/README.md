@@ -1,27 +1,29 @@
-# FERAL Renaissance 16.1.1 — reliability candidate
+# FERAL Renaissance 16.1.2 — held-input continuation candidate
 
-This candidate reconciles the missing 16.0.2 reliability work with the newer 16.1.0 input, Hippo, voice and Territory integration. It contains **29 modules**, **28 core feature records**, and **Territory 0.8.0**.
+This candidate retains the complete 16.1.1 reliability reconciliation and addresses another pair of code-level hold-input cancellations reported during play. It contains **29 modules**, **28 core feature records**, and **Territory 0.8.0**.
 
-**The implementation is automatically verified; live gameplay acceptance is unverified.** The exact current results, source fingerprint and bundle digest are in [candidate.json](candidate.json). The source-level findings and remaining limits are in the [engineering report](docs/V16_1_1_ENGINEERING_REPORT.md).
+**The implementation is automatically verified; live gameplay acceptance is unverified.** The exact current results, source fingerprint and bundle digest are in [candidate.json](candidate.json). The new input findings are in [16.1.2 held-input notes](docs/V16_1_2_HELD_INPUT.md); the full module audit and remaining limits are in the [16.1.1 engineering report](docs/V16_1_1_ENGINEERING_REPORT.md).
 
 ## Open this build
 
-Use the pinned **16.1.1 candidate** loader below. Confirm `RENAISSANCE / 16.1.1` in the window. The old `main/roblox-tools/feral-renaissance.lua` URL still selects the separately recorded **15.7.0 stable baseline**; it does not select this candidate.
+Use the pinned **16.1.2 candidate** loader below. Confirm `RENAISSANCE / 16.1.2` in the window. The old `main/roblox-tools/feral-renaissance.lua` URL still selects the separately recorded **15.7.0 stable baseline**; it does not select this candidate.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/cb5ebf20e3366639f76c5e807c43f925a167cae1/roblox-tools/feral-renaissance-v16.1.1.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/63b189fc871dbc48315e24cdbfe16d1df8246589/roblox-tools/feral-renaissance-v16.1.2.lua"))()
 ```
 
-The immutable [source commit](https://github.com/GSVexed/vexed-schematics/commit/cb5ebf20e3366639f76c5e807c43f925a167cae1) contains the exact tested source and bundle. The separate [candidate launcher](../feral-renaissance-candidate.lua) selects the same bundle. Its SHA-256 is `0c11487d5c1f7af9cd6aff57023ecc45052907bc98c8008ebe1df1cbe904ebb3`.
+The immutable [source commit](https://github.com/GSVexed/vexed-schematics/commit/63b189fc871dbc48315e24cdbfe16d1df8246589) contains the exact tested source and bundle. The older [candidate launcher](../feral-renaissance-candidate.lua) remains on its previous version; use the exact versioned loader above for 16.1.2. Its SHA-256 is `b8d63d8456f21ed61457b60559720ea03dc25bf7a66c7e696d927c8ab452de0b`.
 
 The integrated hub opens with **Right Shift**. On touch devices, the small reopen button remains available when the window is hidden. All controls remain in their existing pages; longer pages scroll.
 
-Hold to Repeat Bites is in **Combat**. It uses the validated original callback when available, respects native readiness and restores owned input on release, focus loss, menus, character changes and unload. The UI distinguishes a native callback from an unverified input-replay fallback. Unsupported discovery stays visible as WAITING/PARTIAL instead of pretending repeated attacks succeeded.
+Hold to Repeat Bites is in **Combat**. The 16.1.2 input patch prevents delayed processed synthetic-click echoes from latching a permanent input suspension, and hovering the hub now pauses without forgetting an existing physical world-originating hold. It still respects native readiness and cancels on real release, explicit UI clicks, focus loss, menus, character changes and unload. The UI distinguishes a native callback from an unverified input-replay fallback. Unsupported discovery stays visible as WAITING/PARTIAL instead of pretending repeated attacks succeeded.
 
 Recovery and Bite Reach default ON for new settings, and explicit saved OFF preferences are honored. Nearby players alone do not disable recovery. Existing native combat and action restrictions remain in force. Territory starts OFF; use **Territory → START FARMING** to start it. Hiding the menu does not stop farming; STOP or unload releases its owned resources.
 
 ## What changed
 
+- 16.1.2: Preserve held attack ownership across hub hover and delayed synthetic processed mouse echoes; real consumed UI clicks still cancel.
+- 16.1.2: Three additional regressions bring the core total to 424; the existing 305 Territory checks remain required.
 - Reliable cancellation of pending synthetic input, callback identity renewal, focus/text/UI ownership, and bounded discovery.
 - Restored failed-Rest handling, character state reset, minigame ordering and clock-loss behavior.
 - Restored configuration ownership, verified settings backups, responsive UI layout, and independent cleanup.
@@ -48,7 +50,7 @@ The local own-character report is saved automatically when file access is availa
 ## Evidence and history
 
 - [Candidate verification](candidate.json), [core test results](test-results.json), [Territory results](../feral-amber/test-results.json), [manifest](manifest.json).
-- [Engineering report and module inventory](docs/V16_1_1_ENGINEERING_REPORT.md).
+- [16.1.2 input continuation report](docs/V16_1_2_HELD_INPUT.md), [full 16.1.1 engineering report and module inventory](docs/V16_1_1_ENGINEERING_REPORT.md).
 - [Previous 16.1.0 and 15.x release notes](docs/V16_1_0_HISTORY.md).
 - [Stable release metadata](release.json), [historical feature audit](docs/FEATURE_AUDIT.md).
 

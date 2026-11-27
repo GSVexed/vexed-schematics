@@ -384,9 +384,11 @@ function Controller.new(M,bridge,options)
     function h:preInput(input)
         if self.closed or not self.active or bridge.UserInputService:GetFocusedTextBox() then return end
         local now,key,kind = bridge.clock(),input.KeyCode,input.UserInputType
-        if kind==Enum.UserInputType.MouseButton1
-            and (bridge.syntheticPressing or now<(bridge.syntheticM1Until or 0)
-                and bridge.UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)) then return end
+        -- Virtual/executor mouse events may be delivered after the sending API
+        -- returns. The short owned replay window is authoritative here; a
+        -- synthetic Up can make IsMouseButtonPressed false before its echo.
+        if kind==Enum.UserInputType.MouseButton1 and (bridge.syntheticPressing
+            or bridge.syntheticM1~=nil or now<(bridge.syntheticM1Until or 0)) then return end
         local previous = self.earlyInputs[input]
         if previous and now-previous < .1 then return end
         self.earlyInputs[input] = now
@@ -462,7 +464,10 @@ function Controller.new(M,bridge,options)
     end
     function h:input(input,processed)
         local kind,key = input.UserInputType,input.KeyCode
-        if kind==Enum.UserInputType.MouseButton1 and bridge.syntheticPressing then return end
+        -- A replayed InputBegan may arrive asynchronously, including with
+        -- processed=true. Never let that echo permanently suspend the real M1.
+        if kind==Enum.UserInputType.MouseButton1 and (bridge.syntheticPressing
+            or bridge.syntheticM1~=nil or bridge.clock()<(bridge.syntheticM1Until or 0)) then return end
         if kind == Enum.UserInputType.MouseButton2 and bridge.clock() < (self.syntheticUntil or 0) then return end
         self:physicalInput("other")
         if processed then

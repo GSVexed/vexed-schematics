@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.1.2 — held-input continuation candidate
+
+- Fix a premature hold cancellation when a virtual/executor mouse InputBegan is delivered asynchronously with a processed flag after the sending API has returned.
+- Prevent hovering the hub from discarding the original world-originating left-button hold; attacks still pause while the cursor is over the hub, and real UI clicks cancel ownership.
+- Add delayed processed-echo, hover/resume and genuine consumed-click regression tests.
+- Keep ability, Rest, minigame and native attack cooldown constraints. These source repairs and the 424+305 offline regressions do not prove sustained live server-accepted damage.
+- Publish a separate immutable 16.1.2 bundle; preserve 16.1.1 and historical stable loaders.
+
 ## 16.1.1 — reliability candidate
 
 ### Input and combat coordination
