@@ -160,7 +160,10 @@ function Mock.new()
     end
     function methods:GetState() return self.NativeState or enum.HumanoidStateType.Running end
     function methods:MoveTo(goal) self.goal=goal end
-    function methods:GetGuiObjectsAtPosition() return w.guiHits or {} end
+    function methods:GetGuiObjectsAtPosition(x,y)
+        if w.guiHitsAt then return w.guiHitsAt(x,y) end
+        return w.guiHits or {}
+    end
     local root = new("DataModel")
     local workspace = new("Workspace");workspace.Parent=root
     workspace.Terrain=new("Terrain");workspace.Terrain.Parent=workspace
@@ -258,7 +261,7 @@ function Mock.new()
         ContextActionService=cas,HttpService=http,Workspace=workspace,VirtualUser=virtual,PathfindingService=paths}
     local gameObject={PlaceId=108901361810209,PlaceVersion=2412}
     local virtualInput={}
-    function virtualInput:SendMouseButtonEvent(_,_,button,down)
+    function virtualInput:SendMouseButtonEvent(x,y,button,down)
         if not w.virtualBiteAvailable or w.virtualBiteBlocked then
             error("virtual mouse unavailable")
         end
@@ -271,7 +274,15 @@ function Mock.new()
             -- InputBegan; previous tests incorrectly counted this as a bite.
             if w.logicalM1Down then return end
             w.logicalM1Down=true
-            w:input(nil,enum.UserInputType.MouseButton1)
+            local consumed=false
+            if w.guiHitsAt then
+                for _,object in ipairs(w.guiHitsAt(x,y)) do
+                    if object:IsA("GuiButton") or object:IsA("TextBox") then
+                        consumed=true;w.virtualGuiClicks=(w.virtualGuiClicks or 0)+1;break
+                    end
+                end
+            end
+            w:input(nil,enum.UserInputType.MouseButton1,consumed)
             if w.virtualStartsGrab then
                 w.virtualStartsGrab=false
                 w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=715,role="prey"})

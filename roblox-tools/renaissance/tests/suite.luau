@@ -3130,5 +3130,81 @@ test("M3 unverified silent native route can select ordinary input once",function
     h:close()
 end)
 
+test("M3 native repeat starts and continues through Eat and Drink offers without clicking them",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    local char=w.player.Character
+    local button=w.new("TextButton");button.Name="FeralFeedTap";button.Text="EAT"
+    button.Parent=w.player:FindFirstChildOfClass("PlayerGui")
+    w.guiHits={button};char:SetAttribute("FeedCan","eat")
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(2)
+    eq(h.combatInput.middleRoute,"NATIVE")
+    assert((w.nativeBites or 0)>=2)
+    local count=w.nativeBites
+    char:SetAttribute("FeedCan","drink");button.Text="DRINK"
+    w:advance(3)
+    assert(w.nativeBites>count+2)
+    eq(w.nativeFeedToggles or 0,0);eq(w.virtualBiteDowns or 0,0)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    count=w.nativeBites;w:advance(1);eq(w.nativeBites,count)
+    h:close()
+end)
+test("M3 locked coordinate adapter avoids a feed prompt and retains continuous hold",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {}end
+    w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(2.2)
+    eq(h.combatInput.middleRoute,"INPUT")
+    eq(h.bridge.heldInputLockedBackend,"VIRTUAL_MOUSE")
+    local char=w.player.Character
+    local button=w.new("TextButton");button.Name="FeralFeedTap";button.Text="DRINK"
+    button.Parent=w.player:FindFirstChildOfClass("PlayerGui")
+    char:SetAttribute("FeedCan","drink")
+    w.guiHitsAt=function(x,y)
+        if math.abs(x-1200)<=30 and math.abs(y-850)<=18 then return {button} end
+        return {}
+    end
+    local count=w.nativeBites or 0
+    w:advance(3)
+    assert(w.nativeBites>count+2)
+    eq(w.virtualGuiClicks or 0,0);eq(w.nativeFeedToggles or 0,0)
+    eq(h.combatInput.middleRoute,"INPUT")
+    eq(h.bridge.heldInputLockedBackend,"VIRTUAL_MOUSE")
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    count=w.nativeBites;w:advance(.9);eq(w.nativeBites,count)
+    w.held=E.UserInputType.MouseButton3
+    press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(2)
+    assert(w.nativeBites>count)
+    eq(w.virtualGuiClicks or 0,0)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    h:close()
+end)
+test("M3 still rejects unrelated buttons or text fields over a food offer",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions()
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.player.Character:SetAttribute("FeedCan","eat")
+    local feed=w.new("TextButton");feed.Name="FeralFeedTap";feed.Text="EAT"
+    local other=w.new("TextButton");other.Name="Other";other.Text="MENU"
+    w.guiHits={feed,other};w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(1)
+    eq(h.combatInput.held,nil);eq(w.nativeBites or 0,0)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

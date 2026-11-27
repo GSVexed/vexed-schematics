@@ -850,19 +850,71 @@ function Roblox.new(Core, environment)
     -- another Down is ignored by input systems that require a new edge.
     -- Re-arm one short Up -> Down -> Up pulse, with a single owner, unless
     -- an active native grab session has priority. No Bite/BiteHit remotes.
-    function b:mouseGameplayPoint()
-        local point=self.UserInputService:GetMouseLocation()
+    -- A food/water offer is not feeding. M3 may start on its prompt,
+    -- but a generated primary input must never activate that GUI control.
+    function b:feedOfferControl(object)
+        local offer=self:attribute(self.player.Character,"FeedCan")
+        if offer~="eat" and offer~="drink" then return false end
+        local name=string.upper(offer)
+        local node=object
+        for _=1,4 do
+            if not node then break end
+            if node.Name=="FeralFeedTap" then return true end
+            if node:IsA("TextButton") or node:IsA("TextLabel") then
+                local label=string.upper(node.Text):match("^%s*(.-)%s*$")
+                if label==name or label==name.." [E]" or label==name.." (E)"
+                    or label=="[E] "..name or label=="(E) "..name then return true end
+            end
+            node=node.Parent
+        end
+        return false
+    end
+    function b:mouseGameplayPoint(point,allowOffer)
+        point=point or self.UserInputService:GetMouseLocation()
         local gui=self.player:FindFirstChildOfClass("PlayerGui")
-        if not point then return false end
-        if gui then
-            local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,point.X,point.Y)
-            if ok and type(under)=="table" then
-                for _,object in ipairs(under) do
-                    if object:IsA("GuiButton") or object:IsA("TextBox") then return false end
+        if not point then return false,false end
+        if self.combatPointBlocked and self.combatPointBlocked(point) then return false,false end
+        if not gui then return true,false end
+        local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,point.X,point.Y)
+        if not ok or type(under)~="table" then return false,false end
+        local offer=false
+        for _,object in ipairs(under) do
+            -- Descendants of a button are not an independent clear surface.
+            local node=object
+            for _=1,4 do
+                if not node then break end
+                if node:IsA("TextBox") then return false,false end
+                if node:IsA("GuiButton") then
+                    if not self:feedOfferControl(node) and not self:feedOfferControl(object) then
+                        return false,false
+                    end
+                    offer=true
+                    break
+                end
+                node=node.Parent
+            end
+        end
+        return not offer or allowOffer==true,offer
+    end
+    function b:clearOfferClickPoint(point)
+        local clear,offer=self:mouseGameplayPoint(point,false)
+        if clear then return point end
+        if not offer then return nil end
+        -- Only the coordinate-addressable adapter can avoid an offered
+        -- Eat/Drink button without sending a physical click at that button.
+        local camera=self.Workspace.CurrentCamera
+        local size=camera and camera.ViewportSize
+        if not size then return nil end
+        for _,distance in ipairs({12,24,48,72,96,128}) do
+            for _,offset in ipairs({{0,-distance},{0,distance},{-distance,0},{distance,0}}) do
+                local x,y=point.X+offset[1],point.Y+offset[2]
+                if x>=8 and y>=8 and x<size.X-8 and y<size.Y-8 then
+                    local candidate=Vector2.new(x,y)
+                    if self:mouseGameplayPoint(candidate,false) then return candidate end
                 end
             end
         end
-        return true
+        return nil
     end
     function b:tryHeldInputBite(s,now)
         if self.syntheticM1 then return false end
@@ -874,21 +926,15 @@ function Roblox.new(Core, environment)
             or s.captured or s.holding then return false end
         local position=self.UserInputService:GetMouseLocation()
         if not position then return false end
-        local gui=self.player:FindFirstChildOfClass("PlayerGui")
-        if gui then
-            local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,position.X,position.Y)
-            if ok and type(under)=="table" then
-                for _,object in ipairs(under) do
-                    if object:IsA("GuiButton") or object:IsA("TextBox") then return false end
-                end
-            end
-        end
+        local clear,offer=self:mouseGameplayPoint(position,false)
+        if not clear and (not independent or not offer) then return false end
+        local virtualPoint=clear and position or self:clearOfferClickPoint(position)
         local modes={}
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then table.insert(modes,{
             name="VIRTUAL_MOUSE",
-            down=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,true,game,0)end,
-            up=function()virtual:SendMouseButtonEvent(position.X,position.Y,0,false,game,0)end,
+            down=function()virtual:SendMouseButtonEvent(virtualPoint.X,virtualPoint.Y,0,true,game,0)end,
+            up=function()virtual:SendMouseButtonEvent(virtualPoint.X,virtualPoint.Y,0,false,game,0)end,
         }) end
         if type(mouse1press)=="function" and type(mouse1release)=="function" then
             table.insert(modes,{name="EXECUTOR_PAIRED",down=mouse1press,up=mouse1release})
@@ -912,8 +958,16 @@ function Roblox.new(Core, environment)
         self.heldInputIndex=index
         local mode=modes[index]
         local down,up,backend=mode.down,mode.up,mode.name
+        if backend=="VIRTUAL_MOUSE" then
+            if not virtualPoint then return false end
+        elseif not clear then
+            -- Keep the same verified adapter and the held M3 state. Do
+            -- not switch to another input method or click a feeding control.
+            return false
+        end
         self.heldInputBackend=backend
         if mode.click then
+            if not self:mouseGameplayPoint(nil,false) then return false end
             self.syntheticM1Until=now+.18
             self.syntheticPressing=true
             local clicked=pcall(mode.click)
@@ -954,7 +1008,17 @@ function Roblox.new(Core, environment)
                 or independent and (current.mouseHeld or current.r2Held or current.grab) then
                 stop();return
             end
-            if independent then pulse.didPress=true end
+            if independent then
+                -- UI may appear between scheduling and the actual press.
+                -- Revalidate the point without moving the physical mouse.
+                if backend=="VIRTUAL_MOUSE" then
+                    local origin=self.UserInputService:GetMouseLocation()
+                    if not origin then stop();return end
+                    virtualPoint=self:clearOfferClickPoint(origin)
+                    if not virtualPoint or not self:mouseGameplayPoint(virtualPoint,false) then stop();return end
+                elseif not self:mouseGameplayPoint(nil,false) then stop();return end
+                pulse.didPress=true
+            end
             self.syntheticPressing=true
             local pressed=pcall(down)
             self.syntheticPressing=false

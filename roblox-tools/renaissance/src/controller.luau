@@ -73,6 +73,7 @@ function Controller.new(M,bridge,options)
     -- press during an asynchronously arriving native grab begin.
     -- Only an independently held middle button can own an ordinary-input pulse.
     -- Never compete with a physically held M1 or a native minigame.
+    bridge.combatPointBlocked = function(point) return h.ui and h.ui:contains(point) or false end
     bridge.combatPulseBlocked = function()
         if bridge.holdBinding~="M3" then return true end
         local held=h.combatInput.held
@@ -493,7 +494,7 @@ function Controller.new(M,bridge,options)
             or not self.registry.byId.holdBite.requested
             or bridge.UserInputService:GetFocusedTextBox()
             or self.ui:contains(bridge.UserInputService:GetMouseLocation())
-            or not bridge:mouseGameplayPoint() then return false end
+            or not bridge:mouseGameplayPoint(nil,true) then return false end
         if self.combatInput.held and self.combatInput.held.key=="M3"
             and self.combatInput.held.generation==s.generation then return true end
         self:physicalInput("other")
