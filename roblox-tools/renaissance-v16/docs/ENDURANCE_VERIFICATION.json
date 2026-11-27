@@ -4,16 +4,52 @@
   "branch": "renaissance/v2415-endurance-exp1",
   "base_release": "16.4.0-rc1",
   "audited_game_build": 2415,
-  "source_commit": null,
-  "loader_commit": null,
-  "source_sha256": null,
-  "local_luau": {"total": 229, "passed": 229, "failed": 0},
-  "hosted_luau": null,
-  "loader_tests": null,
+  "source_commit": "d39828746fff0fdfc709ece15b4c0097b3f35c8c",
+  "loader_commit": "cf2ce27d18696db159de7f302484fb472bcb1585",
+  "source_sha256": "b5ca78b29a8cfc37bfada425561398cda72fa679e83397433c6fdb049d5fba67",
+  "local_luau": {
+    "total": 235,
+    "passed": 235,
+    "failed": 0
+  },
+  "hosted_luau": {
+    "run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46084891842",
+    "client_job_id": 140792052451,
+    "conclusion": "success",
+    "deterministic_bundle_step": "success"
+  },
+  "loader_tests": 6,
   "windows_helper_changed": false,
   "helper_baseline_cycle_tests": 10000,
   "live_gameplay_verified": false,
   "other_client_movement_verified": false,
   "server_stamina_verified_unlimited": false,
-  "notes": "Reversible own-character WalkSpeed request; guarded 2415 only. The prior installed helper and its historical CI results are retained separately."
+  "notes": "Reversible own-character WalkSpeed request; guarded 2415 only. The installed helper and its historical checks are retained, with no new PC installation.",
+  "publication_status": "published_immutable_source_and_loader",
+  "source_bytes": 628555,
+  "source_fingerprint": "b05e56fb2c64abffa8c21c1fb780b75adfac9fcaf676dfefe3eb2c22810700f1",
+  "loader_sha256": "d2256f36f0340f3d18bb201613e12c9c1cab07537b35726b7eec0a33ff3871c5",
+  "loader_bytes": 2189,
+  "remote_raw_source_matches_local": true,
+  "remote_raw_loader_matches_local": true,
+  "remote_raw_chunks_match_manifest_and_reconstruct_source": 7,
+  "hosted_run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46084891842",
+  "hosted_helper": {
+    "run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46084891842",
+    "helper_job_id": 140792052683,
+    "conclusion": "success",
+    "changed_in_experiment": false
+  },
+  "preserved_baseline_gates": [
+    {
+      "name": "Renaissance v15",
+      "run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46084891837",
+      "conclusion": "success"
+    },
+    {
+      "name": "Amber planner",
+      "run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46084891857",
+      "conclusion": "success"
+    }
+  ]
 }

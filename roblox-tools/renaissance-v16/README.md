@@ -2,7 +2,7 @@
 
 Build 2415 endurance movement experiment based on the complete 16.4.0-rc1 candidate. It retains all prior features and adds an independent switch for locally requested sprint pace during fatigue. The old stamina drain control remains under the accurate name **Local Stamina Conservation**.
 
-The source and loader pin an immutable commit once published. Offline tests cover movement guards and cleanup along with the earlier combat and helper regressions. The installed Windows helper is retained. Other-player visibility, server acceptance and actual infinite stamina remain unverified. The floating production loader and earlier pinned launchers are unchanged. See [experiment instructions](docs/RELEASE.md) for the launcher and rollback.
+The published loader pins an immutable source commit. All 235 local Luau checks and the hosted v16 regression gate pass, covering movement guards and cleanup along with the earlier combat regressions. The installed Windows helper is retained. Other-player visibility, server acceptance and actual infinite stamina remain unverified. The floating production loader and earlier pinned launchers are unchanged. See [experiment instructions](docs/RELEASE.md) for the launcher and rollback.
 
 - [Investigation](docs/INVESTIGATION.md)
 - [Complete feature matrix](docs/FEATURE_MATRIX.md)
