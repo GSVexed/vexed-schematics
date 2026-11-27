@@ -2968,7 +2968,7 @@ test("M3 accepts a camera-processed world press and stops on release",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions()
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
     w:advance(.2)
     w.held=E.UserInputType.MouseButton3
     local press=w:input(nil,E.UserInputType.MouseButton3,true)
@@ -2983,7 +2983,7 @@ test("M3 recovers missing began edge by polling but not after focus loss",functi
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions()
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2);w.held=E.UserInputType.MouseButton3
     w:advance(.5);assert(h.combatInput.held and h.combatInput.held.key=="M3")
     h:focusChanged(false);h:focusChanged(true);w:advance(.5)
@@ -3026,7 +3026,7 @@ test("M3 sustained hold survives a short polling dropout and native ability paus
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions();w.virtualBiteAvailable=true
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2);w.held=E.UserInputType.MouseButton3
     local press=w:input(nil,E.UserInputType.MouseButton3)
     w:advance(2)
@@ -3073,7 +3073,7 @@ test("M3 verified native route never switches to ordinary input after silence",f
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions();w.virtualBiteAvailable=true
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2);w.held=E.UserInputType.MouseButton3
     local press=w:input(nil,E.UserInputType.MouseButton3)
     w:advance(2)
@@ -3100,7 +3100,7 @@ test("M3 unverified silent native route can select ordinary input once",function
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions();w.virtualBiteAvailable=true
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2)
     local original=h.bridge.wolfActions.tryBite
     h.bridge.wolfActions.tryBite=function()end
@@ -3134,7 +3134,7 @@ test("M3 native repeat starts and continues through Eat and Drink offers without
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions();w.virtualBiteAvailable=true
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2)
     local char=w.player.Character
     local button=w.new("TextButton");button.Name="FeralFeedTap";button.Text="EAT"
@@ -3194,7 +3194,7 @@ test("M3 native hold is independent of unrelated HUD buttons over an offer",func
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions()
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2);w.player.Character:SetAttribute("FeedCan","eat")
     local feed=w.new("TextButton");feed.Name="FeralFeedTap";feed.Text="EAT"
     local other=w.new("TextButton");other.Name="Other";other.Text="MENU"
@@ -3211,7 +3211,7 @@ test("M3 native hold starts even when HUD hit testing throws",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions()
-    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local h=assert(w.env.loadstring(BUNDLE))({middleRoutePreference="NATIVE",settings={states={holdBite=true,recovery=false,autoBite=false}}})
     w:advance(.2)
     w.guiHitsAt=function()error("GUI query inaccessible")end
     w.held=E.UserInputType.MouseButton3
@@ -3265,6 +3265,28 @@ test("M3 ordinary route pauses on an entirely obstructed HUD and resumes without
     assert((w.nativeBites or 0)>=2)
     eq(h.combatInput.middleRoute,"INPUT")
     w.held=nil;w.uis.InputEnded:Fire(press)
+    h:close()
+end)
+
+test("default M3 selects ordinary input even with native callback available",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    for i=1,4 do
+        w.held=E.UserInputType.MouseButton3
+        local press=w:input(nil,E.UserInputType.MouseButton3)
+        w:advance(1.8)
+        w.held=nil;w.uis.InputEnded:Fire(press)
+        local count=w.nativeBites or 0
+        w:advance(.8);eq(w.nativeBites or 0,count)
+    end
+    eq(h.combatInput.middleRoute,"INPUT")
+    eq(h.combatInput.middleNativeAttempts,0)
+    assert(h.combatInput.middleInputAttempts>=4)
+    assert((w.nativeBites or 0)>=4 and (w.virtualBiteDowns or 0)>=4)
+    eq(h.combatInput.held,nil)
     h:close()
 end)
 

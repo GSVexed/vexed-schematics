@@ -10,7 +10,7 @@ function CombatInput.new(bridge,policy,ledger)
         status="native input", fallbackMisses=0, unavailableUntil=0,
         speedFactor=.62, goodStreak=0, suspectStreak=0,
         lastRateChange=-math.huge, lastMarker=nil, lastDispatch=0,
-        nativeMisses=0,middleCandidate=nil,middleRoute=nil,
+        nativeMisses=0,middleCandidate=middleMode and bridge.middleRoutePreference~="NATIVE" and "INPUT" or nil,middleRoute=nil,
         middleRouteMarkers=0,middleNativeAttempts=0,middleInputAttempts=0,
     }
     local function stopDiscovery()
@@ -73,8 +73,8 @@ function CombatInput.new(bridge,policy,ledger)
         self.nextAttempt=math.max(self.nextAttempt,now+.20)
         self.status=reason.." · middle hold retained"
     end
-    -- Selection is allowed only until the first attributable bite marker.
-    -- Once verified, one route owns every M3 hold for this hub session.
+    -- Standard input is the production M3 route. Explicit native compatibility
+    -- mode may probe only until its first attributable marker.
     function c:noteNativeMiss(now)
         if not middleMode or not self.held or self.held.key~="M3" then return end
         self.nativeMisses=math.min(3,self.nativeMisses+1)
@@ -137,8 +137,8 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:marker(s,now)
         local waiting=self.awaiting
-        if waiting and waiting.backend=="NATIVE" then self.nativeMisses=0 end
         self:confirmMiddleRoute(waiting,s,now)
+        if waiting and waiting.backend=="NATIVE" and (not middleMode or self.middleRoute=="NATIVE") then self.nativeMisses=0 end
         if waiting and waiting.backend=="INPUT"
             and (not middleMode or self.middleRoute=="INPUT")
             and type(bridge.noteHeldInputMarker)=="function" then
@@ -159,7 +159,7 @@ function CombatInput.new(bridge,policy,ledger)
                     and self.held.generation==s.generation then return end
                 self.held={char=s.char,generation=s.generation,key="M3",
                     source="event",input=inputObject,startedAt=now,handoff=true}
-                self.nativeMisses,self.fallbackMisses,self.unavailableUntil=0,0,0
+                self.fallbackMisses,self.unavailableUntil=0,0
                 self.nextAttempt=math.max(self.nextAttempt,now+.025)
                 self.status="middle mouse held"
                 ledger:event("physical_m3_hold_started",now)

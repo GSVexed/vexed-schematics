@@ -63,6 +63,8 @@ function Controller.new(M,bridge,options)
     h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
     bridge.holdBinding=h.options.holdBinding=="M1" and "M1" or "M3"
+    -- Default M3 to standard input: live 16.2.6 reported six native attempts and zero attributable markers.
+    bridge.middleRoutePreference=h.options.middleRoutePreference=="NATIVE" and "NATIVE" or "INPUT"
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
     bridge.combatGovernor = h.combatInput
     -- Weak keyed: a disappeared animal is never retained by combat trust.
