@@ -896,6 +896,30 @@ function Roblox.new(Core, environment)
         if type(state)~="table" or state.at~=startedAt or self:attribute(s.char,"FeralCrushAt")~=startedAt then return false end
         return pcall(native.finish) -- no supplied timestamp, multiplier or damage
     end
+    -- The client's unmodified native attack cooldown provides the baseline
+    -- for request pacing. Reading it does not change native damage or cooldown.
+    function b:nativeBiteCooldown(s)
+        if not s or not s.char or s.char~=self.player.Character then return nil end
+        local native=self.wolfActions
+        if native and type(native.biteCooldown)=="function"
+            and game.PlaceVersion==self.captureVersion then
+            local ok,cd=pcall(native.biteCooldown)
+            if ok and Core.finite(cd) and cd>=.03 and cd<=30 then return cd end
+        end
+        local species=self:config("Species")
+        if not species or type(species.biteCooldown)~="function" then return nil end
+        local ok,cd=pcall(species.biteCooldown,
+            self:attribute(s.char,"Species") or species.DEFAULT,
+            self:attribute(s.char,"Growth") or 1)
+        if not ok or not Core.finite(cd) or cd<.03 or cd>30 then return nil end
+        local passive=self:config("PassiveConfig")
+        if passive and passive.biteCdMult~=nil then
+            local valid,mult=pcall(passive.biteCdMult,s.char)
+            if not valid or not Core.finite(mult) or mult<=0 or mult>20 then return nil end
+            cd*=mult
+        end
+        return Core.finite(cd) and cd>=.03 and cd<=30 and cd or nil
+    end
     function b:biteDelay(char)
         local c = self:config("CombatConfig")
         if c and type(c.hitDelay) == "function" then

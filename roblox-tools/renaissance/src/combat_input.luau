@@ -165,7 +165,7 @@ function CombatInput.new(bridge,policy,ledger)
                 self.unavailableUntil=now+2.5
                 self.fallbackMisses=0
             end
-            self.status="no native marker; waiting before another input"
+            self.status="no native marker; checking original game cooldown"
             ledger:event("native_bite_marker_timeout",now,{backend=waiting.backend})
             return
         end
@@ -186,8 +186,14 @@ function CombatInput.new(bridge,policy,ledger)
         local privateUnknown=not readiness.known
             and (readiness.reason=="native timing unavailable"
                 or readiness.reason=="native timing layout unknown")
-        if not allowed and privateUnknown and held and not automatic and not inGrab then
-            allowed=bridge:visibleBiteWindow(s,now)
+        if not allowed and privateUnknown and held and not automatic then
+            -- When the validated original callback is present, let the game
+            -- enforce its own private cooldown instead of guessing its
+            -- compiler-specific upvalue positions.
+            local original=bridge.wolfActions and bridge.wolfActions.tryBite
+            if type(original)=="function" and (not inGrab or nativeGrabLane) then
+                allowed=true
+            end
         end
         if not allowed then
             self.status=readiness.reason
@@ -207,28 +213,37 @@ function CombatInput.new(bridge,policy,ledger)
         -- Clear prior to calling native code: synchronous WolfBiteAt callbacks
         -- reenter the hub during tryBite and must never issue a second bite.
         self.pending=nil
-        self.nextAttempt=now+.065
         self.lastDispatch=now
         local markers=self.markerCount
+        -- Repeating a physical M1 must never synthesize mouse Up/Down
+        -- events: that is the old executor-dependent feedback loop.
         local native=bridge.wolfActions and bridge.wolfActions.tryBite
-        local called,backend
-        if type(native)=="function" then
-            called,backend=bridge:tryNativeBite(now),"NATIVE"
-        elseif held and not automatic and not inGrab then
-            -- Physical hold fallback. Input backend can be absent or blocked.
-            called,backend=bridge:tryHeldInputBite(s,now),"INPUT"
-        else
-            called,backend=false,"UNAVAILABLE"
+        if type(native)~="function" then
+            self.nextAttempt=now+.12
+            self.status="original native bite callback not available; no mouse replay"
+            return
         end
+        -- Adaptive Faster Bites previously adjusted a display factor without
+        -- feeding it into dispatch timing. It now controls native request
+        -- spacing. The original callback and server still enforce cooldowns.
+        local cooldown=type(bridge.nativeBiteCooldown)=="function"
+            and bridge:nativeBiteCooldown(s) or nil
+        local factor=options.speedEnabled and self:factor() or 1
+        if type(cooldown)=="number" and cooldown==cooldown
+            and cooldown>=.03 and cooldown<=30 then
+            self.nextAttempt=now+math.max(.04,cooldown*factor)
+        else
+            self.nextAttempt=now+.065
+        end
+        local called,backend=bridge:tryNativeBite(now),"NATIVE"
         local marked=self.markerCount>markers
         if called and not marked then
             self.awaiting={char=s.char,generation=s.generation,at=now,backend=backend}
         end
         if not called then self.nextAttempt=math.max(self.nextAttempt,now+.3) end
         self.status=marked and "native marker; awaiting server-confirmed impact"
-            or called and (backend=="INPUT" and "input replay requested; awaiting native marker"
-                or "native callback requested; awaiting marker")
-            or "native attack dispatcher unavailable"
+            or called and "original native callback requested; awaiting marker"
+            or "original native attack dispatcher unavailable"
         ledger:event(p and "native_bite_buffer_released" or "native_cadence_attempt",now,{
             called=called==true,marker=marked,backend=backend,automatic=automatic==true,
             minigameNative=nativeGrabLane==true,

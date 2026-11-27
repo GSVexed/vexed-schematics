@@ -825,15 +825,13 @@ function Controller.new(M,bridge,options)
         end
         local auto=r.byId.autoBite
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
-        local heldFallback=not native and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
         local hold=r.byId.holdBite
         local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
         local sourceLabel=nativeGC and "Original native callback recovered · "
             or native and "Original native callback · "
-            or heldFallback and "Mouse replay only (unverified) · "
-            or "No validated input backend · "
-        r:ack("holdBite",hold.requested and (native or heldFallback),
-            not hold.requested and "OFF" or native and "ARMED" or heldFallback and "PARTIAL" or "WAITING",
+            or "Waiting for original bite callback; no synthetic M1 · "
+        r:ack("holdBite",hold.requested and native,
+            not hold.requested and "OFF" or native and "ARMED" or "WAITING",
             hold.requested and sourceLabel..self.combatInput.status or hold.detail)
         r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
             auto.requested and self.combatInput.status or auto.detail)
@@ -869,7 +867,7 @@ function Controller.new(M,bridge,options)
         end
         local speed=r.byId.attackSpeed
         if speed.requested and speed.applied then
-            speed.reason=string.format("Adaptive %.2fx client rate · server hit acceptance not guaranteed",
+            speed.reason=string.format("Adaptive %.2fx native request pacing · game/server cooldown still applies",
                 1/self.combatInput:factor())
         end
         if self.settingsAvailable then r:ack("settings",true,"CLIENT","saved intent reconciled; " .. self.settingsOrigin) end
@@ -1183,6 +1181,7 @@ function Controller.new(M,bridge,options)
         local nearPress=strike and s.serverNow and math.abs(strike.at-s.serverNow)<.095 or false
         self.combatInput:tick(s,now,{
             repeatHeld=self.registry.byId.holdBite.requested and not self.inputSuspended,
+            speedEnabled=self.registry.byId.attackSpeed.requested,
             automatic=auto and not self.inputSuspended,targetValid=clear,
             inputSuspended=self.inputSuspended==true,
             minigameBusy=grabActive,nativeMinigame=nativeMini==true,
