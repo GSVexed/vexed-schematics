@@ -217,6 +217,7 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(count(),0)
         assert(input.held and input.held.input==source,"hover must not erase physical M1 ownership")
         input:tick(s,10.4,{repeatHeld=true,uiBlocked=false})
+        input:tick(s,10.46,{repeatHeld=true,uiBlocked=false})
         eq(count(),1)
     end)
 
@@ -263,10 +264,11 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         local s={alive=true,char=body,generation=1,attackHeld=true}
         input:input(s,10,"M1",{})
         input:tick(s,10.31,{repeatHeld=true,speedEnabled=true})
+        input:tick(s,10.33,{repeatHeld=true,speedEnabled=true})
         eq(nativeCalls,1)
-        local fast=input.nextAttempt-10.31
+        local fast=input.nextAttempt-10.33
         assert(math.abs(fast-.62)<.0001,"62% adaptive factor must affect actual scheduling")
-        input:marker(s,10.32)
+        input:marker(s,10.34)
         input:tick(s,input.nextAttempt-.02,{repeatHeld=true,speedEnabled=true})
         eq(nativeCalls,1)
         local at=input.nextAttempt+.01

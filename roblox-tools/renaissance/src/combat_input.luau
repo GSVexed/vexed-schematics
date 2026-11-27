@@ -86,7 +86,7 @@ function CombatInput.new(bridge,policy,ledger)
         -- after one uninterrupted hold crosses the tap/hold threshold does
         -- the hub take over repeating. New taps always start a fresh timer.
         self.held={char=s.char,generation=s.generation,key=kind or "mouse",
-            source="event",input=inputObject,startedAt=now,handoff=false}
+            source="event",input=inputObject,startedAt=now,handoff=kind=="R2"}
         self.nextAttempt=math.max(self.nextAttempt,now+.025)
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
         local at=math.max(now+.025,policy.lastRestRelease+bridge:restLock(s.char)+.035)
