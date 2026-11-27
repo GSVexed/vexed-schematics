@@ -1005,8 +1005,13 @@ function Roblox.new(Core, environment)
         self.heldInputBlockReason=nil
         if self.syntheticM1 then return self:blockedHeldInput("previous click releasing") end
         local independent=self.holdBinding=="M3"
-        if independent and (not s or s.mouseHeld or s.r2Held or s.physicalM1Held) then return false end
-        if independent and self.combatPulseBlocked and self.combatPulseBlocked() then return false end
+        local desktop=independent and s and type(self.desktopOwnsPrimary)=="function" and self.desktopOwnsPrimary(s,now)
+        if independent and (not s or s.r2Held or not desktop and (s.mouseHeld or s.physicalM1Held)) then
+            return self:blockedHeldInput("manual primary input")
+        end
+        if independent and self.combatPulseBlocked and self.combatPulseBlocked() then
+            return self:blockedHeldInput("pulse ownership unavailable")
+        end
         if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
             or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
             or s.captured or s.holding then return false end
@@ -1093,14 +1098,19 @@ function Roblox.new(Core, environment)
             if self.syntheticM1~=pulse then return end -- a grab began meanwhile
             if self.combatPulseBlocked then
                 local known,blocked=pcall(self.combatPulseBlocked)
-                if not known or blocked then stop();return end
+                if not known or blocked then self.heldInputBlockReason="pulse ownership unavailable";stop();return end
             end
             local readable,current=pcall(self.snapshot,self,self.clock(),false)
+            local desktopOwned=readable and desktop and type(self.desktopOwnsPrimary)=="function"
+                and self.desktopOwnsPrimary(current,self.clock())
+            if desktop and not desktopOwned then
+                self.heldInputBlockReason="desktop hold expired";stop();return
+            end
             if not readable or not current.alive or current.char~=s.char or current.generation~=s.generation
                 or current.chat or current.gameMenu or current.rest or current.feeding
                 or current.ability or current.captured or current.holding
-                or independent and (current.mouseHeld or current.r2Held or current.grab) then
-                stop();return
+                or independent and (current.r2Held or current.grab or current.mouseHeld and not desktopOwned) then
+                self.heldInputBlockReason="native action or manual input lock";stop();return
             end
             if independent then
                 -- Lease the actual feeding controls just before Down, and
@@ -1123,12 +1133,27 @@ function Roblox.new(Core, environment)
                     self.heldInputBlockReason="cursor over an interactive control"
                     stop();return
                 end
+                -- If the engine still reports the primary as down, re-arm
+                -- its ordinary logical input edge once, under the same
+                -- feeding guard. Do not change physical device state.
+                if desktopOwned and current.mouseHeld and not pulse.desktopReset then
+                    pulse.desktopReset=true
+                    if not safeUp() then self.heldInputBlockReason="logical release unavailable";stop();return end
+                    self.desktopLogicalResets=(self.desktopLogicalResets or 0)+1
+                    self:restoreFeedClickGuard(pulse.feedGuard);pulse.feedGuard=nil
+                    if type(task)=="table" and type(task.delay)=="function" then
+                        local scheduled,timer=pcall(task.delay,.025,beginPress)
+                        if scheduled then pulse.timer=timer;return end
+                    end
+                    self.heldInputBlockReason="logical release scheduling unavailable";stop();return
+                end
                 pulse.didPress=true
             end
             self.syntheticPressing=true
             local pressed=pcall(down)
             self.syntheticPressing=false
-            if not pressed then stop();return end
+            if not pressed then self.heldInputBlockReason="input adapter rejected press";stop();return end
+            if desktop then self.desktopDispatches=(self.desktopDispatches or 0)+1 end
             pulse.didPress=true
             if self.syntheticM1~=pulse then return end -- reentrant grab begin
             if type(task)=="table" and type(task.delay)=="function" then

@@ -3414,5 +3414,50 @@ test("desktop mode does not intercept middle or manual input and disarms for men
     h:close()
 end)
 
+test("desktop hold owns a persistent raw primary poll without mistaking it for a manual click",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({leftHoldBridge=true,settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local io=h.bridge:io()
+    local path="FERAL_LEFT_HOLD_INTENT_V1.json"
+    local seq=0
+    local function signal(held)
+        seq+=1;io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=h.token,sequence=seq,held=held})
+        w:advance(.12)
+    end
+    w:advance(.25);signal(false)
+    -- Reproduce a physical down report and an already latched logical edge.
+    w.held=E.UserInputType.MouseButton1;w.logicalM1Down=true
+    for _=1,30 do signal(true) end
+    assert(h.combatInput.held and h.combatInput.held.source=="desktop")
+    assert((w.nativeBites or 0)>=3)
+    eq(h.combatInput.middleRoute,"INPUT")
+    assert((h.bridge.desktopLogicalResets or 0)>=1)
+    assert((h.bridge.desktopDispatches or 0)>=3)
+    assert(h:desktopHoldReport().rawPrimaryDuringHold>0)
+    w.held=nil;signal(false)
+    w:advance(.4);local count=w.nativeBites;w:advance(.9)
+    eq(w.nativeBites,count);eq(h.combatInput.held,nil)
+    h:close()
+end)
+test("desktop hold stale signals do not own ordinary primary input",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({leftHoldBridge=true,settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local io=h.bridge:io()
+    local path="FERAL_LEFT_HOLD_INTENT_V1.json"
+    w:advance(.2)
+    io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=h.token,sequence=1,held=false});w:advance(.1)
+    w.held=E.UserInputType.MouseButton1
+    io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=h.token,sequence=2,held=true});w:advance(.8)
+    local count=w.virtualBiteDowns or 0
+    eq(h.combatInput.held,nil)
+    io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=h.token,sequence=1,held=true});w:advance(.8)
+    eq(h.combatInput.held,nil);eq(w.virtualBiteDowns or 0,count)
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

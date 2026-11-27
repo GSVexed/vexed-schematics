@@ -83,13 +83,31 @@ function Controller.new(M,bridge,options)
     -- Only an independently held middle button can own an ordinary-input pulse.
     -- Never compete with a physically held M1 or a native minigame.
     bridge.combatPointBlocked = function(point) return h.ui and h.ui:contains(point) or false end
+    -- Desktop ownership is separate from the engine's primary-button poll.
+    -- Only a fresh, accepted session can classify the same physical LMB
+    -- as the held intent instead of a competing manual click.
+    bridge.desktopOwnsPrimary = function(s,now)
+        local held=h.combatInput.held
+        return h.leftHoldBridge and h.active and not h.closed
+            and h.windowFocused~=false and not h.inputSuspended
+            and h.registry.byId.holdBite.requested and h.leftHoldArmed==true
+            and h.leftHoldIntent==true and not h.leftHoldAwaitFresh
+            and h.leftHoldLastAt~=nil and now-h.leftHoldLastAt<=.30
+            and held~=nil and held.source=="desktop" and held.key=="M3"
+            and held.char==s.char and held.generation==s.generation
+            and s.alive and not s.chat and not s.gameMenu
+    end
     bridge.combatPulseBlocked = function()
         if bridge.holdBinding~="M3" then return true end
         local held=h.combatInput.held
+        local desktop=held and held.source=="desktop"
+        local fresh=desktop and bridge.desktopOwnsPrimary({char=bridge.player.Character,
+            generation=bridge.generation,alive=true},bridge.clock())
         return h.closed or not h.active or h.inputSuspended or h.windowFocused==false
             or not h.registry.byId.holdBite.requested
             or not held or held.key~="M3" or held.upSince~=nil
-            or h.physicalM1Input~=nil or h:hasNativeGrab(bridge.clock())
+            or desktop and not fresh
+            or h.physicalM1Input~=nil and not fresh or h:hasNativeGrab(bridge.clock())
             or h.grabInput.lease~=nil
             or bridge.UserInputService:GetFocusedTextBox()~=nil
             or h.ui:contains(bridge.UserInputService:GetMouseLocation())
@@ -277,6 +295,7 @@ function Controller.new(M,bridge,options)
             self.middlePollArmed=false
             self.physicalM1Input=nil
             self.combatInput:cancel()
+            self:disarmDesktopHold(now)
         end
         if id=="attackSpeed" then bridge.biteTiming=nil;self.combatInput.nextAttempt=0;self.combatInput:resetRate() end
         if id=="voice" then self.voice:setEnabled(on) end
@@ -527,7 +546,11 @@ function Controller.new(M,bridge,options)
             helperConnected=self.leftHoldLastAt~=nil and now-self.leftHoldLastAt<=.30,
             held=self.combatInput.held~=nil and self.combatInput.held.source=="desktop",
             intent=self.leftHoldIntent==true,waitingFresh=self.leftHoldAwaitFresh==true,
-            primaryReportedDown=self.leftHoldRawPrimary==true,reason=self.leftHoldReason}
+            primaryReportedDown=self.leftHoldRawPrimary==true,
+            rawPrimaryDuringHold=self.leftHoldRawSamples or 0,
+            logicalResets=bridge.desktopLogicalResets or 0,
+            dispatched=bridge.desktopDispatches or 0,
+            reason=self.leftHoldReason}
     end
     function h:desktopHoldTick(s,now,critical)
         if not self.leftHoldBridge then return end
@@ -557,7 +580,7 @@ function Controller.new(M,bridge,options)
             if ok and type(v)=="table" and v.schema==LEFT_INTENT and v.token==self.token
                 and Core.finite(v.sequence) and v.sequence>=1 and v.sequence<=1e12
                 and v.sequence%1==0 and type(v.held)=="boolean"
-                and v.sequence~=self.leftHoldLastSequence then
+                and (self.leftHoldLastSequence==nil or v.sequence>self.leftHoldLastSequence) then
                 self.leftHoldLastSequence=v.sequence
                 self.leftHoldLastAt=now
                 self.leftHoldIntent=v.held
@@ -583,9 +606,15 @@ function Controller.new(M,bridge,options)
             end
             held=self.combatInput.held
         end
-        if held and held.source=="desktop" then
+        if held and held.source=="desktop" and bridge.desktopOwnsPrimary(s,now) then
             s.middleHeld=true
-            self.leftHoldReason=self.leftHoldRawPrimary and "game still reports primary down" or "desktop hold active"
+            -- This is an internal ownership classification only. Preserve
+            -- the raw read for diagnostics; never alter engine properties.
+            if self.leftHoldRawPrimary then self.leftHoldRawSamples=(self.leftHoldRawSamples or 0)+1 end
+            s.desktopPrimaryRaw=s.mouseHeld
+            s.mouseHeld=false
+            s.physicalM1Held=false
+            self.leftHoldReason=self.leftHoldRawPrimary and "desktop owns reported primary" or "desktop hold active"
         end
     end
     function h:startMiddle(s,now,input)
