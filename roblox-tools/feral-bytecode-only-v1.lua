@@ -13,6 +13,14 @@ local RS = game:GetService("ReplicatedStorage")
 local Http = game:GetService("HttpService")
 local user = Players.LocalPlayer
 if not user then warn("[FERAL BYTECODE] Local player unavailable") return end
+-- End the superseded slow UI collector cooperatively. Its Destroying
+-- connection requests a safe stop and checkpoint, not deletion of exports.
+local ownGui=user:FindFirstChildOfClass("PlayerGui")
+local oldGui=ownGui and ownGui:FindFirstChild("FeralClientRefreshV304")
+if oldGui and oldGui:IsA("ScreenGui") then
+    pcall(function()oldGui:Destroy()end)
+    task.wait(0.25)
+end
 
 local env = type(getgenv)=="function" and getgenv() or _G
 local byteApi = type(getscriptbytecode)=="function" and getscriptbytecode
