@@ -220,20 +220,18 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(count(),1)
     end)
 
-    test("combat queued synthetic processed M1 cannot permanently suspend a physical hold",function()
+    test("processed stale synthetic M1 echo cannot suspend a real held mouse",function()
         local w,h,physical=fallbackWorld()
         w:advance(.75)
-        assert((w.virtualBiteCalls or 0)>0,"fallback must have replayed a native input")
+        eq(w.virtualBiteCalls,nil)
         local before=w.nativeBites or 0
-        -- The real input has already begun. This processed echo is delivered
-        -- after a virtual-input API call has returned, but before its owned
-        -- synthetic grace window expires (a real-world asynchronous ordering).
         h.bridge.syntheticM1Until=w.time+.12
         w.uis.InputBegan:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown},true)
         eq(h.inputSuspended,false)
         assert(h.combatInput.held and h.combatInput.held.source=="event")
         w:advance(1.8)
-        assert((w.nativeBites or 0)>=before+2,"held bites must continue after a delayed echo")
+        eq(w.virtualBiteCalls,nil)
+        eq(w.nativeBites or 0,before)
         w.held=nil
         h:inputEnded(physical)
         h:close()
@@ -247,6 +245,82 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(h.combatInput.held,nil)
         w.held=nil
         h:inputEnded(physical)
+        h:close()
+    end)
+
+
+    test("native physical M1 hold uses the adaptive factor for real scheduler timing",function()
+        local M=modules()
+        local nativeCalls=0
+        local bridge={wolfActions={tryBite=function()end}}
+        function bridge:restLock() return .7 end
+        function bridge:attribute() return nil end
+        function bridge:biteDelay() return .27 end
+        function bridge:biteReadiness() return {ready=true,known=true} end
+        function bridge:nativeBiteCooldown() return 1 end
+        function bridge:tryNativeBite() nativeCalls+=1;return true end
+        function bridge:tryHeldInputBite() error("synthetic fallback must not be called") end
+        local input=M.combat_input.new(bridge,M.policy.new(),M.core.ledger(20))
+        local body={}
+        local s={alive=true,char=body,generation=1,attackHeld=true}
+        input:input(s,10,"M1",{})
+        input:tick(s,10.1,{repeatHeld=true,speedEnabled=true})
+        eq(nativeCalls,1)
+        local fast=input.nextAttempt-10.1
+        assert(math.abs(fast-.62)<.0001,"62% adaptive factor must affect actual scheduling")
+        input:marker(s,10.11)
+        input:tick(s,input.nextAttempt-.02,{repeatHeld=true,speedEnabled=true})
+        eq(nativeCalls,1)
+        local at=input.nextAttempt+.01
+        input:tick(s,at,{repeatHeld=true,speedEnabled=true})
+        eq(nativeCalls,2)
+        input:marker(s,at)
+        local offAt=input.nextAttempt+.01
+        input:tick(s,offAt,{repeatHeld=true,speedEnabled=false})
+        eq(nativeCalls,3)
+        assert(math.abs(input.nextAttempt-offAt-1)<.0001,"Faster Bites OFF restores original request interval")
+    end)
+
+    test("private bite callback never causes synthetic M1 replay while physical M1 is held",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions()
+        w.env.getconnections=nil
+        w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        eq(w.nativeBites,1)
+        w:advance(2.1)
+        eq(w.nativeBites,1)
+        eq(w.virtualBiteCalls,nil)
+        assert(h.combatInput.held~=nil,"real hold remains owned during native discovery")
+        assert(h.registry.byId.holdBite.outcome=="unverified")
+        w.held=nil
+        w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("known native callback repeats on real mouse hold without synthesized mouse edges",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions()
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.25)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(2.15)
+        assert((w.nativeBites or 0)>=3,"must repeat via original function")
+        eq(w.virtualBiteCalls,nil)
+        assert(h.bridge.wolfActions and type(h.bridge.wolfActions.tryBite)=="function")
+        local before=w.nativeBites
+        w.held=nil
+        w.uis.InputEnded:Fire(original)
+        w:advance(.9)
+        eq(w.nativeBites,before)
         h:close()
     end)
 end

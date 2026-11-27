@@ -1,8 +1,8 @@
 {
   "version": "0.8.0",
   "toolchain": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
-  "integrated_version": "16.1.2",
-  "integrated_sha256": "b8d63d8456f21ed61457b60559720ea03dc25bf7a66c7e696d927c8ab452de0b",
+  "integrated_version": "16.1.4",
+  "integrated_sha256": "bc2eec2ae974adb614e228e0d4921b8ec9a8b5c0a49d3e2bb3478a95c80be674",
   "compiled": 24,
   "total": 305,
   "passed": 305,
