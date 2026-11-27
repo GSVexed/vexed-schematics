@@ -115,7 +115,7 @@ function CombatInput.new(bridge,policy,ledger)
         self.middleRouteMarkers+=1
     end
     function c:middleReport()
-        return {binding=middleMode and "M3" or "M1",route=self.middleRoute,
+        return {binding=bridge.desktopLeftHold and "LMB_DESKTOP" or middleMode and "M3" or "M1",route=self.middleRoute,
             candidate=self.middleCandidate,verifiedAt=self.middleVerifiedAt,
             attributableMarkers=self.middleRouteMarkers,nativeAttempts=self.middleNativeAttempts,
             inputAttempts=self.middleInputAttempts,adapter=bridge.heldInputLockedBackend,

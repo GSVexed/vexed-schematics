@@ -261,7 +261,7 @@ function Tests.new(Core,bridge,hub)
             savedAt=os.time(),source="own client observations; server damage reduction unverified",
             events=events,samples=self.samples,species=self.species,snapshot=self:snapshot(),
             features=self:featureStates(),ledgerCounts=counts,ledgerRates=rates,
-            biteCadence=self:biteCadence(),middleRepeat=hub.combatInput:middleReport(),
+            biteCadence=self:biteCadence(),middleRepeat=hub.combatInput:middleReport(),leftHold=hub:desktopHoldReport(),
             recording=self.enabled,oneShotAttempts=self.attempts,reportPath=PATH}
     end
     function t:bridgeReport() return self:report(true) end

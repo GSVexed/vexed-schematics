@@ -3355,5 +3355,64 @@ test("M3 fails closed for an unresolved active offer without discarding the hold
     h:close()
 end)
 
+test("desktop hold bridge admits fresh local intent and stops on release or stale signal",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({leftHoldBridge=true,settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    local io=h.bridge:io()
+    local ready="FERAL_LEFT_HOLD_READY_V1.json"
+    local path="FERAL_LEFT_HOLD_INTENT_V1.json"
+    local seq=0
+    local function signal(held,token)
+        seq+=1
+        io.write(path,{schema="FERAL_LEFT_HOLD_INTENT_V1",token=token or h.token,sequence=seq,held=held})
+        w:advance(.12)
+    end
+    w:advance(.25)
+    eq(io.read(ready).armed,true)
+    signal(true,"previous_session")
+    eq(h.combatInput.held,nil)
+    signal(true)
+    eq(h.combatInput.held,nil)
+    signal(false)
+    for i=1,26 do signal(true) end
+    assert((w.nativeBites or 0)>=3)
+    eq(h.combatInput.held.source,"desktop")
+    eq(h:desktopHoldReport().helperConnected,true)
+    eq(h.combatInput.middleRoute,"INPUT")
+    signal(false);w:advance(.3)
+    local count=w.nativeBites
+    w:advance(.9)
+    eq(w.nativeBites,count);eq(h.combatInput.held,nil)
+    signal(false)
+    for i=1,14 do signal(true) end
+    assert(w.nativeBites>count)
+    w:advance(.5)
+    eq(h.combatInput.held,nil)
+    count=w.nativeBites;w:advance(.6);eq(w.nativeBites,count)
+    signal(true);eq(h.combatInput.held,nil)
+    signal(false)
+    for i=1,10 do signal(true) end
+    assert(h.combatInput.held~=nil)
+    h:close()
+    eq(io.read(ready).armed,false)
+end)
+test("desktop mode does not intercept middle or manual input and disarms for menus",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({leftHoldBridge=true,settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    w.held=E.UserInputType.MouseButton3
+    local p=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(.8)
+    eq(h.combatInput.held,nil);eq(w.virtualBiteDowns or 0,0)
+    w.held=nil;w.uis.InputEnded:Fire(p)
+    w.chat=true;w:advance(.2)
+    eq(h.bridge:io().read("FERAL_LEFT_HOLD_READY_V1.json").armed,false)
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

@@ -1,4 +1,6 @@
 local Controller = {}
+local LEFT_READY="FERAL_LEFT_HOLD_READY_V1"
+local LEFT_INTENT="FERAL_LEFT_HOLD_INTENT_V1"
 -- Replies have no recovered transaction identifier. Prefer a matching native
 -- target and timing, and retain ambiguity instead of assigning the newest bite.
 function Controller.matchFeedback(Core,transactions,data,now)
@@ -54,6 +56,7 @@ function Controller.new(M,bridge,options)
     h.policy.lastPhysical = bridge.clock()
     h.settings,h.settingsOrigin = M.settings.load(bridge:io(),Core.specs)
     if h.options.settings then h.settings = M.settings.sanitize(h.options.settings,Core.specs) end
+    if h.options.leftHoldBridge==true then h.settings.states.holdBite=true end
     for _,feature in ipairs(h.registry.order) do
         if not feature.permanent and not feature.linked then h.registry:request(feature.id,h.settings.states[feature.id]) end
     end
@@ -62,7 +65,11 @@ function Controller.new(M,bridge,options)
     h.grabInput = M.grab_input.new(bridge,h.token)
     h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
     h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
-    bridge.holdBinding=h.options.holdBinding=="M1" and "M1" or "M3"
+    bridge.holdBinding=h.options.holdBinding=="M1" and h.options.leftHoldBridge~=true and "M1" or "M3"
+    h.leftHoldBridge=h.options.leftHoldBridge==true
+    h.leftHoldIo=bridge:io()
+    h.leftHoldAwaitFresh=true
+    bridge.desktopLeftHold=h.leftHoldBridge
     -- Default M3 to standard input: live 16.2.6 reported six native attempts and zero attributable markers.
     bridge.middleRoutePreference=h.options.middleRoutePreference=="NATIVE" and "NATIVE" or "INPUT"
     h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
@@ -108,6 +115,7 @@ function Controller.new(M,bridge,options)
         self.inputSuspended=true
         self.physicalM1Input=nil
         self.combatInput:cancel()
+        self:disarmDesktopHold(bridge.clock())
         self:stopWalk("window focus changed")
     end
     function h:observeCombatAbility(s,now)
@@ -308,6 +316,7 @@ function Controller.new(M,bridge,options)
         bridge:releaseSyntheticBite()
         self.feeding:close(now)
         self.combatInput:cancel()
+        self:disarmDesktopHold(now)
         self.middlePollArmed=false;self.middlePollDown=nil
         self.physicalM1Input=nil;self.physicalM1MissingSince=nil
         self.combatInput:resetRate()
@@ -490,6 +499,95 @@ function Controller.new(M,bridge,options)
             if key ~= Enum.KeyCode.Space then self.rescue:cancel() end
         end
     end
+    -- The helper is a local, scoped physical-input remap. These files carry
+    -- only the current session token, sequence, readiness and held boolean.
+    -- Never execute file contents or accept a signal from an older hub.
+    function h:desktopReady(armed,now,force)
+        if not self.leftHoldBridge or not self.leftHoldIo.available then return false end
+        if not force and self.leftHoldArmed==armed and now<(self.nextLeftReady or 0) then return self.leftHoldReadyWritten==true end
+        self.nextLeftReady=now+.12
+        self.leftHoldArmed=armed
+        local ok,written=pcall(self.leftHoldIo.write,LEFT_READY..".json",{schema=LEFT_READY,token=self.token,armed=armed==true})
+        self.leftHoldReadyWritten=ok and written~=false
+        return self.leftHoldReadyWritten
+    end
+    function h:disarmDesktopHold(now)
+        if not self.leftHoldBridge then return end
+        self.leftHoldAwaitFresh=true
+        self.leftHoldLastAt=nil
+        self.leftHoldLastSequence=nil
+        self.leftHoldIntent=false
+        self:desktopReady(false,now,true)
+        local held=self.combatInput.held
+        if held and held.source=="desktop" then self.combatInput:release("M3",now) end
+    end
+    function h:desktopHoldReport()
+        local now=bridge.clock()
+        return {enabled=self.leftHoldBridge==true,armed=self.leftHoldArmed==true,
+            helperConnected=self.leftHoldLastAt~=nil and now-self.leftHoldLastAt<=.30,
+            held=self.combatInput.held~=nil and self.combatInput.held.source=="desktop",
+            intent=self.leftHoldIntent==true,waitingFresh=self.leftHoldAwaitFresh==true,
+            primaryReportedDown=self.leftHoldRawPrimary==true,reason=self.leftHoldReason}
+    end
+    function h:desktopHoldTick(s,now,critical)
+        if not self.leftHoldBridge then return end
+        self.leftHoldRawPrimary=s.mouseHeld==true and not bridge.syntheticM1
+        -- In desktop mode, the physical middle button is not the trigger.
+        s.middleHeldKnown=true;s.middleHeld=false
+        if critical or self:hasNativeGrab(now) or self.grabInput.lease then
+            if self.leftHoldArmed~=false or self.leftHoldLastAt then self:disarmDesktopHold(now) end
+            self.leftHoldReason="minigame priority";return
+        end
+        local eligible=self.active and not self.closed and self.windowFocused~=false
+            and s.alive and not s.chat and not s.gameMenu
+            and not s.captured and not self.policy.manualRest
+            and self.registry.byId.holdBite.requested
+        if eligible then
+            local ok,allowed=pcall(bridge.mouseGameplayPoint,bridge,nil,true)
+            eligible=ok and allowed==true
+        end
+        local ready=self:desktopReady(eligible==true,now,false)
+        if not ready then
+            eligible=false
+            self.leftHoldReason="local readiness file unavailable"
+        end
+        if now>=(self.nextLeftIntent or 0) and self.leftHoldIo.available then
+            self.nextLeftIntent=now+.04
+            local ok,v=pcall(self.leftHoldIo.read,LEFT_INTENT..".json")
+            if ok and type(v)=="table" and v.schema==LEFT_INTENT and v.token==self.token
+                and Core.finite(v.sequence) and v.sequence>=1 and v.sequence<=1e12
+                and v.sequence%1==0 and type(v.held)=="boolean"
+                and v.sequence~=self.leftHoldLastSequence then
+                self.leftHoldLastSequence=v.sequence
+                self.leftHoldLastAt=now
+                self.leftHoldIntent=v.held
+                if not v.held then self.leftHoldAwaitFresh=false end
+            end
+        end
+        local connected=self.leftHoldLastAt~=nil and now-self.leftHoldLastAt<=.30
+        local held=self.combatInput.held
+        if not eligible or not connected or not self.leftHoldIntent or self.leftHoldAwaitFresh then
+            if held and held.source=="desktop" then self.combatInput:release("M3",now) end
+            if not connected or not eligible then self.leftHoldAwaitFresh=true end
+            if ready then
+                self.leftHoldReason=not eligible and "gameplay input unavailable"
+                    or not connected and "waiting for desktop helper"
+                    or self.leftHoldAwaitFresh and "waiting for fresh physical press" or "ready"
+            end
+            return
+        end
+        if not held then
+            if self:startMiddle(s,now,nil) and self.combatInput.held then
+                self.combatInput.held.source="desktop"
+                self.ledger:event("desktop_left_hold_started",now)
+            end
+            held=self.combatInput.held
+        end
+        if held and held.source=="desktop" then
+            s.middleHeld=true
+            self.leftHoldReason=self.leftHoldRawPrimary and "game still reports primary down" or "desktop hold active"
+        end
+    end
     function h:startMiddle(s,now,input)
         -- A real middle press does not activate a primary-click GUI control.
         -- Only actual menu/text/focus/lifecycle ownership gates the hold.
@@ -522,6 +620,7 @@ function Controller.new(M,bridge,options)
     function h:input(input,processed)
         local kind,key = input.UserInputType,input.KeyCode
         if bridge.holdBinding=="M3" and kind==Enum.UserInputType.MouseButton3 then
+            if self.leftHoldBridge then return end
             -- Camera processing alone is not a gameplay veto. UI/menu/text checks
             -- in startMiddle still reject consumed control clicks.
             self.middlePollDown=true;self.middlePollArmed=false
@@ -600,6 +699,7 @@ function Controller.new(M,bridge,options)
         if self.closed or not self.active then return end
         local kind,key=input.UserInputType,input.KeyCode
         if kind==Enum.UserInputType.MouseButton3 and bridge.holdBinding=="M3" then
+            if self.leftHoldBridge then return end
             self.middlePollArmed=false
             self.combatInput:release("M3",bridge.clock())
             return
@@ -1220,7 +1320,7 @@ function Controller.new(M,bridge,options)
             self.physicalM1Input=nil
             self.combatInput:cancel()
         end
-        if bridge.holdBinding=="M3" and s.middleHeldKnown then
+        if bridge.holdBinding=="M3" and not self.leftHoldBridge and s.middleHeldKnown then
             if not s.middleHeld then self.middlePollArmed=true
             elseif self.middlePollArmed and not self.middlePollDown then
                 self.middlePollArmed=false
@@ -1246,6 +1346,7 @@ function Controller.new(M,bridge,options)
             end
             s.physicalM1Held=self.physicalM1Input~=nil or (s.mouseHeld and not bridge.syntheticM1)
         end
+        self:desktopHoldTick(s,now,critical)
         if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held,s.middleHeld=false,false,false,false
         elseif bridge.holdBinding=="M3" and self.combatInput.held and self.combatInput.held.key=="M3" then s.attackHeld=true end
         self.snapshot = s
@@ -1453,7 +1554,7 @@ function Controller.new(M,bridge,options)
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,
             function() self.feeding:close(bridge.clock()) end,
-            function() self.combatInput:cancel();self.rescue:cancel() end,
+            function() self:disarmDesktopHold(bridge.clock());self.combatInput:cancel();self.rescue:cancel() end,
             function() self.hippo:close();bridge.predictionActive=nil end,
             function() self.tests:close() end,
             function() bridge:closeNativeScan() end,
