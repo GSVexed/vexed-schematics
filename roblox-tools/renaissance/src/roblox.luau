@@ -1097,6 +1097,11 @@ function Roblox.new(Core, environment)
             if padOK and padHeld==true then s.r2Held=true;break end
         end
         s.attackHeld=s.mouseHeld or s.r2Held
+        -- ALT is a separate real held key; synthetic M1 ups cannot release it.
+        local altKnown,altDown=pcall(self.UserInputService.IsKeyDown,
+            self.UserInputService,Enum.KeyCode.LeftAlt)
+        s.altBiteKnown=altKnown
+        s.altBiteHeld=altKnown and altDown==true
         local velocity = root.AssemblyLinearVelocity
         s.moving = hum.MoveDirection.Magnitude > .13 or Vector3.new(velocity.X,0,velocity.Z).Magnitude >= 2
         local clamp = char:FindFirstChild("FeralClamp")
@@ -1687,7 +1692,7 @@ function Roblox.new(Core, environment)
             return Enum.ContextActionResult.Pass
         end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.ButtonY,Enum.KeyCode.Z,Enum.KeyCode.X,
             Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
-            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
+            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.LeftAlt,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
             Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
         scope:add(function() self.ContextActionService:UnbindAction(actionName) end)
         connect(self.UserInputService.JumpRequest,function() hub:requestFlight() end)

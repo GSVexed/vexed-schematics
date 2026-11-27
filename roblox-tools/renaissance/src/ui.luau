@@ -144,7 +144,7 @@ function UI.mount(hub, bridge, scope)
             info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
         elseif u.tab == "Combat" then
             row("reach",0);row("biteHelper",57);row("attackSpeed",114);row("holdBite",171);row("autoBite",228)
-            info(285,"HOLD LEFT MOUSE","Hold normal left mouse button to repeat via the original game's native callback. Faster Bites adjusts attempted pacing, while server/native attack limits remain in force. No synthetic mouse replay.",70)
+            info(285,"HOLD LEFT ALT TO BITE","Hold LEFT ALT (not left mouse) for repeating bites. Normal left-click remains a normal attack. Faster Bites also applies to repeat scheduling. Minigames take priority; original game limits still apply.",85)
             u.combatReadout = info(365,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Hippo" then
             info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)

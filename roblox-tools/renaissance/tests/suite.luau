@@ -2237,7 +2237,10 @@ test("private WolfController never creates repeated or synthetic M1 attacks",fun
     eq(w.nativeBites,initial)
     eq(w.virtualBiteCalls,nil)
     assert(h.combatInput.held~=nil,"physical mouse hold should survive discovery")
-    eq(h.registry.byId.holdBite.applied,false)
+    -- The private callback is now PARTIAL because Alt-input fallback is
+    -- offered. M1 remains native-only and must not synthesize any clicks.
+    eq(h.registry.byId.holdBite.applied,true)
+    assert(h.registry.byId.holdBite.reason:find("Left Alt",1,true))
     w.held=nil;w.uis.InputEnded:Fire(original)
     w:advance(.9);eq(w.nativeBites,initial)
     eq(h.ledger.counts.attack_intent,1)
