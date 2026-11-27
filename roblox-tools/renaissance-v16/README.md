@@ -1,15 +1,15 @@
-# FERAL Renaissance 16.4.0-rc1
+# FERAL Renaissance 16.4.1-exp1
 
-Build 2415 compatibility and input reliability candidate, recovered from the complete 16.3.2 release.
+Build 2415 endurance movement experiment based on the complete 16.4.0-rc1 candidate. It retains all prior features and adds an independent switch for locally requested sprint pace during fatigue. The old stamina drain control remains under the accurate name **Local Stamina Conservation**.
 
-The versioned loader is published and pins an immutable source commit. The candidate passes 230 Luau cases and the Windows helper's 10,000-cycle state test. The helper is installed with a rollback copy. Live gameplay remains unverified because the passive executor observations returned no confirmed receipt. The floating production loader and earlier pinned launchers are unchanged. See [release instructions](docs/RELEASE.md) for the actual launcher and rollback.
+The source and loader pin an immutable commit once published. Offline tests cover movement guards and cleanup along with the earlier combat and helper regressions. The installed Windows helper is retained. Other-player visibility, server acceptance and actual infinite stamina remain unverified. The floating production loader and earlier pinned launchers are unchanged. See [experiment instructions](docs/RELEASE.md) for the launcher and rollback.
 
 - [Investigation](docs/INVESTIGATION.md)
 - [Complete feature matrix](docs/FEATURE_MATRIX.md)
 - [Per-module compatibility and all 19 legacy checks](docs/compatibility.json)
 - [Source recovery and unchanged-module evidence](docs/source-recovery.json)
 - [Automated Luau test results](test-results.json)
-- [CI, installation and passive observation receipts](docs/verification.json)
+- [Experiment verification](docs/ENDURANCE_VERIFICATION.json) and [previous candidate receipts](docs/verification.json)
 - [Release and rollback instructions](docs/RELEASE.md)
 
 The helper's `--self-test` checks its Windows input ABI and the actual hold-state implementation without installing hooks or generating input. `install.ps1` compiles with the machine's existing .NET Framework compiler, saves the previous helper and starts the on-demand task in the already active desktop. No boot/logon trigger is added. Ctrl+Alt+F12 pauses the helper.

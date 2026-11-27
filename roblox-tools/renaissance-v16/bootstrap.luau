@@ -1,4 +1,4 @@
-local moduleOrder = {"core","compat","settings","policy","grab","grab_input","recovery","feeding","combat_input","rescue","hippo","features","roblox","zoom","voice","test_features","ui","controller","amber_ledger","amber_model","amber_planner","amber_gait","amber_nav","amber_hunt","amber_care","amber_agent","amber_bridge","amber_driver","amber_ui","amber_runtime"}
+local moduleOrder = {"core","compat","settings","policy","grab","grab_input","recovery","feeding","combat_input","rescue","hippo","features","endurance","roblox","zoom","voice","test_features","ui","controller","amber_ledger","amber_model","amber_planner","amber_gait","amber_nav","amber_hunt","amber_care","amber_agent","amber_bridge","amber_driver","amber_ui","amber_runtime"}
 local M = {}
 for _, name in ipairs(moduleOrder) do
     local fn, why = loadstring(sources[name], "=Renaissance/" .. name)
@@ -10,13 +10,13 @@ end
 for _, pair in ipairs({
     {"core","scope"},{"core","leases"},{"settings","sanitize"},{"policy","new"},
     {"grab","new"},{"grab_input","new"},{"recovery","new"},{"feeding","new"},{"combat_input","new"},{"rescue","new"},{"features","new"},{"roblox","new"},
-    {"zoom","new"},{"voice","new"},{"ui","mount"},{"controller","new"},
+    {"endurance","new"},{"zoom","new"},{"voice","new"},{"ui","mount"},{"controller","new"},
     {"hippo","new"},{"test_features","new"},
 }) do
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
 M.core.compat=M.compat
-M.release = {version="@VERSION@",territoryVersion="0.8.0",channel="release-candidate",sourceFingerprint="@FINGERPRINT@"}
+M.release = {version="@VERSION@",territoryVersion="0.8.0",channel="experiment",sourceFingerprint="@FINGERPRINT@"}
 if options.inspect then return M end
 if game.PlaceId ~= 108901361810209 then error("Open FERAL Animal Survival",0) end
 local env = type(getgenv) == "function" and getgenv() or _G

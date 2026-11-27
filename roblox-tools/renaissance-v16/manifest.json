@@ -1,18 +1,18 @@
 {
-  "version": "16.4.0-rc1",
+  "version": "16.4.1-exp1",
   "channel": "release-candidate",
   "source_baseline": 2412,
   "audited_captures": [
     2412,
     2415
   ],
-  "bundle_bytes": 620644,
-  "bundle_sha256": "4a25b0a6970bf0f0bf0114a70aa186bd7d11f1f276e2e81b596f7832ddda5a15",
-  "source_fingerprint": "f75dabeff583e4af999c67ad57cc10d8e3cf8745d046f7da35dccb7de2696f58",
+  "bundle_bytes": 628533,
+  "bundle_sha256": "4e54f333cb5870e94f2ce4e0110238baa2548f02972f85cc625d63fcae2c1e3e",
+  "source_fingerprint": "057bcad3410d8c60b7d6658041f637e92feb640fe681d9eaa508b66073e01deb",
   "modules": {
     "core": {
-      "bytes": 13126,
-      "sha256": "29e334c516155a98db05523af2dd3a7e267323b025a4d5d460bb61b76ad6894d"
+      "bytes": 13358,
+      "sha256": "090c9126c9dc7b4c064d8343cb70c31797364ae558c771a00fc19cb0067ddc22"
     },
     "compat": {
       "bytes": 2620,
@@ -58,6 +58,10 @@
       "bytes": 34312,
       "sha256": "cd52e4cb0ca358096677f728f6c4ba725d3c6941c136b34fe8c59bbdcc188fe4"
     },
+    "endurance": {
+      "bytes": 6810,
+      "sha256": "581e07fbf5bae21425cf1397ff7244d7b00ff2f19dc54775dfb1447904fa3ad9"
+    },
     "roblox": {
       "bytes": 118665,
       "sha256": "0ac89b83648ade5099fbefc3ceed279a3fc962a207d196be0c7f24cc7f932b0e"
@@ -75,12 +79,12 @@
       "sha256": "31c86dc5e4faeaca5f35008e72a910d6c7a56b43eab8c68d1e2cef035293e1cf"
     },
     "ui": {
-      "bytes": 23573,
-      "sha256": "546cc64cd3f7aab060d6997946e4630497c6d82329e87c552de51123b6482c91"
+      "bytes": 23555,
+      "sha256": "953dc4608a47df8181321d300b57896529f0e8bc8cbad581a378fff2aa3427f4"
     },
     "controller": {
-      "bytes": 95762,
-      "sha256": "4f79f09f05a525069c6495c8f7371d087eae853ae6c224b06e0fa73fe4ad08ed"
+      "bytes": 96540,
+      "sha256": "04e3e61d562afd64d38f3de2aaa406e5e8023cceafc0cd5345ece28cfcc1ab18"
     },
     "amber_ledger": {
       "bytes": 4302,
@@ -133,44 +137,46 @@
   },
   "chunks": [
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-01.lua",
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-01.lua",
       "bytes": 93000,
-      "sha256": "ef7ed3e1bb16788f08fa6fc16ef18135c2bc2d8b35f85851bc838a483149c92a"
+      "sha256": "81b76e7ef858e0ec59de7471331af8c572addc5683637a2492739ea39fb2c871"
     },
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-02.lua",
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-02.lua",
       "bytes": 93000,
-      "sha256": "40fe2b81b1c0f63bb817585c86931fe850885b9aad7ca69e7701eb5e1df463f9"
+      "sha256": "32b5e319487e36d0a8684324573f347c90f900b2dd130edb72fc558756ccf4f7"
     },
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-03.lua",
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-03.lua",
       "bytes": 93000,
-      "sha256": "ea37c7aee54dafc3e3c42c546ffcc49fdc56ab785858217cbcc9ed13ec68889c"
+      "sha256": "e04af50f0b6cf271b96a532fa5ae482651c2cd4384cee92cc295c6275f74fdd5"
     },
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-04.lua",
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-04.lua",
       "bytes": 93000,
-      "sha256": "ea86f24785c960ee66488ffc2a12dd2df728e141d8e9e32c5851b69dd737a238"
+      "sha256": "ed7e4efecbaca4c5b67943411ba1ca8ddf6352bdba87dff567f6f9b1bce79e80"
     },
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-05.lua",
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-05.lua",
       "bytes": 93000,
-      "sha256": "285ca5b9ae99011c8d5ade8f608caedd889ef139250b8846fcc7efbd0c947c92"
+      "sha256": "9a2ff793085fb031eb27814f9107d47d8e303400a2dbd02c10b7202c23454e84"
     },
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-06.lua",
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-06.lua",
       "bytes": 93000,
-      "sha256": "83cf003d3df24d4a6a77f5ec5ca97c56fd337313190f36d52fb918d787d93343"
+      "sha256": "1901b39e736037f58e1c092c87c035abad051284c3e7be8abc6f5058af0df959"
     },
     {
-      "path": "roblox-tools/renaissance-v16/chunks/16.4.0-rc1/part-07.lua",
-      "bytes": 62644,
-      "sha256": "782a59a15e4588a72f8acf0b12bf2b461cf2d6557045dc689ece1ea2b4f3da6b"
+      "path": "roblox-tools/renaissance-v16/chunks/16.4.1-exp1/part-07.lua",
+      "bytes": 70533,
+      "sha256": "214001d45bfe68d10bd2517ab8e080a238ca0d1c7598faea642f265ef908b3dd"
     }
   ],
   "rollback_protected": {
     "feral-renaissance-v16.3.2.lua": "2ff67bdc354de536eb3085828414709542c9da38c1e42b50f0fdc85052ab0ec8",
-    "feral-renaissance-v16.3.2-loader.lua": "461d5ed28249bbb68b24f8caac75404208d8a7904810c22d143ad8e92c9580e5"
+    "feral-renaissance-v16.3.2-loader.lua": "461d5ed28249bbb68b24f8caac75404208d8a7904810c22d143ad8e92c9580e5",
+    "feral-renaissance-v16.4.0-rc1.lua": "4a25b0a6970bf0f0bf0114a70aa186bd7d11f1f276e2e81b596f7832ddda5a15",
+    "feral-renaissance-v16.4.0-rc1-loader.lua": "90c85df32266b1f1733193015ed48e8d67150be4df5f693fc2e56635949b5867"
   },
   "live_gameplay_verified": false
 }

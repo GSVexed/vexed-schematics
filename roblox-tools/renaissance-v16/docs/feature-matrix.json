@@ -1,12 +1,12 @@
 {
-  "version": "16.4.0-rc1",
+  "version": "16.4.1-exp1",
   "features": [
     {
       "id": "stamina",
-      "feature": "Infinite Stamina",
+      "feature": "Local Stamina Conservation",
       "group": "Survival",
-      "status": "partial client support",
-      "evidence_and_limits": "Native local drain leases retained; Studio-only debug flag skipped on 2415; server fatigue and ability costs respected.",
+      "status": "partial client support; no infinite stamina claim",
+      "evidence_and_limits": "Existing reversible local drain leases retained; 2415 debug flag remains Studio-only. Server fatigue and ability costs remain native.",
       "offline_compiled": true,
       "live_gameplay_verified": false
     },
@@ -151,6 +151,15 @@
       "group": "Movement",
       "status": "preserved; gameplay pending",
       "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "enduranceMove",
+      "feature": "Endurance Movement (experimental)",
+      "group": "Movement",
+      "status": "local request; other-player view unverified",
+      "evidence_and_limits": "Samples a healthy native sprint on build 2415; requests that local WalkSpeed during ground fatigue with held Left Shift. Pauses for native no-sprint, actions, menus, focus, displacement or ineffective movement; restores only its own value. No server stamina edit or peer replication proof.",
       "offline_compiled": true,
       "live_gameplay_verified": false
     },

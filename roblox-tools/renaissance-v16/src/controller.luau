@@ -61,6 +61,7 @@ function Controller.new(M,bridge,options)
         if not feature.permanent and not feature.linked then h.registry:request(feature.id,h.settings.states[feature.id]) end
     end
     h.features = M.features.new(Core,bridge,h.registry)
+    h.endurance = M.endurance.new(Core,bridge)
     h.grab = M.grab.new()
     h.grabInput = M.grab_input.new(bridge,h.token)
     h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
@@ -138,6 +139,7 @@ function Controller.new(M,bridge,options)
         self.combatInput:cancel()
         self:disarmDesktopHold(bridge.clock())
         self:stopWalk("window focus changed")
+        if not focused then self.endurance:reset() end
     end
     function h:observeCombatAbility(s,now)
         if not s.alive then return end
@@ -301,6 +303,7 @@ function Controller.new(M,bridge,options)
             self:disarmDesktopHold(now)
         end
         if id=="attackSpeed" then bridge.biteTiming=nil;self.combatInput.nextAttempt=0;self.combatInput:resetRate() end
+        if id=="enduranceMove" then self.endurance:setEnabled(on) end
         if id=="voice" then self.voice:setEnabled(on) end
         self.features.nextReconcile = 0
         local s = bridge:snapshot(now,false)
@@ -317,6 +320,7 @@ function Controller.new(M,bridge,options)
     function h:characterChanged(generation)
         local now = bridge.clock()
         bridge:paintHippoGait(nil)
+        self.endurance:reset()
         self.recovery:release("animal changed",now)
         self.recovery:clearPose()
         self.recovery.lastAutomaticCharacter,self.recovery.previous = nil,nil
@@ -1100,6 +1104,10 @@ function Controller.new(M,bridge,options)
     end
     function h:ackLocal(s)
         local r = self.registry
+        local endurance=r.byId.enduranceMove
+        r:ack("enduranceMove",endurance.requested,endurance.requested and "PARTIAL" or "OFF",
+            endurance.requested and self.endurance.status.." · server acceptance unverified" or endurance.detail,
+            {localSpeed=self.endurance.observedSpeed,peerVerified=false,corrections=self.endurance.corrections})
         local zoom=r.byId.zoom
         local zoomApplied=self.zoom:set(self.active and zoom.requested)
         r:ack("zoom",zoomApplied,not zoom.requested and "OFF" or zoomApplied and "CLIENT" or "UNAVAILABLE",self.zoom.reason)
@@ -1595,6 +1603,7 @@ function Controller.new(M,bridge,options)
             bridge:refreshGuide(self.snapshot,self.features.originalCombat,self.features.combat,self.guide)
         end
         self.features:paintHippoGait()
+        self.endurance:render(self.snapshot,bridge.clock(),self.windowFocused)
         self.ui:render(dt,bridge.clock())
         self.recovery:afterAnimationFrame(bridge.clock())
     end
@@ -1619,6 +1628,7 @@ function Controller.new(M,bridge,options)
         assert(self.ready and not self.closed,"candidate not staged")
         self.ui:activate()
         self.active = true
+        self.endurance:setEnabled(self.registry.byId.enduranceMove.requested)
         self.zoom:set(self.registry.byId.zoom.requested)
         -- The earlier stand-alone trial must not apply a second attenuation scale.
         -- Automatically retire it before the integrated owner starts.
@@ -1643,6 +1653,7 @@ function Controller.new(M,bridge,options)
             function() if self.territory then self.territory.close() end end,
             function() self.zoom:close() end,
             function() self.voice:close() end,
+            function() self.endurance:close() end,
             function() self:cancelGrabWake() end,
             function() self.recovery:close(bridge.clock()) end,
             function() self.grabInput:close() end,

@@ -144,7 +144,7 @@ function UI.mount(hub, bridge, scope)
             info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
         elseif u.tab == "Combat" then
             row("reach",0);row("biteHelper",57);row("attackSpeed",114);row("holdBite",171);row("autoBite",228)
-            info(285,"NATIVE HOLD BITE","Tap and manual spam normally. Hold the same left mouse button for 0.28s to repeat using original WolfController callbacks. No synthetic mouse clicks. Faster Bites scheduling stays ON; WAITING means game handler inaccessible.",85)
+            info(285,"HOLD TO BITE","Tap normally. With the installed Windows helper, hold left mouse for 0.18s to repeat. The hub pauses for native menus, offers and minigames; source and safe input backend determine availability.",85)
             u.combatReadout = info(365,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Hippo" then
             info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)
@@ -197,7 +197,7 @@ function UI.mount(hub, bridge, scope)
         else
             local order = u.tab == "Survival"
                 and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
-                or {"climb","flight","mobility","speed","leap","zoom"}
+                or {"climb","flight","mobility","speed","enduranceMove","leap","zoom"}
             for i,id in ipairs(order) do row(id,(i-1)*57) end
         end
         for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end

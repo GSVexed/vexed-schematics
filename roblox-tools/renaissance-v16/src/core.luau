@@ -109,7 +109,7 @@ function Core.leases()
 end
 
 Core.specs = {
-    { "stamina", "Survival", "Infinite Stamina", "Client consumption profile; gameplay unverified" },
+    { "stamina", "Survival", "Local Stamina Conservation", "Reversible local drain/regen profile; server fatigue and ability costs remain native" },
     { "recovery", "Survival", "Active Recovery + Fast Effects", "On by default; native effects unverified", default = true },
     { "effects", "Survival", "Fast Negative-Effect Recovery", "Injury, bleed and venom measured separately", linked = "recovery" },
     { "robloxAFK", "Survival", "Roblox Anti-AFK", "Best-effort platform idle input" },
@@ -126,6 +126,7 @@ Core.specs = {
     { "flight", "Movement", "Flight Assistance", "Surface takeoff assistance; no underwater flight" },
     { "mobility", "Movement", "Movement Assistance", "Reversible local injury slowdown inputs" },
     { "speed", "Movement", "Speed Assistance", "1.15x local land and swimming inputs" },
+    { "enduranceMove", "Movement", "Endurance Movement (experimental)", "Attempts native-sampled sprint pace on land while tired; other-player visibility unverified", default = true },
     { "leap", "Movement", "Jump / Leap Assistance", "1.15x local leap inputs; native exclusions retained" },
     { "zoom", "Movement", "Zoom Unlock", "Normal mouse-wheel zoom, from close-up to a distant view", default = true },
     { "esp", "Vision", "Outline ESP", "Hollow outlines for replicated characters" },

@@ -55,7 +55,7 @@ function Mock.new()
         local o = {_props={ClassName=class,Name=class,Visible=true,Enabled=true,Active=true,Interactable=true,Text="",
             AbsolutePosition=V2.new(0,0),AbsoluteSize=V2.new(704,505),
             Size=V3.new(2,2,4),Position=V3.new(0,3,0),Health=100,MaxHealth=100,
-            HipHeight=1,MoveDirection=V3.new(),AssemblyLinearVelocity=V3.new(),
+            HipHeight=1,WalkSpeed=16,MoveDirection=V3.new(),AssemblyLinearVelocity=V3.new(),
             FloorMaterial=enum.Material.Grass,CFrame={LookVector=V3.new(0,0,-1),UpVector=V3.new(0,1,0)}},
             _children={},_attrs={},_signals={},_destroyed=false}
         setmetatable(o,{

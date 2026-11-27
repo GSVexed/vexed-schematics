@@ -1,10 +1,10 @@
-# FERAL Renaissance 16.4.0-rc1 feature matrix
+# FERAL Renaissance 16.4.1-exp1 feature matrix
 
-All 28 registry entries and integrated Territory remain present. Offline simulations do not establish live server outcomes.
+All 29 registry entries and integrated Territory remain present. Offline simulations do not establish live server outcomes.
 
 | Feature | Status | Evidence and limits |
 |---|---|---|
-| Infinite Stamina | partial client support | Native local drain leases retained; Studio-only debug flag skipped on 2415; server fatigue and ability costs respected. |
+| Local Stamina Conservation | partial client support | Reversible local drain controls retained; server fatigue and ability costs remain native. |
 | Active Recovery + Fast Effects | preserved; gameplay pending | Native Rest/effect signaling retained; HP and condition progress remain observations, with no fabricated multiplier success. |
 | Fast Negative-Effect Recovery | preserved; gameplay pending | Native Rest/effect signaling retained; HP and condition progress remain observations, with no fabricated multiplier success. |
 | Roblox Anti-AFK | preserved; gameplay pending | existing behavior retained; full source compiled |
@@ -21,6 +21,7 @@ All 28 registry entries and integrated Territory remain present. Offline simulat
 | Flight Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Movement Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Speed Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
+| Endurance Movement (experimental) | local request; peer view unverified | Healthy native sprint sampled on 2415; guarded local WalkSpeed request only while exhausted on land. Does not change server stamina; backs off and restores its own value. |
 | Jump / Leap Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Zoom Unlock | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Outline ESP | preserved; gameplay pending | existing behavior retained; full source compiled |

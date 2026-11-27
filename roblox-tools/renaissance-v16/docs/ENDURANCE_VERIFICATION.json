@@ -1,0 +1,19 @@
+{
+  "schema": "FERAL_ENDURANCE_EXPERIMENT_V1",
+  "version": "16.4.1-exp1",
+  "branch": "renaissance/v2415-endurance-exp1",
+  "base_release": "16.4.0-rc1",
+  "audited_game_build": 2415,
+  "source_commit": null,
+  "loader_commit": null,
+  "source_sha256": null,
+  "local_luau": {"total": 229, "passed": 229, "failed": 0},
+  "hosted_luau": null,
+  "loader_tests": null,
+  "windows_helper_changed": false,
+  "helper_baseline_cycle_tests": 10000,
+  "live_gameplay_verified": false,
+  "other_client_movement_verified": false,
+  "server_stamina_verified_unlimited": false,
+  "notes": "Reversible own-character WalkSpeed request; guarded 2415 only. The prior installed helper and its historical CI results are retained separately."
+}
