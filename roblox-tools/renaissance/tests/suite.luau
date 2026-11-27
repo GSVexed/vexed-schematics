@@ -3069,7 +3069,7 @@ test("M3 fallback recovers a stale physical M1 owner without another press",func
     count=w.virtualBiteDowns;w:advance(1);eq(w.virtualBiteDowns,count)
     h:close()
 end)
-test("M3 switches to guarded ordinary input when a native callback becomes silent",function()
+test("M3 verified native route never switches to ordinary input after silence",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions();w.virtualBiteAvailable=true
@@ -3079,12 +3079,54 @@ test("M3 switches to guarded ordinary input when a native callback becomes silen
     w:advance(2)
     local count=w.nativeBites or 0
     assert(count>=2 and h.bridge.wolfActions and h.bridge.wolfActions.tryBite)
+    eq(h.combatInput.middleRoute,"NATIVE")
+    local original=h.bridge.wolfActions.tryBite
     h.bridge.wolfActions.tryBite=function()end
     w:advance(7)
-    assert((w.virtualBiteDowns or 0)>0,"silent native callback starved fallback")
-    assert(w.nativeBites>count,"ordinary input did not restore native bite markers")
+    eq(w.virtualBiteDowns or 0,0)
+    eq(h.combatInput.middleRoute,"NATIVE")
+    eq(w.nativeBites,count)
+    h.bridge.wolfActions.tryBite=original
+    w:advance(4)
+    assert(w.nativeBites>count,"same verified native route must resume after recovery")
+    eq(w.virtualBiteDowns or 0,0)
+    eq(h.tests:report().middleRepeat.route,"NATIVE")
     w.held=nil;w.uis.InputEnded:Fire(press)
     count=w.nativeBites;w:advance(1);eq(w.nativeBites,count)
+    h:close()
+end)
+
+test("M3 unverified silent native route can select ordinary input once",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    local original=h.bridge.wolfActions.tryBite
+    h.bridge.wolfActions.tryBite=function()end
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(8)
+    eq(h.combatInput.middleRoute,"INPUT")
+    assert((w.virtualBiteDowns or 0)>0 and (w.nativeBites or 0)>0)
+    eq(h.bridge.heldInputLockedBackend,"VIRTUAL_MOUSE")
+    local attempts=h.combatInput.middleNativeAttempts
+    h.bridge.wolfActions.tryBite=original
+    w:advance(15)
+    eq(h.combatInput.middleNativeAttempts,attempts)
+    eq(h.combatInput.middleRoute,"INPUT")
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    local count=w.nativeBites
+    w:advance(.9);eq(w.nativeBites,count)
+    w.held=E.UserInputType.MouseButton3
+    press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(2)
+    eq(h.combatInput.middleRoute,"INPUT")
+    eq(h.combatInput.middleNativeAttempts,attempts)
+    assert(w.nativeBites>count)
+    local report=h.tests:report().middleRepeat
+    eq(report.route,"INPUT");eq(report.adapter,"VIRTUAL_MOUSE")
+    assert(report.attributableMarkers>0)
     h:close()
 end)
 

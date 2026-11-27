@@ -791,6 +791,7 @@ function Roblox.new(Core, environment)
     -- missing markers even though a backend is still functioning.
     function b:noteHeldInputTimeout()
         self.heldInputMisses=(self.heldInputMisses or 0)+1
+        if self.holdBinding=="M3" and self.heldInputLockedBackend then return end
         local count=self.heldInputModes or 1
         if count<=1 then return end
         local verified=self.heldInputVerifiedIndex
@@ -901,7 +902,13 @@ function Roblox.new(Core, environment)
             self.heldInputVerifiedIndex,self.heldInputProbeLeft=nil,nil
         end
         local index=self.heldInputIndex or 1
-        if index>#modes then index=1 end
+        if independent and self.heldInputLockedBackend then
+            index=nil
+            for i,mode in ipairs(modes) do
+                if mode.name==self.heldInputLockedBackend then index=i;break end
+            end
+            if not index then return false end
+        elseif index>#modes then index=1 end
         self.heldInputIndex=index
         local mode=modes[index]
         local down,up,backend=mode.down,mode.up,mode.name

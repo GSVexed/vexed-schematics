@@ -10,7 +10,8 @@ function CombatInput.new(bridge,policy,ledger)
         status="native input", fallbackMisses=0, unavailableUntil=0,
         speedFactor=.62, goodStreak=0, suspectStreak=0,
         lastRateChange=-math.huge, lastMarker=nil, lastDispatch=0,
-        nativeMisses=0,nativeRetryAt=0,
+        nativeMisses=0,middleCandidate=nil,middleRoute=nil,
+        middleRouteMarkers=0,middleNativeAttempts=0,middleInputAttempts=0,
     }
     local function stopDiscovery()
         bridge.wantHeldNativeDiscovery=false
@@ -72,14 +73,54 @@ function CombatInput.new(bridge,policy,ledger)
         self.nextAttempt=math.max(self.nextAttempt,now+.20)
         self.status=reason.." · middle hold retained"
     end
+    -- Selection is allowed only until the first attributable bite marker.
+    -- Once verified, one route owns every M3 hold for this hub session.
     function c:noteNativeMiss(now)
         if not middleMode or not self.held or self.held.key~="M3" then return end
-        self.nativeMisses+=1
+        self.nativeMisses=math.min(3,self.nativeMisses+1)
         if self.nativeMisses>=3 then
-            self.nativeRetryAt=now+12
-            self.nativeMisses=2
-            ledger:event("m3_native_callback_backoff",now)
+            if not self.middleRoute and self.middleCandidate=="NATIVE"
+                and type(bridge.hasHeldInputBackend)=="function" and bridge:hasHeldInputBackend() then
+                self.middleCandidate="INPUT"
+                stopDiscovery()
+                ledger:event("m3_initial_route_probe_changed",now,{route="INPUT"})
+            else
+                -- A verified route may pause but never hands off to another method.
+                self.nextAttempt=math.max(self.nextAttempt,now+.4)
+            end
         end
+    end
+    function c:manualAttack(now)
+        if middleMode and self.awaiting and self.awaiting.middle then
+            self.awaiting=nil
+            self.nextAttempt=math.max(self.nextAttempt,now+.12)
+        end
+    end
+    function c:confirmMiddleRoute(waiting,s,now)
+        if not middleMode or not waiting or not waiting.middle or not self.held
+            or self.held.key~="M3" or self.held.char~=s.char
+            or self.held.generation~=s.generation or waiting.char~=s.char
+            or waiting.generation~=s.generation then return end
+        local route=waiting.backend
+        if route~="NATIVE" and route~="INPUT" then return end
+        if route=="NATIVE" and (s.mouseHeld or s.r2Held) then return end
+        if route=="INPUT" and not bridge.heldInputBackend then return end
+        if self.middleRoute and self.middleRoute~=route then return end
+        if not self.middleRoute then
+            self.middleRoute,self.middleCandidate=route,route
+            self.middleVerifiedAt=now
+            if route=="INPUT" then bridge.heldInputLockedBackend=bridge.heldInputBackend end
+            ledger:event("m3_route_verified_and_locked",now,{route=route,adapter=bridge.heldInputLockedBackend})
+        end
+        self.middleRouteMarkers+=1
+    end
+    function c:middleReport()
+        return {binding=middleMode and "M3" or "M1",route=self.middleRoute,
+            candidate=self.middleCandidate,verifiedAt=self.middleVerifiedAt,
+            attributableMarkers=self.middleRouteMarkers,nativeAttempts=self.middleNativeAttempts,
+            inputAttempts=self.middleInputAttempts,adapter=bridge.heldInputLockedBackend,
+            held=self.held~=nil,status=self.status,
+            serverDamageVerified=false}
     end
     function c:release(kind,now)
         if self.held and (kind==nil or self.held.key==kind or self.held.key=="poll") then
@@ -94,8 +135,11 @@ function CombatInput.new(bridge,policy,ledger)
         end
     end
     function c:marker(s,now)
-        if self.awaiting and self.awaiting.backend=="NATIVE" then self.nativeMisses,self.nativeRetryAt=0,0 end
-        if self.awaiting and self.awaiting.backend=="INPUT"
+        local waiting=self.awaiting
+        if waiting and waiting.backend=="NATIVE" then self.nativeMisses=0 end
+        self:confirmMiddleRoute(waiting,s,now)
+        if waiting and waiting.backend=="INPUT"
+            and (not middleMode or self.middleRoute=="INPUT")
             and type(bridge.noteHeldInputMarker)=="function" then
             bridge:noteHeldInputMarker()
         end
@@ -114,7 +158,7 @@ function CombatInput.new(bridge,policy,ledger)
                     and self.held.generation==s.generation then return end
                 self.held={char=s.char,generation=s.generation,key="M3",
                     source="event",input=inputObject,startedAt=now,handoff=true}
-                self.nativeMisses,self.nativeRetryAt,self.fallbackMisses,self.unavailableUntil=0,0,0,0
+                self.nativeMisses,self.fallbackMisses,self.unavailableUntil=0,0,0
                 self.nextAttempt=math.max(self.nextAttempt,now+.025)
                 self.status="middle mouse held"
                 ledger:event("physical_m3_hold_started",now)
@@ -195,6 +239,7 @@ function CombatInput.new(bridge,policy,ledger)
         local inGrab=s.grab==true or options.minigameBusy==true
         local nativeGrabLane=inGrab and options.nativeMinigame==true
             and self.held~=nil and (self.held.key=="M3" or self.held.key=="M1" or self.held.key=="poll")
+            and (not middleMode or (self.middleRoute or self.middleCandidate)~="INPUT")
             and options.minigamePressNear~=true
             and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"
         if not s.alive or s.chat or s.gameMenu or inGrab and not nativeGrabLane
@@ -264,13 +309,36 @@ function CombatInput.new(bridge,policy,ledger)
             return
         end
         if now<self.nextAttempt or p and now<p.at or now<self.unavailableUntil then return end
-        if held and not (bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function")
+        local middleHeld=middleMode and held and self.held.key=="M3"
+        if held and (not middleHeld or (self.middleRoute or self.middleCandidate)~="INPUT")
+            and not (bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function")
             and type(bridge.nativeWolfActions)=="function" then
             -- The input-event connection path may be unavailable in the
             -- executor's VM even when the original WolfController closure is
             -- discoverable via getgc. Request validation only while held.
             bridge.wantHeldNativeDiscovery=true
             bridge:nativeWolfActions(now)
+        end
+        local route
+        if middleHeld then
+            route=self.middleRoute or self.middleCandidate
+            if not route then
+                if bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function" then
+                    route="NATIVE"
+                elseif not inGrab and type(bridge.hasHeldInputBackend)=="function"
+                    and bridge:hasHeldInputBackend() then
+                    route="INPUT"
+                end
+                if route then
+                    self.middleCandidate=route
+                    ledger:event("m3_initial_route_selected",now,{route=route})
+                end
+            end
+            if not route then
+                self.status="middle held; waiting for a supported attack route"
+                self.nextAttempt=now+.15
+                return
+            end
         end
         local readiness=bridge:biteReadiness(s,now,policy)
         local allowed=readiness.ready
@@ -286,7 +354,7 @@ function CombatInput.new(bridge,policy,ledger)
             -- original onInput fallback remains gated by the visible stock
             -- bite cooldown and a genuine original M1 InputObject.
             local original=bridge.wolfActions and bridge.wolfActions.tryBite
-            if type(original)=="function" and (not inGrab or nativeGrabLane) then
+            if type(original)=="function" and route~="INPUT" and (not inGrab or nativeGrabLane) then
                 allowed=true
             elseif not inGrab and self.held and ((self.held.key=="M1" and self.held.input)
                 or middleMode and self.held.key=="M3") then
@@ -309,26 +377,23 @@ function CombatInput.new(bridge,policy,ledger)
                 return
             end
         end
-        -- One attack engine, two original-game entrypoints:
-        -- validated tryBite, or WolfController's own already-installed
-        -- InputBegan callback with the original held M1 InputObject.
-        -- No simulated mouse Up/Down/Up is ever dispatched here.
+        -- A chosen M3 route remains exclusive. Native/manual compatibility
+        -- and the separate Auto Bite feature keep their original dispatch.
         local native=bridge.wolfActions and bridge.wolfActions.tryBite
-        -- A callback that was available but stopped producing native markers
-        -- is not allowed to starve the ordinary-input path for the entire hold.
-        if middleMode and held and not inGrab and now<self.nativeRetryAt then native=nil end
+        if middleHeld and route=="INPUT" then native=nil end
         local nativeInput=not native and held and not automatic and not inGrab
             and self.held and self.held.key=="M1" and self.held.source=="event"
             and self.held.input and type(bridge.nativeWolfInputAction)=="function"
             and bridge:nativeWolfInputAction(now) or nil
-        local fallback=type(native)~="function" and not nativeInput and middleMode
-            and held and not automatic and not inGrab and self.held.key=="M3"
+        local ordinary=middleHeld and route=="INPUT" and not inGrab
+            and not automatic and self.held.key=="M3"
             and not (s.mouseHeld or s.r2Held or s.physicalM1Held)
             and type(bridge.tryHeldInputBite)=="function"
             and type(bridge.visibleBiteWindow)=="function" and bridge:visibleBiteWindow(s,now)
-        if type(native)~="function" and not nativeInput and not fallback then
+        if type(native)~="function" and not nativeInput and not ordinary then
             self.nextAttempt=now+.12
-            self.status=held and (middleMode and "M3 held: waiting for a usable native attack or ordinary click window" or "original game handler unavailable; no synthetic mouse replay")
+            self.status=middleHeld and (route=="INPUT" and "ordinary route waiting for native cooldown or manual input"
+                or "native route waiting for original callback")
                 or "waiting for native attack handler"
             return
         end
@@ -349,28 +414,38 @@ function CombatInput.new(bridge,policy,ledger)
             self.nextAttempt=now+.065
         end
         local called,backend
-        if type(native)=="function" then
-            called,backend=bridge:tryNativeBite(now),"NATIVE"
-        elseif nativeInput then
-            called,backend=bridge:tryNativeInputBite(now,self.held.input),"NATIVE_INPUT"
+        if type(native)=="function" then backend="NATIVE"
+        elseif nativeInput then backend="NATIVE_INPUT"
+        else backend="INPUT" end
+        local attempt={char=s.char,generation=s.generation,at=now,backend=backend,middle=middleHeld==true}
+        if middleHeld then
+            if backend=="NATIVE" then self.middleNativeAttempts+=1
+            else self.middleInputAttempts+=1 end
+            -- Record before invocation: the original game can emit its marker
+            -- synchronously, before the callback returns.
+            self.awaiting=attempt
+        end
+        if backend=="NATIVE" then
+            called=bridge:tryNativeBite(now)
+        elseif backend=="NATIVE_INPUT" then
+            called=bridge:tryNativeInputBite(now,self.held.input)
         else
-            backend="INPUT"
-            self.awaiting={char=s.char,generation=s.generation,at=now,backend=backend}
             called=bridge:tryHeldInputBite(s,now)
-            if not called then self.awaiting=nil end
         end
         local marked=self.markerCount>markers
-        if backend=="NATIVE" and marked then self.nativeMisses,self.nativeRetryAt=0,0 end
+        if backend=="NATIVE" and marked then self.nativeMisses=0 end
         if backend=="NATIVE" and not called and not inGrab then self:noteNativeMiss(now) end
         if called and not marked then
-            self.awaiting={char=s.char,generation=s.generation,at=now,backend=backend}
+            self.awaiting=attempt
+        elseif self.awaiting==attempt then
+            self.awaiting=nil
         end
         if not called then
             self.lastDispatch=0
             self.nextAttempt=math.max(self.nextAttempt,now+.3)
         end
         self.status=marked and "native marker; awaiting server-confirmed impact"
-            or called and (backend=="INPUT" and "M3 ordinary click requested; awaiting native marker"
+            or called and (backend=="INPUT" and "M3 ordinary-input route; awaiting native marker"
                 or backend=="NATIVE_INPUT" and "own original input handler called; awaiting native marker"
                 or "original native bite callback called; awaiting marker")
             or "validated native attack handler unavailable"

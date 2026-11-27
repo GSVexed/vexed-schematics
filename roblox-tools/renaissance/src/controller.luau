@@ -462,6 +462,7 @@ function Controller.new(M,bridge,options)
             return
         end
         if primary or key == Enum.KeyCode.ButtonR2 then
+            self.combatInput:manualAttack(now)
             self.policy:input("attack",now)
             local restReleased=self.recovery:release("attack input",now)
             if primary or key == Enum.KeyCode.ButtonR2 then
@@ -912,16 +913,25 @@ function Controller.new(M,bridge,options)
         local native=bridge.wolfActions and bridge.wolfActions.tryBite~=nil
         local hold=r.byId.holdBite
         local m1Native=bridge.holdBinding=="M1" and not native and bridge:nativeWolfInputAction(s.now or bridge.clock()) or nil
-        local m3Fallback=bridge.holdBinding=="M3" and not native and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
+        local middle=bridge.holdBinding=="M3"
+        local locked=self.combatInput.middleRoute
+        local route=locked or self.combatInput.middleCandidate
+        local ordinaryReady=middle and bridge:combatInputCompatible() and bridge:hasHeldInputBackend()
         local nativeGC=native and bridge.wolfActions.discovery=="validated own heap closure"
         local sourceLabel=nativeGC and "Original native callback recovered · "
             or native and "Original native callback · "
             or m1Native and "Original WolfController M1 input callback · "
-            or m3Fallback and "Middle mouse: ordinary click fallback (unverified) · "
-            or (bridge.holdBinding=="M3" and "Middle mouse: original native callback inaccessible · "
-                or "Original attack handler inaccessible; no synthetic clicks · ")
-        r:ack("holdBite",hold.requested and (native or m1Native~=nil or m3Fallback),
-            not hold.requested and "OFF" or native and "ARMED" or (m1Native or m3Fallback) and "PARTIAL" or "WAITING",
+            or "Original attack handler inaccessible · "
+        local routeReady=native or m1Native~=nil
+        if middle then
+            sourceLabel=locked and ("M3 locked: "..(locked=="NATIVE" and "native callback" or "ordinary input").." · ")
+                or route and ("M3 verifying: "..route.." · ") or "M3 awaiting first verified bite · "
+            routeReady=route=="NATIVE" and native or route=="INPUT" and ordinaryReady
+                or route==nil and (native or ordinaryReady)
+        end
+        r:ack("holdBite",hold.requested and routeReady,
+            not hold.requested and "OFF" or middle and locked and routeReady and "ARMED"
+                or not middle and native and "ARMED" or routeReady and "PARTIAL" or "WAITING",
             hold.requested and sourceLabel..self.combatInput.status or hold.detail)
         r:ack("autoBite",auto.requested and native,not auto.requested and "OFF" or native and "ARMED" or "WAITING",
             auto.requested and self.combatInput.status or auto.detail)
