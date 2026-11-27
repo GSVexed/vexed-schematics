@@ -1962,5 +1962,55 @@ test("repeated desktop enable disable and unload leaves only native hooks",funct
     local report=h.leftHoldIo.read("FERAL_LEFT_HOLD_READY_V1.json");eq(report.armed,false)
     local before=w.syntheticPresses or 0;w:advance(1);eq(w.syntheticPresses or 0,before)
 end)
+if type(LOADER)=="string" and #LOADER>0 then
+    local function fetchMock(w,mode)
+        local requests=0
+        w.env.game.HttpGet=function(_,url)
+            requests+=1
+            assert(url:find("/d4e3697728b9b6a2727d610a3f440d5b5f2dd81b/",1,true),"mutable or unexpected source pin")
+            if mode=="offline" then error("network unavailable") end
+            local part=tonumber(url:match("/part%-(%d+)%.lua$"))
+            if part then
+                if mode=="missing" and part==2 then return "truncated" end
+                local offset=1;for i=1,part-1 do offset+=CHUNK_SIZES[i] end
+                return BUNDLE:sub(offset,offset+CHUNK_SIZES[part]-1)
+            end
+            if mode=="chunks" or mode=="missing" then return "truncated" end
+            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.0%-rc1","16.4.1-rc1",1)) end
+            return BUNDLE
+        end
+        return function()return requests end
+    end
+    test("pinned loader starts the complete candidate with desktop hold enabled",function()
+        local w=Mock.new();local requests=fetchMock(w,"full")
+        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.0-rc1");eq(h.leftHoldBridge,true)
+        eq(requests(),1);h:close();eq(w:connections(),0)
+    end)
+    test("pinned loader reconstructs every verified chunk after a truncated full fetch",function()
+        local w=Mock.new();local requests=fetchMock(w,"chunks")
+        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.0-rc1")
+        eq(requests(),1+#CHUNK_SIZES);h:close();eq(w:connections(),0)
+    end)
+    test("missing source chunk leaves the active hub and its hooks intact",function()
+        local w=Mock.new();local h=load(w);local count=w:connections();fetchMock(w,"missing")
+        eq(pcall(assert(w.env.loadstring(LOADER))),false);eq(h.closed,false);eq(w:connections(),count)
+        h:close()
+    end)
+    test("same-length wrong-version source is rejected before replacing the current hub",function()
+        local w=Mock.new();local h=load(w);local count=w:connections();fetchMock(w,"tampered")
+        eq(pcall(assert(w.env.loadstring(LOADER))),false);eq(h.closed,false);eq(w:connections(),count)
+        h:close()
+    end)
+    test("available SHA256 backend rejects a digest mismatch without unloading",function()
+        local w=Mock.new();local h=load(w);fetchMock(w,"full")
+        w.env.crypt={hash=function(_,algorithm)eq(algorithm,"sha256");return string.rep("0",64)end}
+        eq(pcall(assert(w.env.loadstring(LOADER))),false);eq(h.closed,false);h:close()
+    end)
+    test("failed network fetch preserves the old release without partial activation",function()
+        local w=Mock.new();local h=load(w);local count=w:connections();fetchMock(w,"offline")
+        eq(pcall(assert(w.env.loadstring(LOADER))),false);eq(h.closed,false);eq(w:connections(),count)
+        h:close()
+    end)
+end
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end

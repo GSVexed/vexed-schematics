@@ -6,7 +6,10 @@ def long(s): return '[====================[\n'+s+']====================]'
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--luau',default='luau');ap.add_argument('--compiler',default='luau-compile');a=ap.parse_args()
     manifest=build();compiled=[]
-    for path in [*(ROOT/'src').glob('*.luau'),ROOT/'tests/mock_roblox.luau',DEST]:
+    loader=ROOT.parent/f'feral-renaissance-v{VERSION}-loader.lua'
+    paths=[*(ROOT/'src').glob('*.luau'),ROOT/'tests/mock_roblox.luau',DEST]
+    if loader.exists(): paths.append(loader)
+    for path in paths:
         r=subprocess.run([a.compiler,'--null',str(path)],capture_output=True,text=True)
         if r.returncode: raise RuntimeError(r.stdout+r.stderr)
         compiled.append(str(path.relative_to(ROOT.parent)))
@@ -18,10 +21,12 @@ def main():
     assert not re.search(r'(?:setAttribute|SetAttribute)\([^\n]*["\'](?:Hunger|Thirst|Stamina|StaminaMax)["\']\s*,',raw)
     legacy=ROOT.parent/'renaissance'
     definitions={'BUNDLE':raw,'MOCK_SOURCE':(ROOT/'tests/mock_roblox.luau').read_text(),
+                 'LOADER':loader.read_text() if loader.exists() else '',
                  'BASELINE':(ROOT.parent/'feral-renaissance-v15.2.1.lua').read_text(),
                  'PREVIOUS':(ROOT.parent/'feral-renaissance-v15.3.0.lua').read_text(),
                  'PERF_SOURCE':(legacy/'tests/performance.luau').read_text()}
-    script='\n'.join('local '+k+' = '+long(v) for k,v in definitions.items())+'\n'+(ROOT/'tests/suite.luau').read_text()
+    chunks='local CHUNK_SIZES={'+','.join(str(p['bytes']) for p in manifest['chunks'])+'}\n'
+    script='\n'.join('local '+k+' = '+long(v) for k,v in definitions.items())+'\n'+chunks+(ROOT/'tests/suite.luau').read_text()
     with tempfile.TemporaryDirectory(prefix='feral-v16-test-') as d:
         p=Path(d)/'tests.luau';p.write_text(script)
         r=subprocess.run([a.luau,str(p)],capture_output=True,text=True)

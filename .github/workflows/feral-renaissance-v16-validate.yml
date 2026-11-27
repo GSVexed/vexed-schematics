@@ -2,9 +2,9 @@ name: FERAL Renaissance v16 candidate regression gate
 on:
   push:
     branches: ['renaissance/**']
-    paths: ['roblox-tools/renaissance-v16/**', 'roblox-tools/feral-renaissance-v16.4*', '.github/workflows/feral-renaissance-v16-validate.yml']
+    paths: ['roblox-tools/renaissance-v16/src/**', 'roblox-tools/renaissance-v16/tests/**', 'roblox-tools/renaissance-v16/helper/**', 'roblox-tools/renaissance-v16/build.py', 'roblox-tools/renaissance-v16/run_tests.py', 'roblox-tools/renaissance-v16/bootstrap.luau', 'roblox-tools/renaissance-v16/manifest.json', 'roblox-tools/renaissance-v16/chunks/**', 'roblox-tools/feral-renaissance-v16.4*', '.github/workflows/feral-renaissance-v16-validate.yml']
   pull_request:
-    paths: ['roblox-tools/renaissance-v16/**', 'roblox-tools/feral-renaissance-v16.4*']
+    paths: ['roblox-tools/renaissance-v16/src/**', 'roblox-tools/renaissance-v16/tests/**', 'roblox-tools/renaissance-v16/helper/**', 'roblox-tools/renaissance-v16/build.py', 'roblox-tools/renaissance-v16/run_tests.py', 'roblox-tools/renaissance-v16/bootstrap.luau', 'roblox-tools/renaissance-v16/manifest.json', 'roblox-tools/renaissance-v16/chunks/**', 'roblox-tools/feral-renaissance-v16.4*']
 permissions:
   contents: read
 jobs:
