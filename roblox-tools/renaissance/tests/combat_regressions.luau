@@ -323,4 +323,185 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(w.nativeBites,before)
         h:close()
     end)
+
+
+    test("ALT physical hold repeats through the input fallback without holding M1",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions()
+        w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local input=w:input(E.KeyCode.LeftAlt)
+        assert(h.combatInput.held and h.combatInput.held.key=="ALT")
+        w:advance(2.2)
+        assert((w.virtualBiteDowns or 0)>=2,"ALT must dispatch game input without physically held M1")
+        assert((w.nativeBites or 0)>=2,"native game handler must receive repeated Alt-driven edges")
+        eq(h.combatInput.held.key,"ALT")
+        local count=w.nativeBites or 0
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(input)
+        w:advance(.85)
+        eq(w.nativeBites or 0,count)
+        eq(h.combatInput.held,nil)
+        h:close()
+    end)
+
+    test("ALT is immune to processed synthetic M1 echoes outside the grace window",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local input=w:input(E.KeyCode.LeftAlt)
+        h.bridge.syntheticM1Until=0
+        w.uis.InputBegan:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown},true)
+        eq(h.inputSuspended,false)
+        assert(h.combatInput.held and h.combatInput.held.key=="ALT")
+        w:advance(1.5)
+        assert((w.nativeBites or 0)>=2)
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(input);h:close()
+    end)
+
+    test("ALT input fallback yields to prey minigame and resumes after it ends",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions();w:enableNativeGrab()
+        w.env.getconnections=nil;w.env.getgc=function()return {} end;w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local input=w:input(E.KeyCode.LeftAlt)
+        w:advance(.5)
+        local before=w.nativeBites or 0
+        local beforePulse=w.virtualBiteDowns or 0
+        w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=951,role="prey",n=4})
+        w:advance(.9)
+        eq(w.nativeBites or 0,before)
+        eq(w.virtualBiteDowns or 0,beforePulse)
+        eq(h.combatInput.held.key,"ALT")
+        w:remote("FeralGrabV2").OnClientEvent:Fire("end",{f=951})
+        w:advance(1.2)
+        assert((w.nativeBites or 0)>before,"Alt hold should resume after native prey minigame ends")
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(input);h:close()
+    end)
+
+    test("ALT uses original native bite callback without virtual input when discovered",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.3)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local input=w:input(E.KeyCode.LeftAlt)
+        w:advance(1.6)
+        assert((w.nativeBites or 0)>=3)
+        eq(w.virtualBiteCalls,nil)
+        eq(h.combatInput.held.key,"ALT")
+        local count=w.nativeBites or 0
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(input)
+        w:advance(.8);eq(w.nativeBites or 0,count)
+        h:close()
+    end)
+
+    test("ALT respects OFF toggle and ordinary M1 still attacks normally",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=false,attackSpeed=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local alt=w:input(E.KeyCode.LeftAlt)
+        w:advance(1.3)
+        eq(w.nativeBites or 0,0)
+        eq(w.virtualBiteCalls,nil)
+        eq(h.combatInput.held,nil)
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(alt)
+        w.held=E.UserInputType.MouseButton1
+        local click=w:input(nil,E.UserInputType.MouseButton1)
+        eq(w.nativeBites,1)
+        w.held=nil;w.uis.InputEnded:Fire(click)
+        h:close()
+    end)
+
+    test("ALT release or focus loss cancels a pending synthetic Down",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local alt=w:input(E.KeyCode.LeftAlt)
+        local s=h.bridge:snapshot(w.time,false)
+        assert(h.bridge:tryHeldInputBite(s,w.time))
+        assert(h.bridge.syntheticM1)
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(alt)
+        w:advance(.12)
+        eq(w.virtualBiteDowns or 0,0)
+        eq(h.bridge.syntheticM1,nil)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local again=w:input(E.KeyCode.LeftAlt)
+        s=h.bridge:snapshot(w.time,false)
+        assert(h.bridge:tryHeldInputBite(s,w.time))
+        h.uis=nil
+        w.uis.WindowFocusReleased:Fire()
+        w:advance(.15)
+        eq(h.bridge.syntheticM1,nil)
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(again);h:close()
+    end)
+
+    test("ALT fallback adaptive speed factor changes actual input request interval",function()
+        local M=modules()
+        local count=0
+        local bridge={}
+        function bridge:restLock()return .7 end
+        function bridge:attribute()return nil end
+        function bridge:biteDelay()return .27 end
+        function bridge:biteReadiness()return {ready=false,known=false,reason="native timing unavailable"}end
+        function bridge:visibleBiteWindow()return true end
+        function bridge:nativeBiteCooldown()return 1 end
+        function bridge:tryHeldInputBite()count+=1;return true end
+        local input=M.combat_input.new(bridge,M.policy.new(),M.core.ledger(20))
+        local s={alive=true,char={},generation=1,attackHeld=false,altBiteHeld=true,
+            altBiteKnown=true,mouseHeld=false,r2Held=false}
+        input:input(s,10,"ALT",{})
+        input:tick(s,10.1,{repeatHeld=true,speedEnabled=true})
+        eq(count,1)
+        assert(math.abs(input.nextAttempt-10.72)<.0001)
+        input:marker(s,10.11)
+        local at=input.nextAttempt+.01
+        input:tick(s,at,{repeatHeld=true,speedEnabled=false})
+        eq(count,2)
+        assert(math.abs(input.nextAttempt-at-1)<.0001,
+            "Faster Bites OFF must restore native interval for ALT requests")
+    end)
+
+    test("ALT native hunter attacks coexist with the native perfect-press automator",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w:enableNativeGrab()
+        local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true,recovery=false}}})
+        w:advance(.4)
+        local r=w:remote("FeralGrabV2")
+        r.OnClientEvent:Fire("begin",{f=962,role="hunter",n=2})
+        w:advance(.1)
+        assert(h.grabInput.lease and not h.bridge:nativeGrabBound())
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local key=w:input(E.KeyCode.LeftAlt)
+        local before=w.nativeBites or 0
+        r.OnClientEvent:Fire("strike",{f=962,k=1,t0=w.time+1000,spd=1,from=0,zc=.5,zw=.215,dur=2})
+        w:advance(1.3)
+        assert((w.nativeBites or 0)>before)
+        assert(h.grab.presses>=1,"native minigame perfect automation must retain its own input")
+        eq(w.nativeManualPresses,nil)
+        r.OnClientEvent:Fire("end",{f=962})
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(key);h:close()
+    end)
 end
