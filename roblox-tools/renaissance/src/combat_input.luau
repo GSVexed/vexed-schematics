@@ -82,6 +82,8 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:input(s,now,kind,inputObject)
         if not s.alive then return end
+        -- When ALT owns the hold, synthetic M1 events must not steal it.
+        if kind=="M1" and self.held and self.held.key=="ALT" then return end
         self.held={char=s.char,generation=s.generation,key=kind or "mouse",source="event",input=inputObject}
         self.nextAttempt=math.max(self.nextAttempt,now+.025)
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
@@ -99,8 +101,18 @@ function CombatInput.new(bridge,policy,ledger)
             return
         end
         local physical=s.attackHeld==true
+        local alt=s.altBiteHeld==true
         if not options.repeatHeld then
             if self.held then self:release(nil,now) end
+        elseif alt and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation
+            or self.held.key~="ALT") then
+            self.held={char=s.char,generation=s.generation,key="ALT",source="altPoll"}
+            self.nextAttempt=math.max(self.nextAttempt,now+.025)
+        elseif self.held and self.held.key=="ALT"
+            and s.altBiteKnown~=false and not alt then
+            -- Unlike M1, no synthetic bite click can release the ALT key.
+            -- This also prevents a lost InputEnded from latching ALT forever.
+            self:release("ALT",now)
         elseif physical and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
             -- Restore a missed InputBegan (e.g. hub enabled after M1 went down).
             self.held={char=s.char,generation=s.generation,key="poll",source="poll"}
@@ -111,7 +123,7 @@ function CombatInput.new(bridge,policy,ledger)
         end
         local inGrab=s.grab==true or options.minigameBusy==true
         local nativeGrabLane=inGrab and options.nativeMinigame==true
-            and self.held~=nil and (self.held.key=="M1" or self.held.key=="poll")
+            and self.held~=nil and (self.held.key=="M1" or self.held.key=="poll" or self.held.key=="ALT")
             and options.minigamePressNear~=true
             and bridge.wolfActions and type(bridge.wolfActions.tryBite)=="function"
         if not s.alive or s.chat or s.gameMenu or inGrab and not nativeGrabLane
@@ -215,7 +227,14 @@ function CombatInput.new(bridge,policy,ledger)
         if type(native)=="function" then
             called,backend=bridge:tryNativeBite(now),"NATIVE"
         elseif held and not automatic and not inGrab then
-            -- Physical hold fallback. Input backend can be absent or blocked.
+            -- ALT is a separate *physical trigger*: virtual M1 up/down
+            -- events cannot erase its state. Do not synthesize over an
+            -- actually held M1 when both triggers are pressed together.
+            if self.held.key=="ALT" and s.mouseHeld then
+                self.status="release M1 when using ALT hold"
+                self.nextAttempt=now+.12
+                return
+            end
             called,backend=bridge:tryHeldInputBite(s,now),"INPUT"
         else
             called,backend=false,"UNAVAILABLE"

@@ -249,4 +249,86 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         h:inputEnded(physical)
         h:close()
     end)
+
+
+    test("alternate LeftAlt is a separate held key and repeats bites without a held M1",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions()
+        w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local trigger=w:input(E.KeyCode.LeftAlt)
+        assert(h.combatInput.held and h.combatInput.held.key=="ALT","ALT must own independent repeat")
+        w:advance(2.1)
+        assert((w.virtualBiteDowns or 0)>=2,"ALT must use the existing safe native-input fallback")
+        assert((w.nativeBites or 0)>=3,"the game handler must see repeated bite edges")
+        assert(h.combatInput.held and h.combatInput.held.key=="ALT","synthetic M1 ended must not cancel ALT")
+        local bites=w.nativeBites or 0
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(trigger)
+        w:advance(.8)
+        eq(w.nativeBites or 0,bites)
+        eq(h.combatInput.held,nil)
+        h:close()
+    end)
+
+    test("late processed M1 events do not cancel ALT outside UI",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local trigger=w:input(E.KeyCode.LeftAlt)
+        h.bridge.syntheticM1Until=0
+        w.uis.InputBegan:Fire({UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown},true)
+        eq(h.inputSuspended,false)
+        eq(h.combatInput.held.key,"ALT")
+        w:advance(1.4)
+        assert((w.nativeBites or 0)>=2)
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(trigger);h:close()
+    end)
+
+    test("ALT mode honours minigame priority and resumes only after the game session ends",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w:enableNativeGrab()
+        w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,minigame=true,recovery=false}}})
+        w:advance(.2)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local trigger=w:input(E.KeyCode.LeftAlt)
+        w:advance(.6)
+        local before=w.nativeBites or 0
+        w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=922,role="prey",n=3})
+        w:advance(.7)
+        eq(w.nativeBites or 0,before)
+        assert(h.combatInput.held and h.combatInput.held.key=="ALT",
+            "the separate physical key must retain its ownership across a minigame")
+        w:remote("FeralGrabV2").OnClientEvent:Fire("end",{f=922})
+        w:advance(1.1)
+        assert((w.nativeBites or 0)>before,"ALT should resume when minigame has ended")
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(trigger);h:close()
+    end)
+
+    test("no ALT attack when Hold to Repeat Bites is disabled",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local trigger=w:input(E.KeyCode.LeftAlt)
+        w:advance(1.2)
+        eq(w.nativeBites or 0,0)
+        eq(h.combatInput.held,nil)
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(trigger);h:close()
+    end)
 end

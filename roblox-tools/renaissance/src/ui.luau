@@ -144,8 +144,9 @@ function UI.mount(hub, bridge, scope)
             info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
         elseif u.tab == "Combat" then
             row("reach",0);row("biteHelper",57);row("attackSpeed",114);row("holdBite",171);row("autoBite",228)
-            info(285,"BITE GUIDE","Cobra: teal in stock range; amber is unverified extended range. Other animals use the neutral marker. Grey means blocked or uncertain.",70)
-            u.combatReadout = info(365,"NATIVE COMBAT","Waiting for an animal.",100)
+            info(285,"NEW ALT HOLD METHOD","With Hold to Repeat Bites ON, hold LEFT ALT (not M1) to repeat normal game bites. This separates the real hold from synthetic mouse edges. Release ALT to stop; minigames keep priority.",90)
+            info(383,"BITE GUIDE","Cobra: teal in stock range; amber is unverified extended range. Other animals use the neutral marker. Grey means blocked or uncertain.",70)
+            u.combatReadout = info(461,"NATIVE COMBAT","Waiting for an animal.",100)
         elseif u.tab == "Hippo" then
             info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)
             row("hippoMove",74);row("hippoRelease",131)
