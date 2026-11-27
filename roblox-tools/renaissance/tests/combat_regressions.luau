@@ -543,4 +543,140 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         w.keys[E.KeyCode.LeftAlt]=nil
         w.uis.InputEnded:Fire(alt);h:close()
     end)
+
+    test("M1 quick taps and manual spam never enter repeat handoff",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
+        w:advance(.15)
+        for i=1,7 do
+            w.held=E.UserInputType.MouseButton1
+            local click=w:input(nil,E.UserInputType.MouseButton1)
+            w:advance(.1)
+            eq(w.virtualBiteCalls,nil)
+            assert(h.combatInput.held and not h.combatInput.held.handoff)
+            w.held=nil;w.logicalM1Down=false;w.uis.InputEnded:Fire(click)
+            eq(h.combatInput.held,nil)
+            w:advance(.07)
+        end
+        w:advance(.5)
+        eq(w.virtualBiteCalls,nil)
+        h:close()
+    end)
+
+    test("M1 sustained real hold allows initial game click then invokes replay only after handoff",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false,autoBite=false}}})
+        w:advance(.15)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        eq(w.nativeBites,1)
+        w:advance(.22)
+        eq(w.nativeBites,1)
+        eq(w.virtualBiteCalls,nil)
+        assert(h.combatInput.held and not h.combatInput.held.handoff)
+        w:advance(3.0)
+        assert(h.combatInput.held and h.combatInput.held.handoff)
+        assert((w.virtualBiteDowns or 0)>=2)
+        assert((w.nativeBites or 0)>=3)
+        local before=w.nativeBites
+        w.held=nil;w.logicalM1Down=false
+        w.uis.InputEnded:Fire(original)
+        w:advance(.85)
+        eq(w.nativeBites,before)
+        eq(h.combatInput.held,nil)
+        h:close()
+    end)
+
+    test("M1 hold prefers validated native callback and never synthesizes mouse events",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(.19)
+        eq(w.nativeBites,1)
+        w:advance(2.1)
+        assert((w.nativeBites or 0)>=3)
+        eq(w.virtualBiteCalls,nil)
+        w.held=nil;w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("Left Alt no longer has any held-repeat effect",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .5 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local press=w:input(E.KeyCode.LeftAlt)
+        w:advance(1.35)
+        eq(w.nativeBites or 0,0)
+        eq(w.virtualBiteCalls,nil)
+        eq(h.combatInput.held,nil)
+        w.keys[E.KeyCode.LeftAlt]=nil;w.uis.InputEnded:Fire(press)
+        h:close()
+    end)
+
+    test("M1 handoff pauses for prey minigames then resumes if still physically held",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions();w:enableNativeGrab()
+        w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,minigame=true,attackSpeed=true,recovery=false,autoBite=false}}})
+        w:advance(.15)
+        w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(1.15)
+        local before=w.nativeBites or 0
+        local presses=w.virtualBiteDowns or 0
+        w:remote("FeralGrabV2").OnClientEvent:Fire("begin",{f=979,role="prey",n=3})
+        w:advance(.9)
+        eq(w.nativeBites or 0,before)
+        eq(w.virtualBiteDowns or 0,presses)
+        w:remote("FeralGrabV2").OnClientEvent:Fire("end",{f=979})
+        w:advance(1.5)
+        assert((w.virtualBiteDowns or 0)>presses)
+        w.held=nil;w.logicalM1Down=false;w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
+
+    test("preferred backend survives unmarked bite intervals and bounded probe returns to verified API",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions();w.virtualBiteAvailable=true
+        local h=load(w)
+        local b=h.bridge
+        b.heldInputModes=3;b.heldInputIndex=2
+        b:noteHeldInputMarker()
+        eq(b.heldInputVerifiedIndex,2)
+        for i=1,4 do b:noteHeldInputTimeout() end
+        eq(b.heldInputIndex,2)
+        b:noteHeldInputTimeout()
+        eq(b.heldInputIndex,3)
+        b:noteHeldInputTimeout()
+        eq(b.heldInputIndex,3)
+        b:noteHeldInputTimeout()
+        eq(b.heldInputIndex,2)
+        h:close()
+    end)
+
+    test("stale M1 pulse watchdog clears permanently owned synthetic press",function()
+        local w=Mock.new();w:enableNativeActions()
+        local h=load(w)
+        local count=0
+        h.bridge.syntheticM1={startedAt=w.time-.75,release=function()count+=1 end}
+        assert(h.bridge:clearStaleSyntheticBite(w.time))
+        eq(count,1);eq(h.bridge.syntheticM1,nil)
+        h:close()
+    end)
 end
