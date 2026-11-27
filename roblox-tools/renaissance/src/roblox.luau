@@ -656,8 +656,13 @@ function Roblox.new(Core, environment)
         self.wolfInputAction=nil
         if self.deferNativeDiscovery or now<(self.nextWolfInputLookup or 0) then return nil end
         self.nextWolfInputLookup=now+.8
-        if type(getconnections)~="function" or type(debug)~="table"
-            or type(debug.info)~="function" then return nil end
+        -- An executor wrapper can obscure debug.info source/name while
+        -- getfenv still identifies the actual owning WolfController script.
+        -- Accept exactly one uniquely owner-matched unnamed root, never a
+        -- wrapper without script identity.
+        if type(getconnections)~="function" then return nil end
+        local debugAvailable=type(debug)=="table" and type(debug.info)=="function"
+        if not debugAvailable and type(getfenv)~="function" then return nil end
         local ok,connections=pcall(getconnections,self.UserInputService.InputBegan)
         if not ok or type(connections)~="table" then return nil end
         local named,unnamed={},{}
@@ -667,9 +672,14 @@ function Roblox.new(Core, environment)
             if count>128 then break end
             local valid,fn=pcall(function()return connection.Function end)
             if not valid or type(fn)~="function" then continue end
-            local info,source,name=pcall(debug.info,fn,"sn")
-            if not info or type(source)~="string" then continue end
-            if source~="WolfController" and source:match("[%.%/]WolfController$")==nil then continue end
+            local source,name
+            if debugAvailable then
+                local info
+                info,source,name=pcall(debug.info,fn,"sn")
+                if not info then source,name=nil,nil end
+            end
+            local sourceOwned=type(source)=="string" and
+                (source=="WolfController" or source:match("[%.%/]WolfController$")~=nil)
             local ownerConfirmed=false
             if type(getfenv)=="function" then
                 local envOK,env=pcall(getfenv,fn)
@@ -678,6 +688,7 @@ function Roblox.new(Core, environment)
                     ownerConfirmed=true
                 end
             end
+            if not sourceOwned and not ownerConfirmed then continue end
             if name=="onInput" then
                 table.insert(named,fn)
             elseif (name==nil or name=="") and ownerConfirmed then

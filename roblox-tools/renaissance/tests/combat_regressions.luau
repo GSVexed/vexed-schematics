@@ -618,4 +618,43 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         w.held=nil;w.uis.InputEnded:Fire(first)
         h:close()
     end)
+
+    test("native M1 fallback accepts uniquely script-owned vendor-wrapped input callback",function()
+        local w=Mock.new();w:enableNativeActions();w.virtualBiteAvailable=true
+        local priorInfo=w.env.debug.info
+        local priorValues=w.env.debug.getupvalues
+        w.env.debug.info=function(fn,mode)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="onInput" then
+                if mode=="sn" then return "[executor wrapper]",nil end
+                if mode=="s" then return "[executor wrapper]" end
+                if mode=="n" then return nil end
+            end
+            return priorInfo(fn,mode)
+        end
+        w.env.debug.getupvalues=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.name=="tryBite" then return {} end
+            return priorValues(fn)
+        end
+        w.env.getfenv=function(fn)
+            local rec=w.nativeRecords[fn]
+            if rec and rec.script=="WolfController" then
+                return {script=w.player:FindFirstChild("PlayerScripts"):FindFirstChild("WolfController")}
+            end
+            return {}
+        end
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=true,recovery=false}}})
+        w:advance(.15)
+        local original=w.uis.InputBegan
+        w.held=E.UserInputType.MouseButton1
+        local press=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(2.2)
+        assert(h.bridge.wolfInputAction
+            and h.bridge.wolfInputAction.discovery=="one script-owned input listener")
+        assert((w.nativeBites or 0)>=2)
+        eq(w.virtualBiteCalls,nil)
+        w.held=nil;w.uis.InputEnded:Fire(press)
+        h:close()
+    end)
 end
