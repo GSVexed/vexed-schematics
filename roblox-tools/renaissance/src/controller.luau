@@ -387,6 +387,17 @@ function Controller.new(M,bridge,options)
     function h:preInput(input)
         if self.closed or not self.active or bridge.UserInputService:GetFocusedTextBox() then return end
         local now,key,kind = bridge.clock(),input.KeyCode,input.UserInputType
+        -- Once this real physical M1 has been held long enough for the
+        -- hub to own repeat, no *second* InputBegan can originate from that
+        -- same uninterrupted hardware press. Ignore any later replay echo
+        -- even when the executor delivers it after the short grace window.
+        -- It still reaches FERAL's original InputBegan listener normally.
+        if kind==Enum.UserInputType.MouseButton1
+            and self.physicalM1Input~=nil and input~=self.physicalM1Input
+            and self.combatInput.held and self.combatInput.held.handoff
+            and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+            return
+        end
         -- Virtual/executor mouse events may be delivered after the sending API
         -- returns. The short owned replay window is authoritative here; a
         -- synthetic Up can make IsMouseButtonPressed false before its echo.
@@ -467,6 +478,17 @@ function Controller.new(M,bridge,options)
     end
     function h:input(input,processed)
         local kind,key = input.UserInputType,input.KeyCode
+        -- Once this real physical M1 has been held long enough for the
+        -- hub to own repeat, no *second* InputBegan can originate from that
+        -- same uninterrupted hardware press. Ignore any later replay echo
+        -- even when the executor delivers it after the short grace window.
+        -- It still reaches FERAL's original InputBegan listener normally.
+        if kind==Enum.UserInputType.MouseButton1
+            and self.physicalM1Input~=nil and input~=self.physicalM1Input
+            and self.combatInput.held and self.combatInput.held.handoff
+            and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+            return
+        end
         -- A replayed InputBegan may arrive asynchronously, including with
         -- processed=true. Never let that echo permanently suspend the real M1.
         if kind==Enum.UserInputType.MouseButton1 and (bridge.syntheticPressing
@@ -522,12 +544,16 @@ function Controller.new(M,bridge,options)
         if kind==Enum.UserInputType.MouseButton1 then
             -- Owned synchronous releases may reuse the engine's mouse object.
             -- Suppress those before consulting optional InputObject identity.
-            if bridge.syntheticReleasing or bridge.syntheticPressing then return end
+            if bridge.syntheticReleasing then return end
+            -- A matching real InputObject can end during a synthetic Down
+            -- callback. Do not discard that genuine release solely because
+            -- syntheticPressing is set; generated Up has syntheticReleasing.
             if input==self.physicalM1Input then
                 self.physicalM1Input=nil
                 self.combatInput:release("M1",bridge.clock())
                 return
             end
+            if bridge.syntheticPressing then return end
             if bridge.syntheticM1~=nil
                 or bridge.clock()<(bridge.syntheticM1Until or 0) then
                 return

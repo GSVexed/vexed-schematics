@@ -436,4 +436,29 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(count,1);eq(h.bridge.syntheticM1,nil)
         h:close()
     end)
+
+    test("late synthetic M1 echo beyond grace never becomes a second manual press during a real hold",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+        w:enableNativeActions()
+        w.env.getconnections=nil;w.env.getgc=function()return {}end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,recovery=false,autoBite=false}}})
+        w:advance(.15);w.held=E.UserInputType.MouseButton1
+        local original=w:input(nil,E.UserInputType.MouseButton1)
+        w:advance(1.15)
+        assert(h.combatInput.held and h.combatInput.held.handoff)
+        local owned=h.combatInput.held
+        local intentCount=h.ledger.counts.attack_intent
+        h.bridge.syntheticM1Until=0
+        local echo={UserInputType=E.UserInputType.MouseButton1,KeyCode=E.KeyCode.Unknown}
+        h:preInput(echo)
+        h:input(echo,false)
+        eq(h.combatInput.held,owned)
+        eq(h.physicalM1Input,original)
+        eq(h.ledger.counts.attack_intent,intentCount)
+        w.held=nil;w.logicalM1Down=false
+        w.uis.InputEnded:Fire(original)
+        h:close()
+    end)
 end

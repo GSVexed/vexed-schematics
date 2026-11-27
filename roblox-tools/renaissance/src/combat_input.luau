@@ -105,7 +105,9 @@ function CombatInput.new(bridge,policy,ledger)
         local physical=s.attackHeld==true
         if not options.repeatHeld then
             if self.held then self:release(nil,now) end
-        elseif physical and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
+        elseif physical and not bridge.syntheticM1
+            and now>=(bridge.syntheticM1Until or 0)
+            and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
             -- Hub enabled after M1 was already pressed: wait a fresh hold
             -- threshold before dispatching repeats.
             self.held={char=s.char,generation=s.generation,key="poll",source="poll",
@@ -156,7 +158,7 @@ function CombatInput.new(bridge,policy,ledger)
         -- Holding M1 explicitly takes priority over Auto Bite target
         -- selection. Ordinary clicks before the handoff remain game-owned.
         local automatic=not inGrab and options.automatic and options.targetValid==true
-            and not held
+            and self.held==nil
         if inGrab and not nativeGrabLane then automatic=false end
         if not p and not held and not automatic then
             -- A quick manual tap is never repeated by this controller.
