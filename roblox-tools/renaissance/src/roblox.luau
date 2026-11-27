@@ -898,9 +898,17 @@ function Roblox.new(Core, environment)
         if offer then return allowOffer==true,true,"Eat/Drink offer" end
         return true,false,"clear"
     end
+    function b:feedOfferActive(char)
+        local offer=self:attribute(char,"FeedCan")
+        return offer=="eat" or offer=="drink"
+    end
     function b:clearOfferClickPoint(point)
+        if self.holdBinding=="M3" and self:feedOfferActive(self.player.Character) then
+            return nil,"Eat/Drink offer"
+        end
         local clear,offer,reason=self:mouseGameplayPoint(point,false)
         if clear then return point end
+        if self.holdBinding=="M3" and offer then return nil,"Eat/Drink offer" end
         -- Only relocate a coordinate-addressable click around a confirmed HUD
         -- obstruction. Do not relocate across real hub/text/menu boundaries
         -- or when the hit-test API cannot establish a clear position.
@@ -927,6 +935,9 @@ function Roblox.new(Core, environment)
         self.heldInputBlockReason=nil
         if self.syntheticM1 then return self:blockedHeldInput("previous click releasing") end
         local independent=self.holdBinding=="M3"
+        if independent and self:feedOfferActive(self.player.Character) then
+            return self:blockedHeldInput("Eat/Drink offer")
+        end
         if independent and (not s or s.mouseHeld or s.r2Held or s.physicalM1Held) then return false end
         if independent and self.combatPulseBlocked and self.combatPulseBlocked() then return false end
         if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
@@ -935,6 +946,7 @@ function Roblox.new(Core, environment)
         local position=self.UserInputService:GetMouseLocation()
         if not position then return self:blockedHeldInput("mouse position unavailable") end
         local clear,offer,pointReason=self:mouseGameplayPoint(position,false)
+        if independent and offer then return self:blockedHeldInput("Eat/Drink offer") end
         if not clear and (not independent or pointReason~="HUD button" and pointReason~="Eat/Drink offer") then
             return self:blockedHeldInput(pointReason)
         end
@@ -978,6 +990,9 @@ function Roblox.new(Core, environment)
         end
         self.heldInputBackend=backend
         if mode.click then
+            if independent and self:feedOfferActive(self.player.Character) then
+                return self:blockedHeldInput("Eat/Drink offer")
+            end
             if not self:mouseGameplayPoint(nil,false) then return false end
             self.syntheticM1Until=now+.18
             self.syntheticPressing=true
@@ -1008,6 +1023,9 @@ function Roblox.new(Core, environment)
         end
         local function beginPress()
             if self.syntheticM1~=pulse then return end -- a grab began meanwhile
+            if independent and self:feedOfferActive(self.player.Character) then
+                self.heldInputBlockReason="Eat/Drink offer";stop();return
+            end
             if self.combatPulseBlocked then
                 local known,blocked=pcall(self.combatPulseBlocked)
                 if not known or blocked then stop();return end

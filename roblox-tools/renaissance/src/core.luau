@@ -119,7 +119,7 @@ Core.specs = {
     { "reach", "Combat", "Bite Reach", "Existing expanded reach; OFF restores normal game geometry", default = true },
     { "biteHelper", "Combat", "Bite Range Helper", "Small smooth marker; native versus extended range" },
     { "attackSpeed", "Combat", "Adaptive Faster Bites", "Native repeat request pacing starts at 62% of the original cooldown, adapts to damage feedback, and respects game limits", default = true },
-    { "holdBite", "Combat", "Hold to Repeat Bites", "Hold middle mouse to repeat ordinary bite inputs at the game cooldown. Left click remains manual; no route switching.", default = true },
+    { "holdBite", "Combat", "Hold to Repeat Bites", "Hold middle mouse to repeat ordinary bite inputs at the game cooldown. Pauses during Eat/Drink offers; left click remains manual.", default = true },
     { "autoBite", "Combat", "Auto Bite", "Prefers clear stock hits; paces repeated unconfirmed extended contacts" },
     { "combat", "Combat", "Combat Core", "Native attempts and feedback; no extra hit claims", permanent = true },
     { "climb", "Movement", "Climb Assist", "Native Q buffer and one guarded retry" },

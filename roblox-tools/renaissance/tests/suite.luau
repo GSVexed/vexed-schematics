@@ -3154,7 +3154,7 @@ test("M3 native repeat starts and continues through Eat and Drink offers without
     count=w.nativeBites;w:advance(1);eq(w.nativeBites,count)
     h:close()
 end)
-test("M3 locked coordinate adapter avoids a feed prompt and retains continuous hold",function()
+test("M3 ordinary input pauses on food/water offers and resumes the same hold",function()
     local w=Mock.new()
     w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
     w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {}end
@@ -3174,7 +3174,19 @@ test("M3 locked coordinate adapter avoids a feed prompt and retains continuous h
         if math.abs(x-1200)<=30 and math.abs(y-850)<=18 then return {button} end
         return {}
     end
+    w:advance(.15)
     local count=w.nativeBites or 0
+    local downs=w.virtualBiteDowns or 0
+    w:advance(3)
+    eq(w.nativeBites,count);eq(w.virtualBiteDowns or 0,downs)
+    assert(h.combatInput.held)
+    eq(w.virtualGuiClicks or 0,0);eq(w.nativeFeedToggles or 0,0)
+    eq(h.combatInput:middleReport().inputBlockReason,"Eat/Drink offer")
+    w.guiHitsAt=nil;char:SetAttribute("FeedCan","eat")
+    w:advance(2)
+    eq(w.nativeBites,count);eq(w.virtualBiteDowns or 0,downs)
+    assert(h.combatInput.held)
+    char:SetAttribute("FeedCan",nil)
     w:advance(3)
     assert(w.nativeBites>count+2)
     eq(w.virtualGuiClicks or 0,0);eq(w.nativeFeedToggles or 0,0)
@@ -3287,6 +3299,30 @@ test("default M3 selects ordinary input even with native callback available",fun
     assert(h.combatInput.middleInputAttempts>=4)
     assert((w.nativeBites or 0)>=4 and (w.virtualBiteDowns or 0)>=4)
     eq(h.combatInput.held,nil)
+    h:close()
+end)
+
+test("M3 ordinary input refuses a visible feeding control even without FeedCan",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2)
+    local button=w.new("TextButton");button.Name="FeralFeedTap";button.Text="DRINK"
+    button.Parent=w.player:FindFirstChildOfClass("PlayerGui")
+    w.guiHitsAt=function(x,y)
+        if math.abs(x-1200)<=30 and math.abs(y-850)<=18 then return {button} end
+        return {}
+    end
+    w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3,true)
+    w:advance(2)
+    assert(h.combatInput.held)
+    eq(w.virtualBiteDowns or 0,0);eq(w.virtualGuiClicks or 0,0)
+    w.guiHitsAt=nil
+    w:advance(3)
+    assert((w.nativeBites or 0)>=2)
+    w.held=nil;w.uis.InputEnded:Fire(press)
     h:close()
 end)
 
