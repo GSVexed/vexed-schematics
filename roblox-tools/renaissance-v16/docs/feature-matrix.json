@@ -159,7 +159,7 @@
       "feature": "Endurance Movement (experimental)",
       "group": "Movement",
       "status": "local request; other-player view unverified",
-      "evidence_and_limits": "Samples a healthy native sprint on build 2415; requests that local WalkSpeed during ground fatigue with held Left Shift. Pauses for native no-sprint, actions, menus, focus, displacement or ineffective movement; restores only its own value. No server stamina edit or peer replication proof.",
+      "evidence_and_limits": "Samples a healthy native sprint on build 2415; requests that local WalkSpeed during ground fatigue with held Left Shift. Pauses for a separate no-sprint restriction without server fatigue, actions, menus, focus, displacement or ineffective movement; restores only its own value. No server stamina edit or peer replication proof.",
       "offline_compiled": true,
       "live_gameplay_verified": false
     },

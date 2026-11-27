@@ -1,4 +1,4 @@
-ntsInstances={c}
+        params.FilterDescendantsInstances={c}
         params.IgnoreWater=false
         local hit=Workspace:Raycast(Vector3.new(x,2200,z),Vector3.new(0,-4400,0),params)
         if hit and hit.Material~=Enum.Material.Water and hit.Normal.Y>.5 then
@@ -1181,7 +1181,7 @@ for _, pair in ipairs({
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
 M.core.compat=M.compat
-M.release = {version="16.4.1-exp1",territoryVersion="0.8.0",channel="release-candidate",sourceFingerprint="057bcad3410d8c60b7d6658041f637e92feb640fe681d9eaa508b66073e01deb"}
+M.release = {version="16.4.1-exp1",territoryVersion="0.8.0",channel="experiment",sourceFingerprint="b05e56fb2c64abffa8c21c1fb780b75adfac9fcaf676dfefe3eb2c22810700f1"}
 if options.inspect then return M end
 if game.PlaceId ~= 108901361810209 then error("Open FERAL Animal Survival",0) end
 local env = type(getgenv) == "function" and getgenv() or _G

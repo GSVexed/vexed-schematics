@@ -1,4 +1,4 @@
-als.restDamage-=delta end
+t then totals.restHits+=1;totals.restDamage-=delta end
                 end
             end)
             self.characterScope:add(function() connection:Disconnect() end)
@@ -1724,4 +1724,4 @@ function Controller.new(M,bridge,options)
         if not p then
             -- Session timeout must also run between strikes; otherwise a lost
             -- end packet with no private UI handle can block recovery forever.
-            self.grab:tick(clock,s.generat
+            s

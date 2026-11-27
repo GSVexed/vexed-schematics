@@ -1,4 +1,4 @@
-
+ local pulse=self.syntheticM1
         if not pulse then return end
         self.syntheticM1=nil
         if pulse.timer and type(task)=="table" and type(task.cancel)=="function" then
@@ -1714,4 +1714,4 @@ function Tests.new(Core,bridge,hub)
                         self.species[key]=totals
                     end
                     totals.hits+=1;totals.damage-=delta
-                    if snapshot.rest then totals.restHits+=1;tot
+                    if snapshot.res

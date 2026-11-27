@@ -1,3 +1,4 @@
+nk"
             return
         end
         p.sent=bridge:fire("FeralLunge","carry",p.target.char)
@@ -768,14 +769,14 @@ function Endurance.new(Core,bridge)
         local currentOwned=self.owned~=nil
         local ground=not s.swimming and not s.underwater and not s.flying and not s.climbing
             and s.hum.FloorMaterial~=Enum.Material.Air and s.hum.FloorMaterial~=Enum.Material.Water
+        local tired=s.serverTired==true or bridge:attribute(s.char,"StaminaOut")==true
         local clear=ground and not s.rest and not s.feeding and not s.captured and not s.ability
-            and not s.noSprint and not s.holding
+            and (not s.noSprint or s.serverTired==true) and not s.holding
             and not s.grab and not s.chat and not s.gameMenu and not s.protectedInteraction
             and focused~=false and s.hum.MoveDirection.Magnitude>.55
         local inputOK,sprint=pcall(bridge.UserInputService.IsKeyDown,
             bridge.UserInputService,Enum.KeyCode.LeftShift)
         clear=clear and inputOK and sprint==true
-        local tired=s.serverTired==true or bridge:attribute(s.char,"StaminaOut")==true
         if clear and not tired and not currentOwned
             and (not self.baseline or native>=self.baseline*.95)
             and s.stamina and s.maxStamina
@@ -1693,4 +1694,4 @@ function Roblox.new(Core, environment)
         self.heldInputProbeLeft=nil
     end
     function b:releaseSyntheticBite()
-        local pulse=self.syntheticM1
+       

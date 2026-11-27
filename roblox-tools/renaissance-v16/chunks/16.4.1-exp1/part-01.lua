@@ -1,5 +1,5 @@
 -- FERAL Project Renaissance 16.4.1-exp1 | audited captures v2412 and v2415
--- Release candidate: offline tests do not establish live server outcomes.
+-- Experimental movement: offline tests do not establish live server outcomes.
 local options = ...
 if type(options) ~= "table" then options = {} end
 local sources = {}
@@ -1744,4 +1744,4 @@ function Rescue.new(bridge,ledger)
                 s.hum.Jump=true -- one ordinary jump request; no swim-flag or position spoof
                 ledger:event("cub_rescue_jump_requested",now)
             end
-            self.status="Native water lock; jump or move to the bank"
+            self.status="Native water lock; jump or move to the ba

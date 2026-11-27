@@ -1,4 +1,4 @@
-ion,false,function()return false end)
+elf.grab:tick(clock,s.generation,false,function()return false end)
             return
         end
         if self.lastGrabClock==clock and self.lastGrabPending==p then return end
@@ -1663,5 +1663,4 @@ function Nav.new(pathService,workspace,Gait,model)
                         end
                         if valid then return result,"CHECKED_PASSAGE" end
                     end
-                end
-             
+    

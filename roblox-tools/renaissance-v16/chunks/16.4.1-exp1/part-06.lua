@@ -1,4 +1,5 @@
-   local fullPath=self:mesh(from,full,root,hum,char,state)
+            end
+                local fullPath=self:mesh(from,full,root,hum,char,state)
                 if fullPath then return fullPath,"PATH_SURFACE_FULL" end
             end
         end
@@ -1520,4 +1521,3 @@ function Bridge.new(nav)
         end
         local params=RaycastParams.new()
         params.FilterType=Enum.RaycastFilterType.Exclude
-        params.FilterDescenda

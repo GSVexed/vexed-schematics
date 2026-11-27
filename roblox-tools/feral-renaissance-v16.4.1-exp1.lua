@@ -1,5 +1,5 @@
 -- FERAL Project Renaissance 16.4.1-exp1 | audited captures v2412 and v2415
--- Release candidate: offline tests do not establish live server outcomes.
+-- Experimental movement: offline tests do not establish live server outcomes.
 local options = ...
 if type(options) ~= "table" then options = {} end
 local sources = {}
@@ -2515,14 +2515,14 @@ function Endurance.new(Core,bridge)
         local currentOwned=self.owned~=nil
         local ground=not s.swimming and not s.underwater and not s.flying and not s.climbing
             and s.hum.FloorMaterial~=Enum.Material.Air and s.hum.FloorMaterial~=Enum.Material.Water
+        local tired=s.serverTired==true or bridge:attribute(s.char,"StaminaOut")==true
         local clear=ground and not s.rest and not s.feeding and not s.captured and not s.ability
-            and not s.noSprint and not s.holding
+            and (not s.noSprint or s.serverTired==true) and not s.holding
             and not s.grab and not s.chat and not s.gameMenu and not s.protectedInteraction
             and focused~=false and s.hum.MoveDirection.Magnitude>.55
         local inputOK,sprint=pcall(bridge.UserInputService.IsKeyDown,
             bridge.UserInputService,Enum.KeyCode.LeftShift)
         clear=clear and inputOK and sprint==true
-        local tired=s.serverTired==true or bridge:attribute(s.char,"StaminaOut")==true
         if clear and not tired and not currentOwned
             and (not self.baseline or native>=self.baseline*.95)
             and s.stamina and s.maxStamina
@@ -11253,7 +11253,7 @@ for _, pair in ipairs({
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
 M.core.compat=M.compat
-M.release = {version="16.4.1-exp1",territoryVersion="0.8.0",channel="release-candidate",sourceFingerprint="057bcad3410d8c60b7d6658041f637e92feb640fe681d9eaa508b66073e01deb"}
+M.release = {version="16.4.1-exp1",territoryVersion="0.8.0",channel="experiment",sourceFingerprint="b05e56fb2c64abffa8c21c1fb780b75adfac9fcaf676dfefe3eb2c22810700f1"}
 if options.inspect then return M end
 if game.PlaceId ~= 108901361810209 then error("Open FERAL Animal Survival",0) end
 local env = type(getgenv) == "function" and getgenv() or _G

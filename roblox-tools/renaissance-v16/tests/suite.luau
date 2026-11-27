@@ -121,7 +121,10 @@ test("endurance yields to build guard, native sprint ban and fatigue recovery",f
     char:SetAttribute("Stamina",80);char:SetAttribute("StaminaMax",100)
     w.hum.WalkSpeed=32;w:step(.02);close(h.endurance.baseline,32)
     char:SetAttribute("FeralSrvTired",true);char:SetAttribute("FeralNoSprint",true)
+    w.hum.WalkSpeed=13;w:step(.02);close(w.hum.WalkSpeed,32)
+    char:SetAttribute("FeralSrvTired",nil);char:SetAttribute("StaminaOut",true)
     w.hum.WalkSpeed=13;w:step(.02);close(w.hum.WalkSpeed,13)
+    char:SetAttribute("StaminaOut",nil);char:SetAttribute("FeralSrvTired",true)
     char:SetAttribute("FeralNoSprint",nil);w:step(.02);close(w.hum.WalkSpeed,32)
     char:SetAttribute("FeralSrvTired",nil);w:step(.02)
     close(w.hum.WalkSpeed,13);close(h.endurance.baseline,32)
@@ -2065,7 +2068,7 @@ if type(LOADER)=="string" and #LOADER>0 then
         local requests=0
         w.env.game.HttpGet=function(_,url)
             requests+=1
-            assert(url:find("/d4e3697728b9b6a2727d610a3f440d5b5f2dd81b/",1,true),"mutable or unexpected source pin")
+            assert(url:find("/SOURCE_COMMIT_REPLACE_BEFORE_PUBLISH/",1,true),"unexpected loader source URL")
             if mode=="offline" then error("network unavailable") end
             local part=tonumber(url:match("/part%-(%d+)%.lua$"))
             if part then
@@ -2074,7 +2077,7 @@ if type(LOADER)=="string" and #LOADER>0 then
                 return BUNDLE:sub(offset,offset+CHUNK_SIZES[part]-1)
             end
             if mode=="chunks" or mode=="missing" then return "truncated" end
-            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.0%-rc1","16.4.1-rc1",1)) end
+            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.1%-exp1","16.4.1-exp2",1)) end
             return BUNDLE
         end
         return function()return requests end
