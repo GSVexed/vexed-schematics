@@ -1,0 +1,211 @@
+{
+  "schema": "FERAL_RENAISSANCE_RELEASE_VERIFICATION_V1",
+  "version": "16.4.0-rc1",
+  "date_utc": "2026-11-27",
+  "channel": "release-candidate",
+  "branch": "renaissance/v2415-16.4.0-rc1",
+  "publication": {
+    "repository": "GSVexed/vexed-schematics",
+    "source_commit": "d4e3697728b9b6a2727d610a3f440d5b5f2dd81b",
+    "loader_commit": "60e703742efdec8950f69f9ce715f720604f35d3",
+    "bundle_path": "roblox-tools/feral-renaissance-v16.4.0-rc1.lua",
+    "loader_path": "roblox-tools/feral-renaissance-v16.4.0-rc1-loader.lua",
+    "bundle_bytes": 620644,
+    "bundle_sha256": "4a25b0a6970bf0f0bf0114a70aa186bd7d11f1f276e2e81b596f7832ddda5a15",
+    "loader_bytes": 2110,
+    "loader_sha256": "90c85df32266b1f1733193015ed48e8d67150be4df5f693fc2e56635949b5867",
+    "source_fingerprint": "f75dabeff583e4af999c67ad57cc10d8e3cf8745d046f7da35dccb7de2696f58",
+    "anonymous_raw_source_and_loader_match_local": true,
+    "anonymous_raw_chunks_verified": 7,
+    "anonymous_raw_chunks_reconstruct_exact_bundle": true,
+    "floating_production_loaders_changed": false,
+    "changed_paths_confined_to_new_release_and_its_workflow": true
+  },
+  "offline_analysis": {
+    "captured_build": 2415,
+    "capture_sha256": "833a905becc3ebf7f7f07667c08aeecc0dc8ed6f25e1e9c3c4b19e3708030026",
+    "script_instances": 625,
+    "unique_programs": 503,
+    "bytecode_export_failures": 0,
+    "programs_parsed": 503,
+    "decoded_instruction_references_validated": true,
+    "captured_programs_executed_for_analysis": false,
+    "in_game_decompilation_calls": 0,
+    "new_capture_requested": false,
+    "baseline_2412_programs_parsed": 383,
+    "baseline_2412_archive_crc_checked": true,
+    "normalized_paths": {"identical": 307, "changed": 78, "newly_in_inventory": 120, "missing": 1},
+    "new_paths_are_not_all_proven_new_game_features": true,
+    "priority_modules": 29,
+    "legacy_build_checks_accounted_for": 19,
+    "private_analysis_run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46058531037",
+    "private_analysis_result_commit": "8f5c6605effd91fd599aa54969ca8bf5c0703034"
+  },
+  "candidate_automated_tests": {
+    "toolchain_repository": "luau-lang/luau",
+    "toolchain_commit": "97b2f4bf9cd935bed666f3e643a3b749b4d22f38",
+    "local": {"total": 230, "passed": 230, "failed": 0},
+    "hosted": {"total": 230, "passed": 230, "failed": 0},
+    "cases": {"inherited": 202, "input_and_compatibility": 22, "loader": 6},
+    "inherited_expectation_migrations": [
+      "28-feature release registry and explicit reach switch",
+      "actual candidate version",
+      "already-released surface swimming recovery behavior"
+    ],
+    "all_30_modules_and_bundle_compiled": true,
+    "loader_compiled": true,
+    "module_bundle_parity": true,
+    "deterministic_bundle_manifest_and_chunks": true,
+    "simulated_continuous_hold_seconds": 60,
+    "simulated_release_stops_repeat": true,
+    "ci_run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46062065173",
+    "client_job_id": 140718450247,
+    "helper_job_id": 140718449944,
+    "ci_head": "60e703742efdec8950f69f9ce715f720604f35d3",
+    "ci_conclusion": "success"
+  },
+  "windows_helper_tests": {
+    "compiled_with_existing_framework_csc": true,
+    "actual_production_hold_state_implementation_tested": true,
+    "windows_input_abi_checked": true,
+    "deterministic_interrupt_resume_cycles": 10000,
+    "tap_hold_pause_hard_revocation_cases_passed": true,
+    "installer_and_rollback_powershell_syntax_checked": true,
+    "self_test_generates_input": false
+  },
+  "preserved_baseline_gates": [
+    {
+      "name": "Unchanged Renaissance 15.7 suite",
+      "total": 202, "passed": 202, "failed": 0,
+      "run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46062065218",
+      "conclusion": "success"
+    },
+    {
+      "name": "Existing Amber 0.7 planner regression suites",
+      "total": 263, "passed": 263, "failed": 0,
+      "run": "https://github.com/GSVexed/vexed-schematics/actions/runs/46062065281",
+      "conclusion": "success",
+      "scope_note": "Separate retained baseline gate; not live acceptance of the candidate's integrated Territory 0.8.0 journeys."
+    }
+  ],
+  "authorized_pc": {
+    "readiness_run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46058719369",
+    "readiness_conclusion": "success",
+    "observed_roblox_processes": 1,
+    "installation_run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46061642489",
+    "installation_conclusion": "success",
+    "installation_source_commit": "d4e3697728b9b6a2727d610a3f440d5b5f2dd81b",
+    "receipt": {
+      "schema": "FERAL_LEFT_HOLD_INSTALL_V2",
+      "version": "16.4.0-rc1",
+      "utc": "2026-11-27T20:09:30.6000616Z",
+      "status": "RUNNING_INTERACTIVE",
+      "source_sha256": "55d09b90bedba7dd5a561363d419c0c727e650eee8bf03a05adfad8f7a34c63d",
+      "exe_sha256": "f28f20c42e80c69046e2a1c637ffeff0a6c9f7804cc355399e1904bf40770d86",
+      "rollback_available": true,
+      "autostart": false,
+      "gameplay_actions": 0
+    },
+    "pause_shortcut": "Ctrl+Alt+F12",
+    "new_hub_activated_by_validation": false,
+    "global_execution_policy_changed": false,
+    "credentials_exported": false
+  },
+  "passive_client_observation": {
+    "status": "UNCONFIRMED_EXECUTOR_RESULT",
+    "new_live_build_number_confirmed": false,
+    "last_verified_capture_build": 2415,
+    "candidate_live_interfaces_confirmed": false,
+    "attempts": [
+      {
+        "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46061358431",
+        "ci_conclusion": "failure",
+        "semantic_result": "POWERSHELL_PARSE_ERROR_BEFORE_GAME_CONTACT",
+        "resolution": "Wrapper fixed before retry."
+      },
+      {
+        "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46061642337",
+        "ci_conclusion": "success",
+        "semantic_result": "CHUNK_INCOMPLETE",
+        "execution_requested": true,
+        "console_confirmed": false,
+        "counts_as_live_validation": false
+      },
+      {
+        "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46061960184",
+        "ci_conclusion": "success",
+        "semantic_result": "NOT_FOUND",
+        "execution_requested": false,
+        "console_confirmed": false,
+        "counts_as_live_validation": false
+      },
+      {
+        "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46062384612",
+        "ci_conclusion": "success",
+        "semantic_result": "NOT_FOUND",
+        "execution_requested": false,
+        "console_confirmed": false,
+        "counts_as_live_validation": false
+      },
+      {
+        "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46062384685",
+        "ci_conclusion": "failure",
+        "semantic_result": "NO_FRESH_EXECUTOR_FILE",
+        "mcp_dispatch_accepted": true,
+        "fresh_output_file_found": false,
+        "counts_as_live_validation": false
+      }
+    ],
+    "scope": "Own character and client interface types only; candidate inspection without activation.",
+    "gameplay_actions": 0,
+    "other_player_data_exported": false,
+    "remotes_sent_by_probes": false,
+    "new_bytecode_capture": false,
+    "interpretation": "Transport acceptance and a green workflow exit are not proof that the client executed or returned the observation. The bounded console and file checks returned no confirmed receipt; no live compatibility or server outcome is claimed."
+  },
+  "other_failures": [
+    {
+      "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46058531015",
+      "result": "Initial readiness invocation rejected by local PowerShell policy.",
+      "resolution": "Existing process-scoped invocation used; readiness retry passed without changing machine policy."
+    },
+    {
+      "run": "https://github.com/GSVexed/chatgpt-minecraft-testlab/actions/runs/46062382691",
+      "workflow": ".github/workflows/v120-native-observer-pickup.yml",
+      "result": "Existing unrelated workflow failed on the research push; not modified and not counted as a candidate gate."
+    }
+  ],
+  "rollback": {
+    "recommended_loader_version": "16.3.1",
+    "recommended_loader_commit": "c134f883c4464bcac9f2a9e41c1821acc037f685",
+    "recommended_loader_raw_available": true,
+    "recommended_loader_sha256": "3c6aa6bf3fc708c4e14ae5ed2deaa099895acc91e9a5f6fa854908118d8f1c2b",
+    "immediate_previous_loader_version": "16.3.2",
+    "immediate_previous_loader_commit": "0ee8a27f671686c72f3fe3e5407488ddb8900074",
+    "protected_16_3_2_bundle_sha256": "2ff67bdc354de536eb3085828414709542c9da38c1e42b50f0fdc85052ab0ec8",
+    "protected_16_3_2_loader_sha256": "461d5ed28249bbb68b24f8caac75404208d8a7904810c22d143ad8e92c9580e5",
+    "protected_16_3_2_hashes_match": true,
+    "helper_previous_executable_backed_up": true,
+    "helper_rollback_executed": false,
+    "settings_deleted": false
+  },
+  "evidence_limits": {
+    "offline_and_simulated_checks_complete": true,
+    "helper_installation_observed": true,
+    "live_gameplay_verified": false,
+    "authoritative_server_outcomes_verified": false,
+    "unlimited_server_stamina_verified": false,
+    "stamina_status": "PARTIAL_CLIENT_SUPPORT",
+    "pending_gameplay_evidence": [
+      "Long-duration physical hold and native damage acceptance in real combat",
+      "Continuous sprint, swim and ability stamina consumption and server fatigue",
+      "Actual GrabV2 grades and pause/resume during current live minigames",
+      "Active Recovery HP and negative-effect rates",
+      "Hippo ability release and charge movement during live play",
+      "Voice hearing range",
+      "Full Territory navigation, hunting and survival journeys"
+    ],
+    "elder_cap_experiment_added": false,
+    "private_server_source_obtained": false
+  }
+}

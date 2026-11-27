@@ -2,7 +2,7 @@
 
 Build 2415 compatibility and input reliability candidate, recovered from the complete 16.3.2 release.
 
-The versioned loader is published only after the source and relevant automated gates pass. It pins an immutable source commit and preserves the earlier launchers. The floating production loader is unchanged.
+The versioned loader is published and pins an immutable source commit. The candidate passes 230 Luau cases and the Windows helper's 10,000-cycle state test. The helper is installed with a rollback copy. Live gameplay remains unverified because the passive executor observations returned no confirmed receipt. The floating production loader and earlier pinned launchers are unchanged. See [release instructions](docs/RELEASE.md) for the actual launcher and rollback.
 
 - [Investigation](docs/INVESTIGATION.md)
 - [Complete feature matrix](docs/FEATURE_MATRIX.md)
