@@ -1,0 +1,55 @@
+name: FERAL Renaissance v16 candidate regression gate
+on:
+  push:
+    branches: ['renaissance/**']
+    paths: ['roblox-tools/renaissance-v16/**', 'roblox-tools/feral-renaissance-v16.4*', '.github/workflows/feral-renaissance-v16-validate.yml']
+  pull_request:
+    paths: ['roblox-tools/renaissance-v16/**', 'roblox-tools/feral-renaissance-v16.4*']
+permissions:
+  contents: read
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Build pinned official Luau compiler and interpreter
+        run: |
+          git clone https://github.com/luau-lang/luau.git /tmp/feral-luau
+          git -C /tmp/feral-luau checkout 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/feral-luau config=release -j2 luau luau-compile
+      - name: Compile recovered modules and run regression scenarios
+        run: python3 roblox-tools/renaissance-v16/run_tests.py --luau /tmp/feral-luau/luau --compiler /tmp/feral-luau/luau-compile
+      - name: Verify deterministic bundle and manifest
+        run: git diff --exit-code -- roblox-tools/feral-renaissance-v16.4.0-rc1.lua roblox-tools/renaissance-v16/manifest.json roblox-tools/renaissance-v16/chunks/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renaissance-v16-client-results
+          path: |
+            roblox-tools/renaissance-v16/test-results.json
+            roblox-tools/renaissance-v16/test-output.log
+  helper:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile isolated helper and exercise actual hold state machine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          $source=(Resolve-Path 'roblox-tools/renaissance-v16/helper/LeftHoldBridge.cs').Path
+          $exe=Join-Path $env:RUNNER_TEMP 'FERALLeftHoldBridge-selftest.exe'
+          & $compiler /nologo /target:winexe /platform:anycpu /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "/out:$exe" $source
+          if($LASTEXITCODE -ne 0){throw 'C# compilation failed'}
+          $p=Start-Process $exe -ArgumentList '--self-test' -Wait -PassThru
+          if($p.ExitCode -ne 0){throw "Helper state/ABI self-test failed: $($p.ExitCode)"}
+          foreach($name in @('install.ps1','rollback.ps1')) {
+            $tokens=$null;$errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path ('roblox-tools/renaissance-v16/helper/'+$name)),[ref]$tokens,[ref]$errors)
+            if($errors.Count){throw ($errors|Out-String)}
+          }
+          Write-Output 'PASS helper ABI, tap/hold, pause, hard revocation and 10000 transition cycles; installer syntax valid'

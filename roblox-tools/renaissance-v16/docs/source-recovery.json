@@ -1,0 +1,151 @@
+{
+  "release": "16.3.2",
+  "module_count": 29,
+  "modules": {
+    "core": {
+      "bytes": 13126,
+      "sha256": "29e334c516155a98db05523af2dd3a7e267323b025a4d5d460bb61b76ad6894d",
+      "changed": false
+    },
+    "settings": {
+      "bytes": 3954,
+      "sha256": "2b6ee15aa075c552456925eff9f71cedffdf9e135cb3b1739871acee938a25fa",
+      "changed": false
+    },
+    "policy": {
+      "bytes": 5427,
+      "sha256": "7e12462bb4bc0f1b93406d8f864782f9921dff23899a05884a435081c74fb21c",
+      "changed": false
+    },
+    "grab": {
+      "bytes": 13224,
+      "sha256": "caaa5a2e5486d1feadc1fc03ddd576392abd18522d8dfa4b1dd0806138b08b2d",
+      "changed": false
+    },
+    "grab_input": {
+      "bytes": 3812,
+      "sha256": "8bf5d669c52aa3ec3cdeee661fb9cf2994eb414003e0e47d2d88544bff03139b",
+      "changed": false
+    },
+    "recovery": {
+      "bytes": 15446,
+      "sha256": "2dc9b2ebd00af8f2915741245ee1376d14f9dcb61f301db824e170e7d61bf308",
+      "changed": false
+    },
+    "feeding": {
+      "bytes": 6701,
+      "sha256": "4f03841709f72ce8cd22eec26eeb3a205896c0465aa9fd6720f8e674acb6f27c",
+      "changed": false
+    },
+    "combat_input": {
+      "bytes": 25023,
+      "sha256": "c81c54c26f7026347f2958a9f7547b9e6000b575ff560ff7f9f284f50c61a87d",
+      "changed": true
+    },
+    "rescue": {
+      "bytes": 3008,
+      "sha256": "f1be4288bfbe47a55c7c74f6895966ce5f199055d7286d10ad0976bc04b5fecb",
+      "changed": false
+    },
+    "hippo": {
+      "bytes": 5573,
+      "sha256": "92f158c4117b71a7bb9e28dbe61610390c1ec385cfe5c3b56c7c36fb13eb27f9",
+      "changed": true
+    },
+    "features": {
+      "bytes": 33520,
+      "sha256": "b07f03cac508ccc227e2f01f71e26580b4e732ddd7c2c45c40c44cdd187b4972",
+      "changed": true
+    },
+    "roblox": {
+      "bytes": 117236,
+      "sha256": "fb08c75fceaf2758dd391aac0c01f4af38398bb815688a2eb9fee6c2ed24e44b",
+      "changed": true
+    },
+    "zoom": {
+      "bytes": 3565,
+      "sha256": "8446b1f187833685e25b5104dde57eb6c60c5f727bc65c032e704628b23707b3",
+      "changed": false
+    },
+    "voice": {
+      "bytes": 10674,
+      "sha256": "d7ad9c1af597a9ea0e2db73d9c8e21d97546766c20c2de528feb80ff665fab9b",
+      "changed": false
+    },
+    "test_features": {
+      "bytes": 16436,
+      "sha256": "79e4260b3d178ad29bbfbdf8698791f45bbe6aef876b1f29d953eca953678d1a",
+      "changed": true
+    },
+    "ui": {
+      "bytes": 23573,
+      "sha256": "546cc64cd3f7aab060d6997946e4630497c6d82329e87c552de51123b6482c91",
+      "changed": false
+    },
+    "controller": {
+      "bytes": 93240,
+      "sha256": "5aacd440c25b986743d297ff9ff8f8d4a16e937b344acca215a11018fd8d8334",
+      "changed": true
+    },
+    "amber_ledger": {
+      "bytes": 4302,
+      "sha256": "d81f49ce6c742e898d2e8dc2c2f93aa7c00d704f0b9498579712492aa760254f",
+      "changed": false
+    },
+    "amber_model": {
+      "bytes": 3810,
+      "sha256": "49ad32d8d9d81532d55853a675294d053fcf67c4cff1bf398ff0eae169b41177",
+      "changed": false
+    },
+    "amber_planner": {
+      "bytes": 22646,
+      "sha256": "5e5436d28c6be5f69beafe268bfaea11acf46dbfc50db291832e459c4c146feb",
+      "changed": false
+    },
+    "amber_gait": {
+      "bytes": 7902,
+      "sha256": "0204c0a87b47156bd5450dcdd9f3c4e74b4b28399ff755cfb5d3763dee9b63de",
+      "changed": false
+    },
+    "amber_nav": {
+      "bytes": 36600,
+      "sha256": "d2d841beb6c6107752a094f35f0295207f25b90a9f03210f59e60821359aceef",
+      "changed": false
+    },
+    "amber_hunt": {
+      "bytes": 12438,
+      "sha256": "b3e39ae28311654dbef89c16bd5539c6198654f361b39732f0bb0c2f921979dd",
+      "changed": false
+    },
+    "amber_care": {
+      "bytes": 5080,
+      "sha256": "8da160adbe7f08a624f004a59314ec38747c28d01d41a4f4a0eb5bc406e92bbf",
+      "changed": false
+    },
+    "amber_agent": {
+      "bytes": 39816,
+      "sha256": "50c334681beb9992910a984aefb2c9ee51fa1853005991d0cad914ff50397f29",
+      "changed": false
+    },
+    "amber_bridge": {
+      "bytes": 65584,
+      "sha256": "7f9136c212ed6466391303ea9333c82cad4c092a22b4c8a68dc0485abbd0581d",
+      "changed": true
+    },
+    "amber_driver": {
+      "bytes": 5275,
+      "sha256": "00267c2ac18aab2bbe5d4cfa5053e29e9d9fa7d3d860b4f5d650c3a7bfbeab95",
+      "changed": false
+    },
+    "amber_ui": {
+      "bytes": 4566,
+      "sha256": "b59a48e5ca1c8b24735a1021e636ab0e3d2798ed896c4028d88d4092728b8be3",
+      "changed": false
+    },
+    "amber_runtime": {
+      "bytes": 5870,
+      "sha256": "6fdeb6543d3bf4d93df1c393d2e374529822bcbc8c32670a7aea77710128415c",
+      "changed": false
+    }
+  }
+}

@@ -1,0 +1,76 @@
+-- Reversible native input separation. No global function hooks or fake bites.
+-- Temporarily remove the native MouseButton1 minigame action.
+-- Native Space/gamepad presses are retained under this owner's separate binding.
+local GrabInput = {}
+local function read(native)
+    if not native or type(native.state)~="function" then return nil,false end
+    local ok,state,known=pcall(native.state)
+    if ok then return state,known end
+    return nil,false
+end
+function GrabInput.new(bridge,token)
+    local i = { lease = nil, status = "waiting for native session", name = "FERAL_GRAB_INPUT_" .. token }
+    function i:release()
+        local lease = self.lease
+        self.lease = nil
+        pcall(bridge.unbindGrabManual,bridge,self.name)
+        if not lease then return end
+        local current,known = read(lease.controller)
+        local same=current==lease.state or current==nil and known~=true
+        if same and lease.state.ended ~= true and not bridge:nativeGrabBound()
+            and (not lease.controller.script or lease.controller.script.Parent ~= nil)
+            and bridge.player.Character == lease.character then
+            pcall(lease.controller.bind,true)
+        end
+        self.status = "native inputs restored"
+    end
+    function i:controller(now)
+        return bridge:nativeGrabController(now)
+    end
+    function i:update(grab,now,native,state)
+        if not grab.enabled or not grab.active then
+            if self.lease then self:release() end
+            return false
+        end
+        native = native or self:controller(now)
+        state = state or read(native)
+        if not state or state.ended or tostring(state.id) ~= tostring(grab.session) then
+            local lease=self.lease
+            if not state and lease and lease.controller==native and not lease.state.ended
+                and tostring(lease.state.id)==tostring(grab.session) and bridge.player.Character==lease.character then
+                self.status="native state temporarily unreadable; timing retained"
+                return true
+            end
+            if self.lease then self:release() end
+            self.status = "native input isolation unavailable"
+            return false
+        end
+        if self.lease and (self.lease.controller ~= native or self.lease.state ~= state) then self:release() end
+        local check=not self.lease or now >= (self.nextBindingCheck or 0)
+        if check then self.nextBindingCheck=now+.1 end
+        if check and bridge:nativeGrabBound() then
+            local lease = { controller = native,state = state,character = bridge.player.Character }
+            self.lease = lease -- record before calling out so partial failure unwinds
+            local ok = pcall(native.bind,false)
+            if not ok or bridge:nativeGrabBound() then
+                self:release()
+                self.status = "native minigame input could not be separated"
+                return false
+            end
+            local bound = pcall(bridge.bindGrabManual,bridge,self.name,function()
+                if not grab.enabled or not grab.active or self.lease ~= lease or bridge:grabTextFocused() then return false end
+                local current = read(native)
+                if current ~= state or current.ended or tostring(current.id) ~= tostring(grab.session) then return false end
+                grab:manual()
+                return pcall(native.press)
+            end)
+            if not bound then self:release();self.status = "manual input binding unavailable";return false end
+        end
+        if not self.lease then self.status = "waiting for native input binding"; return false end
+        self.status = "bite clicks separated from minigame presses"
+        return true
+    end
+    function i:close() self:release() end
+    return i
+end
+return GrabInput

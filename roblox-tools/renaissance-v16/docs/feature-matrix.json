@@ -1,0 +1,266 @@
+{
+  "version": "16.4.0-rc1",
+  "features": [
+    {
+      "id": "stamina",
+      "feature": "Infinite Stamina",
+      "group": "Survival",
+      "status": "partial client support",
+      "evidence_and_limits": "Native local drain leases retained; Studio-only debug flag skipped on 2415; server fatigue and ability costs respected.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "recovery",
+      "feature": "Active Recovery + Fast Effects",
+      "group": "Survival",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "Native Rest/effect signaling retained; HP and condition progress remain observations, with no fabricated multiplier success.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "effects",
+      "feature": "Fast Negative-Effect Recovery",
+      "group": "Survival",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "Native Rest/effect signaling retained; HP and condition progress remain observations, with no fabricated multiplier success.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "robloxAFK",
+      "feature": "Roblox Anti-AFK",
+      "group": "Survival",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "survivalAFK",
+      "feature": "Survival Bonus AFK",
+      "group": "Survival",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "minigame",
+      "feature": "Automatic Minigames",
+      "group": "Survival",
+      "status": "adapted; gameplay pending",
+      "evidence_and_limits": "Existing GrabV2 automation preserved; serverPress unchanged; new wrestling/open-panel interactions protected and manual.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "escape",
+      "feature": "Auto Escape",
+      "group": "Survival",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "reach",
+      "feature": "Bite Reach",
+      "group": "Combat",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "Existing reversible expanded client geometry retained; no guaranteed server range or hit acceptance.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "biteHelper",
+      "feature": "Bite Range Helper",
+      "group": "Combat",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "attackSpeed",
+      "feature": "Adaptive Faster Bites",
+      "group": "Combat",
+      "status": "adapted; gameplay pending",
+      "evidence_and_limits": "2415 checked interface restored; remove double adaptive scaling; native positive-feedback governor preserved.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "holdBite",
+      "feature": "Hold to Repeat Bites",
+      "group": "Combat",
+      "status": "adapted; gameplay pending",
+      "evidence_and_limits": "Epoch revocation, restart handshake, stale-sequence rejection, protected pauses, guarded offers; 60-second simulated repeat and lifecycle tests.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "autoBite",
+      "feature": "Auto Bite",
+      "group": "Combat",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "combat",
+      "feature": "Combat Core",
+      "group": "Combat",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "climb",
+      "feature": "Climb Assist",
+      "group": "Movement",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "flight",
+      "feature": "Flight Assistance",
+      "group": "Movement",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "mobility",
+      "feature": "Movement Assistance",
+      "group": "Movement",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "speed",
+      "feature": "Speed Assistance",
+      "group": "Movement",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "leap",
+      "feature": "Jump / Leap Assistance",
+      "group": "Movement",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "zoom",
+      "feature": "Zoom Unlock",
+      "group": "Movement",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "esp",
+      "feature": "Outline ESP",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "colours",
+      "feature": "Faction / Health Colours",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "tags",
+      "feature": "Name Tags",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "voice",
+      "feature": "Extended Proximity Hearing",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "Existing local 25% rolloff extension retained; depends on exposed Roblox audio objects; no live hearing-range test.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "finder",
+      "feature": "Long-Range Player Finder",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "menu",
+      "feature": "Right Shift Menu Toggle",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "settings",
+      "feature": "Saved Settings",
+      "group": "Vision",
+      "status": "preserved; gameplay pending",
+      "evidence_and_limits": "existing behavior retained; full source compiled",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "hippoMove",
+      "feature": "Move During Charge",
+      "group": "Hippo",
+      "status": "adapted; gameplay pending",
+      "evidence_and_limits": "Audited 2415 layouts admitted; current profile/player/remote validation and native fatigue constraints retained.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "hippoRelease",
+      "feature": "Smart Crusher Release",
+      "group": "Hippo",
+      "status": "adapted; gameplay pending",
+      "evidence_and_limits": "Audited 2415 layouts admitted; current profile/player/remote validation and native fatigue constraints retained.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    },
+    {
+      "id": "territory",
+      "feature": "Integrated Territory 0.8.0",
+      "group": "Territory",
+      "status": "gait guard adapted; journeys pending",
+      "evidence_and_limits": "All 12 integrated modules recovered and compiled; current scaled gait interface restored; navigation/hunting/care remain native and need live journey validation.",
+      "offline_compiled": true,
+      "live_gameplay_verified": false
+    }
+  ]
+}
