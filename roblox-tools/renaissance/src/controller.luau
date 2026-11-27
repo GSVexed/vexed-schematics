@@ -71,8 +71,8 @@ function Controller.new(M,bridge,options)
     bridge.extendedConfidence=h.extendedConfidence
     -- A pending synthetic reset can outlive the current Heartbeat. Never
     -- press during an asynchronously arriving native grab begin.
-    -- Legacy executor mouse replay is disabled. No generated M1 edge may
-    -- compete with the physical mouse while the player holds to attack.
+    -- Only an independently held middle button can own an ordinary-input pulse.
+    -- Never compete with a physically held M1 or a native minigame.
     bridge.combatPulseBlocked = function()
         if bridge.holdBinding~="M3" then return true end
         local held=h.combatInput.held
@@ -261,8 +261,9 @@ function Controller.new(M,bridge,options)
         if id == "flight" and not on then self:clearFlight() end
         if id == "robloxAFK" then self.idleUnavailable = nil end
         if id == "climb" and not on then self.climbQueue = nil end
-        if id=="autoBite" and not on then self.combatInput:cancel() end
+        if id=="autoBite" and not on then self.combatInput:pause("auto bite disabled",now) end
         if id=="holdBite" and not on then
+            self.middlePollArmed=false
             self.physicalM1Input=nil
             self.combatInput:cancel()
         end
@@ -304,7 +305,8 @@ function Controller.new(M,bridge,options)
         bridge:releaseSyntheticBite()
         self.feeding:close(now)
         self.combatInput:cancel()
-        self.physicalM1Input=nil
+        self.middlePollArmed=false;self.middlePollDown=nil
+        self.physicalM1Input=nil;self.physicalM1MissingSince=nil
         self.combatInput:resetRate()
         self.extendedConfidence=setmetatable({},{__mode="k"})
         bridge.extendedConfidence=self.extendedConfidence
@@ -429,7 +431,7 @@ function Controller.new(M,bridge,options)
         if s.gameMenu or self.windowFocused==false then return end
         if primary or key==Enum.KeyCode.ButtonR2 then
             self.inputSuspended=false
-            if primary then self.physicalM1Input=input end
+            if primary then self.physicalM1Input=input;self.physicalM1MissingSince=nil end
         end
         self.features:hippoInput(s,key)
         if key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonY
@@ -447,7 +449,7 @@ function Controller.new(M,bridge,options)
         local flightCancel=(key==Enum.KeyCode.Space or key==Enum.KeyCode.ButtonB) and self:noteFlightCancel(input,s,now)
         if flightCancel then
             self.policy:input("action",now);self.recovery:release("manual native flight release",now)
-            self.combatInput:cancel();return
+            self.combatInput:pause("native flight release",now);return
         end
         -- WolfController binds E/ButtonB to native feeding. Preserve flight's
         -- active ButtonB cancellation, which has priority over feeding.
@@ -456,7 +458,7 @@ function Controller.new(M,bridge,options)
             self.feeding:input(s,now)
             self.policy:input("action",now)
             self.recovery:release("manual feeding input",now)
-            self.combatInput:cancel();self.rescue:cancel()
+            self.combatInput:pause("manual feeding input",now);self.rescue:cancel()
             return
         end
         if primary or key == Enum.KeyCode.ButtonR2 then
@@ -471,7 +473,7 @@ function Controller.new(M,bridge,options)
                 if #self.transactions > 32 then table.remove(self.transactions,1) end
                 self.ledger:event("attack_intent",now,{restLock = tx.lock})
                 if restReleased then self.combatInput:input(s,now,primary and "M1" or "R2",input)
-                else self.combatInput:cancel() end
+                else self.combatInput:pause("native Rest exit pending",now) end
             end
         elseif key == Enum.KeyCode.E or key == Enum.KeyCode.F or key == Enum.KeyCode.G
             or key==Enum.KeyCode.Z or key==Enum.KeyCode.X
@@ -1203,6 +1205,21 @@ function Controller.new(M,bridge,options)
             self.middlePollDown=s.middleHeld
         end
         if bridge.holdBinding=="M3" then
+            -- A late synthetic echo or a missed native M1 release can leave
+            -- physicalM1Input latched forever. Only clear it after independent
+            -- known-up readings outside every synthetic pulse/grace interval.
+            if self.physicalM1Input and s.mouseHeldKnown and not s.mouseHeld
+                and not bridge.syntheticM1 and now>=(bridge.syntheticM1Until or 0) then
+                self.physicalM1MissingSince=self.physicalM1MissingSince or now
+                local ok,state=pcall(function()return self.physicalM1Input.UserInputState end)
+                if (ok and (state==Enum.UserInputState.End or state==Enum.UserInputState.Cancel))
+                    or now-self.physicalM1MissingSince>=.45 then
+                    self.physicalM1Input=nil;self.physicalM1MissingSince=nil
+                    self.ledger:event("stale_manual_mouse_owner_cleared",now)
+                end
+            else
+                self.physicalM1MissingSince=nil
+            end
             s.physicalM1Held=self.physicalM1Input~=nil or (s.mouseHeld and not bridge.syntheticM1)
         end
         if self.inputSuspended then s.attackHeld,s.mouseHeld,s.r2Held,s.middleHeld=false,false,false,false
@@ -1264,7 +1281,7 @@ function Controller.new(M,bridge,options)
         if repeatActive then
             self.policy.attackUntil=math.max(self.policy.attackUntil,now+1.1)
             if self.recovery.owned and not self.recovery:release("held bite priority",now) then
-                self.combatInput:cancel()
+                self.combatInput:pause("native Rest exit pending",now)
             end
         end
         local auto=self.registry.byId.autoBite.requested and not (self.territory and self.territory.agent.enabled)

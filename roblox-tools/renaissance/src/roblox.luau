@@ -1245,6 +1245,7 @@ function Roblox.new(Core, environment)
         local mouseOK,mouseDown=pcall(self.UserInputService.IsMouseButtonPressed,
             self.UserInputService,Enum.UserInputType.MouseButton1)
         s.mouseHeld=mouseOK and mouseDown==true
+        s.mouseHeldKnown=mouseOK and type(mouseDown)=="boolean"
         if self.holdBinding=="M3" then
             local middleOK,middleDown=pcall(self.UserInputService.IsMouseButtonPressed,
                 self.UserInputService,Enum.UserInputType.MouseButton3)

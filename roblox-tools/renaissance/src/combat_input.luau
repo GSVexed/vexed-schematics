@@ -10,6 +10,7 @@ function CombatInput.new(bridge,policy,ledger)
         status="native input", fallbackMisses=0, unavailableUntil=0,
         speedFactor=.62, goodStreak=0, suspectStreak=0,
         lastRateChange=-math.huge, lastMarker=nil, lastDispatch=0,
+        nativeMisses=0,nativeRetryAt=0,
     }
     local function stopDiscovery()
         bridge.wantHeldNativeDiscovery=false
@@ -57,6 +58,29 @@ function CombatInput.new(bridge,policy,ledger)
         if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
         self.nextAttempt=0
     end
+    -- Temporary native action transitions must not discard an accepted M3
+    -- press. Hard cancellation is reserved for release, focus, UI, OFF,
+    -- manual Rest, or loss of the current animal.
+    function c:pause(reason,now)
+        if not middleMode or not self.held or self.held.key~="M3" then
+            self:cancel()
+            return
+        end
+        self.pending,self.awaiting=nil,nil
+        stopDiscovery()
+        if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
+        self.nextAttempt=math.max(self.nextAttempt,now+.20)
+        self.status=reason.." · middle hold retained"
+    end
+    function c:noteNativeMiss(now)
+        if not middleMode or not self.held or self.held.key~="M3" then return end
+        self.nativeMisses+=1
+        if self.nativeMisses>=3 then
+            self.nativeRetryAt=now+12
+            self.nativeMisses=2
+            ledger:event("m3_native_callback_backoff",now)
+        end
+    end
     function c:release(kind,now)
         if self.held and (kind==nil or self.held.key==kind or self.held.key=="poll") then
             -- A single tap made during an owned Rest-exit window must still
@@ -70,6 +94,7 @@ function CombatInput.new(bridge,policy,ledger)
         end
     end
     function c:marker(s,now)
+        if self.awaiting and self.awaiting.backend=="NATIVE" then self.nativeMisses,self.nativeRetryAt=0,0 end
         if self.awaiting and self.awaiting.backend=="INPUT"
             and type(bridge.noteHeldInputMarker)=="function" then
             bridge:noteHeldInputMarker()
@@ -89,6 +114,7 @@ function CombatInput.new(bridge,policy,ledger)
                     and self.held.generation==s.generation then return end
                 self.held={char=s.char,generation=s.generation,key="M3",
                     source="event",input=inputObject,startedAt=now,handoff=true}
+                self.nativeMisses,self.nativeRetryAt,self.fallbackMisses,self.unavailableUntil=0,0,0,0
                 self.nextAttempt=math.max(self.nextAttempt,now+.025)
                 self.status="middle mouse held"
                 ledger:event("physical_m3_hold_started",now)
@@ -126,8 +152,15 @@ function CombatInput.new(bridge,policy,ledger)
                 end
                 if not options.repeatHeld or self.held.char~=s.char
                     or self.held.generation~=s.generation
-                    or self.held.upSince and now-self.held.upSince>.12 then
+                    or self.held.upSince and now-self.held.upSince>.35 then
                     self:release("M3",now)
+                elseif self.held.upSince then
+                    -- Stop dispatch immediately on an uncertain physical release,
+                    -- but keep the press through a short polling dropout.
+                    if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
+                    self.awaiting=nil
+                    self.status="middle button temporarily unconfirmed"
+                    return
                 end
             end
         else
@@ -204,6 +237,7 @@ function CombatInput.new(bridge,policy,ledger)
         end
         if s.feeding or s.captured or s.holding or s.ability or s.rest then
             self.pending=nil
+            if middleMode then self.awaiting=nil end
             if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
             self.status="native action lock; hold retained"
             return
@@ -219,6 +253,7 @@ function CombatInput.new(bridge,policy,ledger)
             if waiting.backend=="INPUT" and type(bridge.noteHeldInputTimeout)=="function" then
                 bridge:noteHeldInputTimeout()
             end
+            if waiting.backend=="NATIVE" and not inGrab then self:noteNativeMiss(now) end
             self.fallbackMisses+=(waiting.backend=="NATIVE_INPUT" or waiting.backend=="INPUT") and 1 or 0
             if self.fallbackMisses>=3 then
                 self.unavailableUntil=now+2.5
@@ -279,6 +314,9 @@ function CombatInput.new(bridge,policy,ledger)
         -- InputBegan callback with the original held M1 InputObject.
         -- No simulated mouse Up/Down/Up is ever dispatched here.
         local native=bridge.wolfActions and bridge.wolfActions.tryBite
+        -- A callback that was available but stopped producing native markers
+        -- is not allowed to starve the ordinary-input path for the entire hold.
+        if middleMode and held and not inGrab and now<self.nativeRetryAt then native=nil end
         local nativeInput=not native and held and not automatic and not inGrab
             and self.held and self.held.key=="M1" and self.held.source=="event"
             and self.held.input and type(bridge.nativeWolfInputAction)=="function"
@@ -322,6 +360,8 @@ function CombatInput.new(bridge,policy,ledger)
             if not called then self.awaiting=nil end
         end
         local marked=self.markerCount>markers
+        if backend=="NATIVE" and marked then self.nativeMisses,self.nativeRetryAt=0,0 end
+        if backend=="NATIVE" and not called and not inGrab then self:noteNativeMiss(now) end
         if called and not marked then
             self.awaiting={char=s.char,generation=s.generation,at=now,backend=backend}
         end

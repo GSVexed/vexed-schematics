@@ -3021,5 +3021,72 @@ test("M3 fallback uses ordinary clicks when native discovery is inaccessible",fu
     h:close()
 end)
 
+-- Sustained M3 regression scenarios use the production default binding.
+test("M3 sustained hold survives a short polling dropout and native ability pause",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(2)
+    local count=w.nativeBites or 0
+    assert(count>=2)
+    w.held=nil;w:advance(.18)
+    assert(h.combatInput.held,"short physical poll dropout must not forget M3")
+    eq(w.nativeBites,count)
+    w.held=E.UserInputType.MouseButton3;w:advance(2)
+    assert(w.nativeBites>count)
+    h:set("autoBite",false)
+    assert(h.combatInput.held,"unrelated auto bite toggle must retain M3")
+    local char=h.bridge.player.Character
+    char:SetAttribute("FeralCrushAt",w.time+1000)
+    count=w.nativeBites;w:advance(1.5)
+    eq(w.nativeBites,count)
+    char:SetAttribute("FeralCrushAt",nil)
+    w:advance(10)
+    assert(w.nativeBites>count+8,"continuous hold must recover after action lock")
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    count=w.nativeBites;w:advance(1);eq(w.nativeBites,count)
+    h:close()
+end)
+test("M3 fallback recovers a stale physical M1 owner without another press",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.env.getconnections=nil;w.env.getgc=function()return {}end
+    w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(2.2);assert((w.virtualBiteDowns or 0)>=1)
+    h.physicalM1Input={UserInputType=E.UserInputType.MouseButton1,UserInputState=E.UserInputState.Begin}
+    local count=w.virtualBiteDowns
+    w:advance(4)
+    eq(h.physicalM1Input,nil)
+    assert(w.virtualBiteDowns>count,"stale M1 owner permanently blocked repeat")
+    assert(h.combatInput.held)
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    count=w.virtualBiteDowns;w:advance(1);eq(w.virtualBiteDowns,count)
+    h:close()
+end)
+test("M3 switches to guarded ordinary input when a native callback becomes silent",function()
+    local w=Mock.new()
+    w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .55 end})
+    w:enableNativeActions();w.virtualBiteAvailable=true
+    local h=assert(w.env.loadstring(BUNDLE))({settings={states={holdBite=true,recovery=false,autoBite=false}}})
+    w:advance(.2);w.held=E.UserInputType.MouseButton3
+    local press=w:input(nil,E.UserInputType.MouseButton3)
+    w:advance(2)
+    local count=w.nativeBites or 0
+    assert(count>=2 and h.bridge.wolfActions and h.bridge.wolfActions.tryBite)
+    h.bridge.wolfActions.tryBite=function()end
+    w:advance(7)
+    assert((w.virtualBiteDowns or 0)>0,"silent native callback starved fallback")
+    assert(w.nativeBites>count,"ordinary input did not restore native bite markers")
+    w.held=nil;w.uis.InputEnded:Fire(press)
+    count=w.nativeBites;w:advance(1);eq(w.nativeBites,count)
+    h:close()
+end)
+
 print(string.format("RENAISSANCE_TEST_RESULT total=%d passed=%d failed=%d",tests,tests-#failures,#failures))
 if #failures>0 then error(table.concat(failures,"\n"),0) end
