@@ -1,0 +1,1795 @@
+        return knownPack(self:attribute(owner,"FeralPack")) or knownPack(self:attribute(char,"FeralPack"))
+            or knownPack(self:attribute(record,"Pack"))
+    end
+    function b:affiliation(other, char)
+        local own = self:packFor(self.player.Character,self.player)
+        local theirs = self:packFor(char,other or (char and self.Players:GetPlayerFromCharacter(char)))
+        return own and theirs and (own == theirs and "same" or "other") or "unknown"
+    end
+    function b:targetBlocker(char,owner)
+        if not char or not char.Parent or self:attribute(char,"FeralDead") == true then return "target unavailable" end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return "target unavailable" end
+        if char:FindFirstChildOfClass("ForceField") then return "protected target" end
+        local safe,now = self:attribute(char,"FeralSafeUntil"),self:serverNow()
+        if safe~=nil and not Core.finite(safe) then return "protection timing unknown" end
+        if Core.finite(safe) and (not now or safe > now) then return "spawn protection" end
+        owner = owner or self.Players:GetPlayerFromCharacter(char)
+        if self:attribute(owner,"FeralTut") == true or self:attribute(owner,"FeralTutorial") == true then return "tutorial protection" end
+        local tutorial = self:attribute(char,"TutorialOwner")
+        if tutorial ~= nil and tutorial ~= self.player.UserId then return "another tutorial target" end
+        if self:attribute(char,"FeralBurrowed") == true then return "burrowed target" end
+        return nil
+    end
+    function b:combatEligible(char)
+        return char ~= self.player.Character and not self:targetBlocker(char)
+            and self:affiliation(nil,char) ~= "same"
+    end
+    function b:sameTree(a,c)
+        if not self:isClimbing(a) or not self:isClimbing(c) then return false end
+        local axisA,axisB = self:attribute(a,"FeralClimbAxis"),self:attribute(c,"FeralClimbAxis")
+        return typeof(axisA) == "Vector3" and typeof(axisB) == "Vector3" and (axisA-axisB).Magnitude < 5
+    end
+    function b:currentTargetBody(target)
+        if not target or not target.char or target.char==self.player.Character or not target.char.Parent
+            or not target.root or not target.hum
+            or target.root.Parent~=target.char or target.hum.Parent~=target.char
+            or target.hum.Health<=0 then return false end
+        if target.player and target.player.Character~=target.char then return false end
+        return target.char:FindFirstChild("HumanoidRootPart")==target.root
+            and target.char:FindFirstChildOfClass("Humanoid")==target.hum
+    end
+    function b:clearCombatTargets()
+        self.reachTarget,self.treeTarget=nil,nil
+        self.allCandidates,self.tracked={},{}
+        self.replicatedCount,self.packNPCCount=0,0
+    end
+    function b:retireCombatTarget(target)
+        if self.reachTarget==target then self.reachTarget=nil end
+        if self.treeTarget==target then self.treeTarget=nil end
+    end
+    function b:candidates(s, range,visual)
+        local all,seen = {},{}
+        if not s.alive then
+            if visual~=false then self:clearCombatTargets() end
+            return all
+        end
+        local litter = self:refreshLitter()
+        local function add(char,other,npc)
+            if not char or char == s.char or not char.Parent or seen[char] then return end
+            local owner = self.Players:GetPlayerFromCharacter(char)
+            if owner == self.player then return end
+            local root,hum = char:FindFirstChild("HumanoidRootPart"),char:FindFirstChildOfClass("Humanoid")
+            if not root or not hum or hum.Health <= 0 then return end
+            local delta = root.Position-s.root.Position
+            local distance = delta.Magnitude
+            if distance > range then return end
+            local record = litter[char]
+            seen[char] = true
+            table.insert(all,{ char = char, root = root, hum = hum, player = owner, npc = owner == nil,
+                litter = owner == nil and record or nil,
+                name = owner and owner.DisplayName or self:attribute(record,"Name") or self:attribute(char,"FeralName") or char.Name,
+                distance = distance,affiliation = self:affiliation(owner,char), flat = Vector3.new(delta.X,0,delta.Z),
+                sameTree = self:sameTree(s.char,char),
+                protected = self:targetBlocker(char,owner) ~= nil })
+        end
+        for _, other in ipairs(self.Players:GetPlayers()) do
+            if other ~= self.player then add(other.Character,other,false) end
+        end
+        local folder = self.Workspace:FindFirstChild("FeralNPCs")
+        if folder then
+            for i, char in ipairs(folder:GetChildren()) do
+                if i > 256 then break end
+                if char:IsA("Model") then add(char,nil,true) end
+            end
+        end
+        for char in pairs(litter) do add(char,nil,true) end
+        table.sort(all,function(a,c) return a.distance < c.distance end)
+        local tracked,players,playerCount,npcCount = {},0,0,0
+        for _,target in ipairs(all) do
+            if target.player then
+                playerCount += 1
+                if players < 24 then table.insert(tracked,target);players += 1 end
+            elseif target.litter or self:packFor(target.char) then
+                npcCount += 1
+            end
+        end
+        if visual ~= false then
+            self.tracked,self.replicatedCount,self.packNPCCount = tracked,playerCount,npcCount
+            self.allCandidates=all
+        end
+        return all
+    end
+    function b:carrying(s,target)
+        local clamp=s.char and s.char:FindFirstChild("FeralClamp")
+        local value=clamp and clamp:IsA("ObjectValue") and clamp.Value
+        return value ~= nil and (value==target or value:IsDescendantOf(target)) and self:attribute(clamp,"Carry")==true
+    end
+    function b:carryEligible(s,target)
+        if not s.alive or not target or not target.char.Parent or not target.root.Parent or target.hum.Health<=0
+            or self:attribute(target.char,"FeralCarried")==true or self:attribute(target.char,"FeralDragged")==true
+            or self:affiliation(target.player,target.char)=="other" then return false end
+        local cfg,species,abilities=self:config("CarryConfig"),self:config("Species"),self:config("AbilityConfig")
+        if not cfg or cfg.ENABLED~=true or not Core.finite(cfg.REACH) or type(cfg.canCarry)~="function" or not species or not abilities then return false end
+        local diff=target.root.Position-s.root.Position
+        local reach=1.5+cfg.REACH*(s.root.Size.Z+target.root.Size.Z)
+        local flat=Vector3.new(diff.X,0,diff.Z)
+        local look=s.root.CFrame.LookVector;look=Vector3.new(look.X,0,look.Z)
+        if diff.Magnitude>reach or flat.Magnitude>.1 and look.Magnitude>.1 and look.Unit:Dot(flat.Unit)<.2 then return false end
+        local ok,can=pcall(cfg.canCarry,species,abilities,s.char,target.char)
+        return ok and can==true
+    end
+    function b:waterCub(s)
+        local best
+        for _,target in ipairs(self:candidates(s,35,false)) do
+            if self:carryEligible(s,target) then
+                local swim,_,_,depth=self:water(target.char,target.hum,target.root)
+                if (swim or depth and depth>=-.25) and (not best or target.distance<best.distance) then best=target end
+            end
+        end
+        return best
+    end
+    function b:carryWaterAllowed(s)
+        local swim,under,_,depth=self:water(s.char,s.hum,s.root)
+        if not swim and not under and (not depth or depth<-.25) then return true end
+        local cfg=self:config("CarryConfig")
+        return cfg and type(cfg.WATER_OK)=="table" and cfg.WATER_OK[self:attribute(s.char,"Species")]==true or false
+    end
+    function b:geometry(values,s,target)
+        if type(values)~="table" or not s or not s.alive or not s.root or not s.hum
+            or not s.root.Parent or not s.hum.Parent or not target or not target.root or not target.hum then return nil end
+        if s.char and (s.root.Parent~=s.char or s.hum.Parent~=s.char) then return nil end
+        if not target.root.Parent or not target.hum.Parent or target.hum.Health <= 0
+            or target.char and (target.root.Parent~=target.char or target.hum.Parent~=target.char) then return nil end
+        for _,key in ipairs({"REACH","HIT_SCALE","CONE","SLACK","MAX_DY"}) do
+            if not Core.finite(values[key]) then return nil end
+        end
+        if values.REACH<=0 or values.HIT_SCALE<=0 or values.MAX_DY<=0
+            or not Core.finite(s.hum.HipHeight) or not Core.finite(target.hum.HipHeight) then return nil end
+        local diff = target.root.Position-s.root.Position
+        if not Core.finite(diff.X) or not Core.finite(diff.Y) or not Core.finite(diff.Z) then return nil end
+        local flat = Vector3.new(diff.X,0,diff.Z)
+        local fwd = s.root.CFrame.LookVector
+        fwd = Vector3.new(fwd.X,0,fwd.Z)
+        if fwd.Magnitude < .01 then return nil end
+        if type(values.biteLook) == "function" then
+            local ok,v = pcall(values.biteLook,s.char,fwd.Unit)
+            if ok and typeof(v) == "Vector3" then fwd = Vector3.new(v.X,0,v.Z) end
+        end
+        if fwd.Magnitude < .01 then return nil end
+        local ok,gap = pcall(values.bodyGap,target.root,flat)
+        if not ok or not Core.finite(gap) then return nil end
+        local function modifier(key, default)
+            if type(values[key]) ~= "function" then return default end
+            local good,v = pcall(values[key],s.char)
+            return good and Core.finite(v) and v or default
+        end
+        local box = self:attribute(s.root,"FeralBoxFull")
+        if not Core.finite(box) or box <= 0 then box = s.root.Size.Z end
+        local reach = (box*.5+s.hum.HipHeight*values.REACH+values.SLACK)*values.HIT_SCALE*modifier("reachMult",1)
+        local angle = flat.Magnitude > .01 and fwd.Unit:Dot(flat.Unit) or 1
+        local cone = modifier("coneFor",values.CONE)
+        local height = math.abs(target.root.Position.Y-s.root.Position.Y)
+        local vertical = (s.hum.HipHeight+target.hum.HipHeight)*values.MAX_DY*modifier("dyMult",1)
+        return { valid = gap < reach and angle > math.cos(math.rad(cone)) and height < vertical,
+            withinBodyRange = gap < reach and height < vertical,
+            gap = gap, reach = reach, angle = angle, cone = cone, height = height, vertical = vertical,
+            distance = diff.Magnitude,score = gap-angle*2 }
+    end
+    function b:occluded(s,target)
+        if not s or not s.root or not target or not target.root or not target.char then return true,false end
+        local params = RaycastParams.new()
+        params.FilterType,params.FilterDescendantsInstances = Enum.RaycastFilterType.Exclude,{s.char}
+        params.IgnoreWater = true
+        local ok,hit=pcall(self.Workspace.Raycast,self.Workspace,s.root.Position,target.root.Position-s.root.Position,params)
+        -- Missing scene evidence must not turn into a false clear-hit cue or
+        -- shut down all other features because one streamed query failed.
+        if not ok then return true,false end
+        return hit ~= nil and (not hit.Instance or not hit.Instance:IsDescendantOf(target.char)),true
+    end
+    function b:imminentBiteTarget(s,stock,all)
+        -- Release automatic Rest *before* contact, when a real eligible target
+        -- is either within normal bite reach or the animal is closing on it.
+        -- This does not claim extra hit range or force an attack.
+        if not s or not s.alive or not stock or not s.root or not s.hum then return nil end
+        local movement=s.hum.MoveDirection
+        local velocity=s.root.AssemblyLinearVelocity
+        local horizontal=Vector3.new(velocity.X,0,velocity.Z)
+        local speed=math.max(18,horizontal.Magnitude)
+        local anticipate=math.clamp(self:restLock(s.char)*speed+3,6,22)
+        local checked=0
+        for _,target in ipairs(all or {}) do
+            if target.distance>32 then break end
+            if target.affiliation~="same" and not target.protected
+                and self:combatEligible(target.char) and target.root and target.root.Parent then
+                checked+=1
+                if checked>10 then break end
+                local geometric=self:geometry(stock,s,target)
+                if geometric then
+                    local diff=target.root.Position-s.root.Position
+                    local horizontalDiff=Vector3.new(diff.X,0,diff.Z)
+                    local closing=movement.Magnitude>.13 and horizontalDiff.Magnitude>.1
+                        and movement.Unit:Dot(horizontalDiff.Unit)>.25
+                    local allowance=closing and anticipate or 3
+                    local vertical=math.abs(diff.Y)
+                    local verticalLimit=geometric.vertical+2
+                    if geometric.gap <= geometric.reach+allowance
+                        and vertical<=verticalLimit and (target.sameTree or not self:occluded(s,target)) then
+                        return target
+                    end
+                end
+            end
+        end
+        return nil
+    end
+    function b:leadPoint(s,target)
+        local point=target.root.Position
+        local a,bv=target.root.AssemblyLinearVelocity,s.root.AssemblyLinearVelocity
+        if typeof(a)~="Vector3" or typeof(bv)~="Vector3" then return point end
+        -- A one-frame velocity replication spike can steer the bite beyond
+        -- the current hitbox. Reduce the speculative lead on fast movement.
+        local lead=(a-bv)*math.min(.20,self:biteDelay(s.char))
+        lead=Vector3.new(lead.X,0,lead.Z)
+        if not Core.finite(lead.Magnitude) then return point end
+        if lead.Magnitude>2.25 then lead=lead.Unit*2.25 end
+        return point+lead
+    end
+    function b:autoAttackTarget(s,guide,values)
+        if not guide or guide.invalid or not guide.target or not s.alive then return false end
+        local target=guide.target
+        if not self:currentTargetBody(target) or (target.root.Position-s.root.Position).Magnitude>45
+            or not self:combatEligible(target.char) then return false end
+        local geometry=self:geometry(values,s,target)
+        if not geometry or not geometry.valid or self:occluded(s,target) then return false end
+        -- Stock-valid auto hits take priority. Extended-only contacts can
+        -- still be probed, but not spammed during repeated no-reply windows.
+        local base
+        if self.originalAutoCombat then
+            -- An out-of-range animal must not inherit a stale green guide
+            -- from the preceding scan when deciding whether to auto-bite.
+            base=self:geometry(self.originalAutoCombat,s,target)
+        else
+            base=guide.baseline
+        end
+        if base and base.valid then return true end
+        local entry=self.extendedConfidence and self.extendedConfidence[target.char]
+        return not entry or (s.now or 0)>=(entry.waitUntil or 0)
+    end
+    function b:select(s, baseline, changed, all)
+        local previousAssist=self.reachTarget
+        self.treeTarget = nil
+        self.reachTarget = nil
+        local best,score = nil,math.huge
+        local eligible={}
+        for _, target in ipairs(all) do
+            if target.distance <= 45 and self:currentTargetBody(target) and self:combatEligible(target.char) then
+                table.insert(eligible,target)
+                if target.sameTree and (not self.treeTarget or target.distance < self.treeTarget.distance) then self.treeTarget = target end
+            end
+        end
+        local assisted,assistScore = nil,math.huge
+        local visibility,visibilityKnown={},{}
+        local rays=0
+        local function obstruction(target)
+            if visibility[target]==nil then
+                if rays>=12 then
+                    visibility[target],visibilityKnown[target]=true,false
+                else
+                    rays+=1
+                    local blocked,known=self:occluded(s,target)
+                    visibility[target],visibilityKnown[target]=blocked,known~=false
+                end
+            end
+            return visibility[target]
+        end
+        local selectionModel = table.clone(changed)
+        selectionModel.biteLook = baseline.biteLook
+        self.originalAutoCombat=baseline
+        for _,target in ipairs(eligible) do
+                local geometry = self:geometry(selectionModel,s,target)
+                if geometry and geometry.withinBodyRange then
+                    local stock = self:geometry(baseline,s,target)
+                    local rank = target.distance+(target.affiliation == "unknown" and .5 or 0)
+                        -(stock and stock.valid and .75 or 0)
+                    if previousAssist and previousAssist.char==target.char then rank-=.65 end
+                    if rank < assistScore and not obstruction(target) then
+                        assisted,assistScore = target,rank
+                    end
+                end
+        end
+        self.reachTarget = assisted
+        for _, target in ipairs(eligible) do
+                local base = self:geometry(baseline,s,target)
+                local extended = self:geometry(changed,s,target)
+                if base or extended then
+                    local blocked=target.protected or obstruction(target)
+                    -- A clear stock-valid candidate outranks a speculative
+                    -- extended-only target. Never prefer a wall over a
+                    -- nearby unobstructed animal.
+                    -- Stock validity comes from the unmodified biteLook.
+                    -- Calculate its tier BEFORE the extended geometry score:
+                    -- the latter depends on the currently assisted aim target
+                    -- and otherwise creates a feedback loop favouring ghosts.
+                    local stockValid=base and base.valid
+                    local extendedValid=extended and extended.valid
+                    local tier=stockValid and 0 or extendedValid and 100 or 2000
+                    local scoreValue=stockValid and base.score
+                        or extended and extended.score or 1000
+                    local rank=tier+scoreValue+(blocked and 4000 or 0)
+                    if rank<score then
+                        best,score={
+                            target=target,baseline=base,extended=extended,obstruction=blocked,
+                        },rank
+                    end
+                end
+        end
+        if best then
+            best.blocked=best.obstruction
+            best.obstructionKnown=visibilityKnown[best.target]~=false
+            -- Native biteLook must prefer the same stock-clear target the
+            -- guide displays. Extended-only rear/tree aim retains the
+            -- existing sticky assist until a stock-valid option appears.
+            if best.baseline and best.baseline.valid and not best.blocked then
+                self.reachTarget=best.target
+            end
+        end
+        return best
+    end
+    function b:refreshGuide(s,baseline,changed,guide)
+        local target=guide.target
+        if not s.alive or s.char~=self.player.Character or not self:currentTargetBody(target)
+            or not self:combatEligible(target.char) then
+            self:retireCombatTarget(target)
+            guide.blocked,guide.invalid=true,true;return
+        end
+        guide.invalid=false
+        guide.baseline=self:geometry(baseline,s,target)
+        guide.extended=self:geometry(changed,s,target)
+        -- A guide tracks the current selected body every frame. Target search
+        -- and obstacle queries remain bounded background work.
+        guide.blocked=guide.obstruction or not guide.extended or not guide.extended.valid
+    end
+    function b:friendlyCarry(s)
+        if not s.carried or s.pinned then return false end
+        local growth = self:attribute(s.char,"Growth")
+        local species = self:attribute(s.char,"Species")
+        if not Core.finite(growth) or growth > .34 or type(species) ~= "string" then return false end
+        for _, other in ipairs(self.Players:GetPlayers()) do
+            local adult = other.Character
+            local ag = self:attribute(adult,"Growth")
+            if adult ~= s.char and Core.finite(ag) and ag >= .67 and self:attribute(adult,"Species") == species then
+                for _, name in ipairs({"FeralClamp","FeralClampLocal"}) do
+                    local clamp = adult and adult:FindFirstChild(name)
+                    if clamp and clamp:IsA("ObjectValue") then
+                        local target = clamp.Value
+                        if target and (target == s.char or target:IsDescendantOf(s.char)) then return true end
+                    end
+                end
+            end
+        end
+        return false
+    end
+    function b:escapeAction(s)
+        if not s.alive or self:friendlyCarry(s) then return nil,"friendly carry or no animal" end
+        if s.holding and not s.captured then return nil,"carrying prey" end
+        local clamp = self:attribute(s.char,"FeralClampN") or self:attribute(s.char,"FeralClampGame")
+        local need = self:attribute(s.char,"FeralShakeNeed")
+        local cue = s.captured or (Core.finite(clamp) and clamp > 0) or (Core.finite(need) and need > 0)
+        if not cue then return nil,"watching native capture cues" end
+        if s.carried then return "getoff","carried",.435 end
+        local bindings = self.ContextActionService:GetAllBoundActionInfo()
+        if bindings.FeralTugTap then return "shake","native tug",.12 end
+        if bindings.FeralShakeTaps or bindings.FeralShakeMash then return "shake","native shake",.17 end
+        return nil,"captured; no native escape binding"
+    end
+    function b:nearbyDanger(s)
+        if not s.root then return true end
+        local params = OverlapParams.new()
+        params.FilterType,params.FilterDescendantsInstances = Enum.RaycastFilterType.Exclude,{s.char}
+        params.MaxParts = 200
+        local parts = self.Workspace:GetPartBoundsInRadius(s.root.Position,28,params)
+        if #parts >= 200 then return true end
+        for _, part in ipairs(parts) do
+            local model = part:FindFirstAncestorOfClass("Model")
+            local hum = model and model:FindFirstChildOfClass("Humanoid")
+            if model ~= s.char and hum and hum.Health > 0 then return true end
+        end
+        return false
+    end
+    function b:safeStep(s, anchor)
+        local config = self:config("SurvivalConfig")
+        local threshold = config and config.AFK_MOVE
+        if not Core.finite(threshold) or threshold < 0 or threshold+2 > 8 then return nil end
+        local step = threshold+2
+        local root = s.root
+        local params = RaycastParams.new()
+        params.FilterType,params.FilterDescendantsInstances = Enum.RaycastFilterType.Exclude,{s.char}
+        params.IgnoreWater = false
+        local function ground(at)
+            local hit = self.Workspace:Raycast(at+Vector3.new(0,8,0),Vector3.new(0,-35,0),params)
+            return hit and hit.Material ~= Enum.Material.Water and hit.Normal.Y > .86 and hit.Position or nil
+        end
+        local start = ground(root.Position)
+        if not start then return nil end
+        local forward = root.CFrame.LookVector
+        forward = Vector3.new(forward.X,0,forward.Z)
+        if forward.Magnitude < .01 then return nil end
+        forward = forward.Unit
+        local side = Vector3.new(-forward.Z,0,forward.X)
+        local goals = { root.Position+side*step,root.Position-side*step,root.Position+forward*step,root.Position-forward*step }
+        if anchor and (root.Position-anchor).Magnitude > threshold+.2 then goals = {anchor} end
+        for _, goal in ipairs(goals) do
+            local vector = goal-root.Position
+            vector = Vector3.new(vector.X,0,vector.Z)
+            if vector.Magnitude > threshold+.5 and vector.Magnitude <= 8 then
+                local safe = true
+                for distance = 0,vector.Magnitude+1.25,1 do
+                    local point = ground(root.Position+vector.Unit*distance)
+                    if not point or math.abs(point.Y-start.Y) > 1.1 then safe = false; break end
+                end
+                if safe and not self.Workspace:Raycast(root.Position+Vector3.new(0,1,0),vector,params) then
+                    local ending = ground(goal)
+                    if ending then return Vector3.new(goal.X,root.Position.Y+ending.Y-start.Y,goal.Z) end
+                end
+            end
+        end
+        return nil
+    end
+    function b:routeSafe(s,goal)
+        if not s.alive or not goal or s.hum.FloorMaterial==Enum.Material.Air
+            or s.hum.FloorMaterial==Enum.Material.Water then return false end
+        local vector=goal-s.root.Position
+        vector=Vector3.new(vector.X,0,vector.Z)
+        if vector.Magnitude>8.1 then return false end
+        if vector.Magnitude<.05 then return true end
+        local params=RaycastParams.new()
+        params.FilterType,params.FilterDescendantsInstances=Enum.RaycastFilterType.Exclude,{s.char}
+        params.IgnoreWater=false
+        local groundY
+        for distance=0,vector.Magnitude+1.25,1 do
+            local point=s.root.Position+vector.Unit*distance
+            local hit=self.Workspace:Raycast(point+Vector3.new(0,8,0),Vector3.new(0,-35,0),params)
+            if not hit or hit.Material==Enum.Material.Water or hit.Normal.Y<=.86 then return false end
+            groundY=groundY or hit.Position.Y
+            if math.abs(hit.Position.Y-groundY)>1.1 then return false end
+        end
+        return self.Workspace:Raycast(s.root.Position+Vector3.new(0,1,0),vector,params)==nil
+    end
+    function b:walk(s,goal)
+        if s.char ~= self.player.Character or not s.hum or not s.root then return false end
+        s.hum:MoveTo(goal or s.root.Position)
+        return true
+    end
+    function b:pulseIdle()
+        local ok = pcall(function()
+            local v = game:GetService("VirtualUser")
+            v:CaptureController()
+            v:ClickButton2(Vector2.new(0,0))
+        end)
+        return ok
+    end
+    function b:attach(hub,scope)
+        scope:add(function() self:releaseSyntheticBite() end)
+        local function connect(signal,fn)
+            local c = signal:Connect(function(...)
+                if hub.active and not hub.closed then fn(...) end
+            end)
+            scope:add(function() c:Disconnect() end)
+            return c
+        end
+        local function character(char)
+            if self.characterScope then self.characterScope:close() end
+            self.characterScope = Core.scope()
+            self.generation += 1
+            self.character = char
+            hub:characterChanged(self.generation)
+            if not char then return end
+            for _, key in ipairs({"WolfRest","WolfBiteAt","WolfFeed","FeralPinned","FeralCarried",
+                "FeralDragged","FeralTalonLock","FeralDiveLocal","FeralDeathRollLocal","FeralRolling",
+                "FeralDowned","FeralVenomDown","FeralTumbleAt","FeralCrushAt","FeralCrushBiteAt","FeralClimbLocal","FeralFlyLocal",
+                "FeralUnderwater","FeralDiving","FeralSwimLocal"}) do
+                local c = char:GetAttributeChangedSignal(key):Connect(function()
+                    if hub.active and not hub.closed and char == self.player.Character then hub:nativeAttribute(key) end
+                end)
+                self.characterScope:add(function() c:Disconnect() end)
+            end
+        end
+        self.bindCharacter = character
+        scope:add(function() if self.characterScope then self.characterScope:close() end end)
+        connect(self.player.CharacterAdded,character)
+        connect(self.player.CharacterRemoving,function() character(nil) end)
+        connect(self.player.Idled,function() hub:idle() end)
+        connect(self.player:GetAttributeChangedSignal("FeralRestTap"),function()
+            if self.UserInputService:GetFocusedTextBox() then return end
+            local now=self.clock()
+            hub.policy:input("rest",now)
+            hub.recovery:manual(now)
+            hub.combatInput:cancel();hub.feeding:cancel("manual rest control",now);hub.rescue:cancel()
+        end)
+        connect(self.UserInputService.InputBegan,function(input,processed) hub:input(input,processed) end)
+        connect(self.UserInputService.InputEnded,function(input) hub:inputEnded(input) end)
+        if self.UserInputService.WindowFocusReleased then
+            connect(self.UserInputService.WindowFocusReleased,function() hub:focusChanged(false) end)
+        end
+        if self.UserInputService.WindowFocused then
+            connect(self.UserInputService.WindowFocused,function() hub:focusChanged(true) end)
+        end
+        connect(self.UserInputService.InputChanged,function(input)
+            local kind = input.UserInputType
+            if kind == Enum.UserInputType.MouseMovement or kind == Enum.UserInputType.MouseWheel
+                or kind == Enum.UserInputType.Touch then hub:physicalInput(kind == Enum.UserInputType.MouseMovement and "mouse" or "other") end
+        end)
+        local actionName = "FERAL_RENAISSANCE_" .. tostring(hub.token)
+        -- CAS can consume event-driven sprint bindings. Native IsKeyDown
+        -- polling can still see Right Shift; this limitation is recorded.
+        self.ContextActionService:BindActionAtPriority(actionName,function(_,state,input)
+            if not hub.active or hub.closed or self.UserInputService:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
+            if input.KeyCode == Enum.KeyCode.RightShift then
+                if state == Enum.UserInputState.Begin then hub.ui:toggle() end
+                return Enum.ContextActionResult.Sink
+            end
+            if state == Enum.UserInputState.Begin and input.KeyCode == Enum.KeyCode.G and hub:carryInput(input) then
+                return Enum.ContextActionResult.Sink
+            end
+            if state == Enum.UserInputState.Begin then hub:preInput(input) end
+            return Enum.ContextActionResult.Pass
+        end,false,4000,Enum.KeyCode.RightShift,Enum.KeyCode.R,Enum.KeyCode.ButtonY,Enum.KeyCode.Z,Enum.KeyCode.X,
+            Enum.KeyCode.E,Enum.KeyCode.F,Enum.KeyCode.G,
+            Enum.KeyCode.Q,Enum.KeyCode.Space,Enum.KeyCode.ButtonR2,Enum.KeyCode.ButtonB,
+            Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2)
+        scope:add(function() self.ContextActionService:UnbindAction(actionName) end)
+        connect(self.UserInputService.JumpRequest,function() hub:requestFlight() end)
+        connect(self.RunService.Heartbeat,function(dt)
+            local ok,err = pcall(hub.tick,hub,dt)
+            if not ok then hub:fault(err) end
+        end)
+        local renderName = actionName .. "_RENDER"
+        self.RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value+3,function(dt)
+            if hub.active and not hub.closed then
+                local ok,err = pcall(hub.render,hub,dt)
+                if not ok then hub:fault(err) end
+            end
+        end)
+        scope:add(function() self.RunService:UnbindFromRenderStep(renderName) end)
+        if self.RunService.PreAnimation then
+            connect(self.RunService.PreAnimation,function() hub:maskPose() end)
+        end
+        scope:add(function()
+            for _, item in pairs(self.remoteConnections) do item.connection:Disconnect() end
+            table.clear(self.remoteConnections)
+        end)
+    end
+    function b:bindNative(hub)
+        for _, item in ipairs({{"FeralGrabV2","grab"},{"FeralHit","feedback"},{"FeralHippo","hippo"},{"WolfActions","actions"},
+            {"FeralBiteLocal","biteLocal","BindableEvent"}}) do
+            local remote = self.ReplicatedStorage:FindFirstChild(item[1])
+            local old = self.remoteConnections[item[1]]
+            if old and (old.remote ~= remote or old.connection.Connected==false) then
+                old.connection:Disconnect(); self.remoteConnections[item[1]] = nil; old = nil
+            end
+            if remote and remote:IsA(item[3] or "RemoteEvent") and not old then
+                local kind,name = item[2],item[1]
+                local signal = item[3] == "BindableEvent" and remote.Event or remote.OnClientEvent
+                local c = signal:Connect(function(...)
+                    if hub.active and not hub.closed and self.ReplicatedStorage:FindFirstChild(name)==remote then
+                        hub:nativeEvent(kind,...)
+                    end
+                end)
+                self.remoteConnections[item[1]] = { remote = remote,connection = c }
+            end
+        end
+    end
+    return b
+end
+return Roblox
+]============]
+sources["zoom"] = [============[
+-- Expand the normal camera's zoom range without replacing its controller.
+local Zoom = {}
+local fields = {"CameraMaxZoomDistance", "CameraMinZoomDistance", "CameraMode"}
+function Zoom.new(player)
+    local z = {player=player,active=false,applied=false,connections={},reason="OFF"}
+    local desired = {CameraMaxZoomDistance=100000,CameraMinZoomDistance=.5,CameraMode=Enum.CameraMode.Classic}
+    function z:apply()
+        if not self.active or self.writing then return self.applied end
+        self.writing=true
+        local ok=pcall(function()
+            for _,key in ipairs(fields) do
+                if player[key]~=desired[key] then player[key]=desired[key] end
+            end
+            for _,key in ipairs(fields) do assert(player[key]==desired[key],"Camera limit rejected") end
+        end)
+        self.writing=false;self.applied=ok
+        if not ok then
+            -- A rejected second property must not leave the first expanded or
+            -- retain observers on a half-applied camera lease.
+            self:close()
+        end
+        self.reason=ok and "Mouse-wheel zoom · 0.5–100,000 studs" or "Camera limits unavailable or rejected"
+        return ok
+    end
+    function z:close()
+        self.active=false;self.applied=false
+        for _,c in ipairs(self.connections) do pcall(c.Disconnect,c) end
+        self.connections={}
+        local before=self.before;self.before=nil
+        if before then
+            -- Restore only values still owned by us. Min first keeps the
+            -- original min/max pair valid when returning from the wider range.
+            for _,key in ipairs({"CameraMinZoomDistance","CameraMaxZoomDistance","CameraMode"}) do
+                pcall(function()if player[key]==desired[key] then player[key]=before[key] end end)
+            end
+        end
+        self.reason="OFF"
+    end
+    function z:set(on)
+        if not on then
+            if self.active then self:close() end
+            return false
+        end
+        if not self.active then
+            local before={}
+            local ok=pcall(function()
+                before.CameraMaxZoomDistance=player.CameraMaxZoomDistance
+                before.CameraMinZoomDistance=player.CameraMinZoomDistance
+                before.CameraMode=player.CameraMode
+                assert(type(before.CameraMaxZoomDistance)=="number" and type(before.CameraMinZoomDistance)=="number"
+                    and before.CameraMode~=nil,"Camera properties unavailable")
+            end)
+            if not ok then self.reason="Camera properties unavailable";return false end
+            self.before=before;self.active=true
+            local attached=pcall(function()
+                for _,key in ipairs(fields) do
+                    local c=player:GetPropertyChangedSignal(key):Connect(function()
+                        if not self.active or self.writing then return end
+                        local current=player[key]
+                        if current~=desired[key] then
+                            -- A respawn/species script can publish new defaults.
+                            -- Remember those for OFF/unload instead of stale ones.
+                            self.before[key]=current
+                            self:apply()
+                        end
+                    end)
+                    table.insert(self.connections,c)
+                end
+            end)
+            if not attached then self:close();self.reason="Camera observation unavailable";return false end
+        end
+        return self:apply()
+    end
+    return z
+end
+return Zoom
+]============]
+sources["voice"] = [============[
+-- Optional hearing assistance for the default Roblox Audio API voice graph.
+-- This module never touches the microphone, chat controls, voice permissions,
+-- voice wires, remotes, player positions or any combat/minigame subsystem.
+local Voice = {}
+
+local function finite(x)
+    return type(x)=="number" and x==x and x>=0 and x<1e8
+end
+function Voice.cloneCurve(curve)
+    if type(curve)~="table" then return nil end
+    local out,n={},0
+    for distance,volume in pairs(curve) do
+        if not finite(distance) or not finite(volume) or volume>1 then return nil end
+        out[distance]=volume
+        n+=1
+        if n>400 then return nil end
+    end
+    return n>0 and out or nil
+end
+function Voice.scaleCurve(curve,scale)
+    if not finite(scale) or scale<1 or scale>1.5 then return nil end
+    local source=Voice.cloneCurve(curve)
+    if not source then return nil end
+    local out={}
+    for distance,volume in pairs(source) do
+        local farther=distance==0 and 0 or math.floor(distance*scale*10000+.5)/10000
+        if out[farther]~=nil then return nil end
+        out[farther]=volume
+    end
+    return out
+end
+function Voice.sameCurve(a,b)
+    if type(a)~="table" or type(b)~="table" then return false end
+    local left,right=0,0
+    for distance,volume in pairs(a) do
+        left+=1
+        if not finite(distance) or not finite(volume)
+            or not finite(b[distance]) or math.abs(volume-b[distance])>.0001 then return false end
+    end
+    for _ in pairs(b) do right+=1 end
+    return left==right
+end
+
+function Voice.new(players,localPlayer)
+    local v={players=players,localPlayer=localPlayer,closed=false,started=false,
+        enabled=false,factor=1.25,records={},playerConns={},charConns={},
+        characters={},connections={},skipped=0,conflicts=0}
+    local function connect(bucket,signal,handler)
+        if not signal then return end
+        local ok,connection=pcall(function() return signal:Connect(handler) end)
+        if ok and connection then table.insert(bucket,connection) end
+    end
+    local function disconnect(bucket)
+        for i=#bucket,1,-1 do
+            pcall(function() bucket[i]:Disconnect() end)
+            bucket[i]=nil
+        end
+    end
+    local function sameBounds(a,b)
+        return a and b and finite(a.Min) and finite(a.Max)
+            and finite(b.Min) and finite(b.Max)
+            and math.abs(a.Min-b.Min)<.001 and math.abs(a.Max-b.Max)<.001
+    end
+    local function restore(emitter)
+        local record=v.records[emitter]
+        if not record then return end
+        v.records[emitter]=nil
+        local ok=pcall(function()
+            -- Detachment is not destruction. Restore an owned curve even
+            -- between parents so a later reattach cannot scale it twice.
+            if emitter.DistanceAttenuationMode~=record.mode then
+                v.conflicts+=1;return
+            end
+            if record.custom then
+                if not Voice.sameCurve(emitter:GetDistanceAttenuation(),record.modified) then
+                    v.conflicts+=1;return
+                end
+                emitter:SetDistanceAttenuation(record.original)
+            else
+                if not sameBounds(emitter.DistanceAttenuationBounds,record.modified) then
+                    v.conflicts+=1;return
+                end
+                emitter.DistanceAttenuationBounds=record.original
+            end
+        end)
+        if not ok then v.conflicts+=1 end
+    end
+    local function restorePlayer(remote)
+        local found={}
+        for emitter,record in pairs(v.records) do
+            if record.player==remote then table.insert(found,emitter) end
+        end
+        for _,emitter in ipairs(found) do restore(emitter) end
+    end
+    local function apply(remote,emitter)
+        if v.closed or not v.enabled or v.records[emitter] then return end
+        -- Never alter an unrelated ambient sound or a user's own microphone.
+        if remote==localPlayer or remote.Character~=emitter.Parent
+            or not emitter:IsA("AudioEmitter") or emitter.Name~="AudioEmitter"
+            or not remote:FindFirstChildOfClass("AudioDeviceInput") then return end
+        local modeOK,mode=pcall(function() return emitter.DistanceAttenuationMode end)
+        if not modeOK or mode==nil then v.skipped+=1;return end
+        local custom=mode==Enum.DistanceAttenuationMode.Custom
+        if custom then
+            local ok,before=pcall(function() return emitter:GetDistanceAttenuation() end)
+            local old=ok and Voice.cloneCurve(before) or nil
+            -- Empty curves use Roblox's default inverse rolloff, which cannot
+            -- be losslessly stretched. Do not replace it with a fabricated curve.
+            local desired=old and Voice.scaleCurve(old,v.factor)
+            if not desired then v.skipped+=1;return end
+            local wrote=pcall(function() emitter:SetDistanceAttenuation(desired) end)
+            local read,after=pcall(function() return emitter:GetDistanceAttenuation() end)
+            if not wrote or not read or not Voice.sameCurve(after,desired) then
+                v.skipped+=1
+                if read and Voice.sameCurve(after,desired) then
+                    pcall(function() emitter:SetDistanceAttenuation(old) end)
+                end
+                return
+            end
+            v.records[emitter]={player=remote,mode=mode,custom=true,original=old,modified=desired}
+        else
+            local ok,before=pcall(function() return emitter.DistanceAttenuationBounds end)
+            if not ok or not before or not finite(before.Min) or not finite(before.Max)
+                or before.Max<=before.Min then v.skipped+=1;return end
+            local desired=NumberRange.new(before.Min*v.factor,before.Max*v.factor)
+            local wrote=pcall(function() emitter.DistanceAttenuationBounds=desired end)
+            local read,after=pcall(function() return emitter.DistanceAttenuationBounds end)
+            if not wrote or not read or not sameBounds(after,desired) then
+                v.skipped+=1
+                -- A property setter can change the value before reporting a
+                -- failure. Undo only the exact attempted value, just as the
+                -- custom-curve path does, so OFF/unload cannot miss this write.
+                if read and sameBounds(after,desired) then
+                    pcall(function() emitter.DistanceAttenuationBounds=before end)
+                end
+                return
+            end
+            v.records[emitter]={player=remote,mode=mode,custom=false,original=before,modified=desired}
+        end
+    end
+    local function scan(remote)
+        if v.closed or not v.enabled or remote==localPlayer then return end
+        local char=remote.Character
+        if not char or not remote:FindFirstChildOfClass("AudioDeviceInput") then return end
+        for _,child in ipairs(char:GetChildren()) do
+            if child:IsA("AudioEmitter") then apply(remote,child) end
+        end
+    end
+    local function detachCharacter(remote)
+        local bucket=v.charConns[remote]
+        if bucket then disconnect(bucket) end
+        v.charConns[remote]=nil;v.characters[remote]=nil
+        restorePlayer(remote)
+    end
+    local watchCharacter
+    watchCharacter=function(remote,char)
+        if v.characters[remote]==char then scan(remote);return end
+        detachCharacter(remote)
+        v.characters[remote]=char
+        local bucket={}
+        v.charConns[remote]=bucket
+        connect(bucket,char.ChildAdded,function(child)
+            if child:IsA("AudioEmitter") then apply(remote,child) end
+        end)
+        connect(bucket,char.ChildRemoved,function(child)
+            if v.records[child] then restore(child) end
+        end)
+        scan(remote)
+    end
+    local function detachPlayer(remote)
+        detachCharacter(remote)
+        local bucket=v.playerConns[remote]
+        if bucket then disconnect(bucket) end
+        v.playerConns[remote]=nil
+    end
+    local function watchPlayer(remote)
+        if remote==localPlayer or v.playerConns[remote] then return end
+        local bucket={}
+        v.playerConns[remote]=bucket
+        connect(bucket,remote.CharacterAdded,function(char)
+            if not v.closed then watchCharacter(remote,char) end
+        end)
+        connect(bucket,remote.CharacterRemoving,function()
+            detachCharacter(remote)
+        end)
+        connect(bucket,remote.ChildAdded,function(child)
+            if child:IsA("AudioDeviceInput") then scan(remote) end
+        end)
+        if remote.Character then watchCharacter(remote,remote.Character) end
+    end
+
+    function v:start()
+        if self.started or self.closed then return end
+        self.started=true
+        connect(self.connections,players.PlayerAdded,function(remote)
+            if not self.closed then watchPlayer(remote) end
+        end)
+        connect(self.connections,players.PlayerRemoving,function(remote)
+            detachPlayer(remote)
+        end)
+        for _,remote in ipairs(players:GetPlayers()) do watchPlayer(remote) end
+    end
+    function v:setEnabled(on)
+        if self.closed then return false end
+        if not self.started then self:start() end
+        self.enabled=on==true
+        if self.enabled then
+            for _,remote in ipairs(players:GetPlayers()) do
+                watchPlayer(remote)
+                if remote.Character then watchCharacter(remote,remote.Character) end
+                scan(remote)
+            end
+        else
+            local affected={}
+            for emitter in pairs(self.records) do table.insert(affected,emitter) end
+            for _,emitter in ipairs(affected) do restore(emitter) end
+        end
+        return true
+    end
+    function v:status()
+        local adjusted=0
+        for emitter in pairs(self.records) do
+            if emitter.Parent then adjusted+=1 end
+        end
+        return {enabled=self.enabled,adjusted=adjusted,
+            skipped=self.skipped,conflicts=self.conflicts}
+    end
+    function v:summary()
+        if not self.enabled then return "Default hearing restored" end
+        local status=self:status()
+        if status.adjusted>0 then
+            return "Local voice rolloff +25%; server hearing limit unchanged"
+        end
+        return "Waiting for compatible proximity voice audio; server limit unchanged"
+    end
+    function v:close()
+        if self.closed then return end
+        self:setEnabled(false)
+        self.closed=true
+        disconnect(self.connections)
+        local peers={}
+        for remote in pairs(self.playerConns) do table.insert(peers,remote) end
+        for _,remote in ipairs(peers) do detachPlayer(remote) end
+    end
+    return v
+end
+
+return Voice
+]============]
+sources["test_features"] = [============[
+-- Own-character diagnostics for every animal. Potassium's local file is
+-- picked up by the separate private PC runner; this module has no network API.
+local Tests = {}
+local PATH = "FERAL_RENAISSANCE_TESTS_LATEST.json"
+local LIMIT = 240
+local SCHEMA = "FERAL_RENAISSANCE_TESTS_V1"
+
+function Tests.new(Core,bridge,hub)
+    local t = { active = false, closed = false, enabled = true, path = PATH,
+        events = {}, samples = {}, species = {}, biteTimes = {}, biteCount = 0,
+        dirty = true, saved = false, attempts = 0,
+        nextSave = 0, nextSample = 0, notice = "Recording starts with the hub",
+        characterScope = Core.scope() }
+    local io = bridge:io()
+    local function attr(char,key)
+        if not char then return nil end
+        local read,value=pcall(char.GetAttribute,char,key)
+        return read and value or nil
+    end
+    local function finite(value)
+        return Core.finite(value)
+    end
+    function t:snapshot()
+        local char=bridge.player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        local species=attr(char,"Species")
+        local shell
+        local config=bridge:config("CombatConfig")
+        if char and config and type(config.shellMult)=="function" then
+            local computed,value=pcall(config.shellMult,char)
+            if computed and finite(value) then shell=value end
+        end
+        local current=hub.snapshot
+        local combat
+        if current and current.char==char and type(current.combat)=="boolean" then combat=current.combat end
+        return {species=type(species)=="string" and #species<=31 and species:match("^[A-Za-z][A-Za-z0-9]*$") and species or "unknown",
+            rest=attr(char,"WolfRest")==true,
+            restAt=finite(attr(char,"WolfRestAt")) and attr(char,"WolfRestAt") or nil,
+            hp=hum and finite(hum.Health) and hum.Health or nil,
+            maxHP=hum and finite(hum.MaxHealth) and hum.MaxHealth or nil,
+            safeUntil=finite(attr(char,"FeralSafeUntil")) and attr(char,"FeralSafeUntil") or nil,
+            crushAt=finite(attr(char,"FeralCrushAt")) and attr(char,"FeralCrushAt") or nil,
+            injury=current and current.char==char and finite(current.injury) and current.injury or nil,
+            bleed=current and current.char==char and finite(current.bleed) and current.bleed or nil,
+            venom=current and current.char==char and finite(current.venom) and current.venom or nil,
+            stamina=current and current.char==char and finite(current.stamina) and current.stamina or nil,
+            maxStamina=current and current.char==char and finite(current.maxStamina) and current.maxStamina or nil,
+            hunger=current and current.char==char and finite(current.hunger) and current.hunger or nil,
+            thirst=current and current.char==char and finite(current.thirst) and current.thirst or nil,
+            survival=current and current.char==char and finite(current.survival) and current.survival or nil,
+            locomotion=current and current.char==char and current.locomotion or "NONE",
+            moving=current and current.char==char and current.moving==true or false,
+            combat=combat,combatKnown=combat~=nil,
+            shellFormulaClientOnly=shell}
+    end
+    function t:record(kind,fields)
+        if not self.active or not self.enabled then return end
+        local event={kind=kind,at=bridge.clock(),serverAt=bridge:serverNow(),data=fields or {}}
+        table.insert(self.events,event)
+        if #self.events>LIMIT then table.remove(self.events,1) end
+        self.dirty=true
+    end
+    function t:characterChanged(char)
+        self.characterScope:close()
+        self.characterScope=Core.scope()
+        self.char=char
+        self.biteTimes,self.biteCount={},0
+        self.hum=nil
+        if not char then
+            self:record("character_removed")
+            return
+        end
+        local function watch(hum)
+            if not hum or self.closed or bridge.player.Character~=char then return end
+            self.hum=hum
+            local last,lastMax=hum.Health,hum.MaxHealth
+            local connection=hum.HealthChanged:Connect(function(hp)
+                if not self.active or not self.enabled or bridge.player.Character~=char then
+                    last,lastMax=hp,hum.MaxHealth;return
+                end
+                local maxHP=hum.MaxHealth
+                local before,previousMax=last,lastMax
+                last,lastMax=hp,maxHP
+                if not finite(before) or not finite(hp) or hp==before then return end
+                local snapshot=self:snapshot()
+                local delta=hp-before
+                local stable=finite(maxHP) and maxHP==previousMax and maxHP>0
+                self:record(delta<0 and "incoming_hp_loss" or "hp_recovery",
+                    {species=snapshot.species,rest=snapshot.rest,restAt=snapshot.restAt,
+                    before=before,after=hp,delta=delta,maxHP=maxHP,
+                    maxHPStable=stable,safeUntil=snapshot.safeUntil,
+                    shellFormulaClientOnly=snapshot.shellFormulaClientOnly,
+                    crushAt=snapshot.crushAt})
+                if delta<0 and stable then
+                    local key=snapshot.species
+                    local totals=self.species[key]
+                    if type(totals)~="table" then
+                        totals={hits=0,damage=0,restHits=0,restDamage=0}
+                        self.species[key]=totals
+                    end
+                    totals.hits+=1;totals.damage-=delta
+                    if snapshot.rest then totals.restHits+=1;totals.restDamage-=delta end
+                end
+            end)
+            self.characterScope:add(function() connection:Disconnect() end)
+            self:record("character_ready",self:snapshot())
+        end
+        for _,key in ipairs({"Species","WolfRest","WolfRestAt","FeralSafeUntil","FeralCrushAt","FeralCrushBiteAt"}) do
+            local connection=char:GetAttributeChangedSignal(key):Connect(function()
+                if bridge.player.Character==char then self:record("attribute_"..key,self:snapshot()) end
+            end)
+            self.characterScope:add(function() connection:Disconnect() end)
+        end
+        self:record("character_attached",self:snapshot())
+        local hum=char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.HealthChanged then watch(hum)
+        else
+            task.spawn(function()
+                local later=char:WaitForChild("Humanoid",5)
+                if later and later.HealthChanged then watch(later) end
+            end)
+        end
+    end
+    function t:feedback(kind,data)
+        if kind~="hit" or type(data)~="table" then return end
+        local char=bridge.player.Character
+        if not char or data.v~=char and data.a~=char then return end
+        self:record("server_hit_reply",{direction=data.v==char and "incoming" or "outgoing",
+            damage=finite(data.dmg) and data.dmg or nil,safe=data.safe==true,
+            species=self:snapshot().species,rest=attr(char,"WolfRest")==true})
+    end
+    function t:hippoReply(kind,actor,_,_,strength,hit)
+        local mine=actor==bridge.player.Character
+        if mine then
+            self:record("hippo_server_reply",{kind=kind=="cancel" and "cancel" or kind=="release" and "release"
+                or kind=="start" and "start" or "other",actorIsSelf=mine,
+                strength=finite(strength) and strength or nil,
+                hit=type(hit)=="boolean" and hit or nil,snapshot=self:snapshot()})
+        end
+        if mine and kind=="cancel" and self.pending then
+            self.pending=nil
+            self:record("crusher_cancel_observed",{acceptance="unverified"})
+        end
+    end
+    function t:release(reason)
+        local pending=self.pending
+        if not pending then return false end
+        self.pending=nil
+        if bridge.player.Character~=pending.char or not pending.char.Parent then
+            self:record("crusher_release_skipped",{reason="character changed"})
+            return false
+        end
+        local now=bridge:serverNow()
+        local sent=now and bridge:fire("FeralHippo","release",now)==true or false
+        self:record("crusher_release_requested",
+            {sent=sent,reason=reason,heldFor=now and now-pending.at or nil,
+                serverAcceptance="unverified",snapshot=self:snapshot()})
+        return sent
+    end
+    function t:crossSpecies()
+        if not self.active or not self.enabled or self.attempts>0 then
+            self.notice="One attempt per hub run";return false
+        end
+        if game.PlaceId~=108901361810209 or game.PlaceVersion~=2412 then
+            self.notice="Game version changed; test request disabled"
+            self:record("trial_version_blocked",{placeVersion=game.PlaceVersion})
+            return false
+        end
+        local snapshot=self:snapshot()
+        local char=bridge.player.Character
+        local now=bridge:serverNow()
+        local readyAt=bridge:attribute(bridge.player,"FeralLungeReadyAt")
+        if snapshot.species~="SnappingTurtle" or not snapshot.rest
+            or not finite(snapshot.restAt) or not now or now-snapshot.restAt<1.25
+            or not self.hum or self.hum.Health<=0 then
+            self.notice="Rest as Turtle for 1.25 seconds first"
+            return false
+        end
+        if finite(readyAt) and now<readyAt-.05 then
+            self.notice="Ability cooldown active";return false
+        end
+        self.attempts=1
+        local pending={char=char,at=now}
+        self.pending=pending
+        local sent=bridge:fire("FeralHippo","start",now)==true
+        self:record("crusher_start_requested",
+            {sent=sent,serverAcceptance="unverified",snapshot=snapshot})
+        if not sent then self.pending=nil;self.notice="Crusher request unavailable";return false end
+        self.notice="Crusher request sent; observing server"
+        task.delay(6.1,function()
+            if self.active and self.pending==pending then self:release("timed one-shot") end
+        end)
+        return true
+    end
+    function t:featureStates()
+        local states={}
+        for _,feature in ipairs(hub.registry.order) do
+            states[feature.id]={requested=feature.requested==true,applied=feature.applied==true,
+                state=feature.state=="CLIENT" and "CLIENT" or feature.state=="ARMED" and "ARMED"
+                    or feature.state=="PARTIAL" and "PARTIAL" or feature.state=="WAITING" and "WAITING"
+                    or feature.state=="OFF" and "OFF" or "OTHER"}
+        end
+        return states
+    end
+    function t:ledgerSummary()
+        local counts={}
+        for name,count in pairs(hub.ledger.counts) do
+            if type(name)=="string" and #name<=64 and name:match("^[A-Za-z_][A-Za-z0-9_]*$")
+                and finite(count) and count>=0 and count<10000000 then counts[name]=count end
+        end
+        local rates={}
+        for name,bucket in pairs(hub.ledger.rates) do
+            if type(name)=="string" and #name<=55 and name:match("^[A-Z_:a-z]+$")
+                and type(bucket)=="table" then
+                local effects={}
+                for _,effect in ipairs({"injury","bleed","venom"}) do
+                    local v=bucket.effects and bucket.effects[effect]
+                    if v and finite(v.seconds) and finite(v.decrease) then
+                        effects[effect]={seconds=v.seconds,decrease=v.decrease}
+                    end
+                end
+                rates[name]={seconds=finite(bucket.seconds) and bucket.seconds or nil,
+                    hp=finite(bucket.hp) and bucket.hp or nil,
+                    damage=finite(bucket.damage) and bucket.damage or nil,effects=effects}
+            end
+        end
+        return counts,rates
+    end
+    function t:observeBite(s,now)
+        if not self.active or not self.enabled or s.char~=self.char then return end
+        self.biteCount+=1
+        table.insert(self.biteTimes,now)
+        if #self.biteTimes>32 then table.remove(self.biteTimes,1) end
+        self.dirty=true
+    end
+    function t:biteCadence()
+        local sum,minimum,maximum,n=0,nil,nil,0
+        for i=2,#self.biteTimes do
+            local dt=self.biteTimes[i]-self.biteTimes[i-1]
+            -- Exclude breaks between encounters from the active bite rate.
+            if finite(dt) and dt>.03 and dt<=3 then
+                sum+=dt;n+=1
+                minimum=math.min(minimum or dt,dt);maximum=math.max(maximum or dt,dt)
+            end
+        end
+        local seconds=n>0 and sum/n or nil
+        local species=self:snapshot().species
+        return {species=species,markers=self.biteCount,activeIntervals=n,
+            meanSeconds=seconds,minSeconds=minimum,maxSeconds=maximum,
+            measuredBitesPerSecond=seconds and 1/seconds or nil}
+    end
+    function t:report(recent)
+        local counts,rates=self:ledgerSummary()
+        local events=self.events
+        if recent then
+            events={}
+            for i=math.max(1,#self.events-39),#self.events do table.insert(events,self.events[i]) end
+        end
+        return {schema=SCHEMA,version=hub.version,sourceFingerprint=hub.sourceFingerprint,
+            placeId=game.PlaceId,placeVersion=game.PlaceVersion,
+            savedAt=os.time(),source="own client observations; server damage reduction unverified",
+            events=events,samples=self.samples,species=self.species,snapshot=self:snapshot(),
+            features=self:featureStates(),ledgerCounts=counts,ledgerRates=rates,
+            biteCadence=self:biteCadence(),
+            recording=self.enabled,oneShotAttempts=self.attempts,reportPath=PATH}
+    end
+    function t:bridgeReport() return self:report(true) end
+    function t:save()
+        if not io.available then
+            self.notice="Local file writing unavailable";return false
+        end
+        local ok,result=pcall(io.write,PATH,self:report())
+        self.saved=ok and result~=false
+        if self.saved then
+            self.dirty=false
+            self.nextSave=bridge.clock()+8
+            self.notice="Saved "..PATH
+        else self.notice="Could not save report" end
+        return self.saved
+    end
+    function t:copy()
+        local ok,raw=pcall(bridge.HttpService.JSONEncode,bridge.HttpService,self:report())
+        if not ok then self.notice="Report encoding failed";return false end
+        if type(setclipboard)=="function" then
+            local copied=pcall(setclipboard,raw)
+            if copied then self.notice="Report copied to clipboard";return true end
+        end
+        self:save()
+        self.notice="Clipboard unavailable; report saved locally"
+        return false
+    end
+    function t:setEnabled(on)
+        if self.enabled==(on==true) then return end
+        self.enabled=on==true
+        self.dirty=true
+        if self.enabled then self:record("recording_enabled") end
+        self:save()
+    end
+    function t:tick(now,critical)
+        if not self.active or self.closed or not self.enabled or critical then return end
+        if now>=self.nextSample then
+            self.nextSample=now+15
+            local sample=self:snapshot()
+            sample.at=now
+            table.insert(self.samples,sample)
+            if #self.samples>60 then table.remove(self.samples,1) end
+            self.dirty=true
+        end
+        if self.dirty and now>=self.nextSave then self:save() end
+    end
+    function t:summary()
+        local s=self:snapshot()
+        local totals=self.species[s.species]
+        return string.format("%s · HP %s/%s · Rest %s\n%s · %d events · %d damage samples\n%s",
+            s.species,tostring(s.hp or "?"),tostring(s.maxHP or "?"),
+            s.rest and "ON" or "OFF",self.enabled and "Recording" or "Paused",
+            #self.events,totals and totals.hits or 0,
+            self.saved and "Local report saved · PC sync pending" or "Waiting for local report")
+    end
+    function t:start()
+        self.active=true
+        self:record("session_started",self:snapshot())
+        self:save()
+    end
+    function t:close()
+        if self.closed then return end
+        if self.pending then self:release("hub unload") end
+        self:record("session_stopped",self:snapshot())
+        self:save()
+        self.active=false;self.closed=true
+        self.characterScope:close()
+    end
+    return t
+end
+return Tests
+]============]
+sources["ui"] = [============[
+-- One compact window and one owner for all hub outlines, tags and the bite dot.
+local UI = {}
+function UI.fit(viewport,centre)
+    local x,y=viewport and viewport.X,viewport and viewport.Y
+    if type(x)~="number" or type(y)~="number" or x~=x or y~=y or x<80 or y<80 or x>=1e8 or y>=1e8 then return nil end
+    local scale=math.min((x-24)/704,(y-24)/505,1)
+    local halfX,halfY=352*scale,252.5*scale
+    return scale,Vector2.new(math.clamp(centre and centre.X or x/2,halfX+12,x-halfX-12),
+        math.clamp(centre and centre.Y or y/2,halfY+12,y-halfY-12))
+end
+
+function UI.markerTone(species,ready,stock)
+    if not ready then return "sub" end
+    if species=="KingCobra" then return stock and "same" or "unknown" end
+    return "text"
+end
+
+function UI.healthColour(hp,maxHP)
+    if type(hp) ~= "number" or type(maxHP) ~= "number" or hp ~= hp or maxHP ~= maxHP
+        or math.abs(hp) >= 1e12 or math.abs(maxHP) >= 1e12 or maxHP <= 0 then
+        return Color3.fromRGB(151,173,194)
+    end
+    local ratio = math.clamp(hp/maxHP,0,1)
+    return Color3.fromRGB(255*math.min(1,2*(1-ratio)),255*math.min(1,2*ratio),0)
+end
+function UI.mount(hub, bridge, scope)
+    local player = bridge.player
+    local pg = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui",10)
+    assert(pg,"PlayerGui unavailable")
+    local u = { visible = true, rows = {}, records = {}, nextText = 0, nextFit = 0,
+        tab = hub.settings.tab, lastPoint = nil,pages={},pageView=nil }
+    local palette = {
+        bg = Color3.fromRGB(12,17,28), side = Color3.fromRGB(15,22,36),
+        panel = Color3.fromRGB(22,31,48), line = Color3.fromRGB(48,65,85),
+        text = Color3.fromRGB(239,246,252), sub = Color3.fromRGB(151,173,194),
+        same = Color3.fromRGB(77,219,194), other = Color3.fromRGB(236,105,126),
+        unknown = Color3.fromRGB(236,181,104), off = Color3.fromRGB(60,77,97),
+        on = Color3.fromRGB(27,111,98),
+    }
+    local function make(class,properties,parent)
+        local object = Instance.new(class)
+        for key,value in pairs(properties or {}) do object[key] = value end
+        object.Parent = parent
+        return object
+    end
+    local function assign(object,key,value)
+        if object[key]~=value then object[key]=value end
+    end
+    local function round(object,radius)
+        make("UICorner",{CornerRadius = UDim.new(0,radius or 9)},object)
+        return object
+    end
+    local function text(parent,body,x,y,w,h,size,colour)
+        return make("TextLabel",{Text = body, BackgroundTransparency = 1, BorderSizePixel = 0,
+            Position = UDim2.fromOffset(x,y), Size = UDim2.fromOffset(w,h),
+            Font = Enum.Font.Gotham, TextSize = size or 12, TextColor3 = colour or palette.text,
+            TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd},parent)
+    end
+    local function button(parent,body,x,y,w,h)
+        return round(make("TextButton",{Text = body, AutoButtonColor = true,
+            Selectable = true,
+            BackgroundColor3 = palette.off, BorderSizePixel = 0, TextColor3 = palette.text,
+            Font = Enum.Font.GothamMedium, TextSize = 11, Position = UDim2.fromOffset(x,y),
+            Size = UDim2.fromOffset(w,h)},parent),7)
+    end
+    -- Parent ownership is registered immediately, before any child creation.
+    local gui = Instance.new("ScreenGui")
+    scope:add(function() gui:Destroy() end)
+    gui.Name = "FeralRenaissanceV15_" .. tostring(hub.token)
+    gui.ResetOnSpawn, gui.Enabled, gui.IgnoreGuiInset = false,false,true
+    gui.DisplayOrder = 350
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = pg
+    u.gui = gui
+    local folder = Instance.new("Folder")
+    scope:add(function() folder:Destroy() end)
+    folder.Name,folder.Parent = gui.Name .. "_Outlines",bridge.Workspace
+    local frame = round(make("Frame",{Size = UDim2.fromOffset(704,505),
+        Position = UDim2.fromScale(.5,.5), AnchorPoint = Vector2.new(.5,.5),
+        BackgroundColor3 = palette.bg, BorderSizePixel = 0, Active = true},gui),15)
+    u.frame = frame
+    local scale = make("UIScale",{Scale=1},frame)
+    u.scale=scale
+    local side = round(make("Frame",{Size = UDim2.fromOffset(165,505),
+        BackgroundColor3 = palette.side, BorderSizePixel = 0},frame),15)
+    text(side,"F E R A L",18,22,130,28,20)
+    u.versionLabel=text(side,"RENAISSANCE  /  "..tostring(hub.version),18,52,140,18,10,palette.same)
+    local content = make("Frame",{BackgroundTransparency = 1,Position = UDim2.fromOffset(181,17),
+        Size = UDim2.fromOffset(511,470)},frame)
+    local title = text(content,u.tab,10,0,470,30,19)
+    local subtitle = text(content,"Simple controls. Native gameplay remains in charge.",10,34,480,20,11,palette.sub)
+    local cards = make("ScrollingFrame",{BackgroundTransparency = 1,BorderSizePixel=0,
+        Position = UDim2.fromOffset(10,68),Size = UDim2.fromOffset(490,365),
+        CanvasSize=UDim2.fromOffset(0,365),AutomaticCanvasSize=Enum.AutomaticSize.Y,
+        ScrollBarThickness=3,ScrollBarImageColor3=palette.line,ScrollingDirection=Enum.ScrollingDirection.Y,
+        ClipsDescendants=true},content)
+    text(content,"Client changes and predictions · gameplay results unverified",10,440,485,18,10,palette.sub)
+    local footer = text(side,"Ready",14,452,140,39,10,palette.sub)
+    footer.TextWrapped = true
+    local hide = button(side,"HIDE  ·  RIGHT SHIFT",12,378,141,30)
+    local unload = button(side,"UNLOAD",12,414,141,27)
+    local launcher = button(gui,"FERAL",16,16,82,34)
+    launcher.Position=UDim2.new(0,16,1,-50)
+    launcher.Visible=false
+    u.launcher=launcher
+    local tabs = {}
+    local function card(y,height)
+        return round(make("Frame",{Position = UDim2.fromOffset(0,y),Size = UDim2.fromOffset(490,height),
+            BorderSizePixel = 0,BackgroundColor3 = palette.panel},cards),9)
+    end
+    local function info(y,heading,body,height)
+        local c = card(y,height or 75)
+        text(c,heading,14,8,460,20,13,palette.same)
+        local t = text(c,body,14,33,459,(height or 75)-37,11,palette.sub)
+        t.TextWrapped = true
+        return t
+    end
+    local function row(id,y)
+        local f = hub.registry.byId[id]
+        local c = card(y,50)
+        text(c,f.title,13,4,365,21,13)
+        local status = text(c,f.detail,13,27,365,18,10,palette.sub)
+        local toggle = button(c,"OFF",394,9,82,32)
+        u.rows[id] = { toggle = toggle, status = status }
+        toggle.Activated:Connect(function()
+            if not hub.active then return end
+            hub:set(id,not hub.registry.byId[id].requested)
+            u.nextText = 0
+        end)
+    end
+    local function draw()
+        if u.pageView and u.pageView.close then pcall(u.pageView.close,u.pageView) end
+        u.pageView=nil
+        for _, child in ipairs(cards:GetChildren()) do child:Destroy() end
+        cards.CanvasPosition=Vector2.new(0,0)
+        u.rows,u.combatReadout,u.finderReadout,u.hippoReadout,u.testsReadout,u.testsToggle = {},nil,nil,nil,nil,nil
+        title.Text = string.upper(u.tab)
+        subtitle.Text="Simple controls. Native gameplay remains in charge."
+        if u.pages[u.tab] then
+            u.pageView=u.pages[u.tab]:mount(cards,{
+                text=text,button=button,palette=palette,make=make,card=card})
+            subtitle.Text="Automatic territory, survival and native movement in one hub."
+        elseif u.tab=="Territory" then
+            info(0,"TERRITORY FARMING","Territory controls initialise with this hub. If unavailable, reload the current Renaissance launcher.",100)
+        elseif u.tab == "Combat" then
+            row("reach",0);row("biteHelper",57);row("attackSpeed",114);row("holdBite",171);row("autoBite",228)
+            info(285,"TAP OR HOLD LEFT MOUSE","Quick left-clicks and manual spam remain normal. Hold the SAME left mouse button for 0.28 s to enable repeating bites; release to stop. Native handler first, bounded ordinary input fallback second. Faster Bites adjusts scheduling.",85)
+            u.combatReadout = info(365,"NATIVE COMBAT","Waiting for an animal.",100)
+        elseif u.tab == "Hippo" then
+            info(0,"CRUSHER BITE","Hold your normal ability control. Charge movement and release assistance apply only to Hippo.",65)
+            row("hippoMove",74);row("hippoRelease",131)
+            u.hippoReadout=info(193,"CHARGE","Waiting for Hippo.",106)
+            info(309,"POWER LIMIT","Damage beyond full charge and shorter ability cooldowns remain unverified.",55)
+        elseif u.tab == "Test Features" then
+            subtitle.Text="Own-character observations for every animal."
+            info(0,"DAMAGE & ABILITY EVIDENCE","Records HP loss, Rest, effects, Hippo replies and hub feature states. The client shell formula is not proof of protection.",60)
+            u.testsReadout=info(68,"LIVE RECORDER","Waiting for your animal.",96)
+            local save=button(cards,"SAVE REPORT",0,174,238,34)
+            save.Activated:Connect(function()
+                if hub.active then hub.tests:save();u.nextText=0 end
+            end)
+            local copy=button(cards,"COPY REPORT",252,174,238,34)
+            copy.Activated:Connect(function()
+                if hub.active then hub.tests:copy();u.nextText=0 end
+            end)
+            u.testsToggle=button(cards,"RECORDING: ON",0,216,490,34)
+            u.testsToggle.Activated:Connect(function()
+                if hub.active then hub.tests:setEnabled(not hub.tests.enabled);u.nextText=0 end
+            end)
+            local cross=button(cards,"ONE-SHOT TURTLE / CRUSHER REQUEST",0,258,490,34)
+            cross.Activated:Connect(function()
+                if hub.active then hub.tests:crossSpecies();u.nextText=0 end
+            end)
+            info(300,"CONTROLLED TRIAL","Only while naturally resting as Turtle in FERAL v2412. No shell or reduced damage is claimed.",64)
+        elseif u.tab == "Vision" then
+            row("esp",0); row("tags",57); row("voice",114)
+            local c = card(171,52)
+            text(c,"Tracking range",14,8,270,20,13)
+            text(c,"Real players only · up to 24",14,29,320,17,10,palette.sub)
+            local range = button(c,tostring(hub.settings.range) .. " STUDS",350,10,124,30)
+            range.Activated:Connect(function()
+                if not hub.active then return end
+                local old = hub.settings.range
+                hub.settings.range = old == 300 and 600 or old == 600 and 900 or 300
+                range.Text = tostring(hub.settings.range) .. " STUDS"
+                hub:save(); hub.nextScan = 0
+            end)
+            local walls = button(cards,"Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF"),0,231,490,30)
+            walls.Activated:Connect(function()
+                if not hub.active then return end
+                hub.settings.walls = not hub.settings.walls
+                walls.Text = "Through-wall outlines: " .. (hub.settings.walls and "ON" or "OFF")
+                hub:save()
+            end)
+            info(269,"HEALTH / PACK","Health-coloured outlines; pack-coloured names.",47)
+            u.finderReadout = info(317,"PLAYER FINDER","Waiting for replicated players.",48)
+        else
+            local order = u.tab == "Survival"
+                and {"stamina","recovery","escape","robloxAFK","survivalAFK","minigame"}
+                or {"climb","flight","mobility","speed","leap","zoom"}
+            for i,id in ipairs(order) do row(id,(i-1)*57) end
+        end
+        for name,btn in pairs(tabs) do btn.BackgroundColor3 = name == u.tab and Color3.fromRGB(27,111,98) or palette.panel end
+        u.nextText = 0
+    end
+    for i,name in ipairs({"Survival","Combat","Movement","Vision","Territory","Hippo","Test Features"}) do
+        local btn = button(side,string.upper(name),12,106+(i-1)*39,141,32)
+        tabs[name] = btn
+        btn.Activated:Connect(function()
+            if not hub.active then return end
+            u:selectTab(name)
+        end)
+    end
+    function u:selectTab(name)
+        if not tabs[name] then return false end
+        self.tab,hub.settings.tab=name,name
+        draw();if hub.active then hub:save() end
+        return true
+    end
+    function u:registerPage(name,definition)
+        assert(tabs[name] and type(definition.mount)=="function","Unsupported hub page")
+        self.pages[name]=definition
+        if self.tab==name then draw() end
+        local registration={closed=false}
+        function registration:close()
+            if self.closed then return end
+            self.closed=true
+            if u.pages[name]==definition then
+                u.pages[name]=nil
+                if u.tab==name and not hub.closed then draw() end
+            end
+        end
+        return registration
+    end
+    function u:toggle()
+        self.visible = not self.visible
+        self.drag=nil
+        frame.Visible = self.visible
+        launcher.Visible = not self.visible
+        hub.policy.menuOpen = self.visible
+        self.nextText=0
+        if self.visible then hub:stopWalk("menu opened") end
+    end
+    function u:contains(point)
+        if not gui.Enabled then return false end
+        local surface=self.visible and frame or launcher
+        if not surface.Visible then return false end
+        local p,s = surface.AbsolutePosition,surface.AbsoluteSize
+        return point.X >= p.X and point.X <= p.X+s.X and point.Y >= p.Y and point.Y <= p.Y+s.Y
+    end
+    function u:fit()
+        local camera=bridge.Workspace.CurrentCamera
+        local amount,centre=UI.fit(camera and camera.ViewportSize,self.windowCentre)
+        if not amount then return end
+        self.windowCentre=centre
+        assign(scale,"Scale",amount)
+        if self.windowX~=centre.X or self.windowY~=centre.Y then
+            self.windowX,self.windowY=centre.X,centre.Y
+            frame.Position=UDim2.fromOffset(centre.X,centre.Y)
+        end
+    end
+    function u:beginDrag(point,input)
+        if not hub.active or not self.visible or not self:contains(point) then return false end
+        if point.Y>frame.AbsolutePosition.Y+76*scale.Scale then return false end
+        self.drag={origin=point,centre=self.windowCentre or frame.AbsolutePosition+frame.AbsoluteSize*.5,input=input}
+        return true
+    end
+    function u:moveDrag(point)
+        if not self.drag or not self.visible then return end
+        self.windowCentre=self.drag.centre+point-self.drag.origin
+        self:fit()
+    end
+    local inputService=bridge.UserInputService
+    local function pointOf(input)
+        if input.UserInputType==Enum.UserInputType.Touch and input.Position then
+            return Vector2.new(input.Position.X,input.Position.Y)
+        end
+        return inputService:GetMouseLocation()
+    end
+    local function listen(signal,callback)
+        local connection=signal:Connect(callback)
+        scope:add(function()connection:Disconnect()end)
+    end
+    listen(inputService.InputBegan,function(input)
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+            u:beginDrag(pointOf(input),input)
+        end
+    end)
+    listen(inputService.InputChanged,function(input)
+        if u.drag and (input==u.drag.input or input.UserInputType==Enum.UserInputType.MouseMovement) then
+            u:moveDrag(pointOf(input))
+        end
+    end)
+    listen(inputService.InputEnded,function(input)
+        if u.drag and (input==u.drag.input or input.UserInputType==Enum.UserInputType.MouseButton1) then u.drag=nil end
+    end)
+    hide.Activated:Connect(function() if hub.active then u:toggle() end end)
+    launcher.Activated:Connect(function() if hub.active then u:toggle() end end)
+    unload.Activated:Connect(function() if hub.active then hub:close() end end)
+    local dot = round(make("Frame",{Name = "BiteRangeMarker",BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(15,15),AnchorPoint = Vector2.new(.5,.5),Visible = false},gui),50)
+    local dotStroke = make("UIStroke",{Thickness = 1.5,Transparency = .05,Color = palette.same},dot)
+    u.dot,u.dotStroke=dot,dotStroke
+    function u:syncTracked(tracked)
+        local keep = {}
+        for _, target in ipairs(tracked) do
+            if not target.player or bridge.Players:GetPlayerFromCharacter(target.char) ~= target.player then continue end
+            local char = target.char
+            keep[char] = true
+            local record = self.records[char]
+            if not record then
+                local highlight = Instance.new("Highlight")
+                highlight.Name,highlight.Adornee = "Outline",char
+                highlight.FillTransparency,highlight.OutlineTransparency = 1,0
+                highlight.Enabled,highlight.Parent = false,folder
+                local label = text(gui,"",0,0,180,18,11)
+                label.TextXAlignment, label.AnchorPoint = Enum.TextXAlignment.Center,Vector2.new(.5,1)
+                record = { highlight = highlight,label = label }
+                self.records[char] = record
+            end
+            record.target = target
+            record.head=char:FindFirstChild("Head")
+        end
+        for char,record in pairs(self.records) do
+            if not keep[char] then
+                record.highlight:Destroy(); record.label:Destroy()
+                self.records[char] = nil
+            end
+        end
+    end
+    function u:render(dt,now)
+        local camera = bridge.Workspace.CurrentCamera
+        if not camera then
+            for _,record in pairs(self.records) do
+                assign(record.highlight,"Enabled",false);assign(record.label,"Visible",false)
+            end
+            assign(dot,"Visible",false)
+            self.lastPoint,self.lastTarget=nil,nil
+            return
+        end
+        if now >= self.nextFit then
+            self.nextFit = now+.5
+            self:fit()
+        end
+        local registry = hub.registry.byId
+        for char,record in pairs(self.records) do
+            local target = record.target
+            local valid = target.player and target.player.Parent~=nil and target.player.Character==char
+                and char.Parent ~= nil and target.root and target.root.Parent ~= nil
+                and target.hum and target.hum.Parent ~= nil and target.hum.Health > 0
+            valid=valid==true
+            local colour = palette[target.affiliation] or palette.unknown
+            assign(record.highlight,"FillTransparency",1)
+            if valid and registry.esp.requested then
+                local hp,maxHP=target.hum.Health,target.hum.MaxHealth
+                if record.hp~=hp or record.maxHP~=maxHP then
+                    record.hp,record.maxHP=hp,maxHP
+                    record.healthColour=UI.healthColour(hp,maxHP)
+                end
+                assign(record.highlight,"OutlineColor",record.healthColour)
+                assign(record.highlight,"DepthMode",hub.settings.walls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded)
+            end
+            assign(record.highlight,"Enabled",valid and registry.esp.requested)
+            local projected,onScreen
+            if valid and registry.tags.requested then
+                local head=record.head
+                local pos=head and head.Parent and head:IsA("BasePart") and head.Position+Vector3.new(0,head.Size.Y*.65,0)
+                    or target.root.Position+Vector3.new(0,target.root.Size.Y*.6+1,0)
+                projected,onScreen=camera:WorldToViewportPoint(pos)
+            end
+            local show=valid and registry.tags.requested and onScreen==true and projected.Z>0
+            assign(record.label,"Visible",show)
+            if show then
+                local x,y = math.clamp(projected.X,90,math.max(90,camera.ViewportSize.X-90)),math.max(20,projected.Y-6)
+                if not record.x or math.abs(x-record.x)>=.25 or math.abs(y-record.y)>=.25 then
+                    record.x,record.y=x,y;record.label.Position=UDim2.fromOffset(x,y)
+                end
+                assign(record.label,"Text",target.name)
+                assign(record.label,"TextColor3",colour)
+            end
+        end
+        local guide = hub.guide
+        local dotVisible=false
+        if registry.biteHelper.requested and guide and not guide.invalid and guide.target.root.Parent then
+            local point,onScreen = camera:WorldToViewportPoint(guide.target.root.Position)
+            if onScreen and point.Z > 0 then
+                local desired = Vector2.new(point.X,point.Y)
+                if self.lastTarget~=guide.target.char then self.lastPoint=nil;self.lastTarget=guide.target.char end
+                self.lastPoint = self.lastPoint and self.lastPoint:Lerp(desired,1-math.exp(-22*math.min(dt,.1))) or desired
+                if self.dotX~=self.lastPoint.X or self.dotY~=self.lastPoint.Y then
+                    self.dotX,self.dotY=self.lastPoint.X,self.lastPoint.Y
+                    dot.Position=UDim2.fromOffset(self.dotX,self.dotY)
+                end
+                dotVisible = true
+                local readiness=hub.biteReadiness
+                local stale=now-(hub.guideAt or -math.huge)>.35
+                local locked=not readiness or not readiness.ready
+                local species=hub.snapshot and hub.snapshot.species
+                assign(dotStroke,"Color",palette[UI.markerTone(species,not (guide.blocked or locked or stale),
+                    guide.baseline and guide.baseline.valid)])
+            else self.lastPoint,self.lastTarget=nil,nil end
+        else self.lastPoint,self.lastTarget = nil,nil end
+        assign(dot,"Visible",dotVisible)
+        if not self.visible then return end
+        if now < self.nextText then return end
+        self.nextText = now+.25
+        if self.pageView and self.pageView.tick then self.pageView:tick(now) end
+        for id,rowValue in pairs(self.rows) do
+            local feature = registry[id]
+            assign(rowValue.toggle,"Text",not feature.requested and "OFF"
+                or feature.applied and (feature.state == "PARTIAL" and "PARTIAL"
+                    or feature.state == "ARMED" and "ARMED" or "ON") or "WAIT")
+            assign(rowValue.toggle,"BackgroundColor3",feature.requested and feature.applied
+                and (feature.state == "PARTIAL" and palette.unknown or palette.on) or palette.off)
+            assign(rowValue.status,"Text",feature.requested and feature.reason ~= "" and feature.reason or feature.detail)
+        end
+        assign(footer,"Text",hub.rescue.pending and hub.rescue.status
+            or hub.feeding.busy and hub.feeding.status or hub.notice or "Right Shift opens menu")
+        if self.combatReadout then
+            assign(self.combatReadout,"Text",(hub.biteReadiness and hub.biteReadiness.reason or "Native timing unmeasured")
+                .."\n"..(hub.combatStatus or "Watching native attacks") .. "\n" .. hub.combatInput.status)
+        end
+        if self.finderReadout then
+            assign(self.finderReadout,"Text",string.format("%d shown · %d in range · %.0f studs",#bridge.tracked,bridge.replicatedCount or 0,hub.settings.range))
+        end
+        if self.hippoReadout then assign(self.hippoReadout,"Text",hub.hippo:summary()) end
+        if self.testsReadout then assign(self.testsReadout,"Text",hub.tests:summary().."\n"..hub.tests.notice) end
+        if self.testsToggle then assign(self.testsToggle,"Text",hub.tests.enabled and "RECORDING: ON" or "RECORDING: PAUSED") end
+    end
+    function u:activate()
+        gui.Enabled = true
+        hub.policy.menuOpen = self.visible
+    end
+    draw()
+    return u
+end
+return UI
+]============]
+sources["controller"] = [============[
+local Controller = {}
+-- Replies have no recovered transaction identifier. Prefer a matching native
+-- target and timing, and retain ambiguity instead of assigning the newest bite.
+function Controller.matchFeedback(Core,transactions,data,now)
+    if type(data)~="table" or data.v==nil then return nil,false end
+    local best,bestRank,matches,abilityOverlap=nil,math.huge,0,false
+    for _,tx in ipairs(transactions) do
+        local corrected=tx.feedback and not tx.feedback.safe and tx.feedback.v==data.v
+            and Core.finite(tx.feedback.dmg) and tx.feedback.dmg==0 and Core.finite(data.dmg) and data.dmg>0
+        if tx.nativeAt and not tx.closed and (not tx.feedback or corrected) and now>=tx.nativeAt and now-tx.nativeAt<2.6 then
+            local target=tx.focusTarget and tx.focusTarget.char or tx.target and tx.target.char
+            local seenVictim=tx.hpBefore and tx.hpBefore[data.v]~=nil
+            -- Real FeralHit replies may involve a different nearby victim
+            -- than the client's projected target. Prefer exact matches but
+            -- allow a unique weaker nearby-victim match.
+            local rank=tx.nativeTarget==data.v and 0
+                or tx.localTarget==data.v and 1
+                or target==data.v and 2
+                or seenVictim and 3 or nil
+            if rank then
+                if tx.abilityAmbiguous then
+                    abilityOverlap=true
+                elseif rank<bestRank then
+                    best,bestRank,matches=tx,rank,1
+                elseif rank==bestRank then
+                    matches+=1
+                end
+            end
+        end
+    end
+    -- Neither timing proximity nor a shared target is a transaction ID.
+    -- Do not train cadence or label damage when multiple equal candidates fit.
+    local ambiguous=abilityOverlap or best~=nil and matches>1
+    return not ambiguous and best or nil,ambiguous
+end
+local function nativeState(native)
+    if not native or type(native.state)~="function" then return nil,false end
+    local ok,state,known=pcall(native.state)
+    if ok then return state,known end
+    return nil,false
+end
+function Controller.new(M,bridge,options)
+    local Core = M.core
+    local tokenIdentity = {}
+    local h = { version = M.release and M.release.version or "unbundled",
+        sourceFingerprint = M.release and M.release.sourceFingerprint, tokenIdentity = tokenIdentity,
+        token = (tostring(tokenIdentity):gsub("[^%w]","")) .. "_" .. tostring(math.floor(bridge.clock()*1000000)),
+        active = false, closed = false, ready = false, inputSuspended=false, scope = Core.scope(),
+        registry = Core.registry(), policy = M.policy.new(), ledger = Core.ledger(160),
+        nextScan = 0, nextSlow = 0, nextBind = 0, nextSample = 0, nextEscape = 0,
+        nextWalk = bridge.clock()+90, nextIdle = bridge.clock()+75,
+        transactions = {}, earlyInputs = setmetatable({},{__mode = "k"}),
+        notice = "Ready · Right Shift opens menu", bridge = bridge, options = options or {} }
+    h.policy.lastPhysical = bridge.clock()
+    h.settings,h.settingsOrigin = M.settings.load(bridge:io(),Core.specs)
+    if h.options.settings then h.settings = M.settings.sanitize(h.options.settings,Core.specs) end
+    for _,feature in ipairs(h.registry.order) do
+        if not feature.permanent and not feature.linked then h.registry:request(feature.id,h.settings.states[feature.id]) end
+    end
+    h.features = M.features.new(Core,bridge,h.registry)
+    h.grab = M.grab.new()
+    h.grabInput = M.grab_input.new(bridge,h.token)
+    h.recovery = M.recovery.new(bridge,h.policy,h.ledger)
+    h.feeding = M.feeding.new(bridge,h.policy,h.ledger)
+    h.combatInput = M.combat_input.new(bridge,h.policy,h.ledger)
+    bridge.combatGovernor = h.combatInput
+    -- Weak keyed: a disappeared animal is never retained by combat trust.
+    -- Only Auto Bite pauses unconfirmed extended contacts; manual reach stays.
+    h.extendedConfidence=setmetatable({},{__mode="k"})
+    bridge.extendedConfidence=h.extendedConfidence
+    -- A pending synthetic reset can outlive the current Heartbeat. Never
+    -- press during an asynchronously arriving native grab begin.
+    bridge.combatPulseBlocked = function()
+        local held=h.combatInput.held
+        return h.closed or h.inputSuspended==true or not h.registry.byId.holdBite.requested
+            or h:hasNativeGrab(bridge.clock())
+            or held==nil or (held.key~="M1" and held.key~="poll")
+            or not held.handoff or h.physicalM1Input==nil and held.source~="poll"
+    end
+    h.rescue = M.rescue.new(bridge,h.ledger)
+    h.hippo = M.hippo.new(Core,bridge,h.ledger)
+    h.tests = M.test_features.new(Core,bridge,h)
+    h.zoom = M.zoom.new(bridge.player)
+    h.voice = M.voice.new(bridge.Players,bridge.player)
+    h.settingsAvailable = bridge:io().available ~= false
+    function h:hasNativeGrab(now)
+        if self.grab.active then return true end
+        local observed=self.nativeGrabSession
+        return observed~=nil and observed.char==bridge.player.Character
+            and observed.generation==bridge.generation and now-observed.at<=8
+    end
+    function h:focusChanged(focused)
+        if self.closed then return end
+        self.windowFocused=focused==true
+        -- Focus return does not resurrect a hold whose release was missed.
+        -- A fresh gameplay input must establish ownership again.
+        self.inputSuspended=true
+        self.physicalM1Input=nil
+        self.combatInput:cancel()
+        self:stopWalk("window focus changed")
+    end
+    function h:observeCombatAbility(s,now)
+        if not s.alive then return end
+        -- FeralHit does not identify which ordinary bite or ability caused
+        -- damage. Keep the real reply, but suspend ordinary-bite attribution
