@@ -52,7 +52,7 @@ function Mock.new()
     local methods = {}
     local function new(class)
         if w.failure == "instance:"..class then error("injected Instance creation failure") end
-        local o = {_props={ClassName=class,Name=class,Visible=true,Enabled=true,Text="",
+        local o = {_props={ClassName=class,Name=class,Visible=true,Enabled=true,Text="",Active=true,Interactable=true,
             AbsolutePosition=V2.new(0,0),AbsoluteSize=V2.new(704,505),
             Size=V3.new(2,2,4),Position=V3.new(0,3,0),Health=100,MaxHealth=100,
             HipHeight=1,MoveDirection=V3.new(),AssemblyLinearVelocity=V3.new(),
@@ -275,9 +275,11 @@ function Mock.new()
             if w.logicalM1Down then return end
             w.logicalM1Down=true
             local consumed=false
-            if w.guiHitsAt then
-                for _,object in ipairs(w.guiHitsAt(x,y)) do
-                    if object:IsA("GuiButton") or object:IsA("TextBox") then
+            local actualGui=w.virtualActualGuiAt or w.guiHitsAt
+            if actualGui then
+                for _,object in ipairs(actualGui(x,y)) do
+                    if (object:IsA("GuiButton") or object:IsA("TextBox"))
+                        and object.Interactable~=false and object.Active~=false then
                         consumed=true;w.virtualGuiClicks=(w.virtualGuiClicks or 0)+1;break
                     end
                 end

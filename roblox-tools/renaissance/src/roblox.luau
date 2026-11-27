@@ -836,6 +836,7 @@ function Roblox.new(Core, environment)
             pcall(pulse.release)
             self.syntheticReleasing=false
         end
+        self:restoreFeedClickGuard(pulse.feedGuard)
     end
     -- If an executor fails to run the scheduled synthetic release, do not
     -- permanently block subsequent held-M1 takeover bites.
@@ -852,21 +853,91 @@ function Roblox.new(Core, environment)
     -- an active native grab session has priority. No Bite/BiteHit remotes.
     -- A food/water offer is not feeding. M3 may start on its prompt,
     -- but a generated primary input must never activate that GUI control.
-    function b:feedOfferControl(object)
-        local node=object
-        for _=1,4 do
-            if not node then break end
-            if node.Name=="FeralFeedTap" then return true end
-            if node:IsA("TextButton") or node:IsA("TextLabel") then
-                local label=string.upper(tostring(node.Text or "")):match("^%s*(.-)%s*$")
-                for _,name in ipairs({"EAT","DRINK"}) do
-                    if label==name or label==name.." [E]" or label==name.." (E)"
-                        or label=="[E] "..name or label=="(E) "..name then return true end
-                end
-            end
-            node=node.Parent
+    local feedNames={feralfeedtap=true,feedtap=true,feedbutton=true,eatbutton=true,
+        drinkbutton=true,eatdrinkbutton=true,feralfeedbutton=true}
+    local function feedLabel(node)
+        if feedNames[string.lower(tostring(node.Name or "")):gsub("[^%w]","")] then return true end
+        if not (node:IsA("TextButton") or node:IsA("TextLabel")) then return false end
+        local label=string.upper(tostring(node.Text or "")):gsub("<[^>]*>",""):match("^%s*(.-)%s*$")
+        for _,name in ipairs({"EAT","DRINK","EAT / DRINK"}) do
+            if label==name or label==name.." [E]" or label==name.." (E)"
+                or label=="[E] "..name or label=="(E) "..name then return true end
         end
         return false
+    end
+    function b:feedOfferControl(object)
+        local node=object
+        for _=1,5 do
+            if not node then break end
+            if feedLabel(node) then return true end
+            node=node.Parent
+        end
+        if object:IsA("GuiButton") then
+            local ok,children=pcall(object.GetDescendants,object)
+            if ok then
+                for _,child in ipairs(children) do if feedLabel(child) then return true end end
+            end
+        end
+        return false
+    end
+    -- This lease covers one generated primary press and its release.
+    -- Only recognised feed buttons are changed; do not hide HUD elements,
+    -- write game attributes, consume keyboard input or alter native cooldowns.
+    function b:restoreFeedClickGuard(lease)
+        if not lease or lease.restored then return end
+        lease.restored=true
+        for i=#lease.entries,1,-1 do
+            local entry=lease.entries[i]
+            pcall(function()
+                if entry.button.Active==false then entry.button.Active=entry.active end
+                if entry.button.Interactable==false then entry.button.Interactable=entry.interactable end
+            end)
+        end
+    end
+    function b:beginFeedClickGuard(char)
+        local gui=self.player:FindFirstChildOfClass("PlayerGui")
+        local offer=self:feedOfferActive(char)
+        local lease={entries={}}
+        if not gui then
+            if offer then return nil,"feeding control unresolved" end
+            return lease
+        end
+        local ok,objects=pcall(gui.GetDescendants,gui)
+        if not ok or type(objects)~="table" then return nil,"feeding control query unavailable" end
+        local buttons={}
+        -- Look at the entire own GUI, not just the reported click coordinates.
+        -- Nested Eat/Drink labels can identify an ImageButton.
+        for _,object in ipairs(objects) do
+            if object:IsA("GuiButton") and self:feedOfferControl(object) then
+                buttons[object]=true
+            end
+        end
+        local found=false
+        for button in pairs(buttons) do
+            found=true
+            local readable,active,interactable=pcall(function()return button.Active,button.Interactable end)
+            if not readable or type(active)~="boolean" or type(interactable)~="boolean" then
+                self:restoreFeedClickGuard(lease)
+                return nil,"feeding control guard unavailable"
+            end
+            table.insert(lease.entries,{button=button,active=active,interactable=interactable})
+            local guarded,verified=pcall(function()
+                button.Interactable=false
+                button.Active=false
+                return button.Interactable==false and button.Active==false
+            end)
+            if not guarded or not verified then
+                self:restoreFeedClickGuard(lease)
+                return nil,"feeding control guard unavailable"
+            end
+        end
+        -- An unrecognised active feeding control is not safe to click through.
+        if offer and not found then
+            self:restoreFeedClickGuard(lease)
+            return nil,"feeding control unresolved"
+        end
+        if found then self.feedGuardPulses=(self.feedGuardPulses or 0)+1 end
+        return lease
     end
     -- This check is for actual generated clicks only, never M3 acquisition.
     -- Unknown GUI state remains blocked rather than clicking blindly.
@@ -903,11 +974,10 @@ function Roblox.new(Core, environment)
         return offer=="eat" or offer=="drink"
     end
     function b:clearOfferClickPoint(point)
-        if self.holdBinding=="M3" and self:feedOfferActive(self.player.Character) then
-            return nil,"Eat/Drink offer"
-        end
         local clear,offer,reason=self:mouseGameplayPoint(point,false)
         if clear then return point end
+        -- A feed button must be isolated by the pulse guard, not avoided by
+        -- assuming the executor actually honours relocated coordinates.
         if self.holdBinding=="M3" and offer then return nil,"Eat/Drink offer" end
         -- Only relocate a coordinate-addressable click around a confirmed HUD
         -- obstruction. Do not relocate across real hub/text/menu boundaries
@@ -935,9 +1005,6 @@ function Roblox.new(Core, environment)
         self.heldInputBlockReason=nil
         if self.syntheticM1 then return self:blockedHeldInput("previous click releasing") end
         local independent=self.holdBinding=="M3"
-        if independent and self:feedOfferActive(self.player.Character) then
-            return self:blockedHeldInput("Eat/Drink offer")
-        end
         if independent and (not s or s.mouseHeld or s.r2Held or s.physicalM1Held) then return false end
         if independent and self.combatPulseBlocked and self.combatPulseBlocked() then return false end
         if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
@@ -945,13 +1012,12 @@ function Roblox.new(Core, environment)
             or s.captured or s.holding then return false end
         local position=self.UserInputService:GetMouseLocation()
         if not position then return self:blockedHeldInput("mouse position unavailable") end
-        local clear,offer,pointReason=self:mouseGameplayPoint(position,false)
-        if independent and offer then return self:blockedHeldInput("Eat/Drink offer") end
+        local clear,offer,pointReason=self:mouseGameplayPoint(position,independent)
         if not clear and (not independent or pointReason~="HUD button" and pointReason~="Eat/Drink offer") then
             return self:blockedHeldInput(pointReason)
         end
         local virtualPoint,virtualReason=position,nil
-        if not clear then virtualPoint,virtualReason=self:clearOfferClickPoint(position) end
+        if not clear and not offer then virtualPoint,virtualReason=self:clearOfferClickPoint(position) end
         local modes={}
         local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
         if ok and virtual then table.insert(modes,{
@@ -990,8 +1056,10 @@ function Roblox.new(Core, environment)
         end
         self.heldInputBackend=backend
         if mode.click then
-            if independent and self:feedOfferActive(self.player.Character) then
-                return self:blockedHeldInput("Eat/Drink offer")
+            -- Atomic adapters cannot establish the release boundary. The
+            -- verified virtual paired route is preferred for guarded input.
+            if independent and (offer or self:feedOfferActive(self.player.Character)) then
+                return self:blockedHeldInput("paired click required for feeding guard")
             end
             if not self:mouseGameplayPoint(nil,false) then return false end
             self.syntheticM1Until=now+.18
@@ -1023,9 +1091,6 @@ function Roblox.new(Core, environment)
         end
         local function beginPress()
             if self.syntheticM1~=pulse then return end -- a grab began meanwhile
-            if independent and self:feedOfferActive(self.player.Character) then
-                self.heldInputBlockReason="Eat/Drink offer";stop();return
-            end
             if self.combatPulseBlocked then
                 local known,blocked=pcall(self.combatPulseBlocked)
                 if not known or blocked then stop();return end
@@ -1038,6 +1103,11 @@ function Roblox.new(Core, environment)
                 stop();return
             end
             if independent then
+                -- Lease the actual feeding controls just before Down, and
+                -- restore immediately after Up (including errors/unload).
+                local lease,why=self:beginFeedClickGuard(current.char)
+                if not lease then self.heldInputBlockReason=why;stop();return end
+                pulse.feedGuard=lease
                 -- UI may appear between scheduling and the actual press.
                 -- Revalidate the point without moving the physical mouse.
                 if backend=="VIRTUAL_MOUSE" then

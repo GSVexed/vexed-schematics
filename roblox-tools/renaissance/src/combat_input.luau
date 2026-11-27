@@ -120,7 +120,7 @@ function CombatInput.new(bridge,policy,ledger)
             attributableMarkers=self.middleRouteMarkers,nativeAttempts=self.middleNativeAttempts,
             inputAttempts=self.middleInputAttempts,adapter=bridge.heldInputLockedBackend,
             held=self.held~=nil,status=self.status,admission=self.middleAdmission,
-            inputBlockReason=bridge.heldInputBlockReason,
+            inputBlockReason=bridge.heldInputBlockReason,feedGuardPulses=bridge.feedGuardPulses or 0,
             serverDamageVerified=false}
     end
     function c:release(kind,now)
@@ -259,18 +259,6 @@ function CombatInput.new(bridge,policy,ledger)
             if not s.alive or s.chat or s.gameMenu then self.held=nil end
             self.nextAttempt=now+.12
             self.status=(options.minigameBusy or s.grab) and "minigame has priority" or "native action has priority"
-            return
-        end
-        -- Stop generated primary clicks during a food/water offer.
-        -- Keep the accepted physical hold and its selected route.
-        if middleMode and self.held and self.held.key=="M3"
-            and (self.middleRoute or self.middleCandidate)=="INPUT"
-            and type(bridge.feedOfferActive)=="function" and bridge:feedOfferActive(s.char) then
-            if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
-            self.awaiting=nil
-            bridge.heldInputBlockReason="Eat/Drink offer"
-            self.nextAttempt=math.max(self.nextAttempt,now+.08)
-            self.status="M3 held; Eat/Drink offer"
             return
         end
         if middleMode and bridge.syntheticM1 then return end
