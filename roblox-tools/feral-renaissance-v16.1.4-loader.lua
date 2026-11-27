@@ -51,11 +51,14 @@ end
 local source, issue
 for _, url in ipairs(urls) do
     local ok, result = pcall(function() return game:HttpGet(url) end)
-    if ok and type(result) == "string" and result:sub(1, #prefix) == prefix then
+    if ok and type(result) == "string" and #result == 562782
+        and result:sub(1, #prefix) == prefix then
         source = result
         break
     end
-    issue = ok and "Download returned unexpected content" or tostring(result)
+    issue = ok and ("Download incomplete or unexpected (" ..
+        (type(result)=="string" and tostring(#result) or type(result)) .. " bytes)")
+        or tostring(result)
 end
 -- Recover from executors that cap/truncate a large single HttpGet.
 -- These are exact newline-preserving slices of the tested candidate, pinned
