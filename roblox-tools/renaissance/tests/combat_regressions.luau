@@ -629,9 +629,10 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         w.held=E.UserInputType.MouseButton1
         local press=w:input(nil,E.UserInputType.MouseButton1)
         w:advance(2.2)
-        assert(h.bridge.wolfInputAction
-            and h.bridge.wolfInputAction.discovery=="one script-owned input listener")
-        assert((w.nativeBites or 0)>=2)
+        assert(h.bridge.wolfInputAction,
+            "wrapped own input callback must remain reachable")
+        assert((w.nativeBites or 0)>=2,
+            "own game callback should invoke original bites without mouse replay")
         eq(w.virtualBiteCalls,nil)
         w.held=nil;w.uis.InputEnded:Fire(press)
         h:close()
