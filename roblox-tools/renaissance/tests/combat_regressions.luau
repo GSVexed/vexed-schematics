@@ -525,4 +525,22 @@ return function(test,eq,load,Mock,modules,boot,close,E)
         eq(input.held.key,"ALT")
         assert(input.awaiting and input.awaiting.backend=="INPUT")
     end)
+
+    test("ALT processed by a later game binding does not erase the real held key",function()
+        local w=Mock.new()
+        w:addConfig("Species",{DEFAULT="Wolf",biteCooldown=function()return .6 end})
+        w:enableNativeActions()
+        w.env.getconnections=nil;w.env.getgc=function()return {} end
+        w.virtualBiteAvailable=true
+        local h=load(w,{settings={states={holdBite=true,attackSpeed=false,recovery=false}}})
+        w:advance(.15)
+        w.keys={[E.KeyCode.LeftAlt]=true}
+        local alt=w:input(E.KeyCode.LeftAlt,E.UserInputType.Keyboard,true)
+        eq(h.inputSuspended,false)
+        assert(h.combatInput.held and h.combatInput.held.key=="ALT")
+        w:advance(1.4)
+        assert((w.nativeBites or 0)>=2)
+        w.keys[E.KeyCode.LeftAlt]=nil
+        w.uis.InputEnded:Fire(alt);h:close()
+    end)
 end

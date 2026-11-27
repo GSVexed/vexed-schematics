@@ -474,6 +474,17 @@ function Controller.new(M,bridge,options)
         if kind == Enum.UserInputType.MouseButton2 and bridge.clock() < (self.syntheticUntil or 0) then return end
         self:physicalInput("other")
         if processed then
+            -- CAS may observe ALT early, then the UserInputService event is
+            -- marked processed by a later binding. That must not cancel the
+            -- independently owned ALT hold. Chat/menu/UI checks still apply.
+            if key==Enum.KeyCode.LeftAlt then
+                if self.registry.byId.holdBite.requested
+                    and not bridge.UserInputService:GetFocusedTextBox()
+                    and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+                    self:preInput(input)
+                end
+                return
+            end
             -- An asynchronous game-consumed M1 echo cannot revoke a physically
             -- held ALT trigger outside the hub's UI. Actual hub UI clicks
             -- are still allowed to cancel the ongoing hold.
