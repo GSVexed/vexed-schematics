@@ -1,0 +1,1700 @@
+                local record={heldFor=q.heldFor,smart=q.attempted==true,acceptedDamage="unverified"}
+                q.record=record;table.insert(self.history,record)
+                if #self.history>12 then table.remove(self.history,1) end
+                self.status=string.format("release observed after %.2fs",q.heldFor)
+                ledger:event("hippo_release_observed",now,{heldFor=q.heldFor,smart=q.attempted==true,damageAcceptance="unverified"})
+            elseif now-q.endedAt>.35 then
+                self.session=nil;self.status="charge ended without a release marker"
+                ledger:event("hippo_charge_ended",now)
+            end
+        elseif not self.recent then self.status="ready for a manual charge" end
+    end
+    function h:tick(s,now,enabled,guide,geometry)
+        self:observe(s,now)
+        if not s.alive or s.species~="Hippo" then return end
+        if enabled and now>=self.nextProbe and not bridge.deferNativeDiscovery then
+            self.nextProbe=now+.1
+            self.native=bridge:nativeHippoActions(now)
+        end
+        local q=self.session
+        if not enabled then self.releaseStatus="manual release";return end
+        if not self.native then self.releaseStatus="waiting for the native release control";return end
+        self.releaseStatus="waiting for full charge and clear contact"
+        if not q or q.attempted or q.fraction<1 or q.profile~=self.profileValue
+            or s.chat or s.gameMenu or s.captured or s.grab or s.feeding or s.rest or s.holding
+            or s.underwater then return end
+        if not bridge:autoAttackTarget(s,guide,geometry) then return end
+        q.attempted=true
+        q.target=guide.target.char
+        local called=bridge:finishNativeHippo(s,q.start,now)
+        self.releaseStatus=called and "native release attempted; damage unverified" or "native release declined"
+        ledger:event("hippo_smart_release_attempt",now,{called=called==true,damageAcceptance="unverified"})
+    end
+    function h:feedback(data,now)
+        local q=self.recent
+        if not q or q.char~=bridge.player.Character or now-q.releasedAt>1.5 or q.feedback
+            or type(data)~="table" or data.a~=q.char or q.target and data.v~=q.target then return end
+        q.feedback=data
+        if q.record and Core.finite(data.dmg) and data.dmg>=0 then
+            q.record.gameReportedDamage=data.dmg;q.record.protected=data.safe==true
+            -- A nearby reply is correlation; normal bites may share this window.
+            q.record.attribution="unverified"
+        end
+    end
+    function h:summary()
+        local p=self.profileValue
+        if not p then return self.status end
+        return self.status.."\n"..string.format("Captured scale %.2f×–%.2f× · full at %.1fs · overhold %.1fs",
+            p.MULT_START,p.MULT_MAX,p.CHARGE_TIME,p.OVERHOLD).."\n"..self.releaseStatus
+    end
+    function h:close()
+        self:reset();self.native=nil;table.clear(self.history)
+    end
+    return h
+end
+return Hippo
+]============]
+sources["features"] = [============[
+-- Every shared client-config mutation goes through one lease manager.
+local Features = {}
+-- Native tables can alias the same consumption profile in several paths.
+-- Coalesce equal intents before the strict lease manager reserves a field.
+-- Conflicting values remain an error; never silently choose the last value.
+function Features.uniquePlan(plan)
+    local result,seen={},{}
+    for _,item in ipairs(plan) do
+        if type(item.target)~="table" or item.key==nil then return nil,"invalid feature field" end
+        local fields=seen[item.target]
+        if not fields then fields={};seen[item.target]=fields end
+        local previous=fields[item.key]
+        if previous then
+            if previous.value~=item.value or previous.kind~=item.kind then
+                return nil,"conflicting aliased feature field: "..tostring(item.key)
+            end
+        else
+            fields[item.key]=item;table.insert(result,item)
+        end
+    end
+    return result
+end
+function Features.new(Core, bridge, registry)
+    local f = { leases = Core.leases(), originalCombat = nil, combat = nil, flag = nil,
+        nextReconcile = 0, configIdentity = {}, failures = {} }
+    local function entry(target, key, value, kind)
+        return { target = target, key = key, value = value, kind = kind }
+    end
+    local function numeric(t, keys)
+        if type(t) ~= "table" then return false end
+        for _, key in ipairs(keys) do if not Core.finite(t[key]) then return false end end
+        return true
+    end
+    function f:releaseFlag()
+        local flag = self.flag
+        self.flag = nil
+        if flag then bridge:restoreAttribute(flag.char, "WolfDbgNoStamina", true, flag.before) end
+    end
+    function f:flagCharacter(s, on)
+        if self.flag and (not on or not s.alive or self.flag.char ~= s.char) then self:releaseFlag() end
+        if not on or self.flagConflict~=s.char then self.flagConflict=nil end
+        if on and s.alive then
+            if self.flagConflict==s.char then return false end
+            if self.flag then
+                if bridge:attribute(s.char,"WolfDbgNoStamina")==true then return true end
+                -- The game/another owner replaced our value. Never repeatedly
+                -- overwrite it; keep the independently valid config profile.
+                self.flag,self.flagConflict=nil,s.char
+                return false
+            end
+            local before=bridge:attribute(s.char,"WolfDbgNoStamina")
+            if bridge:setAttribute(s.char,"WolfDbgNoStamina",true) then
+                self.flag={char=s.char,before=before};return true
+            end
+            return false
+        end
+        return not on
+    end
+    function f:plan(id)
+        local n = bridge:config("NeedsConfig")
+        if id == "reach" then
+            local c = bridge:config("CombatConfig")
+            if not numeric(c, { "REACH", "HIT_SCALE", "CONE", "SLACK", "MAX_DY" })
+                or type(c.bodyGap) ~= "function" then return nil, "CombatConfig schema unavailable" end
+            local original = {}
+            for k, v in pairs(c) do original[k] = v end
+            -- Keep stock-reference hints conservative even if a native helper
+            -- closes over the shared config table that we are about to tune.
+            if type(c.coneFor) == "function" then
+                local stock = c.coneFor
+                original.coneFor = function(char)
+                    -- Captured CombatConfig.coneFor (p1) adds AnimProfile,
+                    -- then Species, BITE_CONE_ADD to CONE. Clamping the native
+                    -- closure to stock CONE lost the legitimate species bonus
+                    -- after our own shared CONE change.
+                    if game.PlaceVersion==2412 and type(original.BITE_CONE_ADD)=="table" then
+                        local add=original.BITE_CONE_ADD[bridge:attribute(char,"AnimProfile") or ""]
+                            or original.BITE_CONE_ADD[bridge:attribute(char,"Species") or ""] or 0
+                        return original.CONE+(Core.finite(add) and add or 0)
+                    end
+                    local ok,value = pcall(stock,char)
+                    return ok and Core.finite(value) and math.min(value,original.CONE) or original.CONE
+                end
+            end
+            self.originalCombat, self.combat = original, c
+            local nativeCone = c.coneFor
+            local desiredCone = math.max(c.CONE,170)
+            local plan = {
+                entry(c,"REACH",math.min(c.REACH*1.50,3.2),"number"),
+                entry(c,"HIT_SCALE",math.min(c.HIT_SCALE*1.30,2.1),"number"),
+                entry(c,"CONE",desiredCone,"number"),
+                entry(c,"SLACK",c.SLACK+.75,"number"),
+                entry(c,"MAX_DY",math.min(c.MAX_DY*1.50,4.5),"number"),
+                entry(c,"bodyGap",function(part,flat)
+                    local char = part and part.Parent
+                    if char and not bridge:combatEligible(char) then return math.huge end
+                    local gap = original.bodyGap(part,flat)
+                    return Core.finite(gap) and gap-.90 or gap
+                end,"function"),
+            }
+            -- FeralBiteLocal is predictive presentation, not a hit acknowledgement.
+            -- Preserve the native FeralHit response effects; remove premature impacts.
+            if type(c.HIT2) == "table" and type(c.HIT2.PREDICT) == "boolean" then
+                table.insert(plan,entry(c.HIT2,"PREDICT",false,"boolean"))
+            end
+            table.insert(plan,entry(c,"coneFor",function(char)
+                local value = desiredCone
+                if type(nativeCone) == "function" then
+                    local ok,native = pcall(nativeCone,char)
+                    if ok and Core.finite(native) then value = math.max(value,native) end
+                end
+                return math.clamp(value,0,180)
+            end))
+            -- A single candidate selected from the shared snapshot feeds both
+            -- climb aim and the guide; no extra tree scan or hit request.
+            table.insert(plan, entry(c,"biteLook",function(char, forward)
+                local native = forward
+                if type(original.biteLook) == "function" then
+                    local ok,value = pcall(original.biteLook,char,forward)
+                    if ok and typeof(value) == "Vector3" then native = value end
+                end
+                local target = bridge.reachTarget
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if bridge:currentTargetBody(target) and root and char==bridge.player.Character
+                    and bridge:combatEligible(target.char) then
+                    local diff = target.root.Position-root.Position
+                    if bridge.predictionActive and char==bridge.player.Character then
+                        diff=bridge:leadPoint({char=char,root=root},target)-root.Position
+                    end
+                    local flat = Vector3.new(diff.X,0,diff.Z)
+                    local look = Vector3.new(native.X,0,native.Z)
+                    if diff.Magnitude <= 45 and flat.Magnitude > .05
+                        and (bridge.predictionActive or target.sameTree or look.Magnitude < .01 or look.Unit:Dot(flat.Unit) < .3) then
+                        return flat.Unit
+                    end
+                end
+                return native
+            end))
+            table.insert(plan, entry(c,"dyMult",function(char)
+                local native = 1
+                if type(original.dyMult) == "function" then
+                    local ok,value = pcall(original.dyMult,char)
+                    if ok and Core.finite(value) and value > 0 then native = value end
+                end
+                if char==bridge.player.Character and bridge:isClimbing(char)
+                    and bridge:currentTargetBody(bridge.treeTarget) and bridge.treeTarget.sameTree then
+                    return math.min(native*2.50,3.5)
+                end
+                return native*1.35
+            end))
+            return plan
+        elseif id == "stamina" then
+            if not numeric(n, { "STAMINA_REGEN", "STAMINA_REGEN_DELAY", "STAMINA_SPRINT_DRAIN",
+                "STAMINA_JUMP_COST", "STAMINA_LOW_NEEDS" }) then return nil, "NeedsConfig stamina schema unavailable" end
+            local plan = {
+                entry(n,"STAMINA_REGEN",n.STAMINA_REGEN*3,"number"),
+                entry(n,"STAMINA_REGEN_DELAY",0,"number"),
+                entry(n,"STAMINA_SPRINT_DRAIN",0,"number"),
+                entry(n,"STAMINA_JUMP_COST",0,"number"),
+                entry(n,"STAMINA_LOW_NEEDS",1,"number"),
+            }
+            local flight = bridge:config("FlightConfig")
+            if numeric(flight, { "FLAP_DRAIN" }) then table.insert(plan,entry(flight,"FLAP_DRAIN",0,"number")) end
+            -- v2412 WolfController has distinct swim, climb and venom paths.
+            -- Change only recognised consumption inputs; preserve native
+            -- species abilities, immunity, resource values and damage rules.
+            local function zero(t,key)
+                if type(t)=="table" and Core.finite(t[key]) and t[key]>=0 then
+                    table.insert(plan,entry(t,key,0,"number"))
+                end
+            end
+            zero(n,"SWIM_DRAIN_MULT");zero(n,"WATER_DRAIN_NONSWIM")
+            -- v2412 NeedsConfig.BURST has its own finite DRAIN scalar.
+            -- Keep native start eligibility, speed, animation and stamina values.
+            zero(n.BURST,"DRAIN")
+            local passive=bridge:config("PassiveConfig")
+            local climber=passive and passive.CLIMBER
+            if type(climber)=="table" then
+                for level=1,3 do
+                    local profile=type(climber.levels)=="table" and climber.levels[level]
+                    if type(profile)=="table" then
+                        zero(profile,"drain")
+                        if profile.stamina=="drain" then table.insert(plan,entry(profile,"stamina","walk","string")) end
+                    end
+                end
+                if type(climber.CLIMB_SPRINT)=="table" then
+                    for species,profile in pairs(climber.CLIMB_SPRINT) do
+                        if type(species)=="string" then zero(profile,"DRAIN") end
+                    end
+                end
+            end
+            local venom=bridge:config("VenomConfig")
+            for _,key in ipairs({"SPRINT_DRAIN","OTHER_DRAIN","BITE_DRAIN"}) do zero(venom,key) end
+            local status=bridge:config("StatusConfig")
+            for _,key in ipairs({"STAMINA_BASE","STAMINA_PER_POINT"}) do zero(status and status.VENOM,key) end
+            return Features.uniquePlan(plan)
+        elseif id == "attackSpeed" then
+            local species=bridge:config("Species")
+            if game.PlaceVersion~=2412 or type(species)~="table" or type(species.biteCooldown)~="function" then
+                return nil,"compatible native bite cadence unavailable"
+            end
+            local original=species.biteCooldown
+            local wrapper=function(name,growth,...)
+                local value=original(name,growth,...)
+                local char=bridge.player.Character
+                if not char or not char.Parent or game.PlaceVersion~=2412
+                    or name~=(bridge:attribute(char,"Species") or species.DEFAULT)
+                    or not Core.finite(value) or value<=0 or value>30 then return value end
+                -- Keep delayed claims ordered; never slow an already faster
+                -- native profile. The server may enforce its original cadence.
+                local adaptive=bridge.combatGovernor and bridge.combatGovernor:factor() or .62
+                -- Never drive contact claims faster than the game's native
+                -- contact delay. Raise the interval after repeated clean
+                -- no-damage contacts, lower it only on confirmed replies.
+                return math.min(value,math.max(value*adaptive,bridge:biteDelay(char)+.055,.08))
+            end
+            return {entry(species,"biteCooldown",wrapper,"function")}
+        elseif id == "recovery" then
+            if not numeric(n, { "HEALTH_REGEN", "HEALTH_REST_MULT" }) then return nil, "NeedsConfig recovery schema unavailable" end
+            if n.HEALTH_REST_MULT < 1 then return nil,"native HP Rest multiplier unavailable" end
+            -- Preserve both native rates. A higher newly observed Rest factor
+            -- is not a reason to lower ordinary healing to fit an old label.
+            -- Native Rest signaling, not a client-side rate edit, is the feature.
+            return { entry(n,"HEALTH_REGEN",n.HEALTH_REGEN,"number"),
+                entry(n,"HEALTH_REST_MULT",n.HEALTH_REST_MULT,"number") }
+        elseif id == "effects" then
+            local status = bridge:config("StatusConfig")
+            local plan = {}
+            for _, pair in ipairs({ {"INJURY","HEAL"}, {"BLEED","CLOT"}, {"VENOM","FADE"} }) do
+                local c = status and status[pair[1]]
+                if not numeric(c,{pair[2],"REST_MULT"}) or c[pair[2]] <= 0 then
+                    return nil, "StatusConfig " .. pair[1] .. " schema unavailable"
+                end
+                if c.REST_MULT < 1 then return nil,"native condition Rest multiplier unavailable" end
+                -- Keep every independently supplied native condition rate,
+                -- including profiles whose Rest factor differs from v2412.
+                table.insert(plan,entry(c,pair[2],c[pair[2]],"number"))
+                table.insert(plan,entry(c,"REST_MULT",c.REST_MULT,"number"))
+            end
+            return plan
+        elseif id == "mobility" then
+            local status = bridge:config("StatusConfig")
+            if not numeric(n,{"HURT_SLOW"}) or not numeric(status and status.INJURY,{"SLOW_PER_POINT"}) then
+                return nil, "movement slowdown schema unavailable"
+            end
+            return { entry(n,"HURT_SLOW",0,"number"), entry(status.INJURY,"SLOW_PER_POINT",0,"number") }
+        elseif id == "speed" then
+            if not numeric(n,{"RUN_SPEED","SWIM_SPEED"}) or n.RUN_SPEED <= 0 or n.RUN_SPEED > 4
+                or n.SWIM_SPEED <= 0 or n.SWIM_SPEED > 4 then return nil, "speed schema unavailable" end
+            return { entry(n,"RUN_SPEED",n.RUN_SPEED*1.15,"number"), entry(n,"SWIM_SPEED",n.SWIM_SPEED*1.15,"number") }
+        elseif id == "leap" then
+            local c = bridge:config("JumpLeapConfig")
+            if not numeric(c,{"DEFAULT","MAX_RUN_SHARE"}) or c.ON ~= true or type(c.BODY_LENGTHS) ~= "table" then
+                return nil, "leap schema unavailable"
+            end
+            local plan = { entry(c,"DEFAULT",c.DEFAULT*1.15,"number"),
+                entry(c,"MAX_RUN_SHARE",c.MAX_RUN_SHARE*1.15,"number") }
+            for name, value in pairs(c.BODY_LENGTHS) do
+                if Core.finite(value) and value >= 0 and value <= 10 then
+                    table.insert(plan,entry(c.BODY_LENGTHS,name,value*1.15,"number"))
+                end
+            end
+            return plan
+        elseif id == "climb" then
+            local passive = bridge:config("PassiveConfig")
+            local c = passive and passive.CLIMBER
+            if not numeric(c,{"GRAB_REACH","E_REACH","GRAB_FACING","MOUNT_TIME"}) or type(c.levels) ~= "table" then
+                return nil, "climb schema unavailable"
+            end
+            local plan = {
+                entry(c,"GRAB_REACH",math.min(1.25,c.GRAB_REACH*1.3),"number"),
+                entry(c,"E_REACH",math.min(2.1,c.E_REACH*1.25),"number"),
+                entry(c,"GRAB_FACING",math.max(.25,c.GRAB_FACING*.58),"number"),
+                entry(c,"MOUNT_TIME",math.max(.22,c.MOUNT_TIME*.75),"number"),
+            }
+            for _, level in ipairs({1,2}) do
+                if type(c.levels[level]) == "table" then table.insert(plan,entry(c.levels[level],"sprintGrab",true)) end
+            end
+            return Features.uniquePlan(plan)
+        end
+        return nil, "unknown config feature"
+    end
+    -- Captured v2412 WolfMove forces its run boolean off while CrushAt is
+    -- active (186:2394-2402), then uses 16.8 / 42 * scaled(gait) * walkMul.
+    -- SPEED_CAP is not consumed by that branch. Adapt its actual scalar input
+    -- to the requested native tier, preserving the native ability/guard state.
+    function f:hippoInput(s,key)
+        if not s.alive or s.species~="Hippo" or s.chat or s.gameMenu or s.captured or s.rest then return end
+        if key==Enum.KeyCode.X then
+            if self.hippoIntentChar~=s.char then self.hippoBurstIntent=s.burst==true end
+            self.hippoIntentChar=s.char;self.hippoBurstIntent=not self.hippoBurstIntent
+        elseif key==Enum.KeyCode.Z then
+            self.hippoIntentChar=s.char;self.hippoBurstIntent=false
+        end
+    end
+    function f:hippoAttribute(s)
+        if s.species~="Hippo" then self.hippoIntentChar,self.hippoBurstIntent=nil,nil;return end
+        local at=bridge:attribute(s.char,"FeralCrushAt")
+        if at~=nil and at~=false then
+            if self.hippoIntentChar~=s.char or self.hippoBurstIntent==nil then
+                self.hippoIntentChar=s.char;self.hippoBurstIntent=s.burst==true
+            end
+            self.hippoCharge=at
+        else self.hippoCharge=nil;self.hippoBurstIntent=nil end
+    end
+    -- One decision drives both the charge-speed calculation and the native
+    -- HUD presentation. Never change WolfController's gait or Burst flags.
+    function f:hippoTier(char,field,hippo,needs)
+        if bridge.player.Character~=char or not char or not char.Parent
+            or bridge:attribute(char,"Species")~="Hippo" or game.PlaceVersion~=2412 then return nil end
+        local charge=bridge:attribute(char,"FeralCrushAt")
+        if charge==nil or charge==false or bridge:attribute(char,"WolfRest")==true
+            or bridge:attribute(char,"FeralCrouch")==true
+            or bridge:attribute(char,"FeralPinned")==true or bridge:attribute(char,"FeralCarried")==true
+            or bridge:attribute(char,"FeralDragged")==true or bridge.UserInputService:GetFocusedTextBox()
+            or bridge:attribute(bridge.player,"FeralMenuOpen")==true then return nil end
+        local combat=bridge:config("CombatConfig")
+        if combat and type(combat.hobbled)=="function" then
+            local ok,hobbled=pcall(combat.hobbled,char)
+            if not ok or hobbled then return nil end
+        end
+        local shift=false
+        pcall(function()shift=bridge.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)end)
+        local burst=self.hippoIntentChar==char and self.hippoBurstIntent==true
+        local denial=bridge:attribute(bridge.player,"HudBurstNo")
+        if denial==true or Core.finite(denial) and bridge.clock()>=denial and bridge.clock()-denial<1.7
+            or bridge:attribute(char,"StaminaOut")==true then burst=false;self.hippoBurstIntent=false end
+        if not shift and not burst then return nil end
+        local multiplier=1
+        if burst then
+            local boost=needs and needs.BURST
+            local key=field=="swimSpeed" and "SWIM_SPEED" or "SPEED"
+            local n=boost and (boost[key] or boost.SPEED)
+            if not boost or boost.ENABLED~=true or not Core.finite(n) or n<1 or n>3 then
+                if not shift then return nil end
+                burst=false
+            else multiplier=n end
+        end
+        if field=="swimSpeed" then
+            if not Core.finite(hippo.swimSprint) or hippo.swimSprint<=0 then return nil end
+        elseif not Core.finite(needs and needs.RUN_SPEED) or needs.RUN_SPEED<=0
+            or not Core.finite(hippo.speed) then return nil end
+        return burst and "burst" or "sprint",multiplier
+    end
+    function f:paintHippoGait()
+        local record=self.hippoScaled
+        local char=bridge.player.Character
+        local tier
+        if registry.byId.hippoMove.requested and record and record.char==char
+            and self.leases:valid("hippoGait") and char and char.Parent then
+            local field=bridge:attribute(char,"FeralSwimLocal")==true and "swimSpeed" or "gait"
+            tier=self:hippoTier(char,field,record.profile,bridge:config("NeedsConfig"))
+        end
+        bridge:paintHippoGait(tier)
+    end
+    function f:reconcileHippoGait(s)
+        if not registry.byId.hippoMove.requested then self.hippoGaitConflict=nil end
+        local cfg=registry.byId.hippoMove.requested and s.alive and s.species=="Hippo" and bridge:config("Species")
+        local hippo=cfg and cfg.List and cfg.List.Hippo
+        if self.hippoScaled and (not hippo or self.hippoScaled.cfg~=cfg or self.hippoScaled.char~=s.char
+            or self.hippoScaled.profile~=hippo) then
+            self.leases:release("hippoGait");self.hippoScaled=nil
+        end
+        if self.hippoGaitConflict and self.hippoGaitConflict.cfg==cfg and self.hippoGaitConflict.char==s.char then return end
+        if not hippo or type(cfg.scaled)~="function" or not numeric(hippo,{"speed","gait"})
+            or game.PlaceVersion~=2412 then return end
+        if self.hippoScaled then
+            if not self.leases:valid("hippoGait") then self.leases:release("hippoGait");self.hippoScaled=nil;self.hippoGaitConflict={cfg=cfg,char=s.char} end
+            return
+        end
+        local original=cfg.scaled
+        local char=s.char
+        local wrapper=function(species,field,growth,...)
+            local result=original(species,field,growth,...)
+            if species~="Hippo" or (field~="gait" and field~="swimSpeed") or bridge.player.Character~=char
+                or not char.Parent or game.PlaceVersion~=2412 or cfg.List.Hippo~=hippo then return result end
+            local needs=bridge:config("NeedsConfig")
+            local tier,multiplier=self:hippoTier(char,field,hippo,needs)
+            if not tier then return result end
+            if field=="swimSpeed" then
+                local speed=original(species,"swimSprint",growth,...)
+                return Core.finite(speed) and speed*multiplier or result
+            end
+            local walk=hippo.walkMul
+            if type(hippo.walkMulStage)=="table" and type(cfg.stage)=="function" then
+                local ok,stage=pcall(cfg.stage,growth,species);if ok then walk=hippo.walkMulStage[stage] or walk end
+            end
+            local scale=bridge:attribute(char,"WalkKMul")
+            if scale~=nil and not Core.finite(scale) then return result end
+            walk=(Core.finite(walk) and walk or 1)*(scale or 1)
+            local run=needs and needs.RUN_SPEED
+            local speed=original(species,"speed",growth,...)
+            if not Core.finite(walk) or walk<=0 or not Core.finite(run) or run<=0 or not Core.finite(speed) then return result end
+            self.hippoStatus=tier=="burst" and "BURST_SPEED_REQUESTED" or "SPRINT_SPEED_REQUESTED"
+            return speed*run*multiplier*(42/16.8)/walk
+        end
+        local ok=self.leases:apply("hippoGait",{entry(cfg,"scaled",wrapper,"function")})
+        if ok then self.hippoScaled={cfg=cfg,char=char,profile=hippo,original=original} end
+    end
+    -- Hippo Crusher Bite has a v2412 native SPEED_CAP="trot" profile.
+    -- A separate owner avoids touching other species or requiring a new toggle.
+    -- Use the fastest native locomotion tier (burst) as the client-side cap.
+    -- This does not activate a burst gait; the server may still impose a slow.
+    function f:reconcileHippo(s)
+        self:reconcileHippoGait(s)
+        local hippo=registry.byId.hippoMove.requested and s.alive and s.species=="Hippo" and game.PlaceVersion==2412
+        local ability=hippo and bridge:config("AbilityConfig")
+        local base=hippo and bridge:config("AbilityConfigBase")
+        local profile
+        if hippo then
+            for _,cfg in ipairs({ability or false,base or false}) do
+                if type(cfg)=="table" then
+                    local candidate=cfg.CrusherBite
+                        or (type(cfg.Hippo)=="table" and cfg.Hippo.CrusherBite)
+                        or cfg.CRUSHER
+                    if type(candidate)=="table" and (candidate.SPEED_CAP=="trot"
+                        or candidate==self.hippoProfile and candidate.SPEED_CAP=="burst") then
+                        profile=candidate;break
+                    end
+                end
+            end
+        end
+        if self.hippoProfile and (not hippo or not profile or self.hippoProfile~=profile
+            or self.hippoCharacter~=s.char) then
+            self.leases:release("hippoCrush")
+            self.hippoProfile,self.hippoCharacter=nil,nil
+        end
+        if not hippo then
+            self.hippoCapConflict=nil
+            self.hippoStatus=not registry.byId.hippoMove.requested and "OFF"
+                or s.species=="Hippo" and game.PlaceVersion~=2412 and "UNVERIFIED_VERSION" or "WAITING";return
+        end
+        local conflict=self.hippoCapConflict
+        if conflict and conflict.char==s.char and (not profile or conflict.profile==profile) then
+            self.hippoStatus="CONFLICT";return
+        end
+        self.hippoCapConflict=nil
+        if self.leases.owners.hippoCrush then
+            if self.leases:valid("hippoCrush") then
+                self.hippoStatus="CLIENT";return
+            end
+            -- An external edit owns this value now; don't overwrite it.
+            self.hippoCapConflict={profile=self.hippoProfile,char=s.char}
+            self.leases:release("hippoCrush")
+            self.hippoProfile,self.hippoCharacter=nil,nil
+            self.hippoStatus="CONFLICT";return
+        end
+        if not profile then self.hippoStatus="WAITING";return end
+        -- The native speed tier is read from the same scoped Crusher Bite
+        -- profile. Do not force Humanoid.WalkSpeed or manipulate ability remotes.
+        local applied=self.leases:apply("hippoCrush",{
+            entry(profile,"SPEED_CAP","burst","string")
+        })
+        self.hippoStatus=applied and "CLIENT" or "WAITING"
+        if applied then self.hippoProfile,self.hippoCharacter=profile,s.char end
+    end
+    -- Ordinary combat and the guide must remain available without a geometry lease.
+    function f:combatProfileReady()
+        return self.originalCombat~=nil and self.combat~=nil
+            and (self.combatProfileMode=="native" or self.leases:valid("reach"))
+    end
+    function f:reconcile(s, now, force)
+        if not force and now < self.nextReconcile then return end
+        self.nextReconcile = now+1.25
+        for _, id in ipairs({ "reach","stamina","recovery","effects","mobility","speed","leap","climb","attackSpeed" }) do
+            local dependencies = {
+                reach = {"CombatConfig"},stamina = {"NeedsConfig","FlightConfig","PassiveConfig","VenomConfig","StatusConfig"},
+                attackSpeed = {"Species"},
+                recovery = {"NeedsConfig"},effects = {"StatusConfig"},
+                mobility = {"NeedsConfig","StatusConfig"},speed = {"NeedsConfig"},
+                leap = {"JumpLeapConfig"},climb = {"PassiveConfig"},
+            }
+            local identity,changed = {},false
+            for _,name in ipairs(dependencies[id]) do
+                identity[name] = bridge:config(name) or false
+                if self.configIdentity[id] and self.configIdentity[id][name] ~= identity[name] then changed = true end
+            end
+            if id=="stamina" then
+                local passive=identity.PassiveConfig
+                local climb=type(passive)=="table" and type(passive.CLIMBER)=="table" and passive.CLIMBER
+                identity.climb=climb or false
+                identity.levels=climb and climb.levels or false
+                identity.sprint=climb and climb.CLIMB_SPRINT or false
+                identity.venom=type(identity.StatusConfig)=="table" and identity.StatusConfig.VENOM or false
+                identity.burst=type(identity.NeedsConfig)=="table" and identity.NeedsConfig.BURST or false
+                for _,name in ipairs({"climb","levels","sprint","venom","burst"}) do
+                    if self.configIdentity[id] and self.configIdentity[id][name]~=identity[name] then changed=true end
+                end
+                for level=1,3 do
+                    local name="climbLevel"..level
+                    identity[name]=climb and type(climb.levels)=="table" and climb.levels[level] or false
+                    if self.configIdentity[id] and self.configIdentity[id][name]~=identity[name] then changed=true end
+                end
+            end
+            local function reference(key,value)
+                identity[key]=value or false
+                if self.configIdentity[id] and self.configIdentity[id][key]~=identity[key] then changed=true end
+            end
+            if id=="effects" or id=="mobility" then
+                local status=identity.StatusConfig
+                for _,kind in ipairs(id=="mobility" and {"INJURY"} or {"INJURY","BLEED","VENOM"}) do
+                    reference("status:"..kind,type(status)=="table" and status[kind])
+                end
+            elseif id=="leap" then
+                reference("bodyLengths",type(identity.JumpLeapConfig)=="table" and identity.JumpLeapConfig.BODY_LENGTHS)
+            elseif id=="climb" then
+                local passive=identity.PassiveConfig
+                local climb=type(passive)=="table" and passive.CLIMBER
+                reference("climb",climb)
+                reference("levels",type(climb)=="table" and climb.levels)
+                for level=1,2 do
+                    reference("climbLevel"..level,type(climb)=="table" and type(climb.levels)=="table" and climb.levels[level])
+                end
+            elseif id=="reach" then
+                local combat=identity.CombatConfig
+                for _,key in ipairs({"HIT2","BITE_CONE_ADD"}) do reference(key,type(combat)=="table" and combat[key]) end
+            end
+            if id=="stamina" then
+                local sprint=identity.sprint
+                local count=0
+                if type(sprint)=="table" then
+                    for species,profile in pairs(sprint) do
+                        if type(species)=="string" then
+                            count+=1;reference("sprint:"..species,profile)
+                        end
+                    end
+                end
+                reference("sprintCount",count)
+                -- Removed profiles must also retire their ownership.
+                for key in pairs(self.configIdentity[id] or {}) do
+                    if type(key)=="string" and key:sub(1,7)=="sprint:" and identity[key]==nil then changed=true end
+                end
+            end
+            if changed then self.leases:release(id);self.failures[id] = nil end
+            self.configIdentity[id] = identity
+            local record = registry.byId[id]
+            if not record.requested then
+                self.leases:release(id)
+                registry:ack(id,false,"OFF","original client inputs restored")
+                self.failures[id] = nil
+            elseif self.failures[id] == "conflict" then
+                registry:ack(id,false,"UNAVAILABLE","external config changed; toggle to retry")
+            elseif self.leases.owners[id] then
+                if self.leases:valid(id) then
+                    registry:ack(id,true,"CLIENT","local config acknowledged; gameplay unverified")
+                else
+                    self.leases:release(id)
+                    self.failures[id] = "conflict"
+                    registry:ack(id,false,"UNAVAILABLE","external config changed")
+                end
+            else
+                local ok, plan, why = pcall(self.plan,self,id)
+                if not ok then why, plan = tostring(plan), nil end
+                if plan then
+                    local applied, reason = self.leases:apply(id,plan)
+                    registry:ack(id,applied,applied and "CLIENT" or "UNAVAILABLE",reason)
+                else registry:ack(id,false,"WAITING",why) end
+            end
+            if id=="reach" then
+                if record.applied then
+                    self.combatProfileMode="experimental"
+                else
+                    -- Native compatibility is deliberately read-only: the guide
+                    -- and ordinary attacks share the unmodified game profile.
+                    local c=bridge:config("CombatConfig")
+                    local changedProfile=self.combatProfileMode~="native" or self.originalCombat~=c
+                    if numeric(c,{"REACH","HIT_SCALE","CONE","SLACK","MAX_DY"})
+                        and type(c.bodyGap)=="function" then
+                        self.originalCombat,self.combat=c,c
+                        self.combatProfileMode="native"
+                    else
+                        self.originalCombat,self.combat,self.combatProfileMode=nil,nil,nil
+                    end
+                    if changedProfile then bridge.reachTarget,bridge.treeTarget=nil,nil end
+                end
+            end
+        end
+        self:reconcileHippo(s)
+        local stamina = registry.byId.stamina
+        if not self:flagCharacter(s,stamina.requested and stamina.applied) and stamina.requested then
+            registry:ack("stamina",false,"PARTIAL","local config applied; character flag unavailable")
+        end
+    end
+    function f:close()
+        bridge:paintHippoGait(nil)
+        self:releaseFlag()
+        self.leases:close()
+    end
+    return f
+end
+return Features
+]============]
+sources["roblox"] = [============[
+-- Roblox boundary. Staging creates only inactive, owner-scoped listeners.
+local Roblox = {}
+function Roblox.new(Core, environment)
+    local b = { Core = Core, env = environment, generation = 0, modules = {},
+        remoteConnections = {}, characterScope = nil, treeTarget = nil, tracked = {},
+        captureVersion = 2412, placeVersion = game.PlaceVersion }
+    for _, name in ipairs({ "Players","ReplicatedStorage","RunService","UserInputService",
+        "ContextActionService","HttpService","Workspace" }) do b[name] = game:GetService(name) end
+    b.player = assert(b.Players.LocalPlayer,"LocalPlayer unavailable")
+    b.clock = os.clock
+    function b:delay(seconds,fn)
+        if type(task)~="table" or type(task.delay)~="function" then return nil end
+        local ok,handle=pcall(task.delay,seconds,fn)
+        return ok and handle or nil
+    end
+    function b:cancelDelay(handle)
+        if handle and type(task)=="table" and type(task.cancel)=="function" then pcall(task.cancel,handle) end
+    end
+    function b:serverNow()
+        local ok, now = pcall(function() return self.Workspace:GetServerTimeNow() end)
+        return ok and Core.finite(now) and now or nil
+    end
+    function b:attribute(object,key)
+        if not object then return nil end
+        local ok,value = pcall(function() return object:GetAttribute(key) end)
+        if ok then return value end
+        return nil
+    end
+    function b:setAttribute(object,key,value)
+        if not object or not object.Parent then return false end
+        local ok = pcall(function() object:SetAttribute(key,value) end)
+        return ok and self:attribute(object,key) == value
+    end
+    function b:restoreAttribute(object,key,owned,original)
+        if object and object.Parent and self:attribute(object,key) == owned then
+            return self:setAttribute(object,key,original)
+        end
+        return false
+    end
+    -- FeralHUD v2412 builds a Cluster with three named gait outlines. Paint
+    -- those native keycaps only; HudTrot/HudSprint/HudBurst also feed other
+    -- scripts and cannot be used as presentation-only flags.
+    function b:paintHippoGait(tier)
+        local painted=self.hippoGaitPaint
+        local function restore()
+            self.hippoGaitPaint=nil
+            if not painted then return end
+            for _,record in pairs(painted.keys) do
+                if record.rim.Parent and record.rim.Color==record.paintedColor then
+                    pcall(function()record.rim.Color=record.beforeColor end)
+                end
+                if record.cap.Parent and record.cap.BackgroundTransparency==record.paintedAlpha then
+                    pcall(function()record.cap.BackgroundTransparency=record.beforeAlpha end)
+                end
+            end
+        end
+        if tier~="sprint" and tier~="burst" or game.PlaceVersion~=2412 then
+            restore();return false
+        end
+        local gui=self.player:FindFirstChild("PlayerGui")
+        gui=gui and gui:FindFirstChild("FeralHUD")
+        local cluster=painted and painted.gui==gui and painted.cluster.Parent and painted.cluster
+            or gui and gui:FindFirstChild("Cluster",true)
+        if not cluster then restore();return false end
+        if painted and painted.cluster~=cluster then restore();painted=nil end
+        if not painted then
+            local keys={}
+            for _,name in ipairs({"trot","sprint","burst"}) do
+                local outline=cluster:FindFirstChild(name,true)
+                local cap=outline and outline:IsA("Frame") and outline:FindFirstChild("Cap")
+                local rim=cap and cap:IsA("Frame") and cap:FindFirstChildOfClass("UIStroke")
+                if not rim then return false end
+                keys[name]={outline=outline,cap=cap,rim=rim,
+                    beforeColor=rim.Color,beforeAlpha=cap.BackgroundTransparency}
+            end
+            painted={gui=gui,cluster=cluster,keys=keys};self.hippoGaitPaint=painted
+        end
+        local activeColor=painted.keys.trot.beforeColor
+        local quietColor=painted.keys.sprint.beforeColor
+        for name,record in pairs(painted.keys) do
+            if not record.outline:IsDescendantOf(cluster) or record.cap.Parent~=record.outline
+                or record.rim.Parent~=record.cap then restore();return false end
+            local selected=name==tier
+            local desiredColor=selected and activeColor or quietColor
+            local desiredAlpha=selected and painted.keys.trot.beforeAlpha or painted.keys.sprint.beforeAlpha
+            if record.rim.Color~=desiredColor then record.rim.Color=desiredColor end
+            if record.cap.BackgroundTransparency~=desiredAlpha then record.cap.BackgroundTransparency=desiredAlpha end
+            record.paintedColor,record.paintedAlpha=desiredColor,desiredAlpha
+        end
+        return true
+    end
+    function b:config(name)
+        local world = self.ReplicatedStorage:FindFirstChild("FeralWorld")
+        local object = world and world:FindFirstChild(name)
+        if not object or not object:IsA("ModuleScript") then self.modules[name] = nil; return nil end
+        local cached = self.modules[name]
+        if cached and cached.object == object then return cached.value end
+        local ok,value = pcall(require,object)
+        if not ok or type(value) ~= "table" then return nil end
+        self.modules[name] = { object = object, value = value }
+        return value
+    end
+    function b:rest(char,on)
+        if char ~= self.player.Character or not char or not char.Parent then return false end
+        return self:fire("WolfActions","Rest",on)
+    end
+    function b:maskRest(char)
+        if char ~= self.player.Character then return false end
+        if self:attribute(char,"WolfRest") ~= true then return true end
+        return self:setAttribute(char,"WolfRest",false)
+    end
+    function b:fire(name,...)
+        local remote = self.ReplicatedStorage:FindFirstChild(name)
+        if not remote or not remote:IsA("RemoteEvent") then return false end
+        local args = table.pack(...)
+        return pcall(function() remote:FireServer(table.unpack(args,1,args.n)) end)
+    end
+    function b:hasRemote(name)
+        local remote = self.ReplicatedStorage:FindFirstChild(name)
+        return remote and remote:IsA("RemoteEvent") or false
+    end
+    function b:nativeGrabBound()
+        return self.ContextActionService:GetAllBoundActionInfo().FeralGrabV2Press ~= nil
+    end
+    function b:markGrabPress(session,strike,now)
+        local native = self:nativeGrabController(now)
+        if not native or type(native.state)~="function" then return false end
+        local readable,state=pcall(native.state)
+        if readable and type(state)=="table" and not state.ended and tostring(state.id) == tostring(session)
+            and type(state.strike) == "table" and state.strike.k == strike then
+            -- Annotation is optional; a native read/write failure after the
+            -- actual dispatch must not make the coordinator retry that input.
+            return pcall(function() state.strike.pressed = true end)
+        end
+        return false
+    end
+    function b:grabTextFocused()
+        return self.UserInputService:GetFocusedTextBox() ~= nil
+            or self:attribute(self.player,"FeralMenuOpen") == true
+    end
+    function b:grabSnapshot(now)
+        local char=self.player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        return {now=now,serverNow=self:serverNow(),char=char,generation=self.generation,
+            alive=char~=nil and char.Parent~=nil and hum~=nil and hum.Health>0,
+            chat=self.UserInputService:GetFocusedTextBox()~=nil,
+            gameMenu=self:attribute(self.player,"FeralMenuOpen")==true}
+    end
+    function b:unbindGrabManual(name)
+        self.ContextActionService:UnbindAction(name)
+    end
+    function b:bindGrabManual(name,press)
+        self.ContextActionService:BindActionAtPriority(name,function(_,state)
+            -- A stale/ended session must immediately return native controls,
+            -- even before the next coordinator heartbeat removes this binding.
+            if state == Enum.UserInputState.Begin and press() == true then
+                return Enum.ContextActionResult.Sink
+            end
+            return Enum.ContextActionResult.Pass
+        end,false,3000,Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2)
+    end
+    function b:nativeGrabController(now)
+        local scripts = self.player:FindFirstChild("PlayerScripts")
+        local scriptObject = scripts and scripts:FindFirstChild("FeralGrabV2UI")
+        local currentRemote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+        if self.grabController and self.grabController.remote~=currentRemote then
+            self.grabController,self.grabDiscovery,self.nextGrabDiscovery=nil,nil,0
+        end
+        if self.grabController and self.grabController.script == scriptObject and scriptObject.Parent then
+            return self.grabController
+        end
+        self.grabController = nil
+        if not scriptObject then self.grabDiscovery = nil; return nil end
+        if self.grabDiscovery and self.grabDiscovery.script ~= scriptObject then self.grabDiscovery = nil end
+        if not self.grabDiscovery and now < (self.nextGrabDiscovery or 0) then return nil end
+        if self.deferNativeDiscovery or type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then return nil end
+        local many = type(debug.getupvalues) == "function" and debug.getupvalues
+            or type(getupvalues) == "function" and getupvalues
+        local one = type(debug.getupvalue) == "function" and debug.getupvalue
+            or type(getupvalue) == "function" and getupvalue
+        if not many and not one then return nil end
+        local function upvalues(fn)
+            if many then
+                local ok,values = pcall(many,fn)
+                return ok and type(values) == "table" and values or {}
+            end
+            local values = {}
+            for index = 1,12 do
+                local ok,a,c = pcall(one,fn,index)
+                if not ok then break end
+                values[index] = c ~= nil and type(a) == "string" and c or a
+            end
+            return values
+        end
+        local function nativeName(fn)
+            local ok,source,name = pcall(debug.info,fn,"sn")
+            if not ok then return nil end
+            local owned=type(source)=="string" and source:find("FeralGrabV2UI",1,true)~=nil
+            if type(getfenv) == "function" then
+                local valid,env = pcall(getfenv,fn)
+                if valid and type(env) == "table" and env.script ~= nil then
+                    if env.script ~= scriptObject then return nil end
+                    owned=true
+                end
+            end
+            return owned and name or nil
+        end
+        local previous=self.env.FERAL_RENAISSANCE_ACTIVE
+        local inherited=previous and previous.bridge and previous.bridge.grabController
+        if inherited and inherited.script==scriptObject and type(inherited.press)=="function"
+            and type(inherited.state)=="function" and type(inherited.bind)=="function"
+            and nativeName(inherited.press)=="serverPress" then
+            local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+            for _,value in pairs(upvalues(inherited.press)) do
+                if remote and value==remote then
+                    local handle=inherited
+                    if type(inherited.current)~="function" then
+                        -- Upgrade a pre-16.0 hot-reload handle without changing
+                        -- the previous controller's still-owned callback table.
+                        handle=table.clone(inherited)
+                        handle.current=function()
+                            local currentScripts=self.player:FindFirstChild("PlayerScripts")
+                            return scriptObject.Parent~=nil and currentScripts~=nil
+                                and currentScripts:FindFirstChild("FeralGrabV2UI")==scriptObject
+                                and self.ReplicatedStorage:FindFirstChild("FeralGrabV2")==remote
+                                and remote.Parent~=nil
+                        end
+                        handle.state=function()
+                            if not handle.current() then return nil,true end
+                            return inherited.state()
+                        end
+                        handle.bind=function(on)
+                            if not handle.current() then return false end
+                            return inherited.bind(on)
+                        end
+                    end
+                    handle.remote=remote
+                    self.grabController=handle;return handle
+                end
+            end
+        end
+        local pool,source=self:nativeFunctions(now)
+        if not pool then return nil end
+        if not self.grabDiscovery or self.grabDiscovery.source~=source then
+            self.nextGrabDiscovery = now+30
+            self.grabDiscovery = {script=scriptObject,pool=pool,index=1,source=source}
+        end
+        -- Resume the shared own-callback pool without revisiting its prefix.
+        local discovery,started,checked = self.grabDiscovery,self.clock(),0
+        while discovery.index <= #discovery.pool do
+            if checked >= 32 or self.clock()-started > .001 then return nil end
+            local fn = discovery.pool[discovery.index]
+            discovery.index += 1; checked += 1
+            if type(fn) == "function" and nativeName(fn) == "serverPress" then
+                local remote = self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+                local matched = false
+                for _,value in pairs(upvalues(fn)) do
+                    if remote ~= nil and value == remote then matched = true end
+                end
+                if matched then
+                    local native = { press = fn,script = scriptObject,remote=remote }
+                    native.current = function()
+                        local currentScripts=self.player:FindFirstChild("PlayerScripts")
+                        return scriptObject.Parent~=nil and currentScripts~=nil
+                            and currentScripts:FindFirstChild("FeralGrabV2UI")==scriptObject
+                            and self.ReplicatedStorage:FindFirstChild("FeralGrabV2")==remote
+                            and remote.Parent~=nil
+                    end
+                    native.state = function()
+                        -- A replacement service has ended this handle's ownership,
+                        -- even if the old closure still exposes a readable session.
+                        if not native.current() then return nil,true end
+                        local values=upvalues(fn)
+                        local readable=false
+                        for _,value in pairs(values) do if value==remote then readable=true end end
+                        for _,value in pairs(values) do
+                            if type(value) == "table" and value.id ~= nil
+                                and (value.role == "prey" or value.role == "hunter") then
+                                if native.lastState ~= value then native.lastState,native.ownerCharacter = value,self.player.Character end
+                                if native.ownerCharacter ~= self.player.Character then return nil,true end
+                                return value,true
+                            end
+                        end
+                        return nil,readable
+                    end
+                    native.bind = function(on)
+                        if not native.current() then return false end
+                        local cas = self.ContextActionService
+                        if not on then
+                            local info = cas:GetAllBoundActionInfo().FeralGrabV2Press
+                            if info then
+                                native.inputs = info.inputTypes and table.clone(info.inputTypes)
+                                    or {Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2,Enum.UserInputType.MouseButton1}
+                                native.priority = info.priorityLevel or 3000
+                            end
+                            cas:UnbindAction("FeralGrabV2Press")
+                        else
+                            -- v2412 callback prototype 73: Begin calls the
+                            -- original serverPress; every state returns Sink.
+                            cas:BindActionAtPriority("FeralGrabV2Press",function(_,state)
+                                if state == Enum.UserInputState.Begin then fn() end
+                                return Enum.ContextActionResult.Sink
+                            end,false,native.priority or 3000,table.unpack(native.inputs or {
+                                Enum.KeyCode.Space,Enum.KeyCode.ButtonA,Enum.KeyCode.ButtonR2,Enum.UserInputType.MouseButton1}))
+                        end
+                    end
+                    self.grabController = native
+                    self.grabDiscovery = nil
+                    self:releaseNativeScan()
+                    return native
+                end
+            end
+        end
+        if source.complete then self.grabDiscovery = nil end
+        return nil
+    end
+    function b:isClimbing(char) return self:attribute(char,"FeralClimbLocal") == true end
+    -- Inspect only three existing own-script callback chains. Never enumerate
+    -- the Lua heap. Both consumers share a resumable, bounded queue.
+    function b:nativeFunctions(now)
+        if self.deferNativeDiscovery then return nil end
+        if type(getconnections)~="function" or type(debug)~="table" or type(debug.info)~="function" then return nil end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local wolf=scripts and scripts:FindFirstChild("WolfController")
+        local grab=scripts and scripts:FindFirstChild("FeralGrabV2UI")
+        local wolfRemote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        local grabRemote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+        local scan=self.nativeScan
+        if scan and (scan.wolf~=wolf or scan.grab~=grab or scan.wolfRemote~=wolfRemote
+            or scan.grabRemote~=grabRemote or scan.complete and now>=scan.refreshAt) then scan=nil end
+        if not scan then
+            local signals={self.UserInputService.InputBegan,self.player:GetAttributeChangedSignal("FeralFeedTap")}
+            local remote=self.ReplicatedStorage:FindFirstChild("FeralGrabV2")
+            if remote and remote:IsA("RemoteEvent") then table.insert(signals,remote.OnClientEvent) end
+            scan={wolf=wolf,grab=grab,wolfRemote=wolfRemote,grabRemote=grabRemote,
+                functions={},seen={},queue={},cursor=1,signalIndex=1,
+                signals=signals,complete=false,refreshAt=now+30}
+            self.nativeScan=scan
+        end
+        if scan.complete or scan.lastStep==now then return scan.functions,scan end
+        scan.lastStep=now
+        local started,checked=self.clock(),0
+        while checked<32 and self.clock()-started<.002 do
+            if #scan.functions>=256 then scan.complete=true;break end
+            local item=scan.queue[scan.cursor]
+            if item then
+                scan.cursor+=1;checked+=1
+                local fn,depth=item.fn,item.depth
+                if type(fn)~="function" or scan.seen[fn] or depth>4 then continue end
+                scan.seen[fn]=true
+                local ok,source=pcall(debug.info,fn,"s")
+                local owned=ok and type(source)=="string" and (source:find("WolfController",1,true) or source:find("FeralGrabV2UI",1,true))
+                if type(getfenv)=="function" then
+                    local valid,env=pcall(getfenv,fn)
+                    if valid and type(env)=="table" and env.script~=nil then owned=env.script==wolf or env.script==grab end
+                end
+                -- Executors may expose a vendor wrapper as the signal root.
+                -- Inspect one root hop, but accept only validated own-script
+                -- functions; never descend through an unrelated child chain.
+                if not owned and depth~=0 then continue end
+                if owned then table.insert(scan.functions,fn) end
+                local count=0
+                for _,value in pairs(self:upvalues(fn)) do
+                    count+=1;if count>64 then break end
+                    if type(value)=="function" and not scan.seen[value] and #scan.queue<512 then
+                        table.insert(scan.queue,{fn=value,depth=depth+1})
+                    end
+                end
+            elseif scan.connections then
+                local connection=scan.connections[scan.connectionIndex]
+                if not connection or scan.connectionIndex>96 then scan.connections=nil;continue end
+                scan.connectionIndex+=1;checked+=1
+                local ok,fn=pcall(function()return connection.Function end)
+                if ok and type(fn)=="function" and #scan.queue<512 then table.insert(scan.queue,{fn=fn,depth=0}) end
+            else
+                local signal=scan.signals[scan.signalIndex]
+                if not signal then scan.complete=true;break end
+                scan.signalIndex+=1;checked+=1
+                local ok,connections=pcall(getconnections,signal)
+                if ok and type(connections)=="table" then scan.connections,scan.connectionIndex=connections,1 end
+            end
+        end
+        if scan.complete then scan.queue,scan.seen,scan.connections,scan.signals=nil,nil,nil,nil end
+        return scan.functions,scan
+    end
+    function b:releaseNativeScan()
+        local native=self.wolfActions
+        if native and native.tryBite and native.toggleFeed and self.grabController
+            and not self.wolfDiscovery and not self.grabDiscovery then self.nativeScan=nil end
+    end
+    function b:closeNativeScan()
+        self.nativeScan,self.wolfDiscovery,self.grabDiscovery=nil,nil,nil
+        self.hippoActions,self.hippoDiscovery=nil,nil
+        self.biteTiming=nil
+        self.wolfHeapScan,self.wantHeldNativeDiscovery=nil,nil
+        self.wolfInputAction,self.nextWolfInputLookup=nil,nil
+    end
+    function b:upvalues(fn)
+        local many = type(debug.getupvalues) == "function" and debug.getupvalues
+            or type(getupvalues) == "function" and getupvalues
+        if many then
+            local ok,values = pcall(many,fn)
+            return ok and type(values) == "table" and values or {}
+        end
+        local one = type(debug.getupvalue) == "function" and debug.getupvalue
+            or type(getupvalue) == "function" and getupvalue
+        local values = {}
+        if one then
+            for index = 1,24 do
+                local ok,a,value = pcall(one,fn,index)
+                if not ok then break end
+                if type(a) == "string" and value ~= nil then values[index] = value else values[index] = a end
+            end
+        end
+        return values
+    end
+    -- Function names alone are not authority. Every cached or discovered
+    -- action must belong to our current WolfController and capture our player
+    -- and current remote. Locate relationships by identity; closure upvalue
+    -- order is compiler detail and is only used by the versioned timing reader.
+    function b:wolfFunctionName(fn,own)
+        if type(fn)~="function" or type(debug)~="table" or type(debug.info)~="function" then return nil end
+        local ok,source,name=pcall(debug.info,fn,"sn")
+        if not ok then return nil end
+        local owned=type(source)=="string" and (source=="WolfController"
+            or source:match("[%.%/]WolfController$")~=nil)
+        if type(getfenv)=="function" then
+            local valid,env=pcall(getfenv,fn)
+            if valid and type(env)=="table" and env.script~=nil then
+                if env.script~=own then return nil end
+                owned=true
+            end
+        end
+        return owned and name or nil
+    end
+    function b:validateWolfBite(fn,own,remote)
+        if self:wolfFunctionName(fn,own)~="tryBite" then return nil end
+        local playerMatched,doBite,cooldown=false,nil,nil
+        local count=0
+        for _,value in pairs(self:upvalues(fn)) do
+            count+=1;if count>64 then return nil end
+            if value==self.player then playerMatched=true end
+            local name=self:wolfFunctionName(value,own)
+            if name=="biteCooldown" then
+                if cooldown and cooldown~=value then return nil end
+                cooldown=value
+            elseif name=="doBite" then
+                local ownPlayer,ownRemote=false,false
+                local hitCount=0
+                for _,hitValue in pairs(self:upvalues(value)) do
+                    hitCount+=1;if hitCount>64 then return nil end
+                    if hitValue==self.player then ownPlayer=true end
+                    if hitValue==remote then ownRemote=true end
+                end
+                if ownPlayer and ownRemote then
+                    if doBite and doBite~=value then return nil end
+                    doBite=value
+                end
+            end
+        end
+        if not playerMatched or not doBite or not cooldown then return nil end
+        return {script=own,remote=remote,placeVersion=game.PlaceVersion,
+            tryBite=fn,doBite=doBite,biteCooldown=cooldown}
+    end
+    function b:validateWolfFeed(fn,own,remote,expectedName)
+        if self:wolfFunctionName(fn,own)~=expectedName then return false end
+        local playerMatched,remoteMatched=false,false
+        local count=0
+        for _,value in pairs(self:upvalues(fn)) do
+            count+=1;if count>64 then return false end
+            if value==self.player then playerMatched=true end
+            if value==remote then remoteMatched=true end
+        end
+        return playerMatched and remoteMatched
+    end
+    function b:resetWolfDiscovery()
+        self.wolfActions,self.wolfDiscovery,self.biteTiming=nil,nil,nil
+        self.wolfInputAction,self.nextWolfInputLookup=nil,nil
+        self.wolfHeapScan=nil
+        -- The callback queue is shared with the minigame owner. Missing or
+        -- replaced WolfController must not erase the other consumer's work;
+        -- nativeFunctions checks both script and remote identities itself.
+        self.nextWolfDiscovery,self.nextWolfHeapScan=0,0
+    end
+    -- Opt-in fallback for executors where the game's InputBegan connections
+    -- are hidden but the same local WolfController closures are available in
+    -- getgc(). Never search another player's script or call an unvalidated fn.
+    -- Heap enumeration happens only after a physical hold requests a repeat,
+    -- and is bounded over subsequent heartbeats rather than a blocking scan.
+    function b:recoverWolfBiteFromHeap(now)
+        if not self.wantHeldNativeDiscovery or self.deferNativeDiscovery
+            or type(getgc)~="function" or type(debug)~="table"
+            or type(debug.info)~="function" then return nil end
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local own=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        if not own or not own:IsA("LocalScript") or not remote
+            or not remote:IsA("RemoteEvent") then return nil end
+        local scan=self.wolfHeapScan
+        if scan and (scan.script~=own or scan.remote~=remote) then
+            self.wolfHeapScan=nil;scan=nil
+        end
+        if not scan then
+            if now<(self.nextWolfHeapScan or 0) then return nil end
+            self.nextWolfHeapScan=now+15
+            local ok,items=pcall(getgc,false)
+            if not ok or type(items)~="table" then
+                ok,items=pcall(getgc)
+            end
+            if not ok or type(items)~="table" then return nil end
+            -- getgc generally returns a sequential array of functions.
+            -- Only ever inspect the first 32k entries to bound cost.
+            scan={script=own,remote=remote,items=items,index=1,
+                limit=math.min(#items,32768),inputCandidate=nil,
+                inputCount=0,inputSeen={}}
+            self.wolfHeapScan=scan
+        end
+        if scan.lastStep==now then return nil end
+        scan.lastStep=now
+        local checked,started=0,self.clock()
+        while scan.index<=scan.limit and checked<192 and self.clock()-started<.0025 do
+            local fn=scan.items[scan.index]
+            scan.index+=1;checked+=1
+            if type(fn)~="function" then continue end
+            -- A VM may hide the private tryBite layout while exposing the
+            -- original onInput function in the own script's heap. Store
+            -- only uniquely owned candidates; do not call unknown closure
+            -- or replay the physical mouse input.
+            if self:wolfFunctionName(fn,own)=="onInput" and not scan.inputSeen[fn]
+                and type(getfenv)=="function" then
+                local valid,env=pcall(getfenv,fn)
+                if valid and type(env)=="table" and env.script==own then
+                    scan.inputSeen[fn]=true
+                    scan.inputCount+=1
+                    scan.inputCandidate=scan.inputCount==1 and fn or nil
+                end
+            end
+            local native=self:validateWolfBite(fn,own,remote)
+            if not native then continue end
+            native.discovery="validated own heap closure"
+            local previous=self.wolfActions
+            if previous and previous.script==own and previous.remote==remote then
+                for _,name in ipairs({"toggleFeed","cancelFeed"}) do
+                    if self:validateWolfFeed(previous[name],own,remote,name) then native[name]=previous[name] end
+                end
+            end
+            self.wolfActions=native
+            self.wolfHeapScan=nil
+            self.wolfDiscovery=nil
+            return native
+        end
+        if scan.index>scan.limit then
+            if scan.inputCount==1 and scan.inputCandidate then
+                self.wolfInputAction={
+                    fn=scan.inputCandidate,script=own,remote=remote,
+                    placeVersion=game.PlaceVersion,
+                    discovery="unique own heap onInput"}
+            end
+            scan.items,scan.inputSeen=nil,nil
+            self.wolfHeapScan=nil
+        end
+        return nil
+    end
+    function b:nativeWolfActions(now)
+        local scripts = self.player:FindFirstChild("PlayerScripts")
+        local ownScript = scripts and scripts:FindFirstChild("WolfController")
+        local currentRemote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        if self.wolfScript~=ownScript or self.wolfRemote~=currentRemote or self.wolfVersion~=game.PlaceVersion then
+            self:resetWolfDiscovery()
+            self.wolfScript,self.wolfRemote,self.wolfVersion=ownScript,currentRemote,game.PlaceVersion
+        end
+        if not ownScript or not ownScript:IsA("LocalScript") or not currentRemote
+            or not currentRemote:IsA("RemoteEvent") then
+            self:resetWolfDiscovery();return nil
+        end
+        if self.wolfActions and (self.wolfActions.script~=ownScript
+            or self.wolfActions.remote~=currentRemote or self.wolfActions.placeVersion~=game.PlaceVersion) then
+            self:resetWolfDiscovery()
+        end
+        local native = self.wolfActions
+        if not native then
+            -- Preserve validated handles already held by our previous release.
+            -- This reads the existing owner; it never enumerates another VM.
+            local previous=self.env.FERAL_RENAISSANCE_ACTIVE
+            local cached=previous and previous.bridge and previous.bridge.wolfActions
+            local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+            if cached and cached.script==ownScript then
+                native=self:validateWolfBite(cached.tryBite,ownScript,remote)
+                if native then
+                    for _,name in ipairs({"toggleFeed","cancelFeed"}) do
+                        if self:validateWolfFeed(cached[name],ownScript,remote,name) then native[name]=cached[name] end
+                    end
+                    self.wolfActions=native
+                end
+            end
+        end
+        if native and native.tryBite and native.toggleFeed then return native end
+        if not self.wolfDiscovery and now < (self.nextWolfDiscovery or 0) then
+            return self:recoverWolfBiteFromHeap(now) or native
+        end
+        if self.deferNativeDiscovery then return native end
+        if type(getconnections) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then
+            return self:recoverWolfBiteFromHeap(now) or native
+        end
+        if type(debug.getupvalues) ~= "function" and type(getupvalues) ~= "function"
+            and type(debug.getupvalue) ~= "function" and type(getupvalue) ~= "function" then return native end
+        local pool,source=self:nativeFunctions(now)
+        if not pool then return self:recoverWolfBiteFromHeap(now) or native end
+        if not self.wolfDiscovery or self.wolfDiscovery.source~=source then
+            self.nextWolfDiscovery = now+30
+            native = native or {script=ownScript,remote=currentRemote,placeVersion=game.PlaceVersion}
+            self.wolfActions,self.wolfDiscovery = native,{pool=pool,index=1,source=source}
+        end
+        local scan,started,count = self.wolfDiscovery,self.clock(),0
+        local remote = self.ReplicatedStorage:FindFirstChild("WolfActions")
+        while scan.index <= #scan.pool do
+            if count >= 32 or self.clock()-started > .001 then return native end
+            local fn = scan.pool[scan.index];scan.index += 1;count += 1
+            local name=self:wolfFunctionName(fn,ownScript)
+            if name=="tryBite" then
+                local bite=self:validateWolfBite(fn,ownScript,remote)
+                if bite then
+                    native.tryBite,native.doBite,native.biteCooldown=bite.tryBite,bite.doBite,bite.biteCooldown
+                end
+            elseif name=="toggleFeed" or name=="cancelFeed" then
+                if self:validateWolfFeed(fn,ownScript,remote,name) then native[name]=fn end
+            end
+            if native.tryBite and native.toggleFeed then break end
+        end
+        if source.complete or native.tryBite and native.toggleFeed then self.wolfDiscovery = nil end
+        self:releaseNativeScan()
+        if not native.tryBite and source.complete then
+            return self:recoverWolfBiteFromHeap(now) or native
+        end
+        return native
+    end
+
+    -- Second native attack path for a real uninterrupted mouse hold.
+    -- Invoke WolfController's already-installed own InputBegan callback
+    -- with the genuine original InputObject; never simulate M1 Up/Down.
+    -- The captured v2412 onInput calls its original tryBite function.
+    -- Prefer exact onInput name, or one uniquely script-owned anonymous
+    -- callback; fail closed if ownership or identity is ambiguous.
+    function b:nativeWolfInputAction(now)
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local own=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        if not own or not own:IsA("LocalScript") or not remote
+            or not remote:IsA("RemoteEvent") then
+            self.wolfInputAction=nil
+            return nil
+        end
+        local cached=self.wolfInputAction
+        if cached and cached.script==own and cached.remote==remote
+            and cached.placeVersion==game.PlaceVersion then return cached end
+        self.wolfInputAction=nil
+        if self.deferNativeDiscovery or now<(self.nextWolfInputLookup or 0) then return nil end
+        self.nextWolfInputLookup=now+.8
+        -- An executor wrapper can obscure debug.info source/name while
+        -- getfenv still identifies the actual owning WolfController script.
+        -- Accept exactly one uniquely owner-matched unnamed root, never a
+        -- wrapper without script identity.
+        if type(getconnections)~="function" then return nil end
+        local debugAvailable=type(debug)=="table" and type(debug.info)=="function"
+        if not debugAvailable and type(getfenv)~="function" then return nil end
+        local ok,connections=pcall(getconnections,self.UserInputService.InputBegan)
+        if not ok or type(connections)~="table" then return nil end
+        local named,unnamed={},{}
+        local count=0
+        for _,connection in ipairs(connections) do
+            count+=1
+            if count>128 then break end
+            local valid,fn=pcall(function()return connection.Function end)
+            if not valid or type(fn)~="function" then continue end
+            local source,name
+            if debugAvailable then
+                local info
+                info,source,name=pcall(debug.info,fn,"sn")
+                if not info then source,name=nil,nil end
+            end
+            local sourceOwned=type(source)=="string" and
+                (source=="WolfController" or source:match("[%.%/]WolfController$")~=nil)
+            local ownerConfirmed=false
+            if type(getfenv)=="function" then
+                local envOK,env=pcall(getfenv,fn)
+                if envOK and type(env)=="table" and env.script~=nil then
+                    if env.script~=own then continue end
+                    ownerConfirmed=true
+                end
+            end
+            if not sourceOwned and not ownerConfirmed then continue end
+            if name=="onInput" then
+                table.insert(named,fn)
+            elseif (name==nil or name=="") and ownerConfirmed then
+                table.insert(unnamed,fn)
+            end
+        end
+        local fn,origin
+        if #named==1 then fn,origin=named[1],"named own onInput"
+        elseif #named==0 and #unnamed==1 then fn,origin=unnamed[1],"one script-owned input listener" end
+        if not fn then return nil end
+        local action={fn=fn,script=own,remote=remote,
+            placeVersion=game.PlaceVersion,discovery=origin}
+        self.wolfInputAction=action
+        return action
+    end
+    function b:tryNativeInputBite(now,inputObject)
+        if not inputObject or inputObject.UserInputType~=Enum.UserInputType.MouseButton1 then return false end
+        local native=self:nativeWolfInputAction(now)
+        if not native or type(native.fn)~="function" then return false end
+        self.biteTiming=nil
+        return pcall(native.fn,inputObject,false)
+    end
+    function b:nativeFeedState(now)
+        -- Named callbacks can still be used after an update; private upvalue
+        -- offsets cannot be assumed to retain their meaning on another build.
+        if game.PlaceVersion~=self.captureVersion then return nil,nil,false end
+        local native = self:nativeWolfActions(now)
+        if not native or not native.toggleFeed then return nil,nil,false end
+        local values = self:upvalues(native.toggleFeed)
+        if values[5] ~= self.player or values[6] ~= self.ReplicatedStorage:FindFirstChild("WolfActions") then return nil,nil,false end
+        local mode = values[1]
+        if mode ~= nil and mode ~= "eat" and mode ~= "drink" then return nil,nil,false end
+        return mode,values[2] == true,true
+    end
+    function b:toggleNativeFeed(now)
+        local native = self:nativeWolfActions(now)
+        return native and native.toggleFeed and pcall(native.toggleFeed) or false
+    end
+    function b:stopNativeFeed(now)
+        local native = self:nativeWolfActions(now)
+        if native and native.cancelFeed then return pcall(native.cancelFeed) end
+        local mode,_,known=self:nativeFeedState(now)
+        -- The named cancelFeed prototype may be unretained after script startup.
+        -- The original toggle's first branch performs the same native cancellation.
+        return known and mode~=nil and native and native.toggleFeed and pcall(native.toggleFeed) or false
+    end
+    function b:tryNativeBite(now)
+        local native = self:nativeWolfActions(now)
+        self.biteTiming=nil
+        return native and native.tryBite and pcall(native.tryBite) or false
+    end
+    -- This fallback is only for a physically held bite when the same client's
+    -- private native callback cannot be reached. Roblox's own input handler
+    -- continues to own every hit claim, cooldown, range and permission check.
+    function b:combatInputCompatible()
+        -- FERAL has had separate place versions/arenas. Validate the actual
+        -- native game objects instead of hard-coding one historical PlaceId.
+        local scripts=self.player:FindFirstChild("PlayerScripts")
+        local wolf=scripts and scripts:FindFirstChild("WolfController")
+        local remote=self.ReplicatedStorage:FindFirstChild("WolfActions")
+        local species=self:config("Species")
+        return wolf~=nil and wolf:IsA("LocalScript")
+            and remote~=nil and remote:IsA("RemoteEvent")
+            and type(species)=="table" and type(species.biteCooldown)=="function"
+    end
+    function b:hasHeldInputBackend()
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then return true end
+        if type(mouse1click)=="function" then return true end
+        local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
+        return ok and virtual~=nil
+    end
+    function b:visibleBiteWindow(s,now)
+        if not self:combatInputCompatible() or not s.alive or s.char~=self.player.Character
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding or not Core.finite(s.serverNow) then return false end
+        local species=self:config("Species")
+        if not species or type(species.biteCooldown)~="function" then return false end
+        local ok,cd=pcall(species.biteCooldown,self:attribute(s.char,"Species") or species.DEFAULT,
+            self:attribute(s.char,"Growth") or 1)
+        if not ok or not Core.finite(cd) or cd<.03 or cd>30 then return false end
+        local passive=self:config("PassiveConfig")
+        if passive and passive.biteCdMult~=nil then
+            local valid,m=pcall(passive.biteCdMult,s.char)
+            if not valid or not Core.finite(m) or m<=0 or m>20 then return false end
+            cd*=m
+        end
+        local marker=self:attribute(s.char,"WolfBiteAt")
+        if marker~=nil and (not Core.finite(marker) or marker>s.serverNow+1) then return false end
+        if Core.finite(marker) and s.serverNow-marker<cd-.005 then return false end
+        local input=self.combatGovernor
+        if input and input.lastDispatch>0 and now-input.lastDispatch<cd-.005
+            and not Core.finite(marker) then return false end
+        return true
+    end
+    -- A pcall succeeding on VirtualInputManager does not mean FERAL received
+    -- a native bite. After two unmarked pulses try a different available
+    -- real-input backend automatically, without user diagnostics.
+    -- The first backend that produces a real native WolfBiteAt marker is
+    -- preferred over unverified alternatives. Native cooldowns can create
+    -- missing markers even though a backend is still functioning.
+    function b:noteHeldInputTimeout()
+        self.heldInputMisses=(self.heldInputMisses or 0)+1
+        if self.holdBinding=="M3" and self.heldInputLockedBackend then return end
+        local count=self.heldInputModes or 1
+        if count<=1 then return end
+        local verified=self.heldInputVerifiedIndex
+        local current=self.heldInputIndex or 1
+        if verified and verified<=count then
+            if current==verified then
+                if self.heldInputMisses>=5 then
+                    self.heldInputIndex=(verified%count)+1
+                    self.heldInputProbeLeft=2
+                    self.heldInputMisses=0
+                end
+            else
+                self.heldInputProbeLeft=(self.heldInputProbeLeft or 2)-1
+                if self.heldInputProbeLeft<=0 then
+                    self.heldInputIndex=verified
+                    self.heldInputProbeLeft=nil
+                    self.heldInputMisses=0
+                end
+            end
+        elseif self.heldInputMisses>=2 then
+            self.heldInputIndex=(current%count)+1
+            self.heldInputMisses=0
+        end
+    end
+    function b:noteHeldInputMarker()
+        self.heldInputMisses=0
+        local index=self.heldInputIndex or 1
+        if index>=1 and index<=(self.heldInputModes or 1) then
+            self.heldInputVerifiedIndex=index
+        end
+        self.heldInputProbeLeft=nil
+    end
+    function b:releaseSyntheticBite()
+        local pulse=self.syntheticM1
+        if not pulse then return end
+        self.syntheticM1=nil
+        if pulse.timer and type(task)=="table" and type(task.cancel)=="function" then
+            pcall(task.cancel,pulse.timer)
+        end
+        if not pulse.independent or pulse.didPress then
+            self.syntheticReleasing=true
+            pcall(pulse.release)
+            self.syntheticReleasing=false
+        end
+        self:restoreFeedClickGuard(pulse.feedGuard)
+    end
+    -- If an executor fails to run the scheduled synthetic release, do not
+    -- permanently block subsequent held-M1 takeover bites.
+    function b:clearStaleSyntheticBite(now)
+        local pulse=self.syntheticM1
+        if not pulse or not Core.finite(pulse.startedAt)
+            or now-pulse.startedAt<.5 then return false end
+        self:releaseSyntheticBite()
+        return true
+    end
+    -- A physical held M1 is already in the Down state. Simply sending
+    -- another Down is ignored by input systems that require a new edge.
+    -- Re-arm one short Up -> Down -> Up pulse, with a single owner, unless
+    -- an active native grab session has priority. No Bite/BiteHit remotes.
+    -- A food/water offer is not feeding. M3 may start on its prompt,
+    -- but a generated primary input must never activate that GUI control.
+    local feedNames={feralfeedtap=true,feedtap=true,feedbutton=true,eatbutton=true,
+        drinkbutton=true,eatdrinkbutton=true,feralfeedbutton=true}
+    local function feedLabel(node)
+        if feedNames[string.lower(tostring(node.Name or "")):gsub("[^%w]","")] then return true end
+        if not (node:IsA("TextButton") or node:IsA("TextLabel")) then return false end
+        local label=string.upper(tostring(node.Text or "")):gsub("<[^>]*>",""):match("^%s*(.-)%s*$")
+        for _,name in ipairs({"EAT","DRINK","EAT / DRINK"}) do
+            if label==name or label==name.." [E]" or label==name.." (E)"
+                or label=="[E] "..name or label=="(E) "..name then return true end
+        end
+        return false
+    end
+    function b:feedOfferControl(object)
+        local node=object
+        for _=1,5 do
+            if not node then break end
+            if feedLabel(node) then return true end
+            node=node.Parent
+        end
+        if object:IsA("GuiButton") then
+            local ok,children=pcall(object.GetDescendants,object)
+            if ok then
+                for _,child in ipairs(children) do if feedLabel(child) then return true end end
+            end
+        end
+        return false
+    end
+    -- This lease covers one generated primary press and its release.
+    -- Only recognised feed buttons are changed; do not hide HUD elements,
+    -- write game attributes, consume keyboard input or alter native cooldowns.
+    function b:restoreFeedClickGuard(lease)
+        if not lease or lease.restored then return end
+        lease.restored=true
+        for i=#lease.entries,1,-1 do
+            local entry=lease.entries[i]
+            pcall(function()
+                if entry.button.Active==false then entry.button.Active=entry.active end
+                if entry.button.Interactable==false then entry.button.Interactable=entry.interactable end
+            end)
+        end
+    end
+    function b:beginFeedClickGuard(char)
+        local gui=self.player:FindFirstChildOfClass("PlayerGui")
+        local offer=self:feedOfferActive(char)
+        local lease={entries={}}
+        if not gui then
+            if offer then return nil,"feeding control unresolved" end
+            return lease
+        end
+        local ok,objects=pcall(gui.GetDescendants,gui)
+        if not ok or type(objects)~="table" then return nil,"feeding control query unavailable" end
+        local buttons={}
+        -- Look at the entire own GUI, not just the reported click coordinates.
+        -- Nested Eat/Drink labels can identify an ImageButton.
+        for _,object in ipairs(objects) do
+            if object:IsA("GuiButton") and self:feedOfferControl(object) then
+                buttons[object]=true
+            end
+        end
+        local found=false
+        for button in pairs(buttons) do
+            found=true
+            local readable,active,interactable=pcall(function()return button.Active,button.Interactable end)
+            if not readable or type(active)~="boolean" or type(interactable)~="boolean" then
+                self:restoreFeedClickGuard(lease)
+                return nil,"feeding control guard unavailable"
+            end
+            table.insert(lease.entries,{button=button,active=active,interactable=interactable})
+            local guarded,verified=pcall(function()
+                button.Interactable=false
+                button.Active=false
+                return button.Interactable==false and button.Active==false
+            end)
+            if not guarded or not verified then
+                self:restoreFeedClickGuard(lease)
+                return nil,"feeding control guard unavailable"
+            end
+        end
+        -- An unrecognised active feeding control is not safe to click through.
+        if offer and not found then
+            self:restoreFeedClickGuard(lease)
+            return nil,"feeding control unresolved"
+        end
+        if found then self.feedGuardPulses=(self.feedGuardPulses or 0)+1 end
+        return lease
+    end
+    -- This check is for actual generated clicks only, never M3 acquisition.
+    -- Unknown GUI state remains blocked rather than clicking blindly.
+    function b:mouseGameplayPoint(point,allowOffer)
+        point=point or self.UserInputService:GetMouseLocation()
+        local gui=self.player:FindFirstChildOfClass("PlayerGui")
+        if not point then return false,false,"mouse position unavailable" end
+        if self.combatPointBlocked and self.combatPointBlocked(point) then return false,false,"hub UI" end
+        if not gui then return true,false,"clear" end
+        local ok,under=pcall(gui.GetGuiObjectsAtPosition,gui,point.X,point.Y)
+        if not ok or type(under)~="table" then return false,false,"GUI query unavailable" end
+        local offer,button=false,false
+        for _,object in ipairs(under) do
+            local node=object
+            for _=1,4 do
+                if not node then break end
+                if node:IsA("TextBox") then return false,false,"text field" end
+                if node:IsA("GuiButton") then
+                    local readable,interactable=pcall(function()return node.Interactable end)
+                    if not readable or interactable~=false then
+                        if self:feedOfferControl(node) or self:feedOfferControl(object) then offer=true
+                        else button=true end
+                    end
+                end
+                node=node.Parent
+            end
+        end
+        if button then return false,offer,"HUD button" end
+        if offer then return allowOffer==true,true,"Eat/Drink offer" end
+        return true,false,"clear"
+    end
+    function b:feedOfferActive(char)
+        local offer=self:attribute(char,"FeedCan")
+        return offer=="eat" or offer=="drink"
+    end
+    function b:clearOfferClickPoint(point)
+        local clear,offer,reason=self:mouseGameplayPoint(point,false)
+        if clear then return point end
+        -- A feed button must be isolated by the pulse guard, not avoided by
+        -- assuming the executor actually honours relocated coordinates.
+        if self.holdBinding=="M3" and offer then return nil,"Eat/Drink offer" end
+        -- Only relocate a coordinate-addressable click around a confirmed HUD
+        -- obstruction. Do not relocate across real hub/text/menu boundaries
+        -- or when the hit-test API cannot establish a clear position.
+        if reason~="HUD button" and reason~="Eat/Drink offer" then return nil,reason end
+        local camera=self.Workspace.CurrentCamera
+        local size=camera and camera.ViewportSize
+        if not size then return nil,"viewport unavailable" end
+        for _,distance in ipairs({12,24,48,72,96,128}) do
+            for _,offset in ipairs({{0,-distance},{0,distance},{-distance,0},{distance,0}}) do
+                local x,y=point.X+offset[1],point.Y+offset[2]
+                if x>=8 and y>=8 and x<size.X-8 and y<size.Y-8 then
+                    local candidate=Vector2.new(x,y)
+                    if self:mouseGameplayPoint(candidate,false) then return candidate end
+                end
+            end
+        end
+        return nil,"no verified clear click position"
+    end
+    function b:blockedHeldInput(reason)
+        self.heldInputBlockReason=reason
+        return false
+    end
+    function b:tryHeldInputBite(s,now)
+        self.heldInputBlockReason=nil
+        if self.syntheticM1 then return self:blockedHeldInput("previous click releasing") end
+        local independent=self.holdBinding=="M3"
+        local desktop=independent and s and type(self.desktopOwnsPrimary)=="function" and self.desktopOwnsPrimary(s,now)
+        if independent and (not s or s.r2Held or not desktop and (s.mouseHeld or s.physicalM1Held)) then
+            return self:blockedHeldInput("manual primary input")
+        end
+        if independent and self.combatPulseBlocked and self.combatPulseBlocked() then
+            return self:blockedHeldInput("pulse ownership unavailable")
+        end
+        if not s or not s.alive or s.char~=self.player.Character or not self:combatInputCompatible()
+            or s.chat or s.gameMenu or s.grab or s.rest or s.feeding or s.ability
+            or s.captured or s.holding then return false end
+        local position=self.UserInputService:GetMouseLocation()
+        if not position then return self:blockedHeldInput("mouse position unavailable") end
+        local clear,offer,pointReason=self:mouseGameplayPoint(position,independent)
+        if not clear and (not independent or pointReason~="HUD button" and pointReason~="Eat/Drink offer") then
+            return self:blockedHeldInput(pointReason)
+        end
+        local virtualPoint,virtualReason=position,nil
+        if not clear and not offer then virtualPoint,virtualReason=self:clearOfferClickPoint(position) end
+        local modes={}
+        local ok,virtual=pcall(function()return game:GetService("VirtualInputManager")end)
+        if ok and virtual then table.insert(modes,{
+            name="VIRTUAL_MOUSE",
+            down=function()virtual:SendMouseButtonEvent(virtualPoint.X,virtualPoint.Y,0,true,game,0)end,
+            up=function()virtual:SendMouseButtonEvent(virtualPoint.X,virtualPoint.Y,0,false,game,0)end,
+        }) end
+        if type(mouse1press)=="function" and type(mouse1release)=="function" then
+            table.insert(modes,{name="EXECUTOR_PAIRED",down=mouse1press,up=mouse1release})
+        end
+        if type(mouse1click)=="function" then
+            table.insert(modes,{name="EXECUTOR_CLICK",click=mouse1click})
+        end
+        if #modes==0 then return false end
+        self.heldInputModes=#modes
+        if self.heldInputVerifiedIndex and self.heldInputVerifiedIndex>#modes then
+            self.heldInputVerifiedIndex,self.heldInputProbeLeft=nil,nil
+        end
+        local index=self.heldInputIndex or 1
+        if independent and self.heldInputLockedBackend then
+            index=nil
+            for i,mode in ipairs(modes) do
+                if mode.name==self.heldInputLockedBackend then index=i;break end
+            end
+            if not index then return false end
