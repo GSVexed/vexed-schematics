@@ -1,0 +1,56 @@
+name: Verify FERAL Renaissance 16.2.0 compact native M1 launcher
+on:
+  push:
+    branches: ['renaissance/native-input-handoff-16.2.0']
+    paths:
+      - 'roblox-tools/feral-renaissance-v16.2.0-loader.lua'
+      - 'roblox-tools/renaissance/chunks/v16.2.0/**'
+      - '.github/workflows/feral-renaissance-v16.2.0-loader.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile pinned official Luau toolchain
+        run: |
+          git clone --quiet https://github.com/luau-lang/luau.git /tmp/feral-luau-1620
+          git -C /tmp/feral-luau-1620 checkout --quiet 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/feral-luau-1620 config=release -j2 luau-compile
+      - name: Verify launcher compilation, native-only source and exact bundle parity
+        run: |
+          /tmp/feral-luau-1620/luau-compile --null roblox-tools/feral-renaissance-v16.2.0-loader.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path("roblox-tools")
+          source=root/"feral-renaissance-v16.2.0.lua"
+          payload=source.read_bytes()
+          record=json.loads((root/"renaissance/candidate.json").read_text())
+          manifest=json.loads((root/"renaissance/manifest.json").read_text())
+          assert record["version"]==manifest["version"]=="16.2.0"
+          assert record["source_commit"]=="bcc52f080cd7a56fc7fecf9f6d55a63d3cb2e1f0"
+          sha=hashlib.sha256(payload).hexdigest()
+          assert sha==record["bundle_sha256"]==manifest["bundle_sha256"]
+          assert sha=="7a9c8e956e5d2867ca6a5815fab00619e769e39542f4bd968198d8bc447ef73a"
+          assert len(payload)==575316
+          folder=root/"renaissance/chunks/v16.2.0"
+          chunks=[(folder/f"part-{i:02d}.txt").read_bytes() for i in range(1,8)]
+          assert [len(chunk) for chunk in chunks]==[92991,92919,92926,92992,92988,92998,17502]
+          assert b"".join(chunks)==payload
+          loader=(root/"feral-renaissance-v16.2.0-loader.lua").read_text()
+          assert "bcc52f080cd7a56fc7fecf9f6d55a63d3cb2e1f0" in loader
+          assert "b1ba9d92bb730f15823e2e96fd47f70b905c7c5a" in loader
+          assert "#result == 575316" in loader and "#rebuilt == 575316" in loader
+          assert 'reportError("Startup", hub)' in loader
+          combat=(root/"renaissance/src/combat_input.luau").read_text()
+          assert "tryNativeInputBite(now,self.held.input)" in combat
+          assert "bridge:tryHeldInputBite" not in combat
+          controller=(root/"renaissance/src/controller.luau").read_text()
+          assert "speedEnabled=self.registry.byId.attackSpeed.requested" in controller
+          print("FERAL_NATIVE_M1_1620_LOADER_VERIFIED",sha)
+          PY
