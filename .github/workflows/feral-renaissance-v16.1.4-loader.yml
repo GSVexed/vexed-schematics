@@ -1,0 +1,48 @@
+name: Verify small FERAL 16.1.4 launcher
+on:
+  push:
+    branches: ['renaissance/native-m1-adaptive-16.1.4']
+    paths:
+      - 'roblox-tools/feral-renaissance-v16.1.4-loader.lua'
+      - 'roblox-tools/renaissance/chunks/v16.1.4/**'
+      - '.github/workflows/feral-renaissance-v16.1.4-loader.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build pinned official Luau compiler
+        run: |
+          git clone --quiet https://github.com/luau-lang/luau.git /tmp/feral-luau-1614
+          git -C /tmp/feral-luau-1614 checkout --quiet 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/feral-luau-1614 config=release -j2 luau-compile
+      - name: Compile small loader and check exact tested source and transport chunks
+        run: |
+          /tmp/feral-luau-1614/luau-compile --null roblox-tools/feral-renaissance-v16.1.4-loader.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('roblox-tools')
+          src=root/'feral-renaissance-v16.1.4.lua'
+          record=json.loads((root/'renaissance/candidate.json').read_text())
+          manifest=json.loads((root/'renaissance/manifest.json').read_text())
+          assert record['version']==manifest['version']=='16.1.4'
+          digest=hashlib.sha256(src.read_bytes()).hexdigest()
+          assert digest==record['bundle_sha256']==manifest['bundle_sha256']
+          assert record['source_commit']=='5cea9ecf88c62eb9d7c3c80445aba737bcf9f132'
+          chunks=root/'renaissance/chunks/v16.1.4'
+          pieces=[(chunks/f'part-{i:02d}.txt').read_bytes() for i in range(1,8)]
+          assert [len(p) for p in pieces]==[92962,92936,92949,93000,92999,92959,4977]
+          assert b''.join(pieces)==src.read_bytes()
+          loader=(root/'feral-renaissance-v16.1.4-loader.lua').read_text()
+          assert '5cea9ecf88c62eb9d7c3c80445aba737bcf9f132' in loader
+          assert 'fa1a680b23a63ebae67bc2f42b18a9e98a93a448' in loader
+          assert 'reportError("Startup", hub)' in loader
+          assert 'reportError("Download",' in loader
+          print('FERAL_1614_LAUNCHER_VERIFIED',digest)
+          PY
