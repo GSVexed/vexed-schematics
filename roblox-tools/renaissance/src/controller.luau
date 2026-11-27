@@ -90,11 +90,21 @@ function Controller.new(M,bridge,options)
     end
     function h:focusChanged(focused)
         if self.closed then return end
+        local now=bridge.clock()
+        if focused==false then
+            -- If Windows momentarily takes focus during a genuine Alt hold,
+            -- retain *only* the eligibility to rearm after focus returns.
+            -- No attacks occur while unfocused or before fresh key polling.
+            self.altFocusWasHeld=self.registry.byId.holdBite.requested
+                and self.combatInput.held~=nil and self.combatInput.held.key=="ALT"
+            self.altFocusReturnAt=nil
+        else
+            self.altFocusReturnAt=self.altFocusWasHeld and now+.25 or nil
+        end
         self.windowFocused=focused==true
-        -- Focus return does not resurrect a hold whose release was missed.
-        -- A fresh gameplay input must establish ownership again.
         self.inputSuspended=true
         self.physicalM1Input=nil
+        self.altM1DownAtStart=nil
         self.combatInput:cancel()
         self:stopWalk("window focus changed")
     end
@@ -411,6 +421,13 @@ function Controller.new(M,bridge,options)
         if primary or key==Enum.KeyCode.ButtonR2 or alternate then
             self.inputSuspended=false
             if primary then self.physicalM1Input=input end
+            if alternate then
+                -- A real M1 already held before Alt must never be released
+                -- by the Alt fallback. Generated M1 is tracked separately.
+                self.altM1DownAtStart=s.mouseHeld==true
+                self.altFocusReturnAt=nil
+                self.altFocusWasHeld=false
+            end
         end
         self.features:hippoInput(s,key)
         if key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonY
@@ -490,7 +507,7 @@ function Controller.new(M,bridge,options)
             -- are still allowed to cancel the ongoing hold.
             if kind==Enum.UserInputType.MouseButton1
                 and self.combatInput.held and self.combatInput.held.key=="ALT"
-                and bridge.UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+                and not bridge.UserInputService:GetFocusedTextBox()
                 and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
                 return
             end
@@ -552,6 +569,9 @@ function Controller.new(M,bridge,options)
         elseif key==Enum.KeyCode.ButtonR2 then
             self.combatInput:release("R2",bridge.clock())
         elseif key==Enum.KeyCode.LeftAlt then
+            self.altFocusWasHeld=false
+            self.altFocusReturnAt=nil
+            self.altM1DownAtStart=nil
             self.combatInput:release("ALT",bridge.clock())
         end
     end
@@ -1116,6 +1136,10 @@ function Controller.new(M,bridge,options)
     function h:tick(dt)
         if not self.active or self.closed then return end
         local now = bridge.clock()
+        if type(bridge.clearStaleSyntheticBite)=="function"
+            and bridge:clearStaleSyntheticBite(now) then
+            self.ledger:event("stale_alt_input_pulse_released",now)
+        end
         if Core.finite(dt) and dt>0 then
             self.frameInterval=(self.frameInterval or dt)*.85+math.min(dt,.25)*.15
         end
@@ -1123,6 +1147,28 @@ function Controller.new(M,bridge,options)
         local critical=self.registry.byId.minigame.requested and self.grab.active and self.grab.pending~=nil
         self.timingCritical,bridge.deferNativeDiscovery=critical,critical
         local s = bridge:snapshot(now,not critical and slow and self.registry.byId.flight.requested)
+        if self.altM1DownAtStart and not s.mouseHeld then self.altM1DownAtStart=false end
+        -- The synthetic mouse backend may transiently report its own Down
+        -- as held. Only an actual user M1 event or an already-held M1 at Alt
+        -- startup blocks an Alt-generated click.
+        s.physicalM1Held=self.physicalM1Input~=nil
+            or self.altM1DownAtStart==true and s.mouseHeld==true
+        -- A brief Windows focus popup may have suspended an existing Alt
+        -- session. Rearm only after focus is stable and the real Alt key is
+        -- still down; do not resume in chat, menus or the hub's controls.
+        if self.altFocusReturnAt and now>=self.altFocusReturnAt then
+            if self.windowFocused==true and s.alive and s.altBiteHeld
+                and not s.chat and not s.gameMenu
+                and not self.ui:contains(bridge.UserInputService:GetMouseLocation()) then
+                self.inputSuspended=false
+                self.altFocusReturnAt=nil
+                self.altFocusWasHeld=false
+                self.ledger:event("alt_hold_resumed_after_focus",now)
+            elseif not s.altBiteHeld or not s.alive then
+                self.altFocusReturnAt=nil
+                self.altFocusWasHeld=false
+            end
+        end
         if s.ability then self:observeCombatAbility(s,now) end
         if s.chat or s.gameMenu then
             self.inputSuspended=true

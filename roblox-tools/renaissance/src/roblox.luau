@@ -687,16 +687,45 @@ function Roblox.new(Core, environment)
     -- A pcall succeeding on VirtualInputManager does not mean FERAL received
     -- a native bite. After two unmarked pulses try a different available
     -- real-input backend automatically, without user diagnostics.
+    -- Preserve a backend that has produced a real native WolfBiteAt marker.
+    -- Missing markers may be normal cooldown/ability rejections; rotating to
+    -- an untested API after only two misses can make a working Alt hold stop.
+    -- Probe alternatives only after repeated misses, then return to the
+    -- last verified method unless a different method produces its own marker.
     function b:noteHeldInputTimeout()
         self.heldInputMisses=(self.heldInputMisses or 0)+1
         local count=self.heldInputModes or 1
-        if self.heldInputMisses>=2 and count>1 then
-            self.heldInputIndex=((self.heldInputIndex or 1)%count)+1
+        if count<=1 then return end
+        local verified=self.heldInputVerifiedIndex
+        local current=self.heldInputIndex or 1
+        if verified and verified<=count then
+            if current==verified then
+                if self.heldInputMisses>=5 then
+                    self.heldInputIndex=(verified%count)+1
+                    self.heldInputProbeLeft=2
+                    self.heldInputMisses=0
+                end
+            else
+                self.heldInputProbeLeft=(self.heldInputProbeLeft or 2)-1
+                if self.heldInputProbeLeft<=0 then
+                    self.heldInputIndex=verified
+                    self.heldInputProbeLeft=nil
+                    self.heldInputMisses=0
+                end
+            end
+            return
+        end
+        if self.heldInputMisses>=2 then
+            self.heldInputIndex=(current%count)+1
             self.heldInputMisses=0
         end
     end
     function b:noteHeldInputMarker()
         self.heldInputMisses=0
+        local current=self.heldInputIndex or 1
+        local count=self.heldInputModes or 1
+        if current>=1 and current<=count then self.heldInputVerifiedIndex=current end
+        self.heldInputProbeLeft=nil
     end
     function b:releaseSyntheticBite()
         local pulse=self.syntheticM1
@@ -708,6 +737,14 @@ function Roblox.new(Core, environment)
         self.syntheticReleasing=true
         pcall(pulse.release)
         self.syntheticReleasing=false
+    end
+    -- A delayed executor callback can fail to run; never keep an owned
+    -- mouse pulse permanently armed after its bounded safety window.
+    function b:clearStaleSyntheticBite(now)
+        local pulse=self.syntheticM1
+        if not pulse or not Core.finite(pulse.startedAt) or now-pulse.startedAt<.5 then return false end
+        self:releaseSyntheticBite()
+        return true
     end
     -- A physical held M1 is already in the Down state. Simply sending
     -- another Down is ignored by input systems that require a new edge.
@@ -744,6 +781,10 @@ function Roblox.new(Core, environment)
         end
         if #modes==0 then return false end
         self.heldInputModes=#modes
+        if self.heldInputVerifiedIndex and self.heldInputVerifiedIndex>#modes then
+            self.heldInputVerifiedIndex=nil
+            self.heldInputProbeLeft=nil
+        end
         local index=self.heldInputIndex or 1
         if index>#modes then index=1 end
         self.heldInputIndex=index
@@ -759,7 +800,7 @@ function Roblox.new(Core, environment)
             return clicked
         end
         self.syntheticM1Until=now+.3
-        local pulse={release=up,method=backend,didPress=false}
+        local pulse={release=up,method=backend,didPress=false,startedAt=now}
         self.syntheticM1=pulse
         local function safeUp()
             self.syntheticReleasing=true

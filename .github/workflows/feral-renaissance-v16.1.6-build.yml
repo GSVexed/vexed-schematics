@@ -1,0 +1,73 @@
+name: FERAL Renaissance 16.1.6 held-input verification and packaging
+on:
+  push:
+    branches: ['renaissance/alt-hold-continuity-16.1.6']
+    paths:
+      - 'roblox-tools/renaissance/src/**'
+      - 'roblox-tools/renaissance/tests/**'
+      - 'roblox-tools/renaissance/version.json'
+      - '.github/workflows/feral-renaissance-v16.1.6-build.yml'
+permissions:
+  contents: write
+concurrency:
+  group: renaissance-1616-source-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Build pinned official Luau toolchain
+        run: |
+          git clone --quiet https://github.com/luau-lang/luau.git /tmp/renaissance-1616-luau
+          git -C /tmp/renaissance-1616-luau checkout --quiet 97b2f4bf9cd935bed666f3e643a3b749b4d22f38
+          make -s -C /tmp/renaissance-1616-luau config=release -j2 luau luau-compile
+      - name: Compile and run Renaissance service-boundary regressions
+        run: |
+          python3 roblox-tools/renaissance/run_tests.py \
+            --luau /tmp/renaissance-1616-luau/luau \
+            --compiler /tmp/renaissance-1616-luau/luau-compile
+      - name: Run integrated Territory regressions
+        run: |
+          python3 roblox-tools/feral-amber/run_tests.py \
+            --luau /tmp/renaissance-1616-luau/luau \
+            --compiler /tmp/renaissance-1616-luau/luau-compile
+      - name: Validate deterministic package and combined reports
+        run: |
+          python3 roblox-tools/renaissance/verify_candidate.py \
+            --luau /tmp/renaissance-1616-luau/luau \
+            --compiler /tmp/renaissance-1616-luau/luau-compile
+      - name: Commit only validated versioned artifacts
+        run: |
+          git add roblox-tools/feral-renaissance-v16.1.6.lua \
+            roblox-tools/renaissance/manifest.json \
+            roblox-tools/renaissance/test-results.json \
+            roblox-tools/feral-amber/test-results.json
+          if git diff --cached --quiet; then
+            echo 'No generated package changes'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Package tested Renaissance 16.1.6 with integrated Territory'
+          fi
+          python3 roblox-tools/renaissance/verify_candidate.py \
+            --luau /tmp/renaissance-1616-luau/luau \
+            --compiler /tmp/renaissance-1616-luau/luau-compile \
+            --source-commit "$(git rev-parse HEAD)" --check-tracked-bundle
+          git add roblox-tools/renaissance/candidate.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record verified 16.1.6 source provenance'
+          fi
+          git push origin HEAD:${GITHUB_REF_NAME}
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renaissance-16.1.6-verification
+          path: |
+            roblox-tools/renaissance/candidate.json
+            roblox-tools/renaissance/test-results.json
+            roblox-tools/feral-amber/test-results.json

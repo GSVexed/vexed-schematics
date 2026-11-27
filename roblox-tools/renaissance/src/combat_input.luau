@@ -52,6 +52,7 @@ function CombatInput.new(bridge,policy,ledger)
     end
     function c:cancel()
         self.pending,self.held,self.awaiting=nil,nil,nil
+        self.altPollMissingSince=nil
         stopDiscovery()
         if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
         self.nextAttempt=0
@@ -62,6 +63,7 @@ function CombatInput.new(bridge,policy,ledger)
             -- deliver its one buffered native bite after M1/R2 is released.
             -- Only the continuous repeat intent stops on InputEnded.
             self.held,self.awaiting=nil,nil
+            self.altPollMissingSince=nil
             stopDiscovery()
             if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
             self.nextAttempt=now or 0
@@ -86,6 +88,7 @@ function CombatInput.new(bridge,policy,ledger)
         -- the independent Alt hold. The game's M1 handler still runs normally.
         if kind=="M1" and self.held and self.held.key=="ALT" then return end
         self.held={char=s.char,generation=s.generation,key=kind or "mouse",source="event",input=inputObject}
+        self.altPollMissingSince=nil
         self.nextAttempt=math.max(self.nextAttempt,now+.025)
         if not policy:restLocked(now,bridge:restLock(s.char)) then return end
         local at=math.max(now+.025,policy.lastRestRelease+bridge:restLock(s.char)+.035)
@@ -103,6 +106,7 @@ function CombatInput.new(bridge,policy,ledger)
         end
         local physical=s.attackHeld==true
         local alt=s.altBiteHeld==true
+        if alt then self.altPollMissingSince=nil end
         if not options.repeatHeld then
             if self.held then self:release(nil,now) end
         elseif alt and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation
@@ -112,8 +116,14 @@ function CombatInput.new(bridge,policy,ledger)
             self.nextAttempt=math.max(self.nextAttempt,now+.025)
         elseif self.held and self.held.key=="ALT"
             and s.altBiteKnown~=false and not alt then
-            -- ALT release stops repeat even if InputEnded was lost.
-            self:release("ALT",now)
+            -- IsKeyDown can transiently drop a key through overlay/focus
+            -- transitions. Stop synthetic input immediately; forget the
+            -- event-held key only after a short, continuous false reading.
+            self.altPollMissingSince=self.altPollMissingSince or now
+            if type(bridge.releaseSyntheticBite)=="function" then bridge:releaseSyntheticBite() end
+            if now-self.altPollMissingSince>=.18 then self:release("ALT",now) end
+            self.status="Alt key temporarily unconfirmed; no input sent"
+            return
         elseif physical and (not self.held or self.held.char~=s.char or self.held.generation~=s.generation) then
             -- Restore a missed InputBegan (e.g. hub enabled after M1 went down).
             self.held={char=s.char,generation=s.generation,key="poll",source="poll"}
@@ -234,7 +244,7 @@ function CombatInput.new(bridge,policy,ledger)
             and self.held and self.held.key=="ALT"
         -- Never reset a genuinely physically held M1. Native callback is
         -- safe with either trigger; only Alt owns synthetic input replay.
-        if fallback and (s.mouseHeld or s.r2Held) then
+        if fallback and (s.physicalM1Held==true or s.r2Held) then
             self.status="release left mouse while using Alt repeat fallback"
             self.nextAttempt=now+.12
             return
