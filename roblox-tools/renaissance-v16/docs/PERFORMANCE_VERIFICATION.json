@@ -1,0 +1,20 @@
+{
+  "schema": "FERAL_RENAISSANCE_PERFORMANCE_VERIFICATION_V1",
+  "version": "16.4.3-rc1",
+  "branch": "renaissance/v2415-performance-v16.4.3",
+  "source_commit": "757700f484350b02565e49efa7677a2837b15c37",
+  "loader_commit": "668c018aa6cf95d4b401527999d99e995fe5ee1a",
+  "source_sha256": "90dc59c0f0720a2ddec91bc9336e34c5d11e63e1d5f91f76814c5f3666c67277",
+  "loader_sha256": "36ff6ce16e92f585d174f5f15a57804ff24ac90f73586174aa8559f2aab77887",
+  "hosted_git_blobs_match_local": true,
+  "fallback_chunks": 7,
+  "local_luau": {"total": 240, "passed": 240, "failed": 0},
+  "hosted_luau": {"run_id": 46091641948, "client_job_id": 140813678125, "client": "success", "helper_job_id": 140813678447, "helper": "success"},
+  "hosted_legacy": {"amber_run_id": 46091641997, "amber": "success", "v15_run_id": 46091641949, "v15": "success"},
+  "windows_helper_changed": false,
+  "confirmed_code_issue": "Failed automatic diagnostic writes retried once per Heartbeat; now use bounded backoff. Successful periodic saves use a 30-second interval; manual and unload saves remain immediate.",
+  "live_frame_time_verified": false,
+  "live_gameplay_verified": false,
+  "peer_movement_verified": false,
+  "server_stamina_verified_unlimited": false
+}

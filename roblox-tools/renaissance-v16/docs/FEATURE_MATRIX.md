@@ -1,4 +1,4 @@
-# FERAL Renaissance 16.4.2-rc1 feature matrix
+# FERAL Renaissance 16.4.3-rc1 feature matrix
 
 All 29 registry entries and integrated Territory remain present. Offline simulations do not establish live server outcomes.
 
