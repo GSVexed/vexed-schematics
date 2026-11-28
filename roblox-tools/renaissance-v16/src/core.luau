@@ -109,7 +109,7 @@ function Core.leases()
 end
 
 Core.specs = {
-    { "stamina", "Survival", "Local Stamina Conservation", "Reversible local drain/regen profile; server fatigue and ability costs remain native" },
+    { "stamina", "Survival", "Local Stamina Conservation", "Reversible local drain/regen profile; server fatigue and ability costs remain native", default = true },
     { "recovery", "Survival", "Active Recovery + Fast Effects", "On by default; native effects unverified", default = true },
     { "effects", "Survival", "Fast Negative-Effect Recovery", "Injury, bleed and venom measured separately", linked = "recovery" },
     { "robloxAFK", "Survival", "Roblox Anti-AFK", "Best-effort platform idle input" },

@@ -1102,12 +1102,24 @@ function Controller.new(M,bridge,options)
             ok and "idle input sent; retention unverified" or "virtual input unavailable")
         self.ledger:event("idle_input_attempt",now,{callSucceeded = ok})
     end
-    function h:ackLocal(s)
+    function h:ackEndurance(s)
         local r = self.registry
         local endurance=r.byId.enduranceMove
-        r:ack("enduranceMove",endurance.requested,endurance.requested and "PARTIAL" or "OFF",
-            endurance.requested and self.endurance.status.." · server acceptance unverified" or endurance.detail,
-            {localSpeed=self.endurance.observedSpeed,peerVerified=false,corrections=self.endurance.corrections})
+        local active=endurance.requested
+            and (self.endurance.owned~=nil or self.endurance.directionRequested==true)
+        local state=not endurance.requested and "OFF" or game.PlaceVersion~=2415 and "UNAVAILABLE"
+            or (not s or not s.alive) and "WAITING"
+            or bridge.clock()<self.endurance.suspendedUntil and "PAUSED"
+            or active and "PARTIAL" or self.endurance.baseline and "ARMED" or "WAITING"
+        r:ack("enduranceMove",active,state,
+            endurance.requested and self.endurance.status or endurance.detail,
+            {localSpeed=self.endurance.observedSpeed,peerVerified=false,corrections=self.endurance.corrections,
+                nativeOverwrites=self.endurance.nativeOverwrites,
+                directionRequested=self.endurance.directionRequested==true})
+    end
+    function h:ackLocal(s)
+        local r = self.registry
+        self:ackEndurance(s)
         local zoom=r.byId.zoom
         local zoomApplied=self.zoom:set(self.active and zoom.requested)
         r:ack("zoom",zoomApplied,not zoom.requested and "OFF" or zoomApplied and "CLIENT" or "UNAVAILABLE",self.zoom.reason)
@@ -1604,6 +1616,7 @@ function Controller.new(M,bridge,options)
         end
         self.features:paintHippoGait()
         self.endurance:render(self.snapshot,bridge.clock(),self.windowFocused)
+        self:ackEndurance(self.snapshot)
         self.ui:render(dt,bridge.clock())
         self.recovery:afterAnimationFrame(bridge.clock())
     end

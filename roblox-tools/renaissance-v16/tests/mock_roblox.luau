@@ -242,7 +242,11 @@ function Mock.new()
     end
     function uis:IsKeyDown(key)return w.keys and w.keys[key]==true or false end
     uis.InputEnded=signal()
-    function methods:Move(dir)self.MoveDirection=dir end
+    function methods:Move(dir,relative)
+        self.MoveDirection=dir
+        w.moveCalls=(w.moveCalls or 0)+1
+        w.lastMoveRelative=relative
+    end
     V3.zero=V3.new()
     local services={Players=players,ReplicatedStorage=rs,RunService=run,UserInputService=uis,
         ContextActionService=cas,HttpService=http,Workspace=workspace,VirtualUser=virtual,PathfindingService=paths}

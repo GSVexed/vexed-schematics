@@ -10,7 +10,8 @@ end
 local function eq(a,b)
     assert(a==b,"expected "..tostring(b)..", got "..tostring(a))
 end
-local function close(a,b) assert(math.abs(a-b)<1e-8,"numbers differ") end
+local function close(a,b) assert(type(a)=="number" and math.abs(a-b)<1e-8,
+    "expected "..tostring(b)..", got "..tostring(a)) end
 local function load(w,options)
     return assert(w.env.loadstring(BUNDLE))(options)
 end
@@ -37,12 +38,16 @@ test("29 features retain local conservation, experimental endurance and linked r
     local M=modules();local r=M.core.registry()
     eq(#r.order,29);eq(r.byId.stamina.title,"Local Stamina Conservation")
     eq(r.byId.enduranceMove.title,"Endurance Movement (experimental)")
+    local defaults=M.settings.sanitize(nil,M.core.specs)
+    eq(defaults.states.stamina,true);eq(defaults.states.enduranceMove,true)
+    eq(M.settings.sanitize({states={stamina=false,enduranceMove=false}},M.core.specs).states.stamina,false)
     r:request("reach",false);eq(r.byId.reach.requested,false)
     eq(r.byId.recovery.requested,false);r:request("recovery",true);eq(r.byId.effects.requested,true)
     for _,id in ipairs({"territory","hunger","talon","nightVision","performance","diagnostics"}) do eq(r.byId[id],nil) end
 end)
 test("endurance uses a healthy native sprint sample and releases its own speed",function()
     local w,h=enduranceBoot()
+    eq(h.registry.byId.enduranceMove.state,"WAITING")
     w.keys={[E.KeyCode.LeftShift]=true}
     w.player:SetAttribute("HudSprint",true)
     w.player.Character:SetAttribute("Stamina",80)
@@ -98,7 +103,7 @@ test("endurance never guesses a sprint speed and suspends on abrupt movement",fu
     w.hum.WalkSpeed=12;w:step(.02);close(w.hum.WalkSpeed,12)
     h:close();eq(w:connections(),0)
 end)
-test("endurance backs off when a local speed request produces no movement",function()
+test("endurance backs off when a local speed request leaves movement slow",function()
     local w,h=enduranceBoot()
     w.keys={[E.KeyCode.LeftShift]=true}
     w.hum.MoveDirection=Mock.V3.new(1,0,0)
@@ -107,9 +112,10 @@ test("endurance backs off when a local speed request produces no movement",funct
     w.player.Character:SetAttribute("StaminaMax",100)
     w.hum.WalkSpeed=32;w:step(.02)
     w.player.Character:SetAttribute("FeralSrvTired",true)
+    w.root.AssemblyLinearVelocity=Mock.V3.new(15,0,0)
     w.hum.WalkSpeed=13;w:advance(1.7)
     close(w.hum.WalkSpeed,13)
-    assert(h.endurance.status:find("No sustained local movement",1,true))
+    assert(h.endurance.status:find("Local movement below sampled pace",1,true))
     assert(h.endurance.suspendedUntil>w.time)
     h:close();eq(w:connections(),0)
 end)
@@ -131,7 +137,96 @@ test("endurance yields to build guard, native sprint ban and fatigue recovery",f
     assert(h.endurance.status:find("Waiting for native sprint",1,true))
     w.env.game.PlaceVersion=2416;w:step(.02)
     eq(h.endurance.baseline,nil);close(w.hum.WalkSpeed,13)
+    eq(h.registry.byId.enduranceMove.state,"UNAVAILABLE")
     assert(h.endurance.status:find("build 2415",1,true))
+    h.ui:selectTab("Movement");w:advance(.3)
+    eq(h.ui.rows.enduranceMove.toggle.Text,"N/A")
+    h:close();eq(w:connections(),0)
+end)
+test("endurance tolerates native speed writes when actual movement continues",function()
+    local w,h=enduranceBoot()
+    w.keys={[E.KeyCode.LeftShift]=true};w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    w.root.AssemblyLinearVelocity=Mock.V3.new(32,0,0)
+    w.player:SetAttribute("HudSprint",true)
+    local char=w.player.Character
+    char:SetAttribute("Stamina",80);char:SetAttribute("StaminaMax",100)
+    w.hum.WalkSpeed=32;w:step(.02)
+    char:SetAttribute("FeralSrvTired",true)
+    for _=1,7 do w.hum.WalkSpeed=13;w:step(.02) end
+    close(w.hum.WalkSpeed,32)
+    eq(h.endurance.nativeOverwrites,6)
+    eq(h.registry.byId.enduranceMove.applied,true)
+    eq(h.registry.byId.enduranceMove.state,"PARTIAL")
+    w:advance(.5);close(w.hum.WalkSpeed,32)
+    h.ui:selectTab("Movement");w:advance(.3)
+    eq(h.ui.rows.enduranceMove.toggle.Text,"PARTIAL")
+    h:close();eq(w:connections(),0)
+end)
+test("endurance restores physical movement intent after native fatigue zeros it",function()
+    local w,h=enduranceBoot()
+    w.keys={[E.KeyCode.LeftShift]=true,[E.KeyCode.W]=true}
+    w.hum.MoveDirection=Mock.V3.new(0,0,-1)
+    w.player:SetAttribute("HudSprint",true)
+    w.hum.WalkSpeed=32;w:step(.02)
+    close(h.endurance.baseline,32)
+    w.player.Character:SetAttribute("FeralSrvTired",true)
+    w.root.AssemblyLinearVelocity=Mock.V3.new(0,0,-32)
+    w.renders.WolfMove={priority=101,fn=function()
+        w.hum.WalkSpeed=0
+        w.hum:Move(Mock.V3.new(),false)
+    end}
+    w:step(.02)
+    close(w.hum.WalkSpeed,32)
+    close(w.hum.MoveDirection.Z,-1)
+    eq(w.lastMoveRelative,true)
+    eq(h.endurance.directionRequested,true)
+    eq(h.registry.byId.enduranceMove.state,"PARTIAL")
+    w:step(.02);close(w.hum.MoveDirection.Z,-1)
+    assert(w.moveCalls>=4)
+    w.player:SetAttribute("FeralMenuOpen",true);w:step(.02)
+    close(w.hum.WalkSpeed,0);close(w.hum.MoveDirection.Magnitude,0)
+    w.player:SetAttribute("FeralMenuOpen",nil);w:step(.02)
+    close(w.hum.WalkSpeed,32);close(w.hum.MoveDirection.Z,-1)
+    h:set("enduranceMove",false)
+    assert(w.hum.WalkSpeed==0,"disable speed: "..tostring(w.hum.WalkSpeed))
+    w:step(.02)
+    assert(w.hum.MoveDirection.Magnitude==0,"disable direction: "..tostring(w.hum.MoveDirection.Magnitude))
+    eq(h.registry.byId.enduranceMove.state,"OFF")
+    w.renders.WolfMove=nil
+    h:close();eq(w:connections(),0)
+end)
+test("endurance discards a sprint sample when the humanoid changes",function()
+    local w,h=enduranceBoot()
+    w.keys={[E.KeyCode.LeftShift]=true};w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    w.player:SetAttribute("HudSprint",true)
+    w.hum.WalkSpeed=32;w:step(.02)
+    w.player.Character:SetAttribute("FeralSrvTired",true)
+    w.hum.WalkSpeed=13;w:step(.02);close(w.hum.WalkSpeed,32)
+    local old=w.hum
+    old.Parent=nil
+    local replacement=w.env.Instance.new("Humanoid")
+    replacement.Parent=w.player.Character
+    old.Parent=w.player.Character -- the new Humanoid is first, while the previous one remains present
+    replacement.MoveDirection=Mock.V3.new(1,0,0);replacement.WalkSpeed=12
+    w.hum=replacement;w:step(.02)
+    close(old.WalkSpeed,13);close(replacement.WalkSpeed,12)
+    eq(h.endurance.baseline,nil)
+    eq(h.registry.byId.enduranceMove.state,"WAITING")
+    h:close();eq(w:connections(),0)
+end)
+test("endurance forgets a higher sprint pace after a healthy gait change",function()
+    local w,h=enduranceBoot()
+    w.keys={[E.KeyCode.LeftShift]=true};w.hum.MoveDirection=Mock.V3.new(1,0,0)
+    w.player:SetAttribute("HudSprint",true)
+    w.hum.WalkSpeed=32;w:step(.02);close(h.endurance.baseline,32)
+    w.hum.WalkSpeed=20;w:step(.02)
+    eq(h.endurance.baseline,nil);close(w.hum.WalkSpeed,20)
+    eq(h.registry.byId.enduranceMove.state,"WAITING")
+    w:advance(.4);eq(h.endurance.baseline,nil)
+    w:advance(.3);close(h.endurance.baseline,20)
+    w.root.AssemblyLinearVelocity=Mock.V3.new(20,0,0)
+    w.player.Character:SetAttribute("FeralSrvTired",true)
+    w.hum.WalkSpeed=9;w:step(.02);close(w.hum.WalkSpeed,20)
     h:close();eq(w:connections(),0)
 end)
 test("lease transaction rolls back earlier fields on rejection",function()
@@ -1714,7 +1809,7 @@ end)
 
 test("Renaissance candidate presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"16.4.1-exp1")
+    eq(h.version,"16.4.2-rc1")
     h:close()
 end)
 
@@ -2077,19 +2172,19 @@ if type(LOADER)=="string" and #LOADER>0 then
                 return BUNDLE:sub(offset,offset+CHUNK_SIZES[part]-1)
             end
             if mode=="chunks" or mode=="missing" then return "truncated" end
-            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.1%-exp1","16.4.1-exp2",1)) end
+            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.2%-rc1","16.4.2-rc2",1)) end
             return BUNDLE
         end
         return function()return requests end
     end
     test("pinned loader starts the complete candidate with desktop hold enabled",function()
         local w=Mock.new();local requests=fetchMock(w,"full")
-        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.1-exp1");eq(h.leftHoldBridge,true)
+        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.2-rc1");eq(h.leftHoldBridge,true)
         eq(requests(),1);h:close();eq(w:connections(),0)
     end)
     test("pinned loader reconstructs every verified chunk after a truncated full fetch",function()
         local w=Mock.new();local requests=fetchMock(w,"chunks")
-        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.1-exp1")
+        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.2-rc1")
         eq(requests(),1+#CHUNK_SIZES);h:close();eq(w:connections(),0)
     end)
     test("missing source chunk leaves the active hub and its hooks intact",function()

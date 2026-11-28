@@ -16,7 +16,7 @@ for _, pair in ipairs({
     if type(M[pair[1]][pair[2]]) ~= "function" then error("Renaissance interface mismatch",0) end
 end
 M.core.compat=M.compat
-M.release = {version="@VERSION@",territoryVersion="0.8.0",channel="experiment",sourceFingerprint="@FINGERPRINT@"}
+M.release = {version="@VERSION@",territoryVersion="0.8.0",channel="release-candidate",sourceFingerprint="@FINGERPRINT@"}
 if options.inspect then return M end
 if game.PlaceId ~= 108901361810209 then error("Open FERAL Animal Survival",0) end
 local env = type(getgenv) == "function" and getgenv() or _G

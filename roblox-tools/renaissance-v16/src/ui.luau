@@ -66,7 +66,7 @@ function UI.mount(hub, bridge, scope)
     -- Parent ownership is registered immediately, before any child creation.
     local gui = Instance.new("ScreenGui")
     scope:add(function() gui:Destroy() end)
-    gui.Name = "FeralRenaissanceV15_" .. tostring(hub.token)
+    gui.Name = "FeralRenaissanceV16_" .. tostring(hub.token)
     gui.ResetOnSpawn, gui.Enabled, gui.IgnoreGuiInset = false,false,true
     gui.DisplayOrder = 350
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -135,7 +135,9 @@ function UI.mount(hub, bridge, scope)
         cards.CanvasPosition=Vector2.new(0,0)
         u.rows,u.combatReadout,u.finderReadout,u.hippoReadout,u.testsReadout,u.testsToggle = {},nil,nil,nil,nil,nil
         title.Text = string.upper(u.tab)
-        subtitle.Text="Simple controls. Native gameplay remains in charge."
+        subtitle.Text=u.tab=="Survival" and "Local stamina settings; server fatigue remains native."
+            or u.tab=="Movement" and "Endurance movement is experimental; peer view unverified."
+            or "Simple controls. Native gameplay remains in charge."
         if u.pages[u.tab] then
             u.pageView=u.pages[u.tab]:mount(cards,{
                 text=text,button=button,palette=palette,make=make,card=card})
@@ -408,8 +410,10 @@ function UI.mount(hub, bridge, scope)
         for id,rowValue in pairs(self.rows) do
             local feature = registry[id]
             assign(rowValue.toggle,"Text",not feature.requested and "OFF"
-                or feature.applied and (feature.state == "PARTIAL" and "PARTIAL"
-                    or feature.state == "ARMED" and "ARMED" or "ON") or "WAIT")
+                or feature.state == "UNAVAILABLE" and "N/A"
+                or feature.state == "PAUSED" and "PAUSED"
+                or feature.state == "ARMED" and "ARMED"
+                or feature.applied and (feature.state == "PARTIAL" and "PARTIAL" or "ON") or "WAIT")
             assign(rowValue.toggle,"BackgroundColor3",feature.requested and feature.applied
                 and (feature.state == "PARTIAL" and palette.unknown or palette.on) or palette.off)
             assign(rowValue.status,"Text",feature.requested and feature.reason ~= "" and feature.reason or feature.detail)

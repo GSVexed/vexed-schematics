@@ -22,7 +22,7 @@ jobs:
       - name: Compile recovered modules and run regression scenarios
         run: python3 roblox-tools/renaissance-v16/run_tests.py --luau /tmp/feral-luau/luau --compiler /tmp/feral-luau/luau-compile
       - name: Verify deterministic bundle and manifest
-        run: git diff --exit-code -- roblox-tools/feral-renaissance-v16.4.0-rc1.lua roblox-tools/feral-renaissance-v16.4.1-exp1.lua roblox-tools/renaissance-v16/manifest.json roblox-tools/renaissance-v16/chunks/
+        run: git diff --exit-code -- roblox-tools/feral-renaissance-v16.4.0-rc1.lua roblox-tools/feral-renaissance-v16.4.1-exp1.lua roblox-tools/feral-renaissance-v16.4.2-rc1.lua roblox-tools/renaissance-v16/manifest.json roblox-tools/renaissance-v16/chunks/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
