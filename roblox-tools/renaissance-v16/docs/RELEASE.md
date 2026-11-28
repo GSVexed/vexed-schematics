@@ -1,36 +1,34 @@
-# FERAL Renaissance 16.4.1-exp1
+# FERAL Renaissance 16.4.2-rc1
 
-This isolated build tests **Endurance Movement** for game build 2415. It retains the complete 16.4.0-rc1 hub and installed desktop Hold-to-Bite helper. It changes no floating production loader.
+Isolated build-2415 hub candidate focused on the reported failure: **sprint slows or stops when stamina runs out**. It retains the 29 feature switches, integrated Territory module and the installed desktop Hold-to-Bite helper. Floating production loaders are unchanged.
 
-The source and pinned loader pass **235/235 local Luau checks** and the [hosted regression gate](https://github.com/GSVexed/vexed-schematics/actions/runs/46084891842), including six loader failure and chunk cases. The hosted helper check and retained v15/Amber baseline gates also pass. The published raw source, loader and seven fallback chunks match the local hashes. Live gameplay and the view from another client are not verified. The previous candidate passed 230 offline checks; its [verification record](verification.json) remains historical evidence, not evidence for this experiment.
+## Launcher
 
-## What the two stamina controls do
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/1aa4cc2f49b5090078e80aa68cdb809aa6ad5e94/roblox-tools/feral-renaissance-v16.4.2-rc1-loader.lua"))()
+```
+
+The loader pins the source to `85085dfc27c33f54692ea5c1628d90861a6eb016`. Its full source, loader and seven fallback chunks match the local hashes. Right Shift opens the hub. The existing Windows helper is reused; Ctrl+Alt+F12 pauses that helper.
+
+## Stamina and movement
 
 | Control | Behavior | Limit |
 |---|---|---|
-| Local Stamina Conservation | Retains the old reversible client drain and regeneration settings. | Server fatigue and ability costs can still apply; this is not infinite stamina. |
-| Endurance Movement (experimental) | On audited build 2415, observes that animal's healthy native sprint speed. While Left Shift is held on the ground during fatigue, requests that speed through its own Humanoid WalkSpeed. | Local speed request only. Server acceptance and what other players see are unverified. |
+| Local Stamina Conservation | Reversible local drain and regeneration settings; ON by default for new settings. | Server fatigue and ability costs remain native. Saved OFF settings are respected. |
+| Endurance Movement (experimental) | Learns the animal's healthy native sprint pace. While fatigued on land and physically holding Left Shift plus W/A/S/D, requests that pace and replays the keyboard movement direction after the game's own movement update. | The server and another player's view have not been verified. It cannot give unlimited server stamina or restore blocked abilities. |
 
-The movement request pauses while feeding, resting, carrying, using an ability, in a menu, out of focus, airborne, swimming, climbing or subject to a separate native `FeralNoSprint` restriction without the server fatigue flag. When `FeralSrvTired` itself is reported, the experiment can attempt the local pace even if `FeralNoSprint` is also set. It pauses for eight seconds after a large position jump or ineffective local movement. Turning it off, unloading the hub or respawning restores a speed only if this module still owns it. The control starts on by default and has its own Movement switch.
+FERAL's captured `WolfMove` path writes `Humanoid.WalkSpeed` and `Humanoid:Move()` each frame. When it sets its movement intent to zero, changing WalkSpeed alone cannot help. This candidate attempts both local inputs after that native update. It does not change stamina attributes, server remotes, position or root velocity. It yields during feeding, rest, carrying, abilities, menus, focus loss, airborne movement, swimming and climbing. A separate native sprint ban is respected unless server fatigue is reported. Sustained slow local movement or abrupt displacement causes an eight-second pause; the hub shows ARMED, PARTIAL, PAUSED or N/A. A new Humanoid or healthy gait change invalidates the old speed sample. Turning the switch off restores only a WalkSpeed value still owned by the hub.
 
-The server's `FeralSrvTired` flag and stamina values are not changed. Build 2415 only recognizes the old no-stamina debug attribute in Studio; no genuine unlimited resource or persistent sprint acceptance has been established.
+**Live sprint continuity and peer-visible movement are unverified.** The earlier 16.4.1 attempt changed only WalkSpeed and did not solve the reported slowdown. Offline simulation can check request order, cleanup and guards; it cannot establish the game's server acceptance. The mode is restricted to audited build 2415 and will report N/A on a different build.
 
-## Launcher and rollback
+## Checks and rollback
 
-Pinned experimental launcher:
+The local official-Luau suite passes **239/239 cases**, including the prior combat, recovery, helper interaction and Territory regressions, plus the new zero-intent, sustained-speed, interruption and cleanup cases. The [hosted v16 run](https://github.com/GSVexed/vexed-schematics/actions/runs/46090397327) passes its client and Windows helper jobs; the [Amber](https://github.com/GSVexed/vexed-schematics/actions/runs/46090397346) and [v15](https://github.com/GSVexed/vexed-schematics/actions/runs/46090397375) validation runs also pass. See [the verification record](POLISH_VERIFICATION.json) for limits.
+
+Previous pinned experiment:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/cf2ce27d18696db159de7f302484fb472bcb1585/roblox-tools/feral-renaissance-v16.4.1-exp1-loader.lua"))()
 ```
 
-The loader pins its source to commit `d39828746fff0fdfc709ece15b4c0097b3f35c8c`; its full fetch and seven fallback chunks reconstruct the same verified bundle. It enables desktop left-mouse Hold-to-Bite through the previously installed helper. Execute the launcher inside FERAL on build 2415. The endurance switch is in Movement and starts on for this experiment. It pauses on an unaudited game build.
-
-Previous pinned candidate:
-
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GSVexed/vexed-schematics/60e703742efdec8950f69f9ce715f720604f35d3/roblox-tools/feral-renaissance-v16.4.0-rc1-loader.lua"))()
-```
-
-Right Shift opens the hub. Turn off **Endurance Movement (experimental)** in Movement to return to native movement immediately. The helper pause shortcut remains Ctrl+Alt+F12. The existing `%LOCALAPPDATA%\FERALInputBridge\rollback.ps1` is available if the desktop helper itself needs restoring; this build makes no helper change.
-
-A live comparison needs another observer to confirm visible movement and actual distance while fatigue is active. An offline test, a local HUD value or a speed property reading cannot prove this behavior.
+Disable **Endurance Movement (experimental)** in Movement to return immediately to native speed control. The previously installed `%LOCALAPPDATA%\FERALInputBridge\rollback.ps1` remains available for the desktop helper; this release does not change it.

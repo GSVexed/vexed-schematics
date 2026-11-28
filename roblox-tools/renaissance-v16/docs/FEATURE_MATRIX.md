@@ -1,10 +1,10 @@
-# FERAL Renaissance 16.4.1-exp1 feature matrix
+# FERAL Renaissance 16.4.2-rc1 feature matrix
 
 All 29 registry entries and integrated Territory remain present. Offline simulations do not establish live server outcomes.
 
 | Feature | Status | Evidence and limits |
 |---|---|---|
-| Local Stamina Conservation | partial client support | Reversible local drain controls retained; server fatigue and ability costs remain native. |
+| Local Stamina Conservation | partial client support | Reversible local drain controls now default ON for new settings; saved OFF retained; server fatigue and ability costs remain native. |
 | Active Recovery + Fast Effects | preserved; gameplay pending | Native Rest/effect signaling retained; HP and condition progress remain observations, with no fabricated multiplier success. |
 | Fast Negative-Effect Recovery | preserved; gameplay pending | Native Rest/effect signaling retained; HP and condition progress remain observations, with no fabricated multiplier success. |
 | Roblox Anti-AFK | preserved; gameplay pending | existing behavior retained; full source compiled |
@@ -21,7 +21,7 @@ All 29 registry entries and integrated Territory remain present. Offline simulat
 | Flight Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Movement Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Speed Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
-| Endurance Movement (experimental) | local request; peer view unverified | Healthy native sprint sampled on 2415; guarded local WalkSpeed request only while exhausted on land. Does not change server stamina; backs off and restores its own value. |
+| Endurance Movement (experimental) | local request; peer view unverified | Healthy native sprint sampled on 2415; guarded local WalkSpeed and held W/A/S/D direction requests after native movement. It reports ARMED/PARTIAL/PAUSED/N/A and backs off on sustained slow motion. Server and peer results remain unverified. |
 | Jump / Leap Assistance | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Zoom Unlock | preserved; gameplay pending | existing behavior retained; full source compiled |
 | Outline ESP | preserved; gameplay pending | existing behavior retained; full source compiled |

@@ -1,15 +1,15 @@
-# FERAL Renaissance 16.4.1-exp1
+# FERAL Renaissance 16.4.2-rc1
 
-Build 2415 endurance movement experiment based on the complete 16.4.0-rc1 candidate. It retains all prior features and adds an independent switch for locally requested sprint pace during fatigue. The old stamina drain control remains under the accurate name **Local Stamina Conservation**.
+Build 2415 hub candidate based on the complete 16.4.1 experiment. It targets the reported exhausted-sprint slowdown by requesting both a sampled local pace and the held keyboard movement direction after native WolfMove. Local Stamina Conservation is now on by default for new settings; an explicit saved OFF remains OFF.
 
-The published loader pins an immutable source commit. All 235 local Luau checks and the hosted v16 regression gate pass, covering movement guards and cleanup along with the earlier combat regressions. The installed Windows helper is retained. Other-player visibility, server acceptance and actual infinite stamina remain unverified. The floating production loader and earlier pinned launchers are unchanged. See [experiment instructions](docs/RELEASE.md) for the launcher and rollback.
+The published loader pins an immutable source commit. All 239 local Luau checks pass, covering fatigue direction replay and cleanup along with the earlier combat and Territory regressions. The hosted client, helper, Amber and v15 checks also pass. The installed Windows helper is retained. Other-player visibility, server acceptance and actual infinite stamina remain unverified. The floating production loader and earlier pinned launchers are unchanged. See [release instructions](docs/RELEASE.md) for the launcher and rollback.
 
 - [Investigation](docs/INVESTIGATION.md)
 - [Complete feature matrix](docs/FEATURE_MATRIX.md)
 - [Per-module compatibility and all 19 legacy checks](docs/compatibility.json)
 - [Source recovery and unchanged-module evidence](docs/source-recovery.json)
 - [Automated Luau test results](test-results.json)
-- [Experiment verification](docs/ENDURANCE_VERIFICATION.json) and [previous candidate receipts](docs/verification.json)
+- [Current verification](docs/POLISH_VERIFICATION.json), [prior experiment](docs/ENDURANCE_VERIFICATION.json) and [earlier candidate receipts](docs/verification.json)
 - [Release and rollback instructions](docs/RELEASE.md)
 
 The helper's `--self-test` checks its Windows input ABI and the actual hold-state implementation without installing hooks or generating input. `install.ps1` compiles with the machine's existing .NET Framework compiler, saves the previous helper and starts the on-demand task in the already active desktop. No boot/logon trigger is added. Ctrl+Alt+F12 pauses the helper.

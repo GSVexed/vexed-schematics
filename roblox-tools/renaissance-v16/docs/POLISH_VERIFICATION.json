@@ -1,0 +1,19 @@
+{
+  "schema": "FERAL_RENAISSANCE_POLISH_VERIFICATION_V1",
+  "version": "16.4.2-rc1",
+  "branch": "renaissance/v2415-hub-polish-v16.4.2",
+  "source_commit": "85085dfc27c33f54692ea5c1628d90861a6eb016",
+  "loader_commit": "1aa4cc2f49b5090078e80aa68cdb809aa6ad5e94",
+  "source_sha256": "3b06c5f8e3790f67b744b0a263fb58003481c007165183d8b0e0ae1e310f8f1e",
+  "loader_sha256": "65dabd7cd958a961641c67d861faf193aa5eaba729c906c20e3f12497c4a1134",
+  "remote_raw_source_and_loader_match_local": true,
+  "remote_raw_chunks_reconstruct_source": 7,
+  "local_luau": {"total": 239, "passed": 239, "failed": 0},
+  "hosted_luau": {"run_id": 46090397327, "client_job_id": 140809705555, "client": "success", "helper_job_id": 140809705727, "helper": "success"},
+  "hosted_legacy": {"amber_run_id": 46090397346, "amber": "success", "v15_run_id": 46090397375, "v15": "success"},
+  "windows_helper_changed": false,
+  "live_gameplay_verified": false,
+  "peer_movement_verified": false,
+  "server_stamina_verified_unlimited": false,
+  "notes": "Keyboard intent replay after native WolfMove, guarded local WalkSpeed, reversible own-character changes and measured local backoff. This is an offline candidate, not a confirmed stamina or server exploit."
+}

@@ -1,12 +1,12 @@
 {
-  "version": "16.4.1-exp1",
+  "version": "16.4.2-rc1",
   "features": [
     {
       "id": "stamina",
       "feature": "Local Stamina Conservation",
       "group": "Survival",
       "status": "partial client support; no infinite stamina claim",
-      "evidence_and_limits": "Existing reversible local drain leases retained; 2415 debug flag remains Studio-only. Server fatigue and ability costs remain native.",
+      "evidence_and_limits": "Reversible local drain controls default ON for new settings; saved OFF preserved. Server fatigue and ability costs remain native.",
       "offline_compiled": true,
       "live_gameplay_verified": false
     },
@@ -158,8 +158,8 @@
       "id": "enduranceMove",
       "feature": "Endurance Movement (experimental)",
       "group": "Movement",
-      "status": "local request; other-player view unverified",
-      "evidence_and_limits": "Samples a healthy native sprint on build 2415; requests that local WalkSpeed during ground fatigue with held Left Shift. Pauses for a separate no-sprint restriction without server fatigue, actions, menus, focus, displacement or ineffective movement; restores only its own value. No server stamina edit or peer replication proof.",
+      "status": "guarded local pace and direction request; peer view unverified",
+      "evidence_and_limits": "Samples healthy native sprint on build 2415. While fatigued on land, requests sampled WalkSpeed and replays physically held W/A/S/D after native WolfMove. Pauses on protected actions and sustained slow movement, resamples changed gait, restores only its own speed. No server stamina edit or peer acceptance proof.",
       "offline_compiled": true,
       "live_gameplay_verified": false
     },
