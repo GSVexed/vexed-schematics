@@ -2163,7 +2163,7 @@ if type(LOADER)=="string" and #LOADER>0 then
         local requests=0
         w.env.game.HttpGet=function(_,url)
             requests+=1
-            assert(url:find("/d39828746fff0fdfc709ece15b4c0097b3f35c8c/",1,true),"unexpected loader source URL")
+            assert(url:find("/85085dfc27c33f54692ea5c1628d90861a6eb016/",1,true),"unexpected loader source URL")
             if mode=="offline" then error("network unavailable") end
             local part=tonumber(url:match("/part%-(%d+)%.lua$"))
             if part then

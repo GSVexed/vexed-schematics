@@ -33,13 +33,14 @@
     "renaissance-v16/src/amber_gait.luau",
     "renaissance-v16/src/amber_nav.luau",
     "renaissance-v16/tests/mock_roblox.luau",
-    "feral-renaissance-v16.4.2-rc1.lua"
+    "feral-renaissance-v16.4.2-rc1.lua",
+    "feral-renaissance-v16.4.2-rc1-loader.lua"
   ],
   "module_parity": true,
   "bundle_sha256": "3b06c5f8e3790f67b744b0a263fb58003481c007165183d8b0e0ae1e310f8f1e",
   "regressions": {
-    "total": 233,
-    "passed": 233,
+    "total": 239,
+    "passed": 239,
     "failed": 0
   },
   "runtime_exit_code": 0,
@@ -497,6 +498,18 @@
     "PASS new minigame ownership cancels an already queued synthetic pulse",
     "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
     "PASS repeated desktop enable disable and unload leaves only native hooks",
-    "RENAISSANCE_TEST_RESULT total=233 passed=233 failed=0"
+    "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS pinned loader starts the complete candidate with desktop hold enabled",
+    "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS pinned loader reconstructs every verified chunk after a truncated full fetch",
+    "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS missing source chunk leaves the active hub and its hooks intact",
+    "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS same-length wrong-version source is rejected before replacing the current hub",
+    "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS available SHA256 backend rejects a digest mismatch without unloading",
+    "[FERAL Renaissance 16.4.2-rc1] Candidate ready \u00b7 Right Shift \u00b7 v2415 compatibility",
+    "PASS failed network fetch preserves the old release without partial activation",
+    "RENAISSANCE_TEST_RESULT total=239 passed=239 failed=0"
   ]
 }
