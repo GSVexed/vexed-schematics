@@ -1,0 +1,81 @@
+name: Empire Clash NOVA v0.8 weapon guide validation
+on:
+  push:
+    branches: [project-empire-clash-nova]
+    paths:
+      - 'roblox-tools/empire-clash-nova-combat-guide-v0.8.lua'
+      - 'roblox-tools/README-empire-clash-nova-combat-guide-v0.8.md'
+      - '.github/workflows/empire-clash-nova-v08-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Luau compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --max-time 90 \
+            'https://github.com/luau-lang/luau/releases/download/0.747/luau-ubuntu.zip' \
+            -o /tmp/luau-nova.zip
+          mkdir -p /tmp/luau-nova
+          unzip -q /tmp/luau-nova.zip -d /tmp/luau-nova
+          compiler="$(find /tmp/luau-nova -type f -name luau-compile | head -n1)"
+          test -n "$compiler"
+          chmod +x "$compiler"
+          echo "LUAU_COMPILER=$compiler" >> "$GITHUB_ENV"
+      - name: Compile source
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LUAU_COMPILER" --null roblox-tools/empire-clash-nova-combat-guide-v0.8.lua
+          echo NOVA_V08_COMPILE_PASS
+      - name: Check feature invariants and missing unsafe legacy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('roblox-tools/empire-clash-nova-combat-guide-v0.8.lua').read_text()
+          expected=[
+            'local VERSION = "0.8.0"',
+            'local function weaponProfile(tool)',
+            'local function guideForSelection(selection)',
+            'local function attachFeedback()',
+            'local function currentWeapon()',
+            'local function factionIdentity(player)',
+            'local function validSelection()',
+            'local function findTarget(reticle, visualPreview)',
+            'local function updateVisuals()',
+            'local function shutdown()',
+            'return "CANNON"',
+            'return "THROWN"',
+            'return "SPREAD"',
+            'return "PRECISION"',
+            'return "MELEE"',
+            'return "PISTOL"',
+            'rec.highlight.OutlineColor = factionColor',
+            'rec.tagText.TextColor3 = factionColor',
+            'Enum.KeyCode.RightShift',
+            'config.WeaponGuide',
+            'config.ShotFeedback',
+            'state.guideStatus = guideForSelection(selected)',
+            'local rough = rec.head or rec.torso or rec.root',
+            'os.clock() - s.sampledAt > 0.26',
+            'sends_no_gameplay_remotes = true',
+          ]
+          missing=[term for term in expected if term not in src]
+          assert not missing, missing
+          disallowed=['hookfunction','getrawmetatable','getgc(', 'FireServer(', 'InvokeServer(',
+           'Ray.new(ray.Origin','applyExperimentalMode','ExperimentalSilentAim',
+           'MaxAngularCorrection','DamageService.FireGun:Fire(']
+          for term in disallowed:
+            assert term not in src, term
+          assert src.count('ownConnection(RunService.RenderStepped')==1
+          print("NOVA_V08_STATIC_PASS")
+          PY
