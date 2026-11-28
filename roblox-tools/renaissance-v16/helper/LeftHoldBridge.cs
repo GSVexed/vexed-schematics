@@ -19,6 +19,10 @@ static class Program {
             if (HoldRecovery.ReadyStable(100,279) || !HoldRecovery.ReadyStable(100,280)) return 5;
             if (HoldRecovery.ReadyStable(-1,999)) return 6;
             try { HoldState.SelfTest(); } catch { return 7; }
+            if (IntentCadence.ShouldWrite(false,false,false,1000,0,0)) return 8;
+            if (!IntentCadence.ShouldWrite(false,true,false,1000,950,0)) return 9;
+            if (IntentCadence.ShouldWrite(false,true,false,1000,950,1100)) return 10;
+            if (!IntentCadence.ShouldWrite(false,false,true,1000,900,0)) return 11;
             return 0;
         }
         if (args.Length != 1 || !Directory.Exists(args[0])) return 2;
@@ -54,6 +58,13 @@ static class Program {
 static class HoldRecovery {
     public static bool ReadyStable(long since, long now) {
         return since>=0 && now>=since && now-since>=180;
+    }
+}
+// Keep a fresh intent only while the hub is armed. A stale hub heartbeat
+// previously left the helper writing an idle JSON file every 75 ms forever.
+static class IntentCadence {
+    public static bool ShouldWrite(bool held,bool previous,bool allowed,long now,long lastWrite,long nextAttempt) {
+        return now>=nextAttempt && (held!=previous || allowed && now-lastWrite>=75);
     }
 }
 // The actual hook/timer use this deterministic state machine. No OS calls here.
@@ -139,7 +150,7 @@ sealed class Remapper : ApplicationContext {
     readonly HoldState hold=new HoldState();
     readonly string instance=Guid.NewGuid().ToString("N");
     string token="", captureToken="";
-    long seq,lastWrite=-1000;
+    long seq,lastWrite=-1000,nextWriteAttempt;
     bool previousHeld;
     sealed class Tap { public IntPtr Window; public string Token; public long At; }
     readonly Queue<Tap> taps=new Queue<Tap>();
@@ -210,6 +221,9 @@ sealed class Remapper : ApplicationContext {
     }
     void WriteIntent(bool held) {
         if(String.IsNullOrEmpty(token)) return;
+        long now=clock.ElapsedMilliseconds;
+        if(now<nextWriteAttempt) return;
+        nextWriteAttempt=now+75;
         string temp=intentPath+".tmp";
         try {
             var raw=json.Serialize(new { schema=IntentSchema,token=token,sequence=++seq,held=held,
@@ -217,8 +231,11 @@ sealed class Remapper : ApplicationContext {
             File.WriteAllText(temp,raw,new UTF8Encoding(false));
             if(File.Exists(intentPath)) File.Replace(temp,intentPath,null);
             else File.Move(temp,intentPath);
-            lastWrite=clock.ElapsedMilliseconds;previousHeld=held;
-        } catch { try { File.Delete(temp); } catch {} }
+            lastWrite=now;previousHeld=held;
+        } catch {
+            nextWriteAttempt=now+1000;
+            try { File.Delete(temp); } catch {}
+        }
     }
     void Tick() {
         long now=clock.ElapsedMilliseconds;
@@ -237,7 +254,7 @@ sealed class Remapper : ApplicationContext {
         bool sameWindow=hwnd!=IntPtr.Zero && hwnd==captureWindow && RobloxForeground(hwnd);
         hold.Step(now,enabled,sameWindow,captureToken==token,armed);
         bool held=hold.Held && allowed;
-        if(held!=previousHeld || now-lastWrite>=75) WriteIntent(held);
+        if(IntentCadence.ShouldWrite(held,previousHeld,allowed,now,lastWrite,nextWriteAttempt)) WriteIntent(held);
         while(taps.Count>0) {
             Tap tap=taps.Dequeue();
             if(!Current(tap.Window,tap.Token) || now-tap.At>250) continue;
