@@ -34,6 +34,36 @@ local function enduranceBoot()
 end
 local E=Mock.Enum
 
+test("failed diagnostic writes back off instead of retrying every frame",function()
+    local w=Mock.new();w.writeBlocked=true
+    local attempts=0
+    local original=w.env.writefile
+    w.env.writefile=function(...)
+        attempts+=1
+        return original(...)
+    end
+    local h=load(w,{settings={states={}}})
+    w:step(.02);assert(h.active,h.lastError or "not active")
+    eq(attempts,1)
+    h.tests:record("diagnostic_retry_test")
+    w:advance(2)
+    eq(attempts,1)
+    w:advance(14)
+    eq(attempts,2)
+    w:advance(2)
+    eq(attempts,2)
+    w.writeBlocked=false
+    w:advance(29)
+    eq(attempts,3)
+    eq(h.tests.saveFailures,0)
+    h.tests:record("another_event")
+    w:advance(3)
+    eq(attempts,3)
+    h.tests:save() -- explicit save bypasses the automatic interval
+    eq(attempts,4)
+    h:close();eq(w:connections(),0)
+end)
+
 test("29 features retain local conservation, experimental endurance and linked recovery",function()
     local M=modules();local r=M.core.registry()
     eq(#r.order,29);eq(r.byId.stamina.title,"Local Stamina Conservation")
@@ -1809,7 +1839,7 @@ end)
 
 test("Renaissance candidate presents its actual version in the active controller",function()
     local w=Mock.new();local h=load(w)
-    eq(h.version,"16.4.2-rc1")
+    eq(h.version,"16.4.3-rc1")
     h:close()
 end)
 

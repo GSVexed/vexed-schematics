@@ -3,7 +3,7 @@
 import hashlib,json,re
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent
-VERSION='16.4.2-rc1'
+VERSION='16.4.3-rc1'
 DEST=ROOT.parent/f'feral-renaissance-v{VERSION}.lua'
 PROTECTED={
     'feral-renaissance-v16.3.2.lua':'2ff67bdc354de536eb3085828414709542c9da38c1e42b50f0fdc85052ab0ec8',
@@ -12,6 +12,8 @@ PROTECTED={
     'feral-renaissance-v16.4.0-rc1-loader.lua':'90c85df32266b1f1733193015ed48e8d67150be4df5f693fc2e56635949b5867',
     'feral-renaissance-v16.4.1-exp1.lua':'b5ca78b29a8cfc37bfada425561398cda72fa679e83397433c6fdb049d5fba67',
     'feral-renaissance-v16.4.1-exp1-loader.lua':'d2256f36f0340f3d18bb201613e12c9c1cab07537b35726b7eec0a33ff3871c5',
+    'feral-renaissance-v16.4.2-rc1.lua':'3b06c5f8e3790f67b744b0a263fb58003481c007165183d8b0e0ae1e310f8f1e',
+    'feral-renaissance-v16.4.2-rc1-loader.lua':'65dabd7cd958a961641c67d861faf193aa5eaba729c906c20e3f12497c4a1134',
 }
 def sha(raw): return hashlib.sha256(raw).hexdigest()
 def build():

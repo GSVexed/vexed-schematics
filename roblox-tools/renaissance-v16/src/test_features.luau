@@ -9,7 +9,7 @@ function Tests.new(Core,bridge,hub)
     local t = { active = false, closed = false, enabled = true, path = PATH,
         events = {}, samples = {}, species = {}, biteTimes = {}, biteCount = 0,
         dirty = true, saved = false, attempts = 0,
-        nextSave = 0, nextSample = 0, notice = "Recording starts with the hub",
+        nextSave = 0, nextSample = 0, saveFailures = 0, notice = "Recording starts with the hub",
         characterScope = Core.scope() }
     local io = bridge:io()
     local function attr(char,key)
@@ -266,6 +266,11 @@ function Tests.new(Core,bridge,hub)
     end
     function t:bridgeReport() return self:report(true) end
     function t:save()
+        local now=bridge.clock()
+        -- A failed executor write used to retry on every Heartbeat, encoding
+        -- the entire growing report each time. Arm the next attempt first so
+        -- even a missing file API cannot turn into a per-frame save loop.
+        self.nextSave=now+30
         if not io.available then
             self.notice="Local file writing unavailable";return false
         end
@@ -273,9 +278,13 @@ function Tests.new(Core,bridge,hub)
         self.saved=ok and result~=false
         if self.saved then
             self.dirty=false
-            self.nextSave=bridge.clock()+8
+            self.saveFailures=0
             self.notice="Saved "..PATH
-        else self.notice="Could not save report" end
+        else
+            self.saveFailures=math.min(self.saveFailures+1,4)
+            self.nextSave=now+math.min(120,15*2^(self.saveFailures-1))
+            self.notice="Could not save report"
+        end
         return self.saved
     end
     function t:copy()
