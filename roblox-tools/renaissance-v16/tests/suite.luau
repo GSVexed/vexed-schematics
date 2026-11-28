@@ -2193,7 +2193,7 @@ if type(LOADER)=="string" and #LOADER>0 then
         local requests=0
         w.env.game.HttpGet=function(_,url)
             requests+=1
-            assert(url:find("/85085dfc27c33f54692ea5c1628d90861a6eb016/",1,true),"unexpected loader source URL")
+            assert(url:find("/757700f484350b02565e49efa7677a2837b15c37/",1,true),"unexpected loader source URL")
             if mode=="offline" then error("network unavailable") end
             local part=tonumber(url:match("/part%-(%d+)%.lua$"))
             if part then
@@ -2202,19 +2202,19 @@ if type(LOADER)=="string" and #LOADER>0 then
                 return BUNDLE:sub(offset,offset+CHUNK_SIZES[part]-1)
             end
             if mode=="chunks" or mode=="missing" then return "truncated" end
-            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.2%-rc1","16.4.2-rc2",1)) end
+            if mode=="tampered" then return (BUNDLE:gsub("16%.4%.3%-rc1","16.4.3-rc2",1)) end
             return BUNDLE
         end
         return function()return requests end
     end
     test("pinned loader starts the complete candidate with desktop hold enabled",function()
         local w=Mock.new();local requests=fetchMock(w,"full")
-        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.2-rc1");eq(h.leftHoldBridge,true)
+        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.3-rc1");eq(h.leftHoldBridge,true)
         eq(requests(),1);h:close();eq(w:connections(),0)
     end)
     test("pinned loader reconstructs every verified chunk after a truncated full fetch",function()
         local w=Mock.new();local requests=fetchMock(w,"chunks")
-        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.2-rc1")
+        local h=assert(w.env.loadstring(LOADER))();eq(h.version,"16.4.3-rc1")
         eq(requests(),1+#CHUNK_SIZES);h:close();eq(w:connections(),0)
     end)
     test("missing source chunk leaves the active hub and its hooks intact",function()
